@@ -198,6 +198,19 @@ class MeTests(ScopingTestCase):
         self.assertFalse(response.data["permissions"]["manage_countries"])
         self.assertTrue(response.data["permissions"]["manage_subentities"])
 
+    def test_compte_sans_profil_garde_une_reponse_complete(self):
+        """Un compte technique hérité n'a pas de profil : la liste des comptes
+        doit rester exploitable plutôt que d'omettre les clés attendues."""
+        User.objects.create_user(username="legacy", password="Motdepasse-2026-test")
+        self.login(self.siege)
+
+        response = self.client.get("/api/users/")
+
+        legacy = next(u for u in response.data["results"] if u["username"] == "legacy")
+        self.assertIsNone(legacy["role"])
+        self.assertEqual(legacy["countries_detail"], [])
+        self.assertFalse(legacy["must_change_password"])
+
     def test_profil_du_siege(self):
         self.login(self.siege)
 

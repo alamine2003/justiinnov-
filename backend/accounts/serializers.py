@@ -38,19 +38,17 @@ def _validate_password(password, user=None):
 
 
 class MeSerializer(serializers.ModelSerializer):
-    """Profil de l'utilisateur connecté, consommé par le frontend."""
+    """Profil de l'utilisateur connecté, consommé par le frontend.
 
-    role = serializers.CharField(source="profile.role", read_only=True)
-    role_display = serializers.CharField(
-        source="profile.get_role_display", read_only=True
-    )
-    countries = ScopeCountrySerializer(
-        source="profile.countries", many=True, read_only=True
-    )
+    Un compte technique d'amorçage peut ne pas avoir de profil : les champs
+    sont donc calculés, pour que la réponse garde toujours la même forme.
+    """
+
+    role = serializers.SerializerMethodField()
+    role_display = serializers.SerializerMethodField()
+    countries = serializers.SerializerMethodField()
     has_global_scope = serializers.SerializerMethodField()
-    must_change_password = serializers.BooleanField(
-        source="profile.must_change_password", read_only=True
-    )
+    must_change_password = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
 
     class Meta:
@@ -66,6 +64,23 @@ class MeSerializer(serializers.ModelSerializer):
         if profile is not None:
             return profile.role
         return Role.SUPER_ADMIN if user.is_superuser else None
+
+    def get_role(self, user):
+        return self._role(user)
+
+    def get_role_display(self, user):
+        role = self._role(user)
+        return Role(role).label if role else None
+
+    def get_countries(self, user):
+        profile = getattr(user, "profile", None)
+        if profile is None:
+            return []
+        return ScopeCountrySerializer(profile.countries.all(), many=True).data
+
+    def get_must_change_password(self, user):
+        profile = getattr(user, "profile", None)
+        return bool(profile and profile.must_change_password)
 
     def get_has_global_scope(self, user):
         profile = getattr(user, "profile", None)
@@ -129,6 +144,25 @@ class UserSerializer(serializers.ModelSerializer):
                 {"password": "Un mot de passe est requis à la création."}
             )
         return attrs
+
+    def to_representation(self, instance):
+        """Garantit une forme de réponse stable.
+
+        Un compte hérité peut ne pas avoir de profil. DRF traduit alors chaque
+        champ traversant ``profile`` par ``null``, y compris les listes : sans
+        ces valeurs de repli, l'interface planterait en lisant la longueur
+        d'une liste nulle. Seul ``role`` reste à ``null``, ce qui est
+        l'information exacte — ce compte n'a pas de rôle.
+        """
+        data = super().to_representation(instance)
+        for key, fallback in (
+            ("countries", []),
+            ("countries_detail", []),
+            ("must_change_password", False),
+        ):
+            if data.get(key) is None:
+                data[key] = fallback
+        return data
 
     @transaction.atomic
     def create(self, validated_data):

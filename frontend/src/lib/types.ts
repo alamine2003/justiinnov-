@@ -71,6 +71,7 @@ export interface CountrySummary {
   id: number
   name: string
   code: string
+  country_ref: string | null
   currency: string
   currency_symbol: string
   timezone: string
@@ -115,4 +116,158 @@ export interface Paginated<T> {
   next: string | null
   previous: string | null
   results: T[]
+}
+
+// ---------------------------------------------------------------------------
+// Comptes, rôles et périmètres
+// ---------------------------------------------------------------------------
+
+export type Role =
+  | "super_admin"
+  | "admin"
+  | "doo"
+  | "country_manager"
+  | "owner"
+  | "controller"
+  | "auditor"
+
+export const ROLE_LABELS: Record<Role, string> = {
+  super_admin: "Super administrateur",
+  admin: "Administrateur plateforme",
+  doo: "Direction des opérations",
+  country_manager: "Responsable pays",
+  owner: "Manager / Owner",
+  controller: "Contrôleur / Finance",
+  auditor: "Auditeur",
+}
+
+export interface ScopeCountry {
+  id: number
+  name: string
+  code: string
+  country_ref: string | null
+}
+
+export interface Permissions {
+  manage_users: boolean
+  manage_countries: boolean
+  manage_subentities: boolean
+  manage_budgets: boolean
+}
+
+export interface Me {
+  id: number
+  username: string
+  first_name: string
+  last_name: string
+  email: string
+  role: Role
+  role_display: string
+  countries: ScopeCountry[]
+  has_global_scope: boolean
+  must_change_password: boolean
+  permissions: Permissions
+}
+
+export interface AccountUser {
+  id: number
+  username: string
+  first_name: string
+  last_name: string
+  email: string
+  is_active: boolean
+  /** `null` pour un compte technique hérité, sans profil. */
+  role: Role | null
+  countries: number[]
+  countries_detail: ScopeCountry[]
+  must_change_password: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Budgets
+// ---------------------------------------------------------------------------
+
+export type OverrunPolicy = "block" | "warn" | "approval"
+
+export const OVERRUN_POLICY_LABELS: Record<OverrunPolicy, string> = {
+  block: "Bloquer",
+  warn: "Alerter",
+  approval: "Soumettre à approbation",
+}
+
+/** Indicateurs calculés côté serveur — jamais recalculés dans l'interface. */
+export interface BudgetFigures {
+  consumed: string
+  justified: string
+  gap: string
+  remaining: string
+  execution_rate: string | null
+  justification_rate: string | null
+  amount_xof: string | null
+  remaining_xof: string | null
+}
+
+export interface Budget {
+  id: number
+  country: number
+  country_name: string
+  country_ref: string | null
+  currency: string
+  year: number
+  project: number | null
+  project_name: string | null
+  amount: string
+  overrun_policy: OverrunPolicy
+  overrun_policy_display: string
+  is_active: boolean
+  figures: BudgetFigures
+  created_at: string
+  updated_at: string
+}
+
+export interface CountryBudgetRow {
+  country: number
+  country_name: string
+  country_ref: string | null
+  currency: string
+  allocated: string
+  sub_allocated: string
+  consumed: string
+  justified: string
+  remaining: string
+  remaining_xof: string | null
+}
+
+export interface BudgetSummary {
+  countries: CountryBudgetRow[]
+  total_remaining_xof: string
+  unconverted_currencies: string[]
+}
+
+export type ReallocationStatus = "pending" | "approved" | "rejected"
+
+export interface Reallocation {
+  id: number
+  source: number
+  source_label: string
+  target: number
+  target_label: string
+  amount: string
+  reason: string
+  status: ReallocationStatus
+  status_display: string
+  requested_by: string
+  decided_by: string
+  decided_at: string | null
+  decision_note: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExchangeRate {
+  id: number
+  currency: string
+  rate_to_xof: string
+  valid_from: string
+  created_at: string
 }

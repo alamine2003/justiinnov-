@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # apps
     "core",
     "accounts",
+    "budget",
 ]
 
 MIDDLEWARE = [

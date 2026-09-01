@@ -32,6 +32,8 @@ interface ManageManagersProps {
   countryId: number
   managers: Manager[]
   onRefresh: () => void
+  /** Le référentiel des managers relève du siège. */
+  canManage: boolean
 }
 
 interface ManagerForm {
@@ -46,6 +48,7 @@ export function ManageManagers({
   countryId,
   managers,
   onRefresh,
+  canManage,
 }: ManageManagersProps) {
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -119,10 +122,12 @@ export function ManageManagers({
             Responsables rattachés à ce pays.
           </p>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="mr-1 h-4 w-4" />
-          Ajouter
-        </Button>
+        {canManage && (
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="mr-1 h-4 w-4" />
+            Ajouter
+          </Button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border/60 shadow-sm">
@@ -165,29 +170,35 @@ export function ManageManagers({
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEdit(manager)}
-                      aria-label="Modifier"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDetach(manager)}
-                      aria-label="Retirer du pays"
-                      title="Retirer ce manager du pays"
-                      disabled={busyId === manager.id}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      {busyId === manager.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Unlink className="h-4 w-4" />
-                      )}
-                    </Button>
+                    {canManage ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(manager)}
+                          aria-label="Modifier"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDetach(manager)}
+                          aria-label="Retirer du pays"
+                          title="Retirer ce manager du pays"
+                          disabled={busyId === manager.id}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          {busyId === manager.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Unlink className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

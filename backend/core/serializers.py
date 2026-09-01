@@ -134,7 +134,11 @@ class ChangeLogSerializer(serializers.ModelSerializer):
     model_name_display = serializers.CharField(
         source="get_model_name_display", read_only=True
     )
-    country_name = serializers.CharField(source="country.name", read_only=True)
+    # Le pays peut être nul (entité sans pays, ou pays supprimé) : sans
+    # `allow_null`, DRF omettrait purement et simplement la clé.
+    country_name = serializers.CharField(
+        source="country.name", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = ChangeLog

@@ -9,10 +9,13 @@ import {
   fetchCountries,
   updateCountry,
 } from "@/lib/countries"
+import { useAuth } from "@/context/auth"
 import type { CountrySummary } from "@/lib/types"
 
 export function CountriesPage() {
   const navigate = useNavigate()
+  const { can } = useAuth()
+  const canManage = can("manage_countries")
   const [countries, setCountries] = useState<CountrySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -91,6 +94,7 @@ export function CountriesPage() {
         }}
         onOpen={(id) => navigate(`/countries/${id}`)}
         onToggle={handleToggle}
+        canManage={canManage}
       />
 
       <CountryForm

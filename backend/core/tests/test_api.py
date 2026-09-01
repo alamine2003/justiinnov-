@@ -103,6 +103,17 @@ class HistoryTests(ApiTestCase):
         actions = [entry["action"] for entry in response.data["results"]]
         self.assertIn(ChangeLog.Actions.DEACTIVATED, actions)
 
+    def test_entree_sans_pays_conserve_la_cle_country_name(self):
+        """Un événement sans pays (un manager) doit renvoyer `country_name:
+        null` et non omettre la clé."""
+        self.client.post("/api/managers/", {"name": "Awa Diop"})
+
+        response = self.client.get("/api/history/", {"model_name": "manager"})
+
+        entry = response.data["results"][0]
+        self.assertIn("country_name", entry)
+        self.assertIsNone(entry["country_name"])
+
     def test_auteur_de_l_action_est_enregistre(self):
         self.client.patch(
             f"/api/countries/{self.country.pk}/", {"timezone": "Africa/Abidjan"}

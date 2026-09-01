@@ -25,10 +25,13 @@ import {
   updateProject,
   updateTeam,
 } from "@/lib/countries"
+import { useAuth } from "@/context/auth"
 import type { CountryDetail } from "@/lib/types"
 
 export function CountryDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const { can } = useAuth()
+  const canManage = can("manage_subentities")
   const countryId = Number(id)
   const [country, setCountry] = useState<CountryDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -166,6 +169,7 @@ export function CountryDetailPage() {
                 countryId={countryId}
                 managers={country.managers}
                 onRefresh={load}
+                canManage={can("manage_countries")}
               />
             </CardContent>
           </Card>
@@ -195,6 +199,7 @@ export function CountryDetailPage() {
                 detectActive={(t) => t.is_active}
                 defaultForm={{ name: "" }}
                 formFields={[{ key: "name", label: "Nom", placeholder: "Équipe commerciale" }]}
+                canManage={canManage}
                 onSave={saveTeam}
               />
             </CardContent>
@@ -228,6 +233,7 @@ export function CountryDetailPage() {
                   { key: "code", label: "Code", placeholder: "CC01" },
                   { key: "name", label: "Libellé", placeholder: "Centre Paris" },
                 ]}
+                canManage={canManage}
                 onSave={saveCostCenter}
               />
             </CardContent>
@@ -265,6 +271,7 @@ export function CountryDetailPage() {
                   { key: "name", label: "Nom", placeholder: "Projet 2026" },
                   { key: "budget", label: "Budget", placeholder: "0" },
                 ]}
+                canManage={canManage}
                 onSave={saveProject}
               />
             </CardContent>
@@ -298,6 +305,7 @@ export function CountryDetailPage() {
                   { key: "label", label: "Intitulé", placeholder: "Frais de déplacement" },
                   { key: "description", label: "Description" },
                 ]}
+                canManage={canManage}
                 onSave={saveExpense}
               />
             </CardContent>
@@ -331,6 +339,7 @@ export function CountryDetailPage() {
                   { key: "name", label: "Nom", placeholder: "Marketing digital" },
                   { key: "description", label: "Description" },
                 ]}
+                canManage={canManage}
                 onSave={saveCategory}
               />
             </CardContent>

@@ -35,6 +35,8 @@ interface ManageRowsProps<T extends { id: number }> {
   emptyMessage?: string
   createLabel?: string
   onSave: (data: Record<string, unknown>, id?: number) => Promise<void>
+  /** Masque les actions que le rôle ne peut pas exécuter. */
+  canManage?: boolean
   detectActive?: (item: T) => boolean
   defaultForm: Record<string, string>
   formFields: {
@@ -55,6 +57,7 @@ export function ManageRows<T extends { id: number }>({
   emptyMessage = "Aucune entrée.",
   createLabel = "Ajouter",
   onSave,
+  canManage = true,
   detectActive,
   defaultForm,
   formFields,
@@ -107,10 +110,12 @@ export function ManageRows<T extends { id: number }>({
             <p className="text-xs text-muted-foreground">{description}</p>
           )}
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="mr-1 h-4 w-4" />
-          {createLabel}
-        </Button>
+        {canManage && (
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="mr-1 h-4 w-4" />
+            {createLabel}
+          </Button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border/60 shadow-sm">
@@ -120,19 +125,19 @@ export function ManageRows<T extends { id: number }>({
               {columns.map((col) => (
                 <TableHead key={String(col.key)}>{col.header}</TableHead>
               ))}
-              <TableHead className="text-right">Actions</TableHead>
+              {canManage && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={columns.length + 1} className="h-16">
+                <TableCell colSpan={columns.length + (canManage ? 1 : 0)} className="h-16">
                   <div className="h-4 animate-pulse rounded bg-muted" />
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length + 1} className="h-16 text-center text-muted-foreground">
+                <TableCell colSpan={columns.length + (canManage ? 1 : 0)} className="h-16 text-center text-muted-foreground">
                   {emptyMessage}
                 </TableCell>
               </TableRow>
@@ -146,16 +151,18 @@ export function ManageRows<T extends { id: number }>({
                         : (item[col.key as keyof T] as ReactNode)}
                     </TableCell>
                   ))}
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEdit(item)}
-                      aria-label="Modifier"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+                  {canManage && (
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openEdit(item)}
+                        aria-label="Modifier"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}

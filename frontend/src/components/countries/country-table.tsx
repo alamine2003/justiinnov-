@@ -22,6 +22,8 @@ interface CountryTableProps {
   onAdd: () => void
   onOpen: (id: number) => void
   onToggle: (country: CountrySummary) => void
+  /** Masque les actions que le rôle ne peut pas exécuter. */
+  canManage: boolean
 }
 
 export function CountryTable({
@@ -34,7 +36,11 @@ export function CountryTable({
   onAdd,
   onOpen,
   onToggle,
+  canManage,
 }: CountryTableProps) {
+  // La colonne « Actions » n'existe que si le rôle peut agir.
+  const columnCount = 7 + (canManage ? 1 : 0)
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -69,10 +75,12 @@ export function CountryTable({
               </Button>
             ))}
           </div>
-          <Button onClick={onAdd}>
-            <Plus className="mr-2 h-4 w-4" />
-            Ajouter
-          </Button>
+          {canManage && (
+            <Button onClick={onAdd}>
+              <Plus className="mr-2 h-4 w-4" />
+              Ajouter
+            </Button>
+          )}
         </div>
       </div>
 
@@ -87,14 +95,14 @@ export function CountryTable({
               <TableHead className="text-center">Centres de coûts</TableHead>
               <TableHead className="text-center">Projets</TableHead>
               <TableHead>Statut</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              {canManage && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: columnCount }).map((_, j) => (
                     <TableCell key={j}>
                       <div className="h-4 animate-pulse rounded bg-muted" />
                     </TableCell>
@@ -103,7 +111,7 @@ export function CountryTable({
               ))
             ) : countries.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
                   Aucun pays trouvé.
                 </TableCell>
               </TableRow>
@@ -144,16 +152,21 @@ export function CountryTable({
                       <Badge variant="secondary">Inactif</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shadow-sm"
-                      onClick={() => onToggle(country)}
+                  {canManage && (
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {country.is_active ? "Désactiver" : "Réactiver"}
-                    </Button>
-                  </TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shadow-sm"
+                        onClick={() => onToggle(country)}
+                      >
+                        {country.is_active ? "Désactiver" : "Réactiver"}
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}
