@@ -1,7 +1,9 @@
 # Plateforme de contrôle budgétaire
 
-Suivi budgétaire centralisé : référentiel pays et organisations, comptes et
-périmètres, enveloppes annuelles, réallocations et historique des changements.
+Suivi budgétaire centralisé et traçable : référentiel pays et organisations,
+comptes et périmètres, enveloppes annuelles, dossiers de justification,
+dépenses, pièces justificatives, workflow de validation, tableaux de bord
+temps réel, alertes et exports.
 
 ## Architecture
 
@@ -57,7 +59,7 @@ adopte un pays préexistant plutôt que d'échouer sur son nom.
 | `controller` | tous pays | contrôler et auditer, en lecture |
 | `auditor` | tous pays | lecture seule |
 | `country_manager` | ses pays | gérer les sous-entités de son pays |
-| `owner` | ses pays | saisir ses dépenses (lot 2) |
+| `owner` | ses pays | saisir ses dépenses et déposer les justificatifs |
 
 Le périmètre est porté par le profil : un rôle du siège sans pays explicite
 couvre tous les pays, tandis qu'un rôle pays **sans** périmètre ne voit rien —
