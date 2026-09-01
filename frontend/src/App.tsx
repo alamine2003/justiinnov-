@@ -6,6 +6,7 @@ import { AuditPage } from "@/pages/audit/list"
 import { BudgetsPage } from "@/pages/budgets/list"
 import { CountriesPage } from "@/pages/countries/list"
 import { CountryDetailPage } from "@/pages/countries/detail"
+import { DashboardPage } from "@/pages/dashboard"
 import { DossierDetailPage } from "@/pages/dossiers/detail"
 import { DossiersPage } from "@/pages/dossiers/list"
 import { LoginPage } from "@/pages/login"
@@ -46,7 +47,7 @@ function RequirePermission({
 }) {
   const { can } = useAuth()
   if (!can(permission)) {
-    return <Navigate to="/dossiers" replace />
+    return <Navigate to="/" replace />
   }
   return <>{children}</>
 }
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/countries" element={<CountriesPage />} />
         <Route path="/countries/:id" element={<CountryDetailPage />} />
         <Route path="/budgets" element={<BudgetsPage />} />
+        <Route path="/" element={<DashboardPage />} />
         <Route path="/dossiers" element={<DossiersPage />} />
         <Route path="/dossiers/:id" element={<DossierDetailPage />} />
         <Route
@@ -84,7 +86,7 @@ export default function App() {
           }
         />
       </Route>
-      <Route path="*" element={<Navigate to="/dossiers" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

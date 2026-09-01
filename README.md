@@ -18,6 +18,9 @@ Applications Django :
 | `core`     | Référentiel (pays, managers, équipes, centres de coûts, projets, intitulés, catégories) et historique |
 | `accounts` | Profils, rôles, périmètres pays, cloisonnement |
 | `budget`   | Enveloppes annuelles, sous-enveloppes, réallocations, taux de change |
+| `expenses` | Dossiers (N°ORDRE), dépenses, justificatifs, workflow, audit |
+| `notifications` | Notifications in-app et e-mail |
+| `reporting` | Tableaux de bord, alertes, exports Excel et PDF |
 
 ## Démarrage (Docker)
 
@@ -116,7 +119,26 @@ GET/POST /api/reallocations/             # demandes de transfert entre enveloppe
 POST   /api/reallocations/{id}/approve/  # exécute le transfert
 POST   /api/reallocations/{id}/reject/   # motif obligatoire
 GET/POST/PATCH /api/exchange-rates/      # taux de conversion vers le FCFA
+
+GET/POST/PATCH /api/dossiers/            # dossiers de justification (N°ORDRE)
+POST   /api/dossiers/{id}/submit|review|approve|reject|close/
+GET/POST/PATCH /api/expenses/            # lignes de dépenses (mêmes transitions)
+GET/POST /api/proofs/                    # justificatifs (dépôt multipart)
+GET    /api/proofs/{id}/download/        # téléchargement contrôlé et tracé
+POST   /api/proofs/{id}/review/          # contrôle documentaire
+GET/POST/PATCH /api/beneficiaries/       # prospects et bénéficiaires
+GET    /api/audit/                       # journal d'audit
+
+GET    /api/dashboard/                   # consolidation, charge et alertes
+GET    /api/dashboard/breakdown/         # répartition équipe/manager/projet/mois
+GET    /api/exports/expenses.xlsx        # export au format du fichier historique
+GET    /api/exports/reconciliation.xlsx  # rapprochement dépenses / justifiés
+GET    /api/exports/report.pdf           # rapport de synthèse
+GET    /api/notifications/               # centre de notifications
 ```
+
+Les listes acceptent `?country__country_ref=TG-02` pour cibler un pays par
+son identifiant fonctionnel, ainsi que `?year=`, `?status=` et `?search=`.
 
 Toutes les listes sont filtrées par le périmètre du compte.
 
@@ -167,6 +189,13 @@ docker compose run --rm --entrypoint python backend manage.py test
 | `DJANGO_SECURE_SSL_REDIRECT` | `1` | redirection HTTPS hors mode debug |
 | `DJANGO_CREATE_SUPERUSER` | `0` | `1` crée un compte d'amorçage, avec `DJANGO_SUPERUSER_PASSWORD` |
 | `POSTGRES_*` | voir `docker-compose.yml` | connexion à la base |
+| `AWS_S3_ENDPOINT_URL` | — | active le stockage objet ; disque local si vide |
+| `MAX_PROOF_SIZE` | `20971520` | taille maximale d'un justificatif (octets) |
+| `ALERT_THRESHOLDS` | `80,90,100` | seuils de consommation déclenchant une alerte |
+| `UNUSUAL_EXPENSE_FACTOR` | `5` | multiple de la moyenne au-delà duquel une dépense est signalée |
+| `EMAIL_HOST` | — | serveur SMTP ; sans lui, les e-mails vont dans les logs |
+| `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |
+| `DJANGO_TIME_ZONE` | `UTC` | fuseau de référence du serveur |
 
 ## Capture d'écran (revue visuelle)
 
@@ -184,3 +213,45 @@ npx tsx scripts/screenshot.ts
 ```
 
 Le script échoue si la console du navigateur a produit la moindre erreur.
+## Workflow et dossiers
+
+Le **N°ORDRE** devient un dossier de justification : il regroupe les lignes de
+dépenses d'une opération et les preuves qui les appuient. Dossier et lignes
+suivent chacun leur circuit :
+
+```
+brouillon → soumis → en contrôle → validé / refusé → clôturé
+```
+
+Le statut n'est jamais modifiable par écriture de champ : seules les
+transitions déclarées le font évoluer, et chacune est journalisée. Un rejet
+exige un motif, une dépense validée ne se corrige plus en place, et un dossier
+ne peut être validé sans justificatif.
+
+Une dépense soumise **engage** son enveloppe ; validée, elle la **consomme**.
+Le disponible retranche les deux. La politique de dépassement de l'enveloppe
+décide de la suite : bloquer, alerter, ou réserver la validation à la
+direction des opérations — le manager pouvant dans tous les cas formuler la
+demande.
+
+## Justificatifs
+
+Chaque pièce porte son empreinte SHA-256, sa taille et sa version. Redéposer
+un fichier déjà présent sur le même dossier est refusé, sauf remplacement
+explicite, qui archive la version précédente. Les formats acceptés sont
+limités par liste blanche. Le téléchargement passe par une vue authentifiée
+plutôt que par une URL signée : le périmètre est vérifié à chaque accès et
+chaque téléchargement laisse une trace.
+
+## Pilotage, alertes et exports
+
+Le tableau de bord consolide les enveloppes en FCFA, expose la charge de
+contrôle et calcule les alertes : seuils de consommation, dépassements,
+dossiers engagés sans preuve, justificatifs incomplets et dépenses
+inhabituelles. Une dépense est jugée inhabituelle par rapport aux **autres**
+dépenses de son pays — s'inclure dans sa propre référence l'empêcherait de
+s'en détacher.
+
+Les alertes budgétaires deviennent des notifications persistantes, in-app et
+par e-mail, avec une clé d'unicité qui évite de signaler deux fois le même
+franchissement.

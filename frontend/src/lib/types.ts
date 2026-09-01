@@ -430,6 +430,93 @@ export interface Beneficiary {
   is_active: boolean
 }
 
+// ---------------------------------------------------------------------------
+// Pilotage, alertes et notifications
+// ---------------------------------------------------------------------------
+
+export type AlertLevel = "info" | "warning" | "critical"
+
+export interface Alert {
+  kind: string
+  level: AlertLevel
+  title: string
+  detail: string
+  country: number | null
+  country_name: string | null
+  link: string
+  key: string
+}
+
+export interface DashboardTotals {
+  allocated: string
+  engaged: string
+  consumed: string
+  justified: string
+  remaining: string
+  execution_rate: string | null
+  justification_rate: string | null
+}
+
+export interface DashboardCountryRow extends DashboardTotals {
+  country: number
+  country_name: string
+  country_ref: string | null
+  currency: string
+  sub_allocated: string
+  remaining_xof: string | null
+}
+
+export interface Dashboard {
+  year: number
+  totals: DashboardTotals
+  consolidated_xof: {
+    allocated: string
+    remaining: string
+    unconverted_currencies: string[]
+  }
+  countries: DashboardCountryRow[]
+  workload: {
+    expenses_to_review: number
+    expenses_draft: number
+    expenses_rejected: number
+    dossiers_open: number
+  }
+  alerts: Alert[]
+}
+
+export interface BreakdownRow {
+  label: string
+  amount: string
+  justified: string
+  gap: string
+  lines: number
+}
+
+export interface Breakdown {
+  year: number
+  by_team: BreakdownRow[]
+  by_owner: BreakdownRow[]
+  by_project: BreakdownRow[]
+  by_category: BreakdownRow[]
+  by_expense_title: BreakdownRow[]
+  by_month: BreakdownRow[]
+}
+
+export interface AppNotification {
+  id: number
+  kind: string
+  kind_display: string
+  level: AlertLevel
+  level_display: string
+  title: string
+  body: string
+  link: string
+  country: number | null
+  country_name: string | null
+  read_at: string | null
+  created_at: string
+}
+
 export interface AuditEntry {
   id: number
   user: string

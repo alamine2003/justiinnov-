@@ -1,7 +1,16 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom"
-import { FolderOpen, Globe, LogOut, ScrollText, Users, Wallet } from "lucide-react"
+import {
+  FolderOpen,
+  Globe,
+  LayoutDashboard,
+  LogOut,
+  ScrollText,
+  Users,
+  Wallet,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { NotificationBell } from "@/components/layout/notification-bell"
 import { PasswordNotice } from "@/components/layout/password-notice"
 import { useAuth } from "@/context/auth"
 import { cn } from "@/lib/utils"
@@ -67,6 +76,9 @@ export function AppLayout() {
           </div>
 
           <div className="flex items-center gap-1">
+            <NavItem to="/" icon={LayoutDashboard}>
+              Pilotage
+            </NavItem>
             <NavItem to="/dossiers" icon={FolderOpen}>
               Dossiers
             </NavItem>
@@ -92,6 +104,7 @@ export function AppLayout() {
                 {me.username} · {me.role_display}
               </Badge>
             )}
+            <NotificationBell />
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Déconnexion

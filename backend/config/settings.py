@@ -45,6 +45,8 @@ INSTALLED_APPS = [
     "accounts",
     "budget",
     "expenses",
+    "notifications",
+    "reporting",
 ]
 
 MIDDLEWARE = [
@@ -199,6 +201,38 @@ ALLOWED_PROOF_EXTENSIONS = [
     ".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic",
     ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt",
 ]
+
+# ---------------------------------------------------------------------------
+# Alertes et notifications (§8)
+# ---------------------------------------------------------------------------
+# Seuils de consommation déclenchant une alerte, en pourcentage.
+ALERT_THRESHOLDS = [
+    int(value)
+    for value in os.environ.get("ALERT_THRESHOLDS", "80,90,100").split(",")
+    if value.strip()
+]
+
+# Une dépense est signalée « inhabituelle » au-delà de ce multiple de la
+# moyenne des dépenses validées de son pays.
+UNUSUAL_EXPENSE_FACTOR = float(os.environ.get("UNUSUAL_EXPENSE_FACTOR", "5"))
+
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
+    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
+else:
+    # Sans serveur SMTP configuré, les messages sont écrits dans les logs
+    # plutôt que perdus silencieusement.
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", "controle-budgetaire@justi-innov.local"
+)
+# Adresse publique de l'application, pour les liens dans les e-mails.
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:5173")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

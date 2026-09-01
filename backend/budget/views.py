@@ -16,6 +16,7 @@ from accounts.permissions import (
 )
 from accounts.scoping import CountryScopedMixin
 from core.mixins import NoDestroyModelViewSet
+from notifications import triggers
 
 from .aggregates import budget_figures, to_xof
 from .models import Budget, BudgetReallocation, ExchangeRate
@@ -38,7 +39,9 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     serializer_class = BudgetSerializer
     permission_classes = [RolePermission]
     write_roles = BUDGET_WRITE_ROLES
-    filterset_fields = ["country", "year", "project", "is_active"]
+    filterset_fields = [
+        "country", "country__country_ref", "year", "project", "is_active",
+    ]
     search_fields = ["country__name", "country__country_ref", "project__name"]
     ordering_fields = ["year", "amount", "created_at"]
 
@@ -119,6 +122,7 @@ class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(requested_by=self.request.user.username)
+        triggers.reallocation_requested(serializer.instance, self.request.user)
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):

@@ -41,8 +41,10 @@ async function login(page: Page, prefix: string) {
   await page.fill("#username", user)
   await page.fill("#password", password)
   await page.click("button[type=submit]")
-  await page.waitForURL("**/dossiers", { timeout: 15000 })
-  await page.waitForTimeout(1200)
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+    timeout: 15000,
+  })
+  await page.waitForTimeout(1500)
   return user
 }
 
@@ -58,6 +60,22 @@ async function main() {
   const hqUser = await login(hq, "HQ")
   console.log(`\n=== SIÈGE (${hqUser}) ===`)
   console.log("Navigation :", await hq.locator("header a").allTextContents())
+  console.log("Pilotage - titre :", await hq.textContent("h1"))
+  console.log("Pilotage - onglets :", await hq.getByRole("tab").allTextContents())
+  await shot(hq, "pilotage")
+
+  await hq.locator('button[aria-label^="Notifications"]').click()
+  await hq.waitForTimeout(900)
+  console.log(
+    "Notifications ouvertes :",
+    (await hq.textContent("h2, [data-slot=sheet-title]")) ?? "—",
+  )
+  await shot(hq, "notifications")
+  await hq.keyboard.press("Escape")
+  await hq.waitForTimeout(400)
+
+  await hq.goto(`${BASE}/dossiers`, { waitUntil: "networkidle" })
+  await hq.waitForTimeout(1000)
   console.log("Dossiers visibles :", await hq.locator("tbody tr").count())
   await shot(hq, "dossiers")
 

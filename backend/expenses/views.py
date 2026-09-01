@@ -18,6 +18,7 @@ from accounts.permissions import (
 from accounts.scoping import CountryScopedMixin
 from budget.models import Budget
 from core.mixins import NoDestroyModelViewSet
+from notifications import triggers
 
 from .audit import record
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof
@@ -93,6 +94,8 @@ class WorkflowMixin:
             note=note,
         )
 
+        self.after_transition(request, instance, name, note)
+
         data = self.get_serializer(instance).data
         if warning:
             data = {**data, "warning": warning}
@@ -101,6 +104,9 @@ class WorkflowMixin:
     def before_transition(self, instance, name, access):
         """Contrôles propres à la ressource. Renvoie un avertissement ou None."""
         return None
+
+    def after_transition(self, request, instance, name, note):
+        """Effets de bord une fois la transition acquise (notifications)."""
 
     def audit_country(self, instance):
         return instance.country
@@ -146,7 +152,9 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
     )
     permission_classes = [RolePermission]
     write_roles = EXPENSE_WRITE_ROLES
-    filterset_fields = ["country", "status", "team", "owner"]
+    filterset_fields = [
+        "country", "country__country_ref", "status", "team", "owner",
+    ]
     search_fields = ["number", "label"]
     ordering_fields = ["date", "number", "created_at"]
 
@@ -203,8 +211,9 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
     permission_classes = [RolePermission]
     write_roles = EXPENSE_WRITE_ROLES
     filterset_fields = [
-        "country", "dossier", "status", "team", "owner", "project",
-        "beneficiary", "expense_title", "marketing_category", "payment_method",
+        "country", "country__country_ref", "dossier", "status", "team", "owner",
+        "project", "beneficiary", "expense_title", "marketing_category",
+        "payment_method",
     ]
     search_fields = ["title", "place", "description", "dossier__number"]
     ordering_fields = ["date", "amount", "created_at"]
@@ -247,6 +256,12 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         return check_budget_capacity(
             expense, budget, access.role, at_approval=(name == "approve")
         )
+
+    def after_transition(self, request, expense, name, note):
+        if name == "submit":
+            triggers.expense_submitted(expense, request.user)
+        elif name == "reject":
+            triggers.expense_rejected(expense, request.user, note)
 
 
 class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
