@@ -54,13 +54,32 @@ BUDGET_WRITE_ROLES = frozenset({Role.SUPER_ADMIN, Role.DOO})
 #: Comptes utilisateurs et rôles.
 USER_WRITE_ROLES = REFERENTIAL_WRITE_ROLES
 
+#: Saisie des dépenses, des dossiers et dépôt des justificatifs (§4).
+EXPENSE_WRITE_ROLES = frozenset(
+    {Role.SUPER_ADMIN, Role.ADMIN, Role.COUNTRY_MANAGER, Role.OWNER}
+)
+
+#: Contrôle documentaire, validation et rejet. Le responsable pays valide
+#: « selon délégation », le contrôleur exerce le contrôle documentaire.
+VALIDATION_ROLES = frozenset(
+    {Role.SUPER_ADMIN, Role.DOO, Role.CONTROLLER, Role.COUNTRY_MANAGER}
+)
+
+#: Consultation du journal d'audit.
+AUDIT_READ_ROLES = frozenset(
+    {Role.SUPER_ADMIN, Role.ADMIN, Role.DOO, Role.CONTROLLER, Role.AUDITOR}
+)
+
 
 class RolePermission(BasePermission):
     """Autorise la requête selon le rôle porté par le profil.
 
     - lecture : ``view.read_roles`` (tous les rôles si non déclaré) ;
     - écriture : ``view.write_roles``, qui doit être déclaré explicitement —
-      une vue qui l'oublie est en lecture seule plutôt qu'ouverte à tous.
+      une vue qui l'oublie est en lecture seule plutôt qu'ouverte à tous ;
+    - ``view.action_write_roles`` surcharge par action. Indispensable : valider
+      une dépense et la saisir relèvent de rôles différents, alors qu'il s'agit
+      de la même vue.
     """
 
     message = "Votre rôle ne permet pas cette action."
@@ -72,4 +91,9 @@ class RolePermission(BasePermission):
         if request.method in SAFE_METHODS:
             read_roles = getattr(view, "read_roles", None)
             return read_roles is None or access.role in read_roles
+
+        per_action = getattr(view, "action_write_roles", {})
+        action = getattr(view, "action", None)
+        if action in per_action:
+            return access.role in per_action[action]
         return access.role in getattr(view, "write_roles", frozenset())

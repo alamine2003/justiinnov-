@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "core",
     "accounts",
     "budget",
+    "expenses",
 ]
 
 MIDDLEWARE = [
@@ -139,6 +140,46 @@ CORS_ALLOW_CREDENTIALS = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ---------------------------------------------------------------------------
+# Stockage des pièces justificatives
+# ---------------------------------------------------------------------------
+# Object storage compatible S3 (MinIO) dès qu'un point d'accès est configuré ;
+# repli sur le disque local sinon, pour permettre les tests et un démarrage
+# sans dépendance externe.
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL", "")
+
+if AWS_S3_ENDPOINT_URL:
+    _default_storage = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "endpoint_url": AWS_S3_ENDPOINT_URL,
+            "access_key": os.environ.get("AWS_ACCESS_KEY_ID", ""),
+            "secret_key": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
+            "bucket_name": os.environ.get("AWS_STORAGE_BUCKET_NAME", "justificatifs"),
+            # Le contenu n'est jamais public : il est servi par une vue
+            # authentifiée qui vérifie le périmètre de l'utilisateur.
+            "default_acl": None,
+            "querystring_auth": True,
+            "signature_version": "s3v4",
+            "file_overwrite": False,
+        },
+    }
+else:
+    _default_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
+
+STORAGES = {
+    "default": _default_storage,
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+    },
+}
+
+# Taille maximale d'une pièce justificative (octets).
+MAX_PROOF_SIZE = int(os.environ.get("MAX_PROOF_SIZE", 20 * 1024 * 1024))
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

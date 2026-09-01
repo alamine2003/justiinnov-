@@ -7,6 +7,9 @@ python manage.py migrate --noinput
 echo "→ Table de cache (limitation de débit partagée entre workers)…"
 python manage.py createcachetable
 
+echo "→ Stockage des justificatifs…"
+python manage.py ensure_bucket
+
 # Compte d'amorçage optionnel. Les comptes réels sont créés par
 # `python manage.py seed_users` ; aucun mot de passe n'est codé en dur ici.
 if [ "$DJANGO_CREATE_SUPERUSER" = "1" ]; then

@@ -50,7 +50,7 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         budgets = self.filter_queryset(self.get_queryset())
 
         per_country = defaultdict(
-            lambda: {"allocated": ZERO, "sub_allocated": ZERO,
+            lambda: {"allocated": ZERO, "sub_allocated": ZERO, "engaged": ZERO,
                      "consumed": ZERO, "justified": ZERO}
         )
         countries = {}
@@ -62,6 +62,7 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
             else:
                 entry["sub_allocated"] += budget.amount
             figures = budget_figures(budget)
+            entry["engaged"] += figures["engaged"]
             entry["consumed"] += figures["consumed"]
             entry["justified"] += figures["justified"]
 
@@ -70,7 +71,7 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         unconverted = set()
         for country_id, entry in per_country.items():
             country = countries[country_id]
-            remaining = entry["allocated"] - entry["consumed"]
+            remaining = entry["allocated"] - entry["consumed"] - entry["engaged"]
             remaining_xof = to_xof(remaining, country.currency)
             if remaining_xof is None:
                 unconverted.add(country.currency)
@@ -83,6 +84,7 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
                 "currency": country.currency,
                 "allocated": str(entry["allocated"]),
                 "sub_allocated": str(entry["sub_allocated"]),
+                "engaged": str(entry["engaged"]),
                 "consumed": str(entry["consumed"]),
                 "justified": str(entry["justified"]),
                 "remaining": str(remaining),

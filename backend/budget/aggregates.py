@@ -6,7 +6,9 @@ uniquement ici, que consommation, écart et disponible sont établis.
 
 from decimal import Decimal
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
+
+from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
 
 from .models import CONSOLIDATION_CURRENCY, ExchangeRate
 
@@ -15,21 +17,21 @@ CENTS = Decimal("0.01")
 
 
 def consumption(budget):
-    """Montants consommés et justifiés sur une enveloppe.
+    """Montants engagés, consommés et justifiés sur une enveloppe.
 
-    Les lignes de dépenses sont introduites au lot 2 et se rattacheront à
-    l'enveloppe via la relation inverse ``expenses``. Tant qu'elle n'existe
-    pas, aucune dépense n'a pu être saisie : une consommation nulle est donc
-    la valeur exacte, pas une valeur par défaut.
+    Une dépense soumise ou en contrôle **engage** l'enveloppe sans l'avoir
+    encore consommée ; seule une dépense validée ou clôturée la consomme. Un
+    brouillon ou une dépense refusée ne comptent pour rien.
     """
-    expenses = getattr(budget, "expenses", None)
-    if expenses is None:
-        return {"consumed": ZERO, "justified": ZERO}
-
-    totals = expenses.aggregate(
-        consumed=Sum("amount"), justified=Sum("justified_amount")
+    totals = budget.expenses.aggregate(
+        engaged=Sum("amount", filter=Q(status__in=list(ENGAGING_STATUSES))),
+        consumed=Sum("amount", filter=Q(status__in=list(CONSUMING_STATUSES))),
+        justified=Sum(
+            "justified_amount", filter=Q(status__in=list(CONSUMING_STATUSES))
+        ),
     )
     return {
+        "engaged": totals["engaged"] or ZERO,
         "consumed": totals["consumed"] or ZERO,
         "justified": totals["justified"] or ZERO,
     }
@@ -38,14 +40,18 @@ def consumption(budget):
 def budget_figures(budget):
     """Indicateurs d'une enveloppe, dans la devise du pays."""
     totals = consumption(budget)
+    engaged = totals["engaged"]
     consumed = totals["consumed"]
     justified = totals["justified"]
     return {
+        "engaged": engaged,
         "consumed": consumed,
         "justified": justified,
         # Écart entre ce qui est dépensé et ce qui est prouvé.
         "gap": consumed - justified,
-        "remaining": budget.amount - consumed,
+        # Le disponible retranche aussi l'engagé : sans cela, une enveloppe
+        # paraîtrait libre alors qu'elle est déjà mobilisée.
+        "remaining": budget.amount - consumed - engaged,
         "execution_rate": _ratio(consumed, budget.amount),
         "justification_rate": _ratio(justified, consumed),
     }

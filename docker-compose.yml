@@ -16,6 +16,24 @@ services:
     ports:
       - "5433:5432"
 
+  minio:
+    image: minio/minio:latest
+    container_name: justi_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: justi
+      MINIO_ROOT_PASSWORD: justi-minio-dev
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
   backend:
     build: ./backend
     container_name: justi_backend
@@ -30,10 +48,17 @@ services:
       # Les comptes réels sont créés par `manage.py seed_users`.
       DJANGO_CREATE_SUPERUSER: "0"
       CORS_ALLOWED_ORIGINS: "http://localhost:5173"
+      # Stockage des pièces justificatives
+      AWS_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: "justi"
+      AWS_SECRET_ACCESS_KEY: "justi-minio-dev"
+      AWS_STORAGE_BUCKET_NAME: "justificatifs"
     volumes:
       - ./backend:/app
     depends_on:
       db:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     ports:
       - "8000:8000"
@@ -54,4 +79,5 @@ services:
 
 volumes:
   pgdata:
+  miniodata:
   frontend_node_modules:

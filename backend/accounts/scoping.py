@@ -22,6 +22,9 @@ class CountryScopedMixin:
 
     country_lookup = "country"
     country_field = "country"
+    #: Champ dont la valeur *porte* un pays (ex. le dossier d'une preuve),
+    #: quand la ressource n'a pas de champ « pays » propre.
+    country_via = None
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -35,19 +38,34 @@ class CountryScopedMixin:
         ).distinct()
 
     def _check_country_scope(self, serializer):
-        """Interdit d'affecter une entité à un pays hors périmètre."""
-        if self.country_field is None:
-            return
+        """Interdit d'affecter une entité à un pays hors périmètre.
+
+        Indispensable : le champ « pays » d'une charge utile n'est pas limité
+        au périmètre du demandeur, contrairement au queryset de lecture.
+        """
         access = get_access(self.request.user)
         if access is None or access.has_global_scope:
             return
-        country = serializer.validated_data.get(self.country_field)
-        if country is None:
+
+        country_id = self._target_country_id(serializer)
+        if country_id is None:
             # Absent de la charge utile : l'instance visée est déjà filtrée par
             # ``get_queryset``, elle est donc dans le périmètre.
             return
-        if country.pk not in access.country_ids:
+        if country_id not in access.country_ids:
             raise PermissionDenied("Ce pays n'est pas dans votre périmètre.")
+
+    def _target_country_id(self, serializer):
+        data = serializer.validated_data
+        if self.country_field is not None:
+            country = data.get(self.country_field)
+            if country is not None:
+                return country.pk
+        if self.country_via is not None:
+            related = data.get(self.country_via)
+            if related is not None:
+                return related.country_id
+        return None
 
     def perform_create(self, serializer):
         self._check_country_scope(serializer)
