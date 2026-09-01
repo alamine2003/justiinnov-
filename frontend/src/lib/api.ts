@@ -35,6 +35,22 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+/** Extrait un message lisible d'une réponse d'erreur DRF. */
+function readErrorMessage(data: unknown): string | null {
+  if (typeof data === "string") return data
+  if (!data || typeof data !== "object") return null
+
+  const payload = data as Record<string, unknown>
+  if (typeof payload.detail === "string") return payload.detail
+  if (typeof payload.message === "string") return payload.message
+
+  // Erreurs de validation DRF : { non_field_errors: [...], champ: [...] }
+  const errors = Object.values(payload)
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is string => typeof value === "string")
+  return errors.length > 0 ? errors.join(" ") : null
+}
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -42,8 +58,7 @@ api.interceptors.response.use(
       clearToken()
     }
     const message =
-      error.response?.data?.detail ||
-      error.response?.data?.message ||
+      readErrorMessage(error.response?.data) ||
       error.message ||
       "Une erreur est survenue"
     const status = error.response?.status || 0
@@ -51,38 +66,22 @@ api.interceptors.response.use(
   },
 )
 
-function extractData<T>(detail: T): T {
-  if (
-    detail &&
-    typeof detail === "object" &&
-    "results" in detail &&
-    "count" in detail
-  ) {
-    return detail as T
-  }
-  return detail
-}
-
 export async function apiGet<T>(url: string, params?: Record<string, unknown>): Promise<T> {
-  const res = await api.get(url, { params })
-  return extractData<T>(res.data)
+  const res = await api.get<T>(url, { params })
+  return res.data
 }
 
 export async function apiPost<T>(url: string, data: unknown): Promise<T> {
-  const res = await api.post(url, data)
-  return extractData<T>(res.data)
+  const res = await api.post<T>(url, data)
+  return res.data
 }
 
 export async function apiPatch<T>(url: string, data: unknown): Promise<T> {
-  const res = await api.patch(url, data)
-  return extractData<T>(res.data)
+  const res = await api.patch<T>(url, data)
+  return res.data
 }
 
 export async function apiPut<T>(url: string, data: unknown): Promise<T> {
-  const res = await api.put(url, data)
-  return extractData<T>(res.data)
-}
-
-export async function apiDelete(url: string): Promise<void> {
-  await api.delete(url)
+  const res = await api.put<T>(url, data)
+  return res.data
 }

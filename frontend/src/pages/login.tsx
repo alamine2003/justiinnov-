@@ -10,8 +10,8 @@ import { useAuth } from "@/context/auth"
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [username, setUsername] = useState("admin")
-  const [password, setPassword] = useState("admin123")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 

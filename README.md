@@ -58,6 +58,11 @@ Vite proxy les appels `/api` vers `http://localhost:8000`.
 
 Toutes les routes exigent un jeton `Authorization: Token <token>`.
 
+> **Pas de suppression.** Le retrait d'une entité se fait par désactivation
+> (`is_active`), jamais par `DELETE` : supprimer un pays effacerait en cascade
+> ses équipes, centres de coûts et projets. Les routes `DELETE` répondent 405.
+> L'obtention du jeton est limitée à 10 tentatives par minute et par adresse IP.
+
 ```
 POST   /api/token-auth/                  # obtention du jeton (username/password)
 GET    /api/countries/                   # liste paginée (filtres: is_active, search, ordering)
@@ -82,9 +87,30 @@ Les événements suivants sont auto-journalisés dans `ChangeLog` :
 - **Changement de rattachement** : une sous-entité (équipe, centre de coûts,
   projet…) rattachée à un autre pays.
 - **Désactivation / réactivation** d'un pays.
+- **Suppression** effectuée hors API (admin Django, shell), y compris en
+  cascade.
 
 Chaque entrée conserve `label`, `performed_by` (utilisateur authentifié),
-`from_value` / `to_value` et `created_at`.
+`from_value` / `to_value`, `changed_fields` et `created_at`. Une modification
+qui combine plusieurs natures d'événement (par exemple un changement de
+rattachement *et* un renommage) produit une entrée par événement.
+
+## Tests
+
+```bash
+docker compose run --rm --entrypoint python backend manage.py test core
+```
+
+## Variables d'environnement
+
+| Variable | Défaut | Rôle |
+|----------|--------|------|
+| `DJANGO_DEBUG` | `0` | `1` active le mode debug (dev uniquement) |
+| `DJANGO_SECRET_KEY` | — | **obligatoire** hors mode debug |
+| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | hôtes autorisés, séparés par des virgules |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | origines autorisées |
+| `DJANGO_SECURE_SSL_REDIRECT` | `1` | redirection HTTPS hors mode debug |
+| `POSTGRES_*` | voir `docker-compose.yml` | connexion à la base |
 
 ## Capture d'écran (revue visuelle)
 

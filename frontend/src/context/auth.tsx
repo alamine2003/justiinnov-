@@ -6,8 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import axios from "axios"
-import { clearToken, getToken, setToken } from "@/lib/api"
+import { apiPost, clearToken, getToken, setToken } from "@/lib/api"
 
 interface AuthContextValue {
   token: string | null
@@ -22,8 +21,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(() => getToken())
 
   const login = useCallback(async (username: string, password: string) => {
-    const res = await axios.post("/api/token-auth/", { username, password })
-    const newToken = res.data.token as string
+    // Passe par le client partagé pour bénéficier de la normalisation des
+    // erreurs (`ApiError`) : sans elle, un 400 remonte « Request failed with
+    // status code 400 » au lieu du message du serveur.
+    const { token: newToken } = await apiPost<{ token: string }>(
+      "/token-auth/",
+      { username, password },
+    )
     setToken(newToken)
     setTokenState(newToken)
   }, [])

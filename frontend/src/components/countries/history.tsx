@@ -12,6 +12,7 @@ const ACTION_COLOR: Record<string, string> = {
   reassigned: "bg-amber-500 hover:bg-amber-500",
   deactivated: "bg-zinc-500 hover:bg-zinc-500",
   reactivated: "bg-emerald-500 hover:bg-emerald-500",
+  deleted: "bg-destructive hover:bg-destructive",
 }
 
 const ACTION_LABEL: Record<string, string> = {
@@ -20,6 +21,7 @@ const ACTION_LABEL: Record<string, string> = {
   reassigned: "Rattachement",
   deactivated: "Désactivation",
   reactivated: "Réactivation",
+  deleted: "Suppression",
 }
 
 export function CaretHistory({ countryId }: { countryId: number }) {

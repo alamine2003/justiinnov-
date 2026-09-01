@@ -1,7 +1,6 @@
 """URLs de l'API."""
 
 from django.urls import include, path
-from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.routers import DefaultRouter
 
 from . import views
@@ -17,6 +16,10 @@ router.register("marketing-categories", views.MarketingCategoryViewSet, basename
 router.register("history", views.ChangeLogViewSet, basename="history")
 
 urlpatterns = [
-    path("token-auth/", obtain_auth_token, name="token-auth"),
+    path(
+        "token-auth/",
+        views.ThrottledObtainAuthToken.as_view(),
+        name="token-auth",
+    ),
     path("", include(router.urls)),
 ]

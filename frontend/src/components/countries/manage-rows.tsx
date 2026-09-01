@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react"
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react"
+import { Loader2, Pencil, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -35,7 +35,6 @@ interface ManageRowsProps<T extends { id: number }> {
   emptyMessage?: string
   createLabel?: string
   onSave: (data: Record<string, unknown>, id?: number) => Promise<void>
-  onDelete?: (id: number) => Promise<void>
   detectActive?: (item: T) => boolean
   defaultForm: Record<string, string>
   formFields: {
@@ -56,7 +55,6 @@ export function ManageRows<T extends { id: number }>({
   emptyMessage = "Aucune entrée.",
   createLabel = "Ajouter",
   onSave,
-  onDelete,
   detectActive,
   defaultForm,
   formFields,
@@ -122,7 +120,7 @@ export function ManageRows<T extends { id: number }>({
               {columns.map((col) => (
                 <TableHead key={String(col.key)}>{col.header}</TableHead>
               ))}
-              {onDelete && <TableHead className="text-right">Actions</TableHead>}
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -148,27 +146,16 @@ export function ManageRows<T extends { id: number }>({
                         : (item[col.key as keyof T] as ReactNode)}
                     </TableCell>
                   ))}
-                  {onDelete && (
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEdit(item)}
-                        aria-label="Modifier"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onDelete(item.id)}
-                        aria-label="Supprimer"
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  )}
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEdit(item)}
+                      aria-label="Modifier"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}

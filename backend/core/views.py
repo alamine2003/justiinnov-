@@ -2,7 +2,10 @@
 
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.throttling import AnonRateThrottle
 
+from .mixins import NoDestroyModelViewSet
 from .models import (
     ChangeLog,
     CostCenter,
@@ -27,7 +30,24 @@ from .serializers import (
 )
 
 
-class CountryViewSet(viewsets.ModelViewSet):
+class LoginRateThrottle(AnonRateThrottle):
+    """Limite les tentatives d'authentification par adresse IP."""
+
+    scope = "login"
+
+
+class ThrottledObtainAuthToken(ObtainAuthToken):
+    """Obtention du jeton, protégée contre le bourrage d'identifiants.
+
+    ``ObtainAuthToken`` force ``throttle_classes = ()`` : les limites globales
+    de ``REST_FRAMEWORK`` ne s'y appliquent pas et il faut donc les réattacher
+    explicitement.
+    """
+
+    throttle_classes = [LoginRateThrottle]
+
+
+class CountryViewSet(NoDestroyModelViewSet):
     """CRUD des pays + activation/désactivation + historique."""
 
     queryset = Country.objects.prefetch_related(
@@ -46,35 +66,29 @@ class CountryViewSet(viewsets.ModelViewSet):
             return CountryDetailSerializer
         return CountryListSerializer
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        if self.action == "retrieve":
-            return queryset
-        return queryset
 
-
-class ManagerViewSet(viewsets.ModelViewSet):
+class ManagerViewSet(NoDestroyModelViewSet):
     queryset = Manager.objects.all().order_by("name")
     serializer_class = ManagerSerializer
     filterset_fields = ["is_active"]
     search_fields = ["name", "email", "title"]
 
 
-class TeamViewSet(viewsets.ModelViewSet):
+class TeamViewSet(NoDestroyModelViewSet):
     queryset = Team.objects.select_related("country").all().order_by("name")
     serializer_class = TeamSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["name"]
 
 
-class CostCenterViewSet(viewsets.ModelViewSet):
+class CostCenterViewSet(NoDestroyModelViewSet):
     queryset = CostCenter.objects.select_related("country").all().order_by("code")
     serializer_class = CostCenterSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["code", "name"]
 
 
-class ProjectViewSet(viewsets.ModelViewSet):
+class ProjectViewSet(NoDestroyModelViewSet):
     queryset = Project.objects.select_related("country").all().order_by("-created_at")
     serializer_class = ProjectSerializer
     filterset_fields = ["country", "status", "is_active"]
@@ -82,14 +96,14 @@ class ProjectViewSet(viewsets.ModelViewSet):
     ordering_fields = ["created_at", "name"]
 
 
-class ExpenseTitleViewSet(viewsets.ModelViewSet):
+class ExpenseTitleViewSet(NoDestroyModelViewSet):
     queryset = ExpenseTitle.objects.select_related("country").all().order_by("label")
     serializer_class = ExpenseTitleSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["label"]
 
 
-class MarketingCategoryViewSet(viewsets.ModelViewSet):
+class MarketingCategoryViewSet(NoDestroyModelViewSet):
     queryset = MarketingCategory.objects.select_related("country").all().order_by("name")
     serializer_class = MarketingCategorySerializer
     filterset_fields = ["country", "is_active"]

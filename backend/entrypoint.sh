@@ -4,6 +4,9 @@ set -e
 echo "→ Application des migrations…"
 python manage.py migrate --noinput
 
+echo "→ Table de cache (limitation de débit partagée entre workers)…"
+python manage.py createcachetable
+
 if [ "$DJANGO_CREATE_SUPERUSER" = "1" ]; then
   python manage.py shell -c "
 from django.contrib.auth.models import User

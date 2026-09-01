@@ -159,6 +159,7 @@ class ChangeLog(models.Model):
         REASSIGNED = "reassigned", "Changement de rattachement"
         DEACTIVATED = "deactivated", "Désactivation"
         REACTIVATED = "reactivated", "Réactivation"
+        DELETED = "deleted", "Suppression"
 
     class Models(models.TextChoices):
         COUNTRY = "country", "Pays"

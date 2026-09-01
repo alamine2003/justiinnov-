@@ -1,9 +1,4 @@
-import {
-  apiDelete,
-  apiGet,
-  apiPatch,
-  apiPost,
-} from "@/lib/api"
+import { apiGet, apiPatch, apiPost } from "@/lib/api"
 import type {
   ChangeLogEntry,
   CostCenter,
@@ -36,10 +31,6 @@ export function updateCountry(id: number, data: unknown) {
   return apiPatch<CountrySummary>(`/countries/${id}/`, data)
 }
 
-export function deleteCountry(id: number) {
-  return apiDelete(`/countries/${id}/`)
-}
-
 export function updateCountryManagers(id: number, managerIds: number[]) {
   return apiPatch<CountrySummary>(`/countries/${id}/`, { managers: managerIds })
 }
@@ -57,10 +48,6 @@ export function createManager(data: unknown) {
 
 export function updateManager(id: number, data: unknown) {
   return apiPatch<Manager>(`/managers/${id}/`, data)
-}
-
-export function deleteManager(id: number) {
-  return apiDelete(`/managers/${id}/`)
 }
 
 // ---------------------------------------------------------------------------
