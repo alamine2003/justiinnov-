@@ -100,9 +100,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
     beneficiary_name = serializers.CharField(
         source="beneficiary.name", read_only=True, allow_null=True
     )
-    budget_label = serializers.CharField(
-        source="budget.__str__", read_only=True, allow_null=True
-    )
+    # Un `source="budget.__str__"` renverrait la représentation du
+    # method-wrapper de None quand la dépense n'est pas encore imputée.
+    budget_label = serializers.SerializerMethodField()
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     payment_method_display = serializers.CharField(
         source="get_payment_method_display", read_only=True
@@ -128,6 +128,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
         # Le statut ne se modifie que par les actions de workflow, et
         # l'imputation budgétaire est résolue par le serveur.
         read_only_fields = ["status", "budget", "created_by"]
+
+    def get_budget_label(self, expense):
+        return str(expense.budget) if expense.budget_id else None
 
     def validate(self, attrs):
         if self.instance is not None and self.instance.status in LOCKED_STATUSES:

@@ -205,6 +205,16 @@ class BudgetImputationTests(ExpenseTestCase):
 
         self.assertEqual(figures["remaining"], Decimal("1000000.00"))
 
+    def test_depense_non_imputee_expose_un_libelle_nul(self):
+        """Régression : la traversée `budget.__str__` renvoyait la
+        représentation du method-wrapper de None, affichée telle quelle."""
+        expense = self.make_expense()
+        self.login(self.owner)
+
+        response = self.client.get(f"/api/expenses/{expense.pk}/")
+
+        self.assertIsNone(response.data["budget_label"])
+
     def test_ecart_calcule_jamais_saisi(self):
         expense = self.make_expense(amount="100000.00", justified_amount="60000.00")
         self.login(self.owner)

@@ -21,7 +21,7 @@ export function LoginPage() {
     setError(null)
     try {
       await login(username, password)
-      navigate("/countries", { replace: true })
+      navigate("/dossiers", { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Identifiants invalides")
     } finally {

@@ -148,11 +148,18 @@ export interface ScopeCountry {
   country_ref: string | null
 }
 
+/**
+ * Droits calculés par le serveur à partir du rôle. L'interface ne redéfinit
+ * jamais la matrice : elle s'en sert seulement pour masquer l'inutile.
+ */
 export interface Permissions {
   manage_users: boolean
   manage_countries: boolean
   manage_subentities: boolean
   manage_budgets: boolean
+  record_expenses: boolean
+  validate_expenses: boolean
+  view_audit: boolean
 }
 
 export interface Me {
@@ -269,5 +276,172 @@ export interface ExchangeRate {
   currency: string
   rate_to_xof: string
   valid_from: string
+  created_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Dossiers, dépenses et justificatifs
+// ---------------------------------------------------------------------------
+
+export type WorkflowStatus =
+  | "draft"
+  | "submitted"
+  | "in_review"
+  | "approved"
+  | "rejected"
+  | "closed"
+
+export const WORKFLOW_LABELS: Record<WorkflowStatus, string> = {
+  draft: "Brouillon",
+  submitted: "Soumis",
+  in_review: "En contrôle",
+  approved: "Validé",
+  rejected: "Refusé",
+  closed: "Clôturé",
+}
+
+/** Doit refléter `expenses.workflow.LOCKED_STATUSES`. */
+export const LOCKED_STATUSES: WorkflowStatus[] = ["approved", "closed"]
+
+export type TransitionName = "submit" | "review" | "approve" | "reject" | "close"
+
+export interface DossierTotals {
+  amount: string
+  justified: string
+  gap: string
+}
+
+export interface Dossier {
+  id: number
+  number: string
+  label: string
+  country: number
+  country_name: string
+  country_ref: string | null
+  currency: string
+  team: number | null
+  team_name: string | null
+  owner: number | null
+  owner_name: string | null
+  date: string
+  status: WorkflowStatus
+  status_display: string
+  note: string
+  totals: DossierTotals
+  expense_count: number
+  proof_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Expense {
+  id: number
+  dossier: number
+  dossier_number: string
+  country: number
+  country_name: string
+  currency: string
+  team: number | null
+  team_name: string | null
+  owner: number | null
+  owner_name: string | null
+  date: string
+  place: string
+  title: string
+  description: string
+  project: number | null
+  project_name: string | null
+  expense_title: number | null
+  marketing_category: number | null
+  beneficiary: number | null
+  beneficiary_name: string | null
+  budget: number | null
+  budget_label: string | null
+  amount: string
+  justified_amount: string
+  gap: string
+  payment_method: string
+  payment_method_display: string
+  status: WorkflowStatus
+  status_display: string
+  note: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export type ProofStatus =
+  | "received"
+  | "incomplete"
+  | "to_review"
+  | "validated"
+  | "rejected"
+  | "archived"
+
+export const PROOF_STATUS_LABELS: Record<ProofStatus, string> = {
+  received: "Reçu",
+  incomplete: "Incomplet",
+  to_review: "À contrôler",
+  validated: "Validé",
+  rejected: "Rejeté",
+  archived: "Archivé",
+}
+
+export const PROOF_KIND_LABELS: Record<string, string> = {
+  receipt: "Reçu",
+  invoice: "Facture",
+  discharge: "Décharge",
+  deliverable: "Livrable",
+  other: "Autre",
+}
+
+export interface Proof {
+  id: number
+  dossier: number
+  original_name: string
+  kind: string
+  kind_display: string
+  status: ProofStatus
+  status_display: string
+  is_complete: boolean
+  sha256: string
+  size: number
+  content_type: string
+  version: number
+  replaces: number | null
+  uploaded_by: string
+  rejection_reason: string
+  download_url: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DossierDetail extends Dossier {
+  expenses: Expense[]
+  proofs: Proof[]
+}
+
+export interface Beneficiary {
+  id: number
+  name: string
+  kind: string
+  kind_display: string
+  contact: string
+  is_active: boolean
+}
+
+export interface AuditEntry {
+  id: number
+  user: string
+  action: string
+  action_display: string
+  object_type: string
+  object_id: number
+  label: string
+  country: number | null
+  country_name: string | null
+  detail: Record<string, unknown>
+  ip_address: string | null
+  user_agent: string
   created_at: string
 }

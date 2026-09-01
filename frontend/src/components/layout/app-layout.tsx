@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom"
-import { Globe, LogOut, Users, Wallet } from "lucide-react"
+import { FolderOpen, Globe, LogOut, ScrollText, Users, Wallet } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PasswordNotice } from "@/components/layout/password-notice"
@@ -67,12 +67,20 @@ export function AppLayout() {
           </div>
 
           <div className="flex items-center gap-1">
-            <NavItem to="/countries" icon={Globe}>
-              Pays
+            <NavItem to="/dossiers" icon={FolderOpen}>
+              Dossiers
             </NavItem>
             <NavItem to="/budgets" icon={Wallet}>
               Budgets
             </NavItem>
+            <NavItem to="/countries" icon={Globe}>
+              Pays
+            </NavItem>
+            {can("view_audit") && (
+              <NavItem to="/audit" icon={ScrollText}>
+                Audit
+              </NavItem>
+            )}
             {can("manage_users") && (
               <NavItem to="/users" icon={Users}>
                 Comptes

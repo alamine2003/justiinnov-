@@ -41,7 +41,7 @@ async function login(page: Page, prefix: string) {
   await page.fill("#username", user)
   await page.fill("#password", password)
   await page.click("button[type=submit]")
-  await page.waitForURL("**/countries", { timeout: 15000 })
+  await page.waitForURL("**/dossiers", { timeout: 15000 })
   await page.waitForTimeout(1200)
   return user
 }
@@ -57,9 +57,33 @@ async function main() {
   const hq = await newPage(browser)
   const hqUser = await login(hq, "HQ")
   console.log(`\n=== SIÈGE (${hqUser}) ===`)
-  await shot(hq, "countries_hq")
-  console.log("Pays visibles :", await hq.locator("tbody tr").count())
   console.log("Navigation :", await hq.locator("header a").allTextContents())
+  console.log("Dossiers visibles :", await hq.locator("tbody tr").count())
+  await shot(hq, "dossiers")
+
+  // Premier dossier : lignes de dépenses, justificatifs et workflow.
+  const firstDossier = hq.locator("tbody tr").first()
+  if (await firstDossier.count()) {
+    await firstDossier.click()
+    await hq.waitForURL("**/dossiers/*", { timeout: 15000 })
+    await hq.waitForTimeout(1200)
+    console.log("Dossier - N°ORDRE :", await hq.textContent("h1"))
+    console.log(
+      "Dossier - lignes :",
+      await hq.locator("table").first().locator("tbody tr").count(),
+    )
+    await shot(hq, "dossier_detail")
+  }
+
+  await hq.goto(`${BASE}/audit`, { waitUntil: "networkidle" })
+  await hq.waitForTimeout(1200)
+  console.log("Audit - entrées :", await hq.locator("tbody tr").count())
+  await shot(hq, "audit")
+
+  await hq.goto(`${BASE}/countries`, { waitUntil: "networkidle" })
+  await hq.waitForTimeout(1000)
+  console.log("Pays visibles :", await hq.locator("tbody tr").count())
+  await shot(hq, "countries_hq")
 
   await hq.goto(`${BASE}/budgets`, { waitUntil: "networkidle" })
   await hq.waitForTimeout(1200)
@@ -84,12 +108,14 @@ async function main() {
   const rep = await newPage(browser)
   const repUser = await login(rep, "COUNTRY")
   console.log(`\n=== REPRÉSENTANT PAYS (${repUser}) ===`)
-  console.log("Pays visibles :", await rep.locator("tbody tr").count())
   console.log("Périmètre affiché :", await rep.textContent("header p.text-xs"))
-  console.log(
-    "Lien « Comptes » visible :",
-    await rep.locator('header a:has-text("Comptes")').count(),
-  )
+  console.log("Navigation :", await rep.locator("header a").allTextContents())
+  console.log("Dossiers visibles :", await rep.locator("tbody tr").count())
+  await shot(rep, "dossiers_representant")
+
+  await rep.goto(`${BASE}/countries`, { waitUntil: "networkidle" })
+  await rep.waitForTimeout(1000)
+  console.log("Pays visibles :", await rep.locator("tbody tr").count())
   console.log(
     "Bouton « Ajouter » visible :",
     await rep.locator('button:has-text("Ajouter")').count(),

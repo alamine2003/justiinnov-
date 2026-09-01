@@ -2,9 +2,12 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { Loader2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/app-layout"
 import { useAuth } from "@/context/auth"
+import { AuditPage } from "@/pages/audit/list"
 import { BudgetsPage } from "@/pages/budgets/list"
 import { CountriesPage } from "@/pages/countries/list"
 import { CountryDetailPage } from "@/pages/countries/detail"
+import { DossierDetailPage } from "@/pages/dossiers/detail"
+import { DossiersPage } from "@/pages/dossiers/list"
 import { LoginPage } from "@/pages/login"
 import { UsersPage } from "@/pages/users/list"
 import type { Permissions } from "@/lib/types"
@@ -43,7 +46,7 @@ function RequirePermission({
 }) {
   const { can } = useAuth()
   if (!can(permission)) {
-    return <Navigate to="/countries" replace />
+    return <Navigate to="/dossiers" replace />
   }
   return <>{children}</>
 }
@@ -62,6 +65,16 @@ export default function App() {
         <Route path="/countries" element={<CountriesPage />} />
         <Route path="/countries/:id" element={<CountryDetailPage />} />
         <Route path="/budgets" element={<BudgetsPage />} />
+        <Route path="/dossiers" element={<DossiersPage />} />
+        <Route path="/dossiers/:id" element={<DossierDetailPage />} />
+        <Route
+          path="/audit"
+          element={
+            <RequirePermission permission="view_audit">
+              <AuditPage />
+            </RequirePermission>
+          }
+        />
         <Route
           path="/users"
           element={
@@ -71,7 +84,7 @@ export default function App() {
           }
         />
       </Route>
-      <Route path="*" element={<Navigate to="/countries" replace />} />
+      <Route path="*" element={<Navigate to="/dossiers" replace />} />
     </Routes>
   )
 }
