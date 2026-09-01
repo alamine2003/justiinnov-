@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
+from accounts.models import Role, UserProfile
 from core.models import ChangeLog, Country, Team
 
 PASSWORD = "Motdepasse-de-test-2026"
@@ -16,7 +17,9 @@ class ApiTestCase(APITestCase):
         # Les compteurs de débit vivent dans le cache : ils doivent repartir de
         # zéro à chaque test.
         cache.clear()
-        self.user = User.objects.create_user(username="controleur", password=PASSWORD)
+        self.user = User.objects.create_user(username="admin.test", password=PASSWORD)
+        # Les vues exigent un profil : sans rôle, aucun droit.
+        UserProfile.objects.create(user=self.user, role=Role.SUPER_ADMIN)
         self.token = Token.objects.create(user=self.user)
         self.country = Country.objects.create(
             name="Togo", code="TG", currency="XOF", timezone="Africa/Lome"
@@ -35,7 +38,7 @@ class AuthenticationTests(ApiTestCase):
     def test_login_retourne_un_jeton(self):
         response = self.client.post(
             "/api/token-auth/",
-            {"username": "controleur", "password": PASSWORD},
+            {"username": "admin.test", "password": PASSWORD},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -44,7 +47,7 @@ class AuthenticationTests(ApiTestCase):
     def test_login_limite_le_bourrage_d_identifiants(self):
         """``ObtainAuthToken`` neutralise les limites globales de DRF : la
         limitation doit être explicitement rattachée à la vue."""
-        payload = {"username": "controleur", "password": "mauvais"}
+        payload = {"username": "admin.test", "password": "mauvais"}
 
         for _ in range(10):
             response = self.client.post("/api/token-auth/", payload)
@@ -106,4 +109,4 @@ class HistoryTests(ApiTestCase):
         )
 
         entry = ChangeLog.objects.filter(action=ChangeLog.Actions.UPDATED).first()
-        self.assertEqual(entry.performed_by, "controleur")
+        self.assertEqual(entry.performed_by, "admin.test")

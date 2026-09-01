@@ -27,7 +27,8 @@ services:
       POSTGRES_PASSWORD: justi
       DJANGO_DEBUG: "1"
       DJANGO_ALLOWED_HOSTS: "*"
-      DJANGO_CREATE_SUPERUSER: "1"
+      # Les comptes réels sont créés par `manage.py seed_users`.
+      DJANGO_CREATE_SUPERUSER: "0"
       CORS_ALLOWED_ORIGINS: "http://localhost:5173"
     volumes:
       - ./backend:/app

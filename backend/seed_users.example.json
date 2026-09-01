@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "Modèle de fichier d'amorçage des pays et des comptes.",
+    "Copiez-le en seed_users.local.json (ignoré par git) et renseignez les",
+    "identifiants réels, puis lancez : python manage.py seed_users --dry-run",
+    "",
+    "Rôles disponibles : super_admin, admin, doo, country_manager, owner,",
+    "controller, auditor.",
+    "Un compte sans 'countries' relève du siège et voit tous les pays ;",
+    "un country_manager doit toujours avoir au moins un pays."
+  ],
+  "countries": [
+    {
+      "country_ref": "XX-00",
+      "name": "Nom du pays",
+      "code": "XX",
+      "currency": "XOF",
+      "currency_symbol": "FCFA",
+      "timezone": "Africa/Dakar"
+    }
+  ],
+  "users": [
+    {
+      "username": "prenom.innov",
+      "password": "à renseigner",
+      "first_name": "Prénom",
+      "last_name": "Nom",
+      "role": "super_admin",
+      "countries": []
+    },
+    {
+      "username": "pays.innov",
+      "password": "à renseigner",
+      "role": "country_manager",
+      "countries": ["XX-00"]
+    }
+  ]
+}

@@ -5,6 +5,13 @@ from rest_framework import filters, viewsets
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.throttling import AnonRateThrottle
 
+from accounts.permissions import (
+    REFERENTIAL_WRITE_ROLES,
+    SUBENTITY_WRITE_ROLES,
+    RolePermission,
+)
+from accounts.scoping import CountryScopedMixin
+
 from .mixins import NoDestroyModelViewSet
 from .models import (
     ChangeLog,
@@ -47,7 +54,13 @@ class ThrottledObtainAuthToken(ObtainAuthToken):
     throttle_classes = [LoginRateThrottle]
 
 
-class CountryViewSet(NoDestroyModelViewSet):
+class ScopedViewSet(CountryScopedMixin, NoDestroyModelViewSet):
+    """Base commune : cloisonnement par pays + droits liés au rôle."""
+
+    permission_classes = [RolePermission]
+
+
+class CountryViewSet(ScopedViewSet):
     """CRUD des pays + activation/désactivation + historique."""
 
     queryset = Country.objects.prefetch_related(
@@ -55,9 +68,13 @@ class CountryViewSet(NoDestroyModelViewSet):
         "expense_titles", "marketing_categories",
     ).all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["is_active", "currency"]
-    search_fields = ["name", "code", "timezone"]
+    filterset_fields = ["is_active", "currency", "country_ref"]
+    search_fields = ["name", "code", "country_ref", "timezone"]
     ordering_fields = ["name", "code", "created_at"]
+    write_roles = REFERENTIAL_WRITE_ROLES
+    # Le pays est l'objet lui-même : il n'y a pas de champ « pays » à valider.
+    country_lookup = "pk"
+    country_field = None
 
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
@@ -67,60 +84,66 @@ class CountryViewSet(NoDestroyModelViewSet):
         return CountryListSerializer
 
 
-class ManagerViewSet(NoDestroyModelViewSet):
+class ManagerViewSet(ScopedViewSet):
     queryset = Manager.objects.all().order_by("name")
     serializer_class = ManagerSerializer
     filterset_fields = ["is_active"]
     search_fields = ["name", "email", "title"]
+    write_roles = REFERENTIAL_WRITE_ROLES
+    # Un manager est rattaché à ses pays par une relation multiple.
+    country_lookup = "countries"
+    country_field = None
 
 
-class TeamViewSet(NoDestroyModelViewSet):
+class TeamViewSet(ScopedViewSet):
     queryset = Team.objects.select_related("country").all().order_by("name")
     serializer_class = TeamSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["name"]
+    write_roles = SUBENTITY_WRITE_ROLES
 
 
-class CostCenterViewSet(NoDestroyModelViewSet):
+class CostCenterViewSet(ScopedViewSet):
     queryset = CostCenter.objects.select_related("country").all().order_by("code")
     serializer_class = CostCenterSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["code", "name"]
+    write_roles = SUBENTITY_WRITE_ROLES
 
 
-class ProjectViewSet(NoDestroyModelViewSet):
+class ProjectViewSet(ScopedViewSet):
     queryset = Project.objects.select_related("country").all().order_by("-created_at")
     serializer_class = ProjectSerializer
     filterset_fields = ["country", "status", "is_active"]
     search_fields = ["name"]
     ordering_fields = ["created_at", "name"]
+    write_roles = SUBENTITY_WRITE_ROLES
 
 
-class ExpenseTitleViewSet(NoDestroyModelViewSet):
+class ExpenseTitleViewSet(ScopedViewSet):
     queryset = ExpenseTitle.objects.select_related("country").all().order_by("label")
     serializer_class = ExpenseTitleSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["label"]
+    write_roles = SUBENTITY_WRITE_ROLES
 
 
-class MarketingCategoryViewSet(NoDestroyModelViewSet):
-    queryset = MarketingCategory.objects.select_related("country").all().order_by("name")
+class MarketingCategoryViewSet(ScopedViewSet):
+    queryset = (
+        MarketingCategory.objects.select_related("country").all().order_by("name")
+    )
     serializer_class = MarketingCategorySerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["name"]
+    write_roles = SUBENTITY_WRITE_ROLES
 
 
-class ChangeLogViewSet(viewsets.ReadOnlyModelViewSet):
+class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     """Historique des changements de rattachement et de configuration."""
 
+    queryset = ChangeLog.objects.select_related("country").all()
     serializer_class = ChangeLogSerializer
+    permission_classes = [RolePermission]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["country", "model_name", "action"]
     ordering_fields = ["created_at"]
-
-    def get_queryset(self):
-        queryset = ChangeLog.objects.select_related("country").all()
-        country_id = self.request.query_params.get("country")
-        if country_id:
-            queryset = queryset.filter(country_id=country_id)
-        return queryset

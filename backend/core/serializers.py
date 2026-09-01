@@ -88,9 +88,9 @@ class CountryListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Country
         fields = [
-            "id", "name", "code", "currency", "currency_symbol", "timezone",
-            "is_active", "managers", "team_count", "cost_center_count",
-            "project_count", "created_at", "updated_at",
+            "id", "name", "code", "country_ref", "currency", "currency_symbol",
+            "timezone", "is_active", "managers", "team_count",
+            "cost_center_count", "project_count", "created_at", "updated_at",
         ]
 
 
@@ -124,7 +124,7 @@ class CountryWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Country
         fields = [
-            "id", "name", "code", "currency", "currency_symbol",
+            "id", "name", "code", "country_ref", "currency", "currency_symbol",
             "timezone", "is_active", "managers",
         ]
 

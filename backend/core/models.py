@@ -31,6 +31,14 @@ class Country(TimeStampedModel):
 
     name = models.CharField("Nom", max_length=120, unique=True)
     code = models.CharField("Code ISO", max_length=2, unique=True, help_text="ISO 3166-1 alpha-2")
+    country_ref = models.CharField(
+        "Identifiant pays",
+        max_length=10,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Identifiant fonctionnel utilisé par le siège, ex. CT-01.",
+    )
     currency = models.CharField("Devise", max_length=3, help_text="ISO 4217")
     currency_symbol = models.CharField("Symbole devise", max_length=4, blank=True)
     timezone = models.CharField("Fuseau horaire", max_length=64, default="UTC")
