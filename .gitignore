@@ -1,0 +1,21 @@
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+!.env.example
+.venv/
+dist/
+build/
+.vite/
+docker-data/
+*.log
+.DS_Store
+
+# Secrets et données locales (jamais versionnés)
+*.local.json
+media/
+
+# Captures Playwright MCP
+.playwright-mcp/

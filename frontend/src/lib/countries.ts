@@ -1,0 +1,146 @@
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+} from "@/lib/api"
+import type {
+  ChangeLogEntry,
+  CostCenter,
+  CountryDetail,
+  CountrySummary,
+  ExpenseTitle,
+  Manager,
+  MarketingCategory,
+  Paginated,
+  Project,
+  Team,
+} from "@/lib/types"
+
+// ---------------------------------------------------------------------------
+// Pays
+// ---------------------------------------------------------------------------
+export function fetchCountries(params?: Record<string, unknown>) {
+  return apiGet<Paginated<CountrySummary>>("/countries/", params)
+}
+
+export function fetchCountry(id: number) {
+  return apiGet<CountryDetail>(`/countries/${id}/`)
+}
+
+export function createCountry(data: unknown) {
+  return apiPost<CountrySummary>("/countries/", data)
+}
+
+export function updateCountry(id: number, data: unknown) {
+  return apiPatch<CountrySummary>(`/countries/${id}/`, data)
+}
+
+export function deleteCountry(id: number) {
+  return apiDelete(`/countries/${id}/`)
+}
+
+export function updateCountryManagers(id: number, managerIds: number[]) {
+  return apiPatch<CountrySummary>(`/countries/${id}/`, { managers: managerIds })
+}
+
+// ---------------------------------------------------------------------------
+// Managers
+// ---------------------------------------------------------------------------
+export function fetchManagers(params?: Record<string, unknown>) {
+  return apiGet<Paginated<Manager>>("/managers/", params)
+}
+
+export function createManager(data: unknown) {
+  return apiPost<Manager>("/managers/", data)
+}
+
+export function updateManager(id: number, data: unknown) {
+  return apiPatch<Manager>(`/managers/${id}/`, data)
+}
+
+export function deleteManager(id: number) {
+  return apiDelete(`/managers/${id}/`)
+}
+
+// ---------------------------------------------------------------------------
+// Équipes
+// ---------------------------------------------------------------------------
+export function fetchTeams(params?: Record<string, unknown>) {
+  return apiGet<Paginated<Team>>("/teams/", params)
+}
+
+export function createTeam(data: unknown) {
+  return apiPost<Team>("/teams/", data)
+}
+
+export function updateTeam(id: number, data: unknown) {
+  return apiPatch<Team>(`/teams/${id}/`, data)
+}
+
+// ---------------------------------------------------------------------------
+// Centres de coûts
+// ---------------------------------------------------------------------------
+export function fetchCostCenters(params?: Record<string, unknown>) {
+  return apiGet<Paginated<CostCenter>>("/cost-centers/", params)
+}
+
+export function createCostCenter(data: unknown) {
+  return apiPost<CostCenter>("/cost-centers/", data)
+}
+
+export function updateCostCenter(id: number, data: unknown) {
+  return apiPatch<CostCenter>(`/cost-centers/${id}/`, data)
+}
+
+// ---------------------------------------------------------------------------
+// Projets
+// ---------------------------------------------------------------------------
+export function fetchProjects(params?: Record<string, unknown>) {
+  return apiGet<Paginated<Project>>("/projects/", params)
+}
+
+export function createProject(data: unknown) {
+  return apiPost<Project>("/projects/", data)
+}
+
+export function updateProject(id: number, data: unknown) {
+  return apiPatch<Project>(`/projects/${id}/`, data)
+}
+
+// ---------------------------------------------------------------------------
+// Intitulés de dépenses
+// ---------------------------------------------------------------------------
+export function fetchExpenseTitles(params?: Record<string, unknown>) {
+  return apiGet<Paginated<ExpenseTitle>>("/expense-titles/", params)
+}
+
+export function createExpenseTitle(data: unknown) {
+  return apiPost<ExpenseTitle>("/expense-titles/", data)
+}
+
+export function updateExpenseTitle(id: number, data: unknown) {
+  return apiPatch<ExpenseTitle>(`/expense-titles/${id}/`, data)
+}
+
+// ---------------------------------------------------------------------------
+// Catégories marketing
+// ---------------------------------------------------------------------------
+export function fetchMarketingCategories(params?: Record<string, unknown>) {
+  return apiGet<Paginated<MarketingCategory>>("/marketing-categories/", params)
+}
+
+export function createMarketingCategory(data: unknown) {
+  return apiPost<MarketingCategory>("/marketing-categories/", data)
+}
+
+export function updateMarketingCategory(id: number, data: unknown) {
+  return apiPatch<MarketingCategory>(`/marketing-categories/${id}/`, data)
+}
+
+// ---------------------------------------------------------------------------
+// Historique
+// ---------------------------------------------------------------------------
+export function fetchHistory(params?: Record<string, unknown>) {
+  return apiGet<Paginated<ChangeLogEntry>>("/history/", params)
+}
