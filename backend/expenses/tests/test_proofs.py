@@ -115,6 +115,32 @@ class ProofVersionTests(ExpenseTestCase):
         ancienne = Proof.objects.get(pk=self.first["id"])
         self.assertEqual(ancienne.status, Proof.ProofStatus.ARCHIVED)
 
+    def test_double_remplacement_de_la_meme_piece_refuse(self):
+        """La relation « remplace » est unique : une seconde tentative doit
+        être refusée proprement, pas violer une contrainte en base."""
+        self.client.post(
+            "/api/proofs/",
+            {
+                "dossier": self.dossier.pk,
+                "file": pdf("v2.pdf", b"version 2"),
+                "replaces": self.first["id"],
+            },
+            format="multipart",
+        )
+
+        response = self.client.post(
+            "/api/proofs/",
+            {
+                "dossier": self.dossier.pk,
+                "file": pdf("v3.pdf", b"version 3"),
+                "replaces": self.first["id"],
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("replaces", response.data)
+
     def test_remplacement_journalise_comme_tel(self):
         self.client.post(
             "/api/proofs/",

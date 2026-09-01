@@ -32,7 +32,9 @@ ZERO = Decimal("0.00")
 class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     """Enveloppes annuelles et sous-enveloppes par projet."""
 
-    queryset = Budget.objects.select_related("country", "project").all()
+    queryset = (
+        Budget.objects.select_related("country", "project").with_consumption()
+    )
     serializer_class = BudgetSerializer
     permission_classes = [RolePermission]
     write_roles = BUDGET_WRITE_ROLES

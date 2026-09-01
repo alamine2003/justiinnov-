@@ -142,6 +142,18 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ---------------------------------------------------------------------------
+# Localisation
+# ---------------------------------------------------------------------------
+# Sans ces réglages, Django appliquerait ses défauts (America/Chicago, en-us) :
+# les horodatages d'audit et l'admin s'afficheraient dans un fuseau sans
+# rapport avec les pays gérés. Les dates sont stockées en UTC ; chaque pays
+# porte son propre fuseau dans `Country.timezone` pour l'affichage local.
+LANGUAGE_CODE = "fr-fr"
+TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "UTC")
+USE_I18N = True
+USE_TZ = True
+
+# ---------------------------------------------------------------------------
 # Stockage des pièces justificatives
 # ---------------------------------------------------------------------------
 # Object storage compatible S3 (MinIO) dès qu'un point d'accès est configuré ;
@@ -180,6 +192,13 @@ STORAGES = {
 
 # Taille maximale d'une pièce justificative (octets).
 MAX_PROOF_SIZE = int(os.environ.get("MAX_PROOF_SIZE", 20 * 1024 * 1024))
+
+# Formats acceptés (§5.4). Une liste blanche évite qu'un exécutable ou une page
+# HTML active se retrouve stockée et rediffusée comme « justificatif ».
+ALLOWED_PROOF_EXTENSIONS = [
+    ".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic",
+    ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt",
+]
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

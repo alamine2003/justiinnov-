@@ -1,5 +1,7 @@
 """Vues des dossiers, dépenses, justificatifs et journal d'audit."""
 
+from django.db import transaction
+from django.db.models import Prefetch
 from django.http import FileResponse
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -14,6 +16,7 @@ from accounts.permissions import (
     get_access,
 )
 from accounts.scoping import CountryScopedMixin
+from budget.models import Budget
 from core.mixins import NoDestroyModelViewSet
 
 from .audit import record
@@ -55,6 +58,7 @@ class WorkflowMixin:
 
     action_write_roles = ACTION_ROLES
 
+    @transaction.atomic
     def perform_transition(self, request, name):
         instance = self.get_object()
         # Le rôle a déjà été vérifié par RolePermission via action_write_roles.
@@ -137,7 +141,9 @@ class BeneficiaryViewSet(NoDestroyModelViewSet):
 class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
     """Dossiers de justification (N°ORDRE)."""
 
-    queryset = Dossier.objects.select_related("country", "team", "owner").all()
+    queryset = (
+        Dossier.objects.select_related("country", "team", "owner").with_totals()
+    )
     permission_classes = [RolePermission]
     write_roles = EXPENSE_WRITE_ROLES
     filterset_fields = ["country", "status", "team", "owner"]
@@ -152,7 +158,19 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.action == "retrieve":
-            return queryset.prefetch_related("expenses", "proofs")
+            # Le détail sérialise chaque ligne avec son contexte : sans
+            # `select_related` sur la sous-requête, chaque ligne rouvrirait
+            # une requête par relation affichée.
+            return queryset.prefetch_related(
+                Prefetch(
+                    "expenses",
+                    queryset=Expense.objects.select_related(
+                        "dossier", "country", "team", "owner", "project",
+                        "beneficiary", "budget__country", "budget__project",
+                    ),
+                ),
+                "proofs",
+            )
         return queryset
 
     def perform_create(self, serializer):
@@ -220,6 +238,11 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         if name not in ("submit", "approve"):
             return None
         budget = attach_budget(expense)
+        # Verrou sur l'enveloppe : sans lui, deux soumissions simultanées
+        # liraient le même total engagé et franchiraient toutes deux une
+        # enveloppe qu'une seule pouvait absorber.
+        budget = Budget.objects.select_for_update().get(pk=budget.pk)
+        expense.budget = budget
         # L'imputation est persistée par la sauvegarde de la transition.
         return check_budget_capacity(
             expense, budget, access.role, at_approval=(name == "approve")

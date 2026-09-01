@@ -12,6 +12,8 @@ from decimal import Decimal
 
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Count, OuterRef, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 
 from budget.models import Budget
 from core.models import (
@@ -60,8 +62,54 @@ class Beneficiary(TimeStampedModel):
         return self.name
 
 
+class DossierQuerySet(models.QuerySet):
+    def with_totals(self):
+        """Prépare totaux et compteurs en une seule requête.
+
+        Les totaux passent par une sous-requête plutôt que par une jointure :
+        joindre à la fois les dépenses et les preuves multiplierait chaque
+        montant par le nombre de preuves du dossier.
+        """
+        lines = (
+            Expense.objects.filter(dossier=OuterRef("pk"))
+            .order_by()
+            .values("dossier")
+            .annotate(
+                amount=Sum("amount"),
+                justified=Sum("justified_amount"),
+                lines=Count("id"),
+            )
+        )
+        money = models.DecimalField(max_digits=16, decimal_places=2)
+        # Le comptage des preuves introduit un GROUP BY, qui fait perdre à
+        # Django l'ordre par défaut du modèle : sans tri explicite, deux pages
+        # successives pourraient se recouvrir.
+        return self.order_by(*Dossier._meta.ordering).annotate(
+            total_amount=Coalesce(
+                Subquery(lines.values("amount")[:1], output_field=money),
+                Value(ZERO),
+                output_field=money,
+            ),
+            total_justified=Coalesce(
+                Subquery(lines.values("justified")[:1], output_field=money),
+                Value(ZERO),
+                output_field=money,
+            ),
+            total_lines=Coalesce(
+                Subquery(
+                    lines.values("lines")[:1],
+                    output_field=models.IntegerField(),
+                ),
+                Value(0),
+            ),
+            total_proofs=Count("proofs", distinct=True),
+        )
+
+
 class Dossier(TimeStampedModel):
     """Le **N°ORDRE** : ensemble documentaire d'une opération."""
+
+    objects = DossierQuerySet.as_manager()
 
     number = models.CharField("N° d'ordre", max_length=50, unique=True)
     label = models.CharField("Libellé", max_length=250)
@@ -91,13 +139,31 @@ class Dossier(TimeStampedModel):
         return f"{self.number} — {self.label}"
 
     def totals(self):
-        """Totaux du dossier, calculés sur ses lignes."""
-        aggregate = self.expenses.aggregate(
-            amount=models.Sum("amount"), justified=models.Sum("justified_amount")
-        )
-        amount = aggregate["amount"] or ZERO
-        justified = aggregate["justified"] or ZERO
+        """Totaux du dossier, calculés sur ses lignes.
+
+        Réutilise les annotations de :meth:`DossierQuerySet.with_totals`
+        lorsqu'elles sont présentes, plutôt que de relancer une agrégation par
+        dossier affiché.
+        """
+        amount = getattr(self, "total_amount", None)
+        if amount is None:
+            aggregate = self.expenses.aggregate(
+                amount=Sum("amount"), justified=Sum("justified_amount")
+            )
+            amount = aggregate["amount"] or ZERO
+            justified = aggregate["justified"] or ZERO
+        else:
+            justified = self.total_justified
         return {"amount": amount, "justified": justified, "gap": amount - justified}
+
+    def counts(self):
+        """Nombre de lignes et de preuves, annotés si disponibles."""
+        lines = getattr(self, "total_lines", None)
+        proofs = getattr(self, "total_proofs", None)
+        return {
+            "expenses": self.expenses.count() if lines is None else lines,
+            "proofs": self.proofs.count() if proofs is None else proofs,
+        }
 
 
 class Expense(TimeStampedModel):

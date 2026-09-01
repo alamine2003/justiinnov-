@@ -22,7 +22,19 @@ def consumption(budget):
     Une dépense soumise ou en contrôle **engage** l'enveloppe sans l'avoir
     encore consommée ; seule une dépense validée ou clôturée la consomme. Un
     brouillon ou une dépense refusée ne comptent pour rien.
+
+    Réutilise les annotations de :meth:`BudgetQuerySet.with_consumption`
+    lorsqu'elles sont présentes, pour éviter une agrégation par enveloppe
+    affichée.
     """
+    engaged = getattr(budget, "engaged_total", None)
+    if engaged is not None:
+        return {
+            "engaged": engaged,
+            "consumed": budget.consumed_total,
+            "justified": budget.justified_total,
+        }
+
     totals = budget.expenses.aggregate(
         engaged=Sum("amount", filter=Q(status__in=list(ENGAGING_STATUSES))),
         consumed=Sum("amount", filter=Q(status__in=list(CONSUMING_STATUSES))),

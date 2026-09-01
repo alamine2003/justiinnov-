@@ -1,5 +1,7 @@
 """Sérialiseurs des dossiers, dépenses et justificatifs."""
 
+from pathlib import Path
+
 from django.conf import settings
 from rest_framework import serializers
 
@@ -47,6 +49,13 @@ class ProofSerializer(serializers.ModelSerializer):
             limit = settings.MAX_PROOF_SIZE // (1024 * 1024)
             raise serializers.ValidationError(
                 f"Fichier trop volumineux (maximum {limit} Mo)."
+            )
+        extension = Path(uploaded.name).suffix.lower()
+        if extension not in settings.ALLOWED_PROOF_EXTENSIONS:
+            accepted = ", ".join(settings.ALLOWED_PROOF_EXTENSIONS)
+            raise serializers.ValidationError(
+                f"Format non accepté ({extension or 'sans extension'}). "
+                f"Formats autorisés : {accepted}."
             )
         return uploaded
 
@@ -168,8 +177,8 @@ class DossierSerializer(serializers.ModelSerializer):
     )
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     totals = serializers.SerializerMethodField()
-    expense_count = serializers.IntegerField(source="expenses.count", read_only=True)
-    proof_count = serializers.IntegerField(source="proofs.count", read_only=True)
+    expense_count = serializers.SerializerMethodField()
+    proof_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Dossier
@@ -183,6 +192,12 @@ class DossierSerializer(serializers.ModelSerializer):
 
     def get_totals(self, dossier):
         return {key: str(value) for key, value in dossier.totals().items()}
+
+    def get_expense_count(self, dossier):
+        return dossier.counts()["expenses"]
+
+    def get_proof_count(self, dossier):
+        return dossier.counts()["proofs"]
 
     def validate(self, attrs):
         if self.instance is not None and self.instance.status in LOCKED_STATUSES:

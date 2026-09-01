@@ -9,7 +9,8 @@ from decimal import Decimal
 
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Sum, Value
+from django.db.models.functions import Coalesce
 
 from core.models import Country, Project, TimeStampedModel
 
@@ -25,8 +26,51 @@ class OverrunPolicy(models.TextChoices):
     APPROVAL = "approval", "Soumettre à approbation"
 
 
+class BudgetQuerySet(models.QuerySet):
+    def with_consumption(self):
+        """Annote engagé, consommé et justifié en une seule requête.
+
+        Les trois totaux passent par la même jointure sur les dépenses, avec
+        des filtres conditionnels : pas de multiplication des lignes possible,
+        `expenses` étant l'unique relation jointe.
+        """
+        # Import local : `expenses` dépend de `budget`, l'inverse ne doit pas
+        # créer de cycle à l'import du module.
+        from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
+
+        money = models.DecimalField(max_digits=16, decimal_places=2)
+        engaging = list(ENGAGING_STATUSES)
+        consuming = list(CONSUMING_STATUSES)
+        zero = Value(Decimal("0.00"))
+        # L'agrégation introduit un GROUP BY, qui fait perdre à Django
+        # l'ordre par défaut du modèle : sans tri explicite, deux pages
+        # successives pourraient se recouvrir.
+        return self.order_by(*Budget._meta.ordering).annotate(
+            engaged_total=Coalesce(
+                Sum("expenses__amount", filter=Q(expenses__status__in=engaging)),
+                zero,
+                output_field=money,
+            ),
+            consumed_total=Coalesce(
+                Sum("expenses__amount", filter=Q(expenses__status__in=consuming)),
+                zero,
+                output_field=money,
+            ),
+            justified_total=Coalesce(
+                Sum(
+                    "expenses__justified_amount",
+                    filter=Q(expenses__status__in=consuming),
+                ),
+                zero,
+                output_field=money,
+            ),
+        )
+
+
 class Budget(TimeStampedModel):
     """Enveloppe annuelle d'un pays, ou sous-enveloppe d'un projet."""
+
+    objects = BudgetQuerySet.as_manager()
 
     country = models.ForeignKey(
         Country, on_delete=models.CASCADE, related_name="budgets", verbose_name="Pays"
