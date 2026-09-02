@@ -18,3 +18,4 @@ class NoDestroyModelViewSet(
     l'historique ne puissent être reconstitués. ``destroy`` n'est donc pas
     exposé et ``DELETE`` répond 405.
     """
+

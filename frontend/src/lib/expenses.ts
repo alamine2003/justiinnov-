@@ -55,6 +55,16 @@ export function updateExpense(id: number, data: unknown) {
   return apiPatch<Expense>(`/expenses/${id}/`, data)
 }
 
+/**
+ * Supprime un brouillon.
+ *
+ * Une dépense déclarée est irréversible : le serveur refuse toute suppression
+ * au-delà du brouillon.
+ */
+export function deleteExpenseDraft(id: number) {
+  return api.delete(`/expenses/${id}/`)
+}
+
 export function transitionExpense(
   id: number,
   action: TransitionName,

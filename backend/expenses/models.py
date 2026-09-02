@@ -330,8 +330,13 @@ class AuditLog(models.Model):
         UPDATED = "updated", "Modification"
         SUBMITTED = "submitted", "Soumission"
         REVIEWED = "reviewed", "Mise en contrôle"
-        APPROVED = "approved", "Validation"
-        REJECTED = "rejected", "Rejet"
+        JUSTIFIED = "justified", "Justification"
+        UNJUSTIFIED = "unjustified", "Constat de non-justification"
+        # Conservées pour le contrôle documentaire d'une pièce : celle-ci
+        # est bien validée ou rejetée, à la différence de la dépense.
+        APPROVED = "approved", "Validation d'un justificatif"
+        REJECTED = "rejected", "Rejet d'un justificatif"
+        DELETED = "deleted", "Suppression d'un brouillon"
         CLOSED = "closed", "Clôture"
         PROOF_UPLOADED = "proof_uploaded", "Dépôt de justificatif"
         PROOF_REPLACED = "proof_replaced", "Remplacement de justificatif"

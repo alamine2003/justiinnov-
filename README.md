@@ -215,26 +215,45 @@ npx tsx scripts/screenshot.ts
 ```
 
 Le script échoue si la console du navigateur a produit la moindre erreur.
-## Workflow et dossiers
+## Circuit de justification
 
-Le **N°ORDRE** devient un dossier de justification : il regroupe les lignes de
+Le but de l'application n'est pas d'autoriser des dépenses : c'est de savoir
+**ce que le pays a dépensé, quand, où, au profit de qui — et où est la
+preuve**. Le contrôleur ne valide pas un achat déjà fait ; il constate qu'une
+pièce le couvre. D'où « justifié » plutôt que « validé ».
+
+Le **N°ORDRE** est le dossier de justification : il regroupe les lignes de
 dépenses d'une opération et les preuves qui les appuient. Dossier et lignes
 suivent chacun leur circuit :
 
 ```
-brouillon → soumis → en contrôle → validé / refusé → clôturé
+brouillon → soumis → en contrôle → justifié / non justifié → clôturé
 ```
 
-Le statut n'est jamais modifiable par écriture de champ : seules les
-transitions déclarées le font évoluer, et chacune est journalisée. Un rejet
-exige un motif, une dépense validée ne se corrige plus en place, et un dossier
-ne peut être validé sans justificatif.
+Deux principes gouvernent ce circuit :
 
-Une dépense soumise **engage** son enveloppe ; validée, elle la **consomme**.
-Le disponible retranche les deux. La politique de dépassement de l'enveloppe
-décide de la suite : bloquer, alerter, ou réserver la validation à la
-direction des opérations — le manager pouvant dans tous les cas formuler la
-demande.
+**Une fois soumise, une dépense est irréversible.** Elle ne revient jamais au
+brouillon, ne se modifie plus, ne se supprime pas. L'argent est sorti :
+l'effacer reviendrait à en perdre la trace. Seul un brouillon — jamais
+soumis, donc sans valeur probante — peut être retiré, par son auteur, et sa
+suppression est elle-même journalisée.
+
+**Une dépense non justifiée pèse malgré tout sur l'enveloppe.** L'absence de
+preuve ne fait pas revenir l'argent. Elle se lit dans l'écart entre le montant
+dépensé et le montant justifié — le chiffre que l'application existe pour
+faire diminuer. Une preuve déposée après coup reste le seul chemin de
+rattrapage : le contrôleur peut alors marquer la dépense justifiée.
+
+Le statut n'est jamais modifiable par écriture de champ : seules les
+transitions déclarées le font évoluer, et chacune est journalisée. Un constat
+de non-justification exige un motif, et un dossier ne peut être justifié sans
+pièce.
+
+Une dépense soumise **engage** son enveloppe ; contrôlée, elle la **consomme**
+— qu'elle soit justifiée ou non. Le disponible retranche les deux. La
+politique de dépassement décide de la suite : bloquer, alerter, ou réserver la
+justification à la direction des opérations — le manager pouvant dans tous les
+cas déclarer la dépense.
 
 ## Justificatifs
 

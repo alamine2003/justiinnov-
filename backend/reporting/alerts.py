@@ -149,7 +149,9 @@ def unusual_expense_alerts(expenses):
     }
 
     alerts = []
-    candidates = expenses.exclude(status__in=[Status.DRAFT, Status.REJECTED])
+    # Un brouillon n'est pas encore une dépense ; tout le reste l'est, y
+    # compris ce qui n'a pas trouvé sa preuve.
+    candidates = expenses.exclude(status=Status.DRAFT)
     for expense in candidates.select_related("country", "dossier"):
         total, lines = stats.get(expense.country_id, (None, 0))
         if total is None:

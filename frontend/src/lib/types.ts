@@ -239,6 +239,7 @@ export interface CountryBudgetRow {
   currency: string
   allocated: string
   sub_allocated: string
+  engaged: string
   consumed: string
   justified: string
   remaining: string
@@ -287,23 +288,35 @@ export type WorkflowStatus =
   | "draft"
   | "submitted"
   | "in_review"
-  | "approved"
-  | "rejected"
+  | "justified"
+  | "unjustified"
   | "closed"
 
 export const WORKFLOW_LABELS: Record<WorkflowStatus, string> = {
   draft: "Brouillon",
   submitted: "Soumis",
   in_review: "En contrôle",
-  approved: "Validé",
-  rejected: "Refusé",
+  justified: "Justifié",
+  unjustified: "Non justifié",
   closed: "Clôturé",
 }
 
-/** Doit refléter `expenses.workflow.LOCKED_STATUSES`. */
-export const LOCKED_STATUSES: WorkflowStatus[] = ["approved", "closed"]
+/**
+ * Une dépense déclarée est irréversible : elle ne se modifie plus.
+ * Doit refléter `expenses.workflow.LOCKED_STATUSES`.
+ */
+export const LOCKED_STATUSES: WorkflowStatus[] = [
+  "submitted",
+  "in_review",
+  "justified",
+  "unjustified",
+  "closed",
+]
 
-export type TransitionName = "submit" | "review" | "approve" | "reject" | "close"
+/** Seul un brouillon peut encore être retiré, par son auteur. */
+export const DELETABLE_STATUSES: WorkflowStatus[] = ["draft"]
+
+export type TransitionName = "submit" | "review" | "justify" | "reject" | "close"
 
 export interface DossierTotals {
   amount: string
@@ -452,6 +465,8 @@ export interface DashboardTotals {
   engaged: string
   consumed: string
   justified: string
+  /** Dépensé sans preuve à l'appui. */
+  gap: string
   remaining: string
   execution_rate: string | null
   justification_rate: string | null
@@ -478,7 +493,7 @@ export interface Dashboard {
   workload: {
     expenses_to_review: number
     expenses_draft: number
-    expenses_rejected: number
+    expenses_unjustified: number
     dossiers_open: number
   }
   alerts: Alert[]

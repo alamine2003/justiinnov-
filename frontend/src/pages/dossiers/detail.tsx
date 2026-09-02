@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, Loader2, Pencil, Plus } from "lucide-react"
+import { AlertTriangle, ArrowLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,6 +19,7 @@ import { WorkflowActions } from "@/components/expenses/workflow-actions"
 import { useAuth } from "@/context/auth"
 import {
   createExpense,
+  deleteExpenseDraft,
   fetchBeneficiaries,
   fetchDossier,
   transitionDossier,
@@ -27,6 +28,7 @@ import {
 } from "@/lib/expenses"
 import { fetchProjects, fetchTeams } from "@/lib/countries"
 import {
+  DELETABLE_STATUSES,
   LOCKED_STATUSES,
   type Beneficiary,
   type DossierDetail,
@@ -52,6 +54,7 @@ export function DossierDetailPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -91,6 +94,19 @@ export function DossierDetailPage() {
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action impossible")
+    }
+  }
+
+  const removeDraft = async (expense: Expense) => {
+    setDeletingId(expense.id)
+    setError(null)
+    try {
+      await deleteExpenseDraft(expense.id)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suppression impossible")
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -183,7 +199,7 @@ export function DossierDetailPage() {
             <div>
               <h3 className="text-sm font-semibold">Lignes de dépenses</h3>
               <p className="text-xs text-muted-foreground">
-                Chaque ligne suit son propre circuit de validation.
+                Chaque ligne suit son propre circuit de justification.
               </p>
             </div>
             {canWrite && !locked && (
@@ -263,6 +279,23 @@ export function DossierDetailPage() {
                               }}
                             >
                               <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canWrite && DELETABLE_STATUSES.includes(expense.status) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Supprimer le brouillon"
+                              title="Supprimer ce brouillon"
+                              className="text-destructive hover:text-destructive"
+                              disabled={deletingId === expense.id}
+                              onClick={() => removeDraft(expense)}
+                            >
+                              {deletingId === expense.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
                             </Button>
                           )}
                           <WorkflowActions

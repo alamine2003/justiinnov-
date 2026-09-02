@@ -204,18 +204,32 @@ class ProofReviewTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_dossier_avec_justificatif_peut_etre_valide(self):
+    def test_dossier_avec_justificatif_peut_etre_justifie(self):
         self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
         self.login(self.controller)
 
-        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/approve/")
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_dossier_verrouille_refuse_un_nouveau_justificatif(self):
+    def test_une_preuve_reste_deposable_apres_soumission(self):
+        """Rassembler la preuve est l'objet même de l'application : une
+        dépense non justifiée doit pouvoir être couverte après coup."""
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+
+        response = self.client.post(
+            "/api/proofs/",
+            {"dossier": self.dossier.pk, "file": pdf("complement.pdf", b"complement")},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_dossier_cloture_refuse_un_nouveau_justificatif(self):
         self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
         self.login(self.controller)
-        self.client.post(f"/api/dossiers/{self.dossier.pk}/approve/")
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
         self.login(self.owner)
 
         response = self.client.post(

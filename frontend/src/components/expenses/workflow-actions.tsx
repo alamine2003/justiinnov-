@@ -17,25 +17,27 @@ import type { TransitionName, WorkflowStatus } from "@/lib/types"
 /** Transitions possibles depuis chaque état — reflète `expenses.workflow`. */
 const AVAILABLE: Record<WorkflowStatus, TransitionName[]> = {
   draft: ["submit"],
-  rejected: ["submit"],
-  submitted: ["review", "approve", "reject"],
-  in_review: ["approve", "reject"],
-  approved: ["close"],
+  submitted: ["review", "justify", "reject"],
+  in_review: ["justify", "reject"],
+  // Une dépense non justifiée ne revient pas au brouillon : seule une preuve
+  // déposée après coup peut encore la justifier.
+  unjustified: ["justify"],
+  justified: ["close"],
   closed: [],
 }
 
 const LABELS: Record<TransitionName, string> = {
   submit: "Soumettre",
   review: "Prendre en contrôle",
-  approve: "Valider",
-  reject: "Refuser",
+  justify: "Marquer justifié",
+  reject: "Marquer non justifié",
   close: "Clôturer",
 }
 
 const ICONS = {
   submit: Send,
   review: Search,
-  approve: Check,
+  justify: Check,
   reject: X,
   close: Play,
 }
@@ -80,7 +82,7 @@ export function WorkflowActions({
           <Button
             key={action}
             size={size}
-            variant={isReject ? "outline" : action === "approve" ? "default" : "outline"}
+            variant={isReject ? "outline" : action === "justify" ? "default" : "outline"}
             className={isReject ? "text-destructive hover:text-destructive" : undefined}
             disabled={busy !== null}
             onClick={() => (isReject ? setRejecting(true) : run(action))}
@@ -134,9 +136,10 @@ function RejectDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Refuser</DialogTitle>
+          <DialogTitle>Marquer non justifié</DialogTitle>
           <DialogDescription>
-            Le motif est obligatoire et reste attaché à l'historique.
+            La dépense reste au débit du budget : l'argent est sorti. Le motif
+            est obligatoire et reste attaché à l'historique.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
@@ -162,7 +165,7 @@ function RejectDialog({
                 className="ml-2"
               >
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Refuser
+                Confirmer
               </Button>
             </div>
           </DialogFooter>

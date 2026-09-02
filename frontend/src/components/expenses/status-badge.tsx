@@ -10,8 +10,8 @@ const WORKFLOW_STYLE: Record<WorkflowStatus, string> = {
   draft: "bg-slate-500 hover:bg-slate-500",
   submitted: "bg-blue-500 hover:bg-blue-500",
   in_review: "bg-amber-500 hover:bg-amber-500",
-  approved: "bg-emerald-500 hover:bg-emerald-500",
-  rejected: "bg-destructive hover:bg-destructive",
+  justified: "bg-emerald-500 hover:bg-emerald-500",
+  unjustified: "bg-destructive hover:bg-destructive",
   closed: "bg-zinc-600 hover:bg-zinc-600",
 }
 

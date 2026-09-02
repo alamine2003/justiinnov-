@@ -19,15 +19,15 @@ from notifications.models import Notification
 
 
 class DashboardTestCase(ExpenseTestCase):
-    """Une dépense validée et une engagée, sur l'enveloppe togolaise."""
+    """Une dépense justifiée et une soumise, sur l'enveloppe togolaise."""
 
     def setUp(self):
         super().setUp()
-        self.validee = self.make_expense(
+        self.justifiee = self.make_expense(
             amount="300000.00", justified_amount="250000.00",
-            status=Status.APPROVED, budget=self.budget,
+            status=Status.JUSTIFIED, budget=self.budget,
         )
-        self.engagee = self.make_expense(
+        self.soumise = self.make_expense(
             amount="200000.00", status=Status.SUBMITTED, budget=self.budget
         )
 
@@ -115,8 +115,10 @@ class BreakdownTests(DashboardTestCase):
         self.assertEqual(equipes["Équipe Lomé"]["lines"], 2)
         self.assertEqual(len(response.data["by_month"]), 1)
 
-    def test_brouillons_et_refus_exclus(self):
+    def test_seuls_les_brouillons_sont_exclus(self):
+        """Une dépense non justifiée reste un décaissement : elle compte."""
         self.make_expense(amount="999999.00", status=Status.DRAFT)
+        self.make_expense(amount="70000.00", status=Status.UNJUSTIFIED)
         self.login(self.doo)
 
         response = self.client.get(
@@ -124,11 +126,11 @@ class BreakdownTests(DashboardTestCase):
         )
 
         total = sum(Decimal(row["amount"]) for row in response.data["by_team"])
-        self.assertEqual(total, Decimal("500000.00"))
+        self.assertEqual(total, Decimal("570000.00"))
 
     def test_repartition_par_projet(self):
         projet = Project.objects.create(country=self.togo, name="Campagne T1")
-        self.make_expense(amount="100000.00", status=Status.APPROVED, project=projet)
+        self.make_expense(amount="100000.00", status=Status.JUSTIFIED, project=projet)
         self.login(self.doo)
 
         response = self.client.get(
@@ -193,7 +195,7 @@ class AlertTests(DashboardTestCase):
     def test_depense_inhabituelle(self):
         """Régression : incluse dans sa propre moyenne, une dépense énorme
         relevait la référence au point de ne plus s'en détacher."""
-        self.make_expense(amount="50000000.00", status=Status.APPROVED)
+        self.make_expense(amount="50000000.00", status=Status.JUSTIFIED)
         self.login(self.doo)
 
         response = self.client.get("/api/dashboard/", {"year": self.year})
@@ -204,7 +206,7 @@ class AlertTests(DashboardTestCase):
         self.assertIn("50000000", alerte["title"] + alerte["detail"])
 
     def test_depense_ordinaire_non_signalee(self):
-        self.make_expense(amount="310000.00", status=Status.APPROVED)
+        self.make_expense(amount="310000.00", status=Status.JUSTIFIED)
         self.login(self.doo)
 
         response = self.client.get("/api/dashboard/", {"year": self.year})

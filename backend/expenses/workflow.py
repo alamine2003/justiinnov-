@@ -1,9 +1,19 @@
-"""Workflow de contrôle et de validation (§5.5).
+"""Circuit de justification d'une dépense (§5.5).
 
-    brouillon → soumis → en contrôle → validé / refusé → clôturé
+    brouillon → soumis → en contrôle → justifié / non justifié → clôturé
 
-Les transitions sont déclarées une fois et vérifiées côté serveur : le statut
-n'est jamais modifiable directement par une écriture de champ.
+La dépense constate un décaissement déjà effectué : le contrôleur n'autorise
+pas un achat, il constate qu'une preuve le couvre — d'où « justifié » plutôt
+que « validé ».
+
+Deux principes gouvernent ce circuit :
+
+- **Une fois soumise, une dépense est irréversible.** Elle ne revient jamais
+  au brouillon, ne se modifie plus et ne se supprime pas. Le budget a été
+  dépensé ; l'effacer reviendrait à perdre la trace de l'argent.
+- **Une dépense non justifiée pèse malgré tout sur l'enveloppe.** L'absence de
+  preuve ne fait pas revenir l'argent : elle se lit dans l'écart entre le
+  montant dépensé et le montant justifié.
 """
 
 from django.db import models
@@ -13,29 +23,56 @@ class Status(models.TextChoices):
     DRAFT = "draft", "Brouillon"
     SUBMITTED = "submitted", "Soumis"
     IN_REVIEW = "in_review", "En contrôle"
-    APPROVED = "approved", "Validé"
-    REJECTED = "rejected", "Refusé"
+    JUSTIFIED = "justified", "Justifié"
+    UNJUSTIFIED = "unjustified", "Non justifié"
     CLOSED = "closed", "Clôturé"
 
 
 #: Transitions autorisées : action → (états de départ, état d'arrivée).
+#:
+#: ``submit`` ne part que du brouillon : une dépense déjà déclarée ne se
+#: resoumet pas. ``justify`` accepte en revanche une dépense non justifiée —
+#: c'est le seul chemin de rattrapage, ouvert par le dépôt d'une preuve
+#: complémentaire.
 TRANSITIONS = {
-    "submit": ({Status.DRAFT, Status.REJECTED}, Status.SUBMITTED),
+    "submit": ({Status.DRAFT}, Status.SUBMITTED),
     "review": ({Status.SUBMITTED}, Status.IN_REVIEW),
-    "approve": ({Status.SUBMITTED, Status.IN_REVIEW}, Status.APPROVED),
-    "reject": ({Status.SUBMITTED, Status.IN_REVIEW}, Status.REJECTED),
-    "close": ({Status.APPROVED}, Status.CLOSED),
+    "justify": (
+        {Status.SUBMITTED, Status.IN_REVIEW, Status.UNJUSTIFIED},
+        Status.JUSTIFIED,
+    ),
+    "reject": ({Status.SUBMITTED, Status.IN_REVIEW}, Status.UNJUSTIFIED),
+    "close": ({Status.JUSTIFIED}, Status.CLOSED),
 }
 
-#: États après lesquels les données sont verrouillées (§6). Une dépense
-#: validée ne se corrige que par une opération auditée, jamais en place.
-LOCKED_STATUSES = frozenset({Status.APPROVED, Status.CLOSED})
+#: États verrouillés : la dépense est déclarée, plus rien ne se modifie.
+#: Le brouillon seul reste une matière de travail.
+LOCKED_STATUSES = frozenset(
+    {
+        Status.SUBMITTED,
+        Status.IN_REVIEW,
+        Status.JUSTIFIED,
+        Status.UNJUSTIFIED,
+        Status.CLOSED,
+    }
+)
 
-#: États qui engagent le budget sans que la dépense soit encore validée.
+#: Un justificatif reste déposable tant que le dossier n'est pas clôturé :
+#: rassembler la preuve est précisément l'objet de l'application, et une
+#: dépense non justifiée doit pouvoir être couverte après coup.
+PROOF_LOCKED_STATUSES = frozenset({Status.CLOSED})
+
+#: Seul un brouillon peut encore être retiré, par son auteur.
+DELETABLE_STATUSES = frozenset({Status.DRAFT})
+
+#: Déclarée mais pas encore contrôlée.
 ENGAGING_STATUSES = frozenset({Status.SUBMITTED, Status.IN_REVIEW})
 
-#: États qui consomment réellement le budget.
-CONSUMING_STATUSES = frozenset({Status.APPROVED, Status.CLOSED})
+#: Décaissements constatés. La non-justification en fait partie : l'argent est
+#: sorti, la preuve manque — c'est précisément ce que l'écart doit montrer.
+CONSUMING_STATUSES = frozenset(
+    {Status.JUSTIFIED, Status.UNJUSTIFIED, Status.CLOSED}
+)
 
 
 class TransitionError(Exception):

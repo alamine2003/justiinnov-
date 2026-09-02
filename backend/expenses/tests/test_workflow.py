@@ -1,4 +1,4 @@
-"""Workflow de validation, imputation budgétaire et verrouillage."""
+"""Circuit de justification, imputation budgétaire et verrouillage."""
 
 from decimal import Decimal
 
@@ -25,17 +25,17 @@ class TransitionTests(ExpenseTestCase):
 
         self.login(self.controller)
         reviewed = self.client.post(f"/api/expenses/{self.expense.pk}/review/")
-        approved = self.client.post(f"/api/expenses/{self.expense.pk}/approve/")
+        approved = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
 
         self.assertEqual(submitted.data["status"], Status.SUBMITTED)
         self.assertEqual(reviewed.data["status"], Status.IN_REVIEW)
-        self.assertEqual(approved.data["status"], Status.APPROVED)
+        self.assertEqual(approved.data["status"], Status.JUSTIFIED)
 
     def test_transition_impossible_depuis_l_etat_courant(self):
         """On ne valide pas une dépense encore en brouillon."""
         self.login(self.controller)
 
-        response = self.client.post(f"/api/expenses/{self.expense.pk}/approve/")
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.expense.refresh_from_db()
@@ -45,7 +45,7 @@ class TransitionTests(ExpenseTestCase):
         self.login(self.owner)
 
         self.client.patch(
-            f"/api/expenses/{self.expense.pk}/", {"status": Status.APPROVED}
+            f"/api/expenses/{self.expense.pk}/", {"status": Status.JUSTIFIED}
         )
 
         self.expense.refresh_from_db()
@@ -62,7 +62,9 @@ class TransitionTests(ExpenseTestCase):
         self.expense.refresh_from_db()
         self.assertEqual(self.expense.status, Status.SUBMITTED)
 
-    def test_rejet_motive_puis_correction_et_nouvelle_soumission(self):
+    def test_non_justifiee_reste_figee(self):
+        """L'argent est sorti : la dépense ne se réécrit pas et ne repart pas
+        au brouillon. Elle demeure au débit, marquée non justifiée."""
         self.login(self.owner)
         self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
         self.login(self.controller)
@@ -76,10 +78,27 @@ class TransitionTests(ExpenseTestCase):
         )
         resubmitted = self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
 
-        self.assertEqual(rejected.data["status"], Status.REJECTED)
+        self.assertEqual(rejected.data["status"], Status.UNJUSTIFIED)
         self.assertEqual(rejected.data["note"], "Reçu illisible")
-        self.assertEqual(corrected.status_code, status.HTTP_200_OK)
-        self.assertEqual(resubmitted.data["status"], Status.SUBMITTED)
+        self.assertEqual(corrected.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resubmitted.status_code, status.HTTP_400_BAD_REQUEST)
+        self.expense.refresh_from_db()
+        self.assertEqual(self.expense.amount, Decimal("100000.00"))
+        self.assertEqual(self.expense.status, Status.UNJUSTIFIED)
+
+    def test_une_preuve_tardive_permet_de_justifier(self):
+        """Seul chemin de rattrapage : le contrôleur constate qu'une preuve
+        déposée après coup couvre la dépense."""
+        self.login(self.owner)
+        self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        self.login(self.controller)
+        self.client.post(
+            f"/api/expenses/{self.expense.pk}/reject/", {"note": "Preuve absente"}
+        )
+
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+
+        self.assertEqual(response.data["status"], Status.JUSTIFIED)
 
     def test_saisie_reservee_aux_roles_habilites(self):
         """Le contrôleur contrôle, il ne soumet pas à la place du manager."""
@@ -93,13 +112,13 @@ class TransitionTests(ExpenseTestCase):
         self.login(self.owner)
         self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
 
-        response = self.client.post(f"/api/expenses/{self.expense.pk}/approve/")
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class LockingTests(ExpenseTestCase):
-    """§6 : une dépense validée ne se modifie plus en place."""
+    """§6 : une dépense déclarée ne se modifie plus, ni ne s'efface."""
 
     def setUp(self):
         super().setUp()
@@ -107,9 +126,9 @@ class LockingTests(ExpenseTestCase):
         self.login(self.owner)
         self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
         self.login(self.controller)
-        self.client.post(f"/api/expenses/{self.expense.pk}/approve/")
+        self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
 
-    def test_modification_refusee_apres_validation(self):
+    def test_modification_refusee_apres_declaration(self):
         self.login(self.owner)
 
         response = self.client.patch(
@@ -120,16 +139,17 @@ class LockingTests(ExpenseTestCase):
         self.expense.refresh_from_db()
         self.assertEqual(self.expense.amount, Decimal("100000.00"))
 
-    def test_suppression_impossible(self):
-        """Même pour un rôle habilité à écrire : la route n'existe pas."""
+    def test_suppression_impossible_une_fois_declaree(self):
+        """Effacer une dépense déclarée reviendrait à perdre la trace de
+        l'argent."""
         self.login(self.owner)
 
         response = self.client.delete(f"/api/expenses/{self.expense.pk}/")
 
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertTrue(Expense.objects.filter(pk=self.expense.pk).exists())
 
-    def test_cloture_possible_apres_validation(self):
+    def test_cloture_possible_apres_justification(self):
         self.login(self.controller)
 
         response = self.client.post(f"/api/expenses/{self.expense.pk}/close/")
@@ -186,24 +206,35 @@ class BudgetImputationTests(ExpenseTestCase):
         self.assertEqual(engaged["remaining"], Decimal("750000.00"))
 
         self.login(self.controller)
-        self.client.post(f"/api/expenses/{expense.pk}/approve/")
+        self.client.post(f"/api/expenses/{expense.pk}/justify/")
 
         consumed = budget_figures(self.budget)
         self.assertEqual(consumed["engaged"], Decimal("0.00"))
         self.assertEqual(consumed["consumed"], Decimal("250000.00"))
         self.assertEqual(consumed["remaining"], Decimal("750000.00"))
 
-    def test_brouillon_et_rejet_n_engagent_rien(self):
-        self.make_expense(amount="400000.00")  # reste en brouillon
-        rejected = self.make_expense(amount="400000.00")
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{rejected.pk}/submit/")
-        self.login(self.controller)
-        self.client.post(f"/api/expenses/{rejected.pk}/reject/", {"note": "Non justifié"})
+    def test_le_brouillon_seul_n_engage_rien(self):
+        self.make_expense(amount="400000.00")  # jamais soumis
 
         figures = budget_figures(self.budget)
 
         self.assertEqual(figures["remaining"], Decimal("1000000.00"))
+
+    def test_une_depense_non_justifiee_pese_sur_l_enveloppe(self):
+        """L'absence de preuve ne fait pas revenir l'argent : elle se lit dans
+        l'écart entre dépensé et justifié."""
+        expense = self.make_expense(amount="400000.00")
+        self.login(self.owner)
+        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.login(self.controller)
+        self.client.post(f"/api/expenses/{expense.pk}/reject/", {"note": "Sans reçu"})
+
+        figures = budget_figures(self.budget)
+
+        self.assertEqual(figures["consumed"], Decimal("400000.00"))
+        self.assertEqual(figures["justified"], Decimal("0.00"))
+        self.assertEqual(figures["gap"], Decimal("400000.00"))
+        self.assertEqual(figures["remaining"], Decimal("600000.00"))
 
     def test_depense_non_imputee_expose_un_libelle_nul(self):
         """Régression : la traversée `budget.__str__` renvoyait la
@@ -264,7 +295,7 @@ class OverrunPolicyTests(ExpenseTestCase):
         expense, submitted = self._submit("150000.00")
 
         self.login(self.controller)
-        response = self.client.post(f"/api/expenses/{expense.pk}/approve/")
+        response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
 
         self.assertEqual(submitted.status_code, status.HTTP_200_OK)
         self.assertIn("direction des opérations", submitted.data["warning"])
@@ -280,7 +311,7 @@ class OverrunPolicyTests(ExpenseTestCase):
         self.client.post(f"/api/expenses/{expense.pk}/submit/")
 
         self.login(self.doo)
-        response = self.client.post(f"/api/expenses/{expense.pk}/approve/")
+        response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("Dépassement", response.data["warning"])
@@ -302,7 +333,7 @@ class DossierWorkflowTests(ExpenseTestCase):
         self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
         self.login(self.controller)
 
-        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/approve/")
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("proofs", response.data)
@@ -376,7 +407,7 @@ class AuditTests(ExpenseTestCase):
         # transitions passées par l'API sont journalisées.
         actions = list(entries.values_list("action", flat=True))
         self.assertEqual(
-            actions, [AuditLog.Action.SUBMITTED, AuditLog.Action.REJECTED]
+            actions, [AuditLog.Action.SUBMITTED, AuditLog.Action.UNJUSTIFIED]
         )
         rejection = entries.last()
         self.assertEqual(rejection.user, "rh.innov")
@@ -407,3 +438,44 @@ class AuditTests(ExpenseTestCase):
         response = self.client.get("/api/audit/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class DraftDeletionTests(ExpenseTestCase):
+    """« On peut écrire au brouillon » : un brouillon reste une matière de
+    travail, tout le reste est définitif."""
+
+    def test_l_auteur_supprime_son_brouillon(self):
+        self.login(self.owner)
+        created = self.client.post(
+            "/api/expenses/",
+            {
+                "dossier": self.dossier.pk, "country": self.togo.pk,
+                "date": f"{self.year}-03-15T10:00:00Z", "title": "Erreur de saisie",
+                "amount": "1000.00",
+            },
+        )
+        expense_id = created.data["id"]
+
+        response = self.client.delete(f"/api/expenses/{expense_id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Expense.objects.filter(pk=expense_id).exists())
+
+    def test_la_suppression_est_journalisee(self):
+        self.login(self.owner)
+        expense = self.make_expense(created_by="owner.togo")
+
+        self.client.delete(f"/api/expenses/{expense.pk}/")
+
+        entry = AuditLog.objects.filter(action=AuditLog.Action.DELETED).first()
+        self.assertEqual(entry.user, "owner.togo")
+        self.assertIn("Brouillon supprimé", entry.label)
+
+    def test_un_tiers_ne_supprime_pas_le_brouillon_d_autrui(self):
+        expense = self.make_expense(created_by="quelqu-un-dautre")
+        self.login(self.owner)
+
+        response = self.client.delete(f"/api/expenses/{expense.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Expense.objects.filter(pk=expense.pk).exists())

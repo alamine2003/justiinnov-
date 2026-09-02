@@ -6,7 +6,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, compute_sha256
-from .workflow import LOCKED_STATUSES
+from .workflow import LOCKED_STATUSES, PROOF_LOCKED_STATUSES
 
 
 class BeneficiarySerializer(serializers.ModelSerializer):
@@ -61,10 +61,10 @@ class ProofSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         dossier = attrs.get("dossier") or getattr(self.instance, "dossier", None)
-        if dossier is not None and dossier.status in LOCKED_STATUSES:
+        if dossier is not None and dossier.status in PROOF_LOCKED_STATUSES:
             raise serializers.ValidationError(
-                "Le dossier est verrouillé : aucun justificatif ne peut y être "
-                "ajouté ou modifié."
+                "Le dossier est clôturé : plus aucun justificatif ne peut y "
+                "être ajouté."
             )
 
         uploaded = attrs.get("file")
@@ -144,8 +144,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance is not None and self.instance.status in LOCKED_STATUSES:
             raise serializers.ValidationError(
-                "Cette dépense est validée : elle ne peut plus être modifiée "
-                "en place, seulement corrigée par une opération auditée."
+                "Cette dépense est déclarée : elle ne peut plus être modifiée. "
+                "Seul un brouillon reste modifiable."
             )
 
         dossier = attrs.get("dossier") or getattr(self.instance, "dossier", None)
@@ -202,7 +202,7 @@ class DossierSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance is not None and self.instance.status in LOCKED_STATUSES:
             raise serializers.ValidationError(
-                "Ce dossier est validé : il ne peut plus être modifié en place."
+                "Ce dossier est déclaré : il ne peut plus être modifié."
             )
         country = attrs.get("country") or getattr(self.instance, "country", None)
         team = attrs.get("team")

@@ -171,7 +171,7 @@ export function DashboardPage() {
         </Alert>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat
           label="Enveloppe"
           value={formatAmount(data?.totals.allocated)}
@@ -188,6 +188,11 @@ export function DashboardPage() {
           hint="Soumis ou en contrôle"
         />
         <Stat
+          label="Sans preuve"
+          value={formatAmount(data?.totals.gap)}
+          hint={`Justifié à ${formatRate(data?.totals.justification_rate)}`}
+        />
+        <Stat
           label="Disponible"
           value={formatAmount(data?.totals.remaining)}
           hint={`${formatAmount(data?.consolidated_xof.remaining)} FCFA`}
@@ -201,7 +206,11 @@ export function DashboardPage() {
           to="/dossiers?status=submitted"
         />
         <Workload label="Brouillons" value={data?.workload.expenses_draft ?? 0} to="/dossiers" />
-        <Workload label="Refusées" value={data?.workload.expenses_rejected ?? 0} to="/dossiers" />
+        <Workload
+          label="Non justifiées"
+          value={data?.workload.expenses_unjustified ?? 0}
+          to="/dossiers?status=unjustified"
+        />
         <Workload label="Dossiers ouverts" value={data?.workload.dossiers_open ?? 0} to="/dossiers" />
       </div>
 
@@ -269,6 +278,7 @@ export function DashboardPage() {
                   <TableHead className="text-right">Engagé</TableHead>
                   <TableHead className="text-right">Consommé</TableHead>
                   <TableHead className="text-right">Justifié</TableHead>
+                  <TableHead className="text-right">Sans preuve</TableHead>
                   <TableHead className="text-right">Disponible</TableHead>
                   <TableHead>Exécution</TableHead>
                 </TableRow>
@@ -276,7 +286,7 @@ export function DashboardPage() {
               <TableBody>
                 {!data || data.countries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                       Aucune enveloppe sur la période.
                     </TableCell>
                   </TableRow>
@@ -300,6 +310,15 @@ export function DashboardPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {formatAmount(row.justified)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(row.gap) > 0 ? (
+                          <span className="font-medium text-destructive">
+                            {formatAmount(row.gap)}
+                          </span>
+                        ) : (
+                          formatAmount(row.gap)
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatAmount(row.remaining)}

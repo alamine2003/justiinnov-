@@ -148,6 +148,7 @@ class DashboardView(APIView):
                     "engaged": _money(entry["engaged"]),
                     "consumed": _money(entry["consumed"]),
                     "justified": _money(entry["justified"]),
+                    "gap": _money(entry["consumed"] - entry["justified"]),
                     "remaining": _money(remaining),
                     "execution_rate": _ratio(used, entry["allocated"]),
                     "justification_rate": _ratio(entry["justified"], entry["consumed"]),
@@ -166,6 +167,8 @@ class DashboardView(APIView):
                 "engaged": _money(totals["engaged"]),
                 "consumed": _money(totals["consumed"]),
                 "justified": _money(totals["justified"]),
+                # Ce qui est sorti sans preuve à l'appui.
+                "gap": _money(totals["consumed"] - totals["justified"]),
                 "remaining": _money(totals["remaining"]),
                 "execution_rate": _ratio(used_total, totals["allocated"]),
                 "justification_rate": _ratio(totals["justified"], totals["consumed"]),
@@ -188,10 +191,10 @@ class DashboardView(APIView):
             "expenses_to_review": by_status.get(Status.SUBMITTED, 0)
             + by_status.get(Status.IN_REVIEW, 0),
             "expenses_draft": by_status.get(Status.DRAFT, 0),
-            "expenses_rejected": by_status.get(Status.REJECTED, 0),
-            "dossiers_open": dossiers.exclude(
-                status__in=[Status.CLOSED, Status.REJECTED]
-            ).count(),
+            # Décaissements sans preuve : le chiffre que l'application existe
+            # pour faire diminuer.
+            "expenses_unjustified": by_status.get(Status.UNJUSTIFIED, 0),
+            "dossiers_open": dossiers.exclude(status=Status.CLOSED).count(),
         }
 
 

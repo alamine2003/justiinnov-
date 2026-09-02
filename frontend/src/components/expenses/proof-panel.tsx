@@ -304,7 +304,7 @@ function UploadDialog({
 }
 
 const REVIEW_CHOICES: { value: ProofStatus; label: string }[] = [
-  { value: "validated", label: "Valider" },
+  { value: "validated", label: "Valider la pièce" },
   { value: "to_review", label: "À contrôler" },
   { value: "incomplete", label: "Marquer incomplet" },
   { value: "rejected", label: "Rejeter" },

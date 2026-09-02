@@ -21,6 +21,7 @@ from core.mixins import NoDestroyModelViewSet
 from notifications import triggers
 
 from .audit import record
+from .mixins import DraftDeletableViewSet
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof
 from .serializers import (
     AuditLogSerializer,
@@ -39,7 +40,7 @@ from .workflow import TransitionError, next_status
 ACTION_ROLES = {
     "submit": EXPENSE_WRITE_ROLES,
     "review": VALIDATION_ROLES,
-    "approve": VALIDATION_ROLES,
+    "justify": VALIDATION_ROLES,
     "reject": VALIDATION_ROLES,
     "close": VALIDATION_ROLES,
 }
@@ -48,8 +49,8 @@ ACTION_ROLES = {
 AUDIT_ACTIONS = {
     "submit": AuditLog.Action.SUBMITTED,
     "review": AuditLog.Action.REVIEWED,
-    "approve": AuditLog.Action.APPROVED,
-    "reject": AuditLog.Action.REJECTED,
+    "justify": AuditLog.Action.JUSTIFIED,
+    "reject": AuditLog.Action.UNJUSTIFIED,
     "close": AuditLog.Action.CLOSED,
 }
 
@@ -120,8 +121,8 @@ class WorkflowMixin:
         return self.perform_transition(request, "review")
 
     @action(detail=True, methods=["post"])
-    def approve(self, request, pk=None):
-        return self.perform_transition(request, "approve")
+    def justify(self, request, pk=None):
+        return self.perform_transition(request, "justify")
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
@@ -144,7 +145,7 @@ class BeneficiaryViewSet(NoDestroyModelViewSet):
     ordering_fields = ["name", "created_at"]
 
 
-class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
+class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     """Dossiers de justification (N°ORDRE)."""
 
     queryset = (
@@ -157,6 +158,9 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
     ]
     search_fields = ["number", "label"]
     ordering_fields = ["date", "number", "created_at"]
+
+    # Un dossier ne porte pas d'auteur : le périmètre pays fait foi.
+    author_field = None
 
     def get_serializer_class(self):
         if self.action == "retrieve":
@@ -189,8 +193,17 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         super().perform_update(serializer)
         record(self.request, AuditLog.Action.UPDATED, serializer.instance)
 
+    def perform_destroy(self, instance):
+        record(
+            self.request,
+            AuditLog.Action.DELETED,
+            instance,
+            label=f"Brouillon supprimé — {instance}",
+        )
+        super().perform_destroy(instance)
+
     def before_transition(self, dossier, name, access):
-        if name == "approve" and not dossier.proofs.exclude(
+        if name == "justify" and not dossier.proofs.exclude(
             status=Proof.ProofStatus.REJECTED
         ).exists():
             # Valider un dossier sans preuve viderait de son sens l'ensemble
@@ -201,7 +214,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         return None
 
 
-class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
+class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     """Lignes de dépenses."""
 
     queryset = Expense.objects.select_related(
@@ -242,9 +255,19 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
             },
         )
 
+    def perform_destroy(self, instance):
+        record(
+            self.request,
+            AuditLog.Action.DELETED,
+            instance,
+            label=f"Brouillon supprimé — {instance}",
+            amount=str(instance.amount),
+        )
+        super().perform_destroy(instance)
+
     def before_transition(self, expense, name, access):
         """Impute l'enveloppe et applique la politique de dépassement."""
-        if name not in ("submit", "approve"):
+        if name not in ("submit", "justify"):
             return None
         budget = attach_budget(expense)
         # Verrou sur l'enveloppe : sans lui, deux soumissions simultanées
@@ -254,7 +277,7 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         expense.budget = budget
         # L'imputation est persistée par la sauvegarde de la transition.
         return check_budget_capacity(
-            expense, budget, access.role, at_approval=(name == "approve")
+            expense, budget, access.role, at_approval=(name == "justify")
         )
 
     def after_transition(self, request, expense, name, note):
