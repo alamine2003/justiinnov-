@@ -16,15 +16,19 @@ import { useAuth } from "@/context/auth"
 import { changePassword } from "@/lib/accounts"
 
 /**
- * Invite à remplacer le mot de passe distribué par le siège.
+ * Impose le remplacement du mot de passe distribué par le siège.
  *
- * Volontairement non bloquant pendant la phase de test : le compte reste
- * utilisable, mais l'invitation persiste tant que le mot de passe provisoire
- * n'a pas été changé.
+ * Le mot de passe de création a circulé — par message, par téléphone, sur un
+ * papier. Tant qu'il n'a pas été remplacé, le compte n'est pas réellement
+ * personnel : ce qu'il signe ne prouve rien.
+ *
+ * Le blocage réel est côté serveur ; cet écran évite d'envoyer l'utilisateur
+ * se heurter à des refus qu'il ne comprendrait pas. Il ne se ferme pas :
+ * proposer « Plus tard » serait proposer une porte qui ne mène nulle part.
  */
 export function PasswordNotice() {
   const { me, refreshProfile } = useAuth()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [confirmation, setConfirmation] = useState("")
@@ -66,11 +70,12 @@ export function PasswordNotice() {
     <>
       <Alert className="mb-6 border-amber-500/40 bg-amber-500/10">
         <KeyRound className="h-4 w-4" />
-        <AlertTitle>Mot de passe provisoire</AlertTitle>
+        <AlertTitle>Mot de passe à remplacer</AlertTitle>
         <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
           <span>
-            Votre mot de passe a été défini par le siège. Remplacez-le par un
-            mot de passe personnel.
+            Votre mot de passe a été défini par le siège : il a circulé, et
+            tant qu'il n'est pas remplacé vos actions ne vous engagent pas.
+            La plateforme reste fermée jusque-là.
           </span>
           <Button size="sm" onClick={() => setOpen(true)}>
             Changer maintenant
@@ -78,18 +83,17 @@ export function PasswordNotice() {
         </AlertDescription>
       </Alert>
 
-      <Dialog
-        open={open}
-        onOpenChange={(o) => {
-          setOpen(o)
-          if (!o) reset()
-        }}
-      >
-        <DialogContent>
+      {/* Ni « Plus tard », ni fermeture au clic extérieur : le serveur refuse
+          tout le reste, une sortie ne mènerait nulle part. `onOpenChange`
+          ignoré volontairement — la boîte ne se referme que par la réussite
+          du changement, qui fait disparaître le composant. */}
+      <Dialog open={open} onOpenChange={() => {}} disablePointerDismissal>
+        <DialogContent showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Changer le mot de passe</DialogTitle>
+            <DialogTitle>Choisissez votre mot de passe</DialogTitle>
             <DialogDescription>
               Au moins 10 caractères, ni trop courant ni uniquement numérique.
+              Il ne doit être connu que de vous.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="grid gap-4 py-2">
@@ -133,10 +137,7 @@ export function PasswordNotice() {
             </div>
             <DialogFooter>
               <div>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                  Plus tard
-                </Button>
-                <Button type="submit" disabled={saving} className="ml-2">
+                <Button type="submit" disabled={saving}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Enregistrer
                 </Button>

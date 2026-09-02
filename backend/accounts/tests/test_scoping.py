@@ -10,9 +10,18 @@ from accounts.models import Role, UserProfile
 from core.models import ChangeLog, Country, Team
 
 
-def make_user(username, role, countries=()):
+def make_user(username, role, countries=(), must_change_password=False):
+    """Compte de test, mot de passe déjà personnalisé par défaut.
+
+    Le modèle exige un changement à la première connexion, et la plateforme
+    est fermée tant qu'il n'a pas eu lieu. Les tests portent sur l'usage
+    courant : leurs comptes sont donc des comptes en service, pas des comptes
+    fraîchement créés.
+    """
     user = User.objects.create_user(username=username, password="Motdepasse-2026-test")
-    profile = UserProfile.objects.create(user=user, role=role)
+    profile = UserProfile.objects.create(
+        user=user, role=role, must_change_password=must_change_password
+    )
     profile.countries.set(countries)
     return user
 

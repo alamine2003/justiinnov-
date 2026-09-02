@@ -81,30 +81,37 @@ export function AppLayout() {
           </div>
 
           <div className="flex items-center gap-1">
-            <NavItem to="/" icon={LayoutDashboard}>
-              Pilotage
-            </NavItem>
-            <NavItem to="/dossiers" icon={FolderOpen}>
-              Dossiers
-            </NavItem>
-            <NavItem to="/registre" icon={ListChecks}>
-              Registre
-            </NavItem>
-            <NavItem to="/budgets" icon={Wallet}>
-              Budgets
-            </NavItem>
-            <NavItem to="/countries" icon={Globe}>
-              Pays
-            </NavItem>
-            {can("view_audit") && (
-              <NavItem to="/audit" icon={ScrollText}>
-                Audit
-              </NavItem>
-            )}
-            {can("manage_users") && (
-              <NavItem to="/configuration" icon={Settings}>
-                Configuration
-              </NavItem>
+            {/* Aucun menu tant que le mot de passe du siège n'est pas
+                remplacé : chaque entrée mènerait à une page que le serveur
+                refuse de servir. */}
+            {!me?.must_change_password && (
+              <>
+                <NavItem to="/" icon={LayoutDashboard}>
+                  Pilotage
+                </NavItem>
+                <NavItem to="/dossiers" icon={FolderOpen}>
+                  Dossiers
+                </NavItem>
+                <NavItem to="/registre" icon={ListChecks}>
+                  Registre
+                </NavItem>
+                <NavItem to="/budgets" icon={Wallet}>
+                  Budgets
+                </NavItem>
+                <NavItem to="/countries" icon={Globe}>
+                  Pays
+                </NavItem>
+                {can("view_audit") && (
+                  <NavItem to="/audit" icon={ScrollText}>
+                    Audit
+                  </NavItem>
+                )}
+                {can("manage_users") && (
+                  <NavItem to="/configuration" icon={Settings}>
+                    Configuration
+                  </NavItem>
+                )}
+              </>
             )}
 
             {me && (
@@ -112,7 +119,7 @@ export function AppLayout() {
                 {me.username} · {me.role_display}
               </Badge>
             )}
-            <NotificationBell />
+            {!me?.must_change_password && <NotificationBell />}
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Déconnexion
@@ -122,9 +129,11 @@ export function AppLayout() {
       </header>
       {/* `min-h-0 flex-1` maintient le pied de page en bas même sur un écran
           court, sans le coller au contenu sur un écran long. */}
+      {/* Tant que le mot de passe du siège n'est pas remplacé, le serveur
+          refuse tout : afficher les pages produirait un mur d'erreurs
+          derrière la boîte de dialogue. On ne les monte donc pas. */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
-        <PasswordNotice />
-        <Outlet />
+        {me?.must_change_password ? <PasswordNotice /> : <Outlet />}
       </main>
       <AppFooter />
     </div>

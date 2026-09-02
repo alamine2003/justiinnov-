@@ -35,7 +35,9 @@ class DossierCoherenceTests(APITestCase):
 
     def _compte(self, username, role, pays=()):
         user = User.objects.create_user(username, password="Motdepasse-2026-test")
-        profil = UserProfile.objects.create(user=user, role=role)
+        profil = UserProfile.objects.create(
+            user=user, role=role, must_change_password=False
+        )
         profil.countries.set(pays)
         return user
 

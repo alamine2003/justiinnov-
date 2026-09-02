@@ -19,7 +19,9 @@ class ApiTestCase(APITestCase):
         cache.clear()
         self.user = User.objects.create_user(username="admin.test", password=PASSWORD)
         # Les vues exigent un profil : sans rôle, aucun droit.
-        UserProfile.objects.create(user=self.user, role=Role.SUPER_ADMIN)
+        UserProfile.objects.create(
+            user=self.user, role=Role.SUPER_ADMIN, must_change_password=False
+        )
         self.token = Token.objects.create(user=self.user)
         self.country = Country.objects.create(
             name="Togo", code="TG", currency="XOF", timezone="Africa/Lome"

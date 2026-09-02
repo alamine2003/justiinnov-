@@ -57,6 +57,10 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    # Après l'authentification de session, avant toute vue : un compte au
+    # mot de passe provisoire ne doit rien pouvoir faire d'autre que le
+    # changer.
+    "accounts.middleware.ProvisionalPasswordMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "core.middleware.CurrentUserMiddleware",
 ]

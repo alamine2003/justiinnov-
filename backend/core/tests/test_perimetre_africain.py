@@ -38,7 +38,9 @@ class CreationParApiTests(APITestCase):
     def setUp(self):
         cache.clear()
         user = User.objects.create_user(username="ceo.innov", password="Motdepasse-2026-test")
-        UserProfile.objects.create(user=user, role=Role.SUPER_ADMIN)
+        UserProfile.objects.create(
+            user=user, role=Role.SUPER_ADMIN, must_change_password=False
+        )
         token, _ = Token.objects.get_or_create(user=user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
@@ -114,7 +116,9 @@ class PaysDisponiblesTests(CreationParApiTests):
         rep = User.objects.create_user(
             username="togo.innov", password="Motdepasse-2026-test"
         )
-        UserProfile.objects.create(user=rep, role=Role.COUNTRY_MANAGER)
+        UserProfile.objects.create(
+            user=rep, role=Role.COUNTRY_MANAGER, must_change_password=False
+        )
         token, _ = Token.objects.get_or_create(user=rep)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
