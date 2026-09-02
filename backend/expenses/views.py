@@ -35,7 +35,7 @@ from .serializers import (
     TransitionSerializer,
 )
 from .services import attach_budget, check_budget_capacity
-from .workflow import Status, TransitionError, next_status
+from .workflow import LOCKED_STATUSES, Status, TransitionError, next_status
 
 #: Rôle habilité pour chaque action du workflow.
 ACTION_ROLES = {
@@ -223,6 +223,9 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         if name == "submit":
             return self._soumettre_les_lignes(dossier, access)
 
+        if name == "close":
+            self._refuser_les_lignes_en_suspens(dossier)
+
         if name == "justify" and not dossier.proofs.exclude(
             status=Proof.ProofStatus.REJECTED
         ).exists():
@@ -232,6 +235,32 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
                 {"proofs": "Un dossier ne peut être justifié sans justificatif."}
             )
         return None
+
+    def _refuser_les_lignes_en_suspens(self, dossier):
+        """Un dossier ne se clôture pas sur une ligne non tranchée.
+
+        Clôturer, c'est déclarer l'affaire terminée. Une ligne encore en
+        brouillon, soumise ou en contrôle n'a pas été tranchée : la classer
+        avec le dossier reviendrait à perdre la dépense de vue sans jamais
+        dire si elle est justifiée.
+        """
+        en_suspens = dossier.expenses.exclude(
+            status__in=[Status.JUSTIFIED, Status.UNJUSTIFIED, Status.CLOSED]
+        )
+        if not en_suspens.exists():
+            return
+        detail = ", ".join(
+            f"{e.title} ({e.get_status_display().lower()})" for e in en_suspens[:5]
+        )
+        raise ValidationError(
+            {
+                "expenses": (
+                    f"{en_suspens.count()} ligne(s) ne sont pas tranchées : "
+                    f"{detail}. Justifiez-les ou marquez-les non justifiées "
+                    "avant de clôturer."
+                )
+            }
+        )
 
     def _soumettre_les_lignes(self, dossier, access):
         """Le dossier et ses lignes partent ensemble.
@@ -332,7 +361,29 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         return Response(serializer.data)
 
     def perform_create(self, serializer):
+        """Enregistre une ligne, si son dossier l'accepte encore.
+
+        Le contrôle du dossier vient après celui du périmètre, et non dans le
+        sérialiseur : dire « ce dossier est déjà soumis » à quelqu'un qui n'a
+        pas le droit de le voir révélerait son existence et son état.
+
+        Sans ce refus, la ligne arrivait en brouillon dans un dossier déjà
+        passé : plus rien ne pouvait la soumettre, et la dépense restait
+        indéfiniment en suspens dans un dossier clos.
+        """
         self._check_country_scope(serializer)
+        dossier = serializer.validated_data.get("dossier")
+        if dossier is not None and dossier.status in LOCKED_STATUSES:
+            raise ValidationError(
+                {
+                    "dossier": (
+                        f"Le dossier {dossier.number} est déjà déclaré "
+                        f"({dossier.get_status_display().lower()}) : il "
+                        "n'accepte plus de nouvelle ligne. Ouvrez un nouveau "
+                        "dossier pour cette dépense."
+                    )
+                }
+            )
         serializer.save(created_by=self.request.user.username)
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
@@ -368,6 +419,21 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     def before_transition(self, expense, name, access):
         """Sépare la déclaration du contrôle, impute l'enveloppe et applique la
         politique de dépassement."""
+        if name == "submit" and expense.dossier.status == Status.DRAFT:
+            # Une ligne ne devance pas son dossier. Sans ce garde-fou, une
+            # dépense pouvait être soumise puis justifiée alors que le pays
+            # n'avait jamais rien déclaré : le dossier restait un brouillon
+            # portant des lignes tranchées.
+            raise ValidationError(
+                {
+                    "dossier": (
+                        f"Le dossier {expense.dossier.number} est encore un "
+                        "brouillon. Soumettez le dossier : ses lignes partent "
+                        "avec lui."
+                    )
+                }
+            )
+
         if name in ("justify", "reject") and expense.created_by:
             # Quatre yeux : décaisser puis se donner quitus soi-même n'est pas
             # un contrôle.

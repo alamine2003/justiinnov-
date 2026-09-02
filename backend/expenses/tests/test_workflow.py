@@ -17,6 +17,8 @@ from .base import ExpenseTestCase
 
 
 class TransitionTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     def setUp(self):
         super().setUp()
         self.expense = self.make_expense()
@@ -120,6 +122,8 @@ class TransitionTests(ExpenseTestCase):
 
 
 class LockingTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     """§6 : une dépense déclarée ne se modifie plus, ni ne s'efface."""
 
     def setUp(self):
@@ -160,6 +164,8 @@ class LockingTests(ExpenseTestCase):
 
 
 class BudgetImputationTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     def test_imputation_automatique_sur_l_enveloppe_du_pays(self):
         expense = self.make_expense()
         self.login(self.owner)
@@ -258,6 +264,8 @@ class BudgetImputationTests(ExpenseTestCase):
 
 
 class OverrunPolicyTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     def setUp(self):
         super().setUp()
         self.budget.amount = Decimal("100000.00")
@@ -354,6 +362,8 @@ class DossierWorkflowTests(ExpenseTestCase):
 
 
 class ScopingTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     def test_un_pays_ne_voit_pas_les_dossiers_d_un_autre(self):
         self.login(self.rep_ivoire)
 
@@ -362,6 +372,8 @@ class ScopingTests(ExpenseTestCase):
         self.assertEqual(response.data["count"], 0)
 
     def test_creation_d_une_depense_hors_perimetre_refusee(self):
+        """Le refus doit être un 403 de périmètre, pas un 400 qui laisserait
+        deviner que le dossier existe et dans quel état il est."""
         self.login(self.rep_ivoire)
 
         response = self.client.post(
@@ -397,6 +409,8 @@ class ScopingTests(ExpenseTestCase):
 
 
 class AuditTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     def test_chaque_transition_laisse_une_trace(self):
         expense = self.make_expense()
         self.login(self.owner)
@@ -485,6 +499,8 @@ class DraftDeletionTests(ExpenseTestCase):
 
 
 class JustificationRegisterTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     """« On t'a donné un budget, qu'as-tu dépensé, et où est la preuve ? »"""
 
     def setUp(self):
@@ -552,6 +568,8 @@ class JustificationRegisterTests(ExpenseTestCase):
 
 
 class SubEnvelopeImputationTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     """La sous-enveloppe la plus précise l'emporte."""
 
     def setUp(self):
@@ -606,6 +624,8 @@ class SubEnvelopeImputationTests(ExpenseTestCase):
 
 
 class LocalTimeTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     """§6 : l'heure se lit dans le fuseau du pays, pas dans celui du lecteur."""
 
     def test_le_fuseau_du_pays_accompagne_la_depense(self):
@@ -635,6 +655,8 @@ class LocalTimeTests(ExpenseTestCase):
 
 
 class SeparationOfDutiesTests(ExpenseTestCase):
+    dossier_status = Status.SUBMITTED
+
     """Le pays déclare, le siège constate. Personne ne se donne quitus."""
 
     def setUp(self):

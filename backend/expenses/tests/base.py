@@ -14,6 +14,7 @@ from accounts.tests.test_scoping import make_user
 from budget.models import Budget
 from core.models import Country, Manager, Team
 from expenses.models import Dossier, Expense
+from expenses.workflow import Status
 
 #: Les tests ne doivent jamais écrire dans MinIO ni sur le disque.
 in_memory_storage = override_settings(
@@ -28,6 +29,12 @@ in_memory_storage = override_settings(
 
 class ExpenseTestCase(APITestCase):
     """Deux pays, une enveloppe par pays, un dossier au Togo."""
+
+    #: État du dossier au démarrage. Les tests du circuit d'une ligne partent
+    #: d'un dossier déjà déclaré : côté pays, déclarer tient en une action, et
+    #: une ligne ne se soumet jamais avant son dossier. Ceux qui portent sur
+    #: le dossier lui-même gardent le brouillon.
+    dossier_status = Status.DRAFT
 
     def setUp(self):
         cache.clear()
@@ -58,6 +65,7 @@ class ExpenseTestCase(APITestCase):
         self.dossier = Dossier.objects.create(
             number="N-0001", label="Mission Lomé", country=self.togo,
             team=self.team, owner=self.manager, date=date(self.year, 3, 15),
+            status=self.dossier_status,
         )
 
     def login(self, user):

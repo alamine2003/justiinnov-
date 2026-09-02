@@ -228,11 +228,15 @@ class ProofReviewTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_dossier_cloture_refuse_un_nouveau_justificatif(self):
-        self.make_expense()
+        depense = self.make_expense()
         self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
         self.login(self.controller)
+        # La ligne doit être tranchée avant la clôture : un dossier ne se
+        # clôture pas en laissant une dépense en suspens.
+        self.client.post(f"/api/expenses/{depense.pk}/justify/")
         self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
-        self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
+        cloture = self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
+        self.assertEqual(cloture.status_code, status.HTTP_200_OK)
         self.login(self.owner)
 
         response = self.client.post(
