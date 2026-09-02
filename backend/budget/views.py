@@ -34,13 +34,16 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     """Enveloppes annuelles et sous-enveloppes par projet."""
 
     queryset = (
-        Budget.objects.select_related("country", "project").with_consumption()
+        Budget.objects.select_related(
+            "country", "project", "team", "manager"
+        ).with_consumption()
     )
     serializer_class = BudgetSerializer
     permission_classes = [RolePermission]
     write_roles = BUDGET_WRITE_ROLES
     filterset_fields = [
-        "country", "country__country_ref", "year", "project", "is_active",
+        "country", "country__country_ref", "year", "project", "team",
+        "manager", "is_active",
     ]
     search_fields = ["country__name", "country__country_ref", "project__name"]
     ordering_fields = ["year", "amount", "created_at"]
@@ -62,7 +65,9 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         for budget in budgets:
             entry = per_country[budget.country_id]
             countries[budget.country_id] = budget.country
-            if budget.project_id is None:
+            # Seule l'enveloppe du pays compose le total : projet,
+            # équipe et manager n'en sont que des découpages.
+            if budget.scope_kind == "country":
                 entry["allocated"] += budget.amount
             else:
                 entry["sub_allocated"] += budget.amount

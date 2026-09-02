@@ -22,12 +22,14 @@ import {
   fetchBudgets,
   updateBudget,
 } from "@/lib/budgets"
-import { fetchCountries, fetchProjects } from "@/lib/countries"
+import { fetchCountries, fetchManagers, fetchProjects, fetchTeams } from "@/lib/countries"
 import type {
   Budget,
   BudgetSummary,
   CountrySummary,
+  Manager,
   Project,
+  Team,
 } from "@/lib/types"
 import { formatAmount, formatRate } from "@/lib/utils"
 
@@ -39,6 +41,8 @@ export function BudgetsPage() {
   const [summary, setSummary] = useState<BudgetSummary | null>(null)
   const [countries, setCountries] = useState<CountrySummary[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [teams, setTeams] = useState<Team[]>([])
+  const [managers, setManagers] = useState<Manager[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -48,16 +52,21 @@ export function BudgetsPage() {
     setLoading(true)
     setError(null)
     try {
-      const [budgetPage, summaryData, countryPage, projectPage] = await Promise.all([
-        fetchBudgets({ page_size: 200 }),
-        fetchBudgetSummary(),
-        fetchCountries({ page_size: 200 }),
-        fetchProjects({ page_size: 200 }),
-      ])
+      const [budgetPage, summaryData, countryPage, projectPage, teamPage, managerPage] =
+        await Promise.all([
+          fetchBudgets({ page_size: 200 }),
+          fetchBudgetSummary(),
+          fetchCountries({ page_size: 200 }),
+          fetchProjects({ page_size: 200 }),
+          fetchTeams({ page_size: 200 }),
+          fetchManagers({ page_size: 200 }),
+        ])
       setBudgets(budgetPage.results)
       setSummary(summaryData)
       setCountries(countryPage.results)
       setProjects(projectPage.results)
+      setTeams(teamPage.results)
+      setManagers(managerPage.results)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossible de charger les budgets")
     } finally {
@@ -85,8 +94,8 @@ export function BudgetsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Budgets</h1>
           <p className="text-sm text-muted-foreground">
-            Enveloppes annuelles par pays, sous-enveloppes par projet et
-            réallocations.
+            Enveloppes annuelles par pays, sous-enveloppes par projet, équipe ou
+            manager, et réallocations.
           </p>
         </div>
         {canManage && (
@@ -238,7 +247,7 @@ export function BudgetsPage() {
                           <TableCell>
                             <p className="font-medium">{budget.country_name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {budget.project_name ?? "Enveloppe du pays"}
+                              {budget.scope_label ?? "Enveloppe du pays"}
                             </p>
                           </TableCell>
                           <TableCell>{budget.year}</TableCell>
@@ -303,6 +312,8 @@ export function BudgetsPage() {
         onSave={handleSave}
         countries={countries}
         projects={projects}
+        teams={teams}
+        managers={managers}
         editing={editing}
       />
     </div>

@@ -5,6 +5,7 @@ l'instance en mémoire diffère encore de l'état en base de données.
 """
 
 import threading
+from functools import partial
 
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
@@ -66,19 +67,24 @@ def _resolve_country(instance, *, verify_exists=False):
     return Country.objects.filter(pk=country_id).first()
 
 
-def _log(instance, action, model_name, from_value="", changed_fields=None):
+def _log(instance, action, model_name, from_value="", changed_fields=None,
+         country_resolver=None):
     """Crée une entrée d'historique pour une instance."""
     user = get_current_user()
     if callable(user):
         user = user()
     performed_by = user.username if user and user.is_authenticated else ""
     deleted = action == ChangeLog.Actions.DELETED
+    if country_resolver is not None:
+        country = country_resolver(instance)
+    else:
+        country = _resolve_country(instance, verify_exists=deleted)
     ChangeLog.objects.create(
         model_name=model_name,
         object_id=instance.pk,
         label=str(instance),
         action=action,
-        country=_resolve_country(instance, verify_exists=deleted),
+        country=country,
         from_value=from_value,
         to_value="" if deleted else str(instance),
         changed_fields=changed_fields or [],
@@ -104,7 +110,8 @@ def _plain_changes(instance, previous):
     return changes
 
 
-def _track_creation_update(sender, instance, **kwargs):
+def _track_creation_update(sender, instance, model_name=None,
+                           country_resolver=None, **kwargs):
     """Journalise toute modification d'une entité existante.
 
     Couvre la mise à jour générique (``updated``), l'activation /
@@ -112,7 +119,9 @@ def _track_creation_update(sender, instance, **kwargs):
     rattachement de pays (``reassigned``).
     """
     previous = _previous(instance)
-    model_name = _MODEL_NAME.get(sender.__name__, ChangeLog.Models.COUNTRY)
+    model_name = model_name or _MODEL_NAME.get(
+        sender.__name__, ChangeLog.Models.COUNTRY
+    )
     is_country = sender is Country
 
     if previous is None:
@@ -134,6 +143,7 @@ def _track_creation_update(sender, instance, **kwargs):
             model_name,
             from_value=f"{previous.country.name} ({previous.country.code})",
             changed_fields=["country"],
+            country_resolver=country_resolver,
         )
         changes.remove("country")
 
@@ -144,7 +154,10 @@ def _track_creation_update(sender, instance, **kwargs):
             if instance.is_active
             else ChangeLog.Actions.DEACTIVATED
         )
-        _log(instance, action, model_name, changed_fields=["is_active"])
+        _log(
+            instance, action, model_name,
+            changed_fields=["is_active"], country_resolver=country_resolver,
+        )
         changes.remove("is_active")
 
     # 3. Mise à jour générique des champs restants.
@@ -155,15 +168,23 @@ def _track_creation_update(sender, instance, **kwargs):
             model_name,
             from_value=str(previous),
             changed_fields=changes,
+            country_resolver=country_resolver,
         )
 
 
-def _log_creation(sender, instance, created, **kwargs):
+def _log_creation(sender, instance, created, model_name=None,
+                  country_resolver=None, **kwargs):
     if created:
-        _log(instance, ChangeLog.Actions.CREATED, _MODEL_NAME[sender.__name__])
+        _log(
+            instance,
+            ChangeLog.Actions.CREATED,
+            model_name or _MODEL_NAME[sender.__name__],
+            country_resolver=country_resolver,
+        )
 
 
-def _log_deletion(sender, instance, **kwargs):
+def _log_deletion(sender, instance, model_name=None, country_resolver=None,
+                  **kwargs):
     """Journalise les suppressions restantes (admin Django, shell, cascade).
 
     L'API n'expose plus ``DELETE`` (cf. :class:`core.mixins.NoDestroyModelViewSet`),
@@ -172,8 +193,9 @@ def _log_deletion(sender, instance, **kwargs):
     _log(
         instance,
         ChangeLog.Actions.DELETED,
-        _MODEL_NAME[sender.__name__],
+        model_name or _MODEL_NAME[sender.__name__],
         from_value=str(instance),
+        country_resolver=country_resolver,
     )
     if isinstance(instance, Country):
         # Les entités filles sont supprimées *avant* leur pays : leurs entrées
@@ -181,6 +203,22 @@ def _log_deletion(sender, instance, **kwargs):
         # référence. Le pays n'existant plus, ces liens doivent être coupés
         # avant la fin de la transaction (contrainte de clé étrangère).
         ChangeLog.objects.filter(country_id=instance.pk).update(country=None)
+
+
+def register(model, model_name, country_resolver=None):
+    """Branche la journalisation sur un modèle d'une autre application.
+
+    Permet à ``budget`` — ou à toute app en dépendant — de réutiliser cette
+    machinerie sans que ``core`` ait à connaître ses modèles : la dépendance
+    reste dirigée dans le bon sens.
+
+    ``country_resolver`` sert aux modèles qui n'ont pas de champ ``country``
+    propre, comme une réallocation, rattachée au pays de son enveloppe source.
+    """
+    options = {"model_name": model_name, "country_resolver": country_resolver}
+    receiver(pre_save, sender=model)(partial(_track_creation_update, **options))
+    receiver(post_save, sender=model)(partial(_log_creation, **options))
+    receiver(post_delete, sender=model)(partial(_log_deletion, **options))
 
 
 # Le décorateur ``@receiver`` ne dissocie pas un *sender* qui est un tuple :

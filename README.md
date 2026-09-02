@@ -149,10 +149,19 @@ Toutes les listes sont filtrées par le périmètre du compte.
 
 ## Budgets
 
-Une enveloppe est annuelle et rattachée à un pays ; renseigner un projet en
-fait une **sous-enveloppe**, c'est-à-dire un découpage de l'enveloppe du pays
-(la consolidation ne l'additionne donc pas, sous peine de compter deux fois le
-même argent).
+Une enveloppe est annuelle et rattachée à un pays. Elle se décline en
+**sous-enveloppes** selon **une** dimension à la fois — un projet, une équipe
+ou un manager. En autoriser plusieurs rendrait l'imputation d'une dépense
+ambiguë ; la contrainte est posée en base autant que dans l'API.
+
+Une sous-enveloppe découpe l'enveloppe du pays : la consolidation ne
+l'additionne donc pas, sous peine de compter deux fois le même argent. Une
+dépense s'impute sur la plus précise qui la concerne — le projet l'emporte sur
+l'équipe, qui l'emporte sur le manager — et à défaut sur l'enveloppe du pays.
+
+Tout mouvement budgétaire est journalisé : création, modification de montant,
+réallocation et taux de change apparaissent dans `/api/history/`, avec leur
+auteur et les champs touchés.
 
 Consommation, écart et solde disponible sont **calculés côté serveur** et
 jamais reconstitués dans l'interface. Les montants sont stockés dans la devise
@@ -177,11 +186,35 @@ Chaque entrée conserve `label`, `performed_by` (utilisateur authentifié),
 qui combine plusieurs natures d'événement (par exemple un changement de
 rattachement *et* un renommage) produit une entrée par événement.
 
+## Rapports périodiques
+
+```bash
+docker compose exec backend python manage.py send_periodic_report \
+    --period=weekly --dry-run
+```
+
+Sans `--dry-run`, le rapport de rapprochement est envoyé par e-mail aux rôles
+du siège et de contrôle, avec le classeur en pièce jointe. À planifier sur
+l'hôte, par exemple chaque lundi à 7 h :
+
+```cron
+0 7 * * 1  cd /chemin/du/projet && docker compose exec -T backend \
+             python manage.py send_periodic_report --period=weekly
+```
+
 ## Tests
 
 ```bash
+# Backend
 docker compose run --rm --entrypoint python backend manage.py test
+
+# Frontend : types, lint, tests unitaires
+cd frontend && npx tsc -b && npm run lint && npm run test
 ```
+
+L'intégration continue (`.github/workflows/ci.yml`) rejoue les deux suites à
+chaque poussée, et vérifie au passage qu'aucun modèle n'a été modifié sans
+migration — un oubli qui passerait les tests mais casserait le déploiement.
 
 ## Variables d'environnement
 

@@ -98,6 +98,30 @@ export function reviewProof(id: number, status: ProofStatus, reason?: string) {
   return apiPost<Proof>(`/proofs/${id}/review/`, { status, reason: reason ?? "" })
 }
 
+/** Types affichables directement dans l'application. */
+export function isPreviewable(proof: Proof): boolean {
+  const name = proof.original_name.toLowerCase()
+  return /\.(pdf|png|jpe?g|webp|gif)$/.test(name)
+}
+
+/**
+ * Charge une pièce pour l'afficher.
+ *
+ * Le fichier n'ayant pas d'URL publique, il faut le récupérer avec le jeton
+ * puis en faire une URL locale. L'appelant doit la révoquer après usage, sinon
+ * le navigateur garde le contenu en mémoire.
+ */
+export async function loadProofBlob(proof: Proof) {
+  const response = await api.get(`/proofs/${proof.id}/download/`, {
+    responseType: "blob",
+  })
+  const blob = response.data as Blob
+  return {
+    url: URL.createObjectURL(blob),
+    type: blob.type || "application/octet-stream",
+  }
+}
+
 /**
  * Télécharge une pièce justificative.
  *

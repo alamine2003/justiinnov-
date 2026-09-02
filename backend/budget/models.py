@@ -12,7 +12,7 @@ from django.db import models
 from django.db.models import Q, Sum, Value
 from django.db.models.functions import Coalesce
 
-from core.models import Country, Project, TimeStampedModel
+from core.models import Country, Manager, Project, Team, TimeStampedModel
 
 #: Devise de consolidation : le siège est au Sénégal.
 CONSOLIDATION_CURRENCY = "XOF"
@@ -76,6 +76,9 @@ class Budget(TimeStampedModel):
         Country, on_delete=models.CASCADE, related_name="budgets", verbose_name="Pays"
     )
     year = models.PositiveIntegerField("Année")
+    # Une sous-enveloppe découpe l'enveloppe du pays selon **une** dimension :
+    # un projet, une équipe ou un manager. En autoriser plusieurs à la fois
+    # rendrait l'imputation d'une dépense ambiguë.
     project = models.ForeignKey(
         Project,
         null=True,
@@ -83,7 +86,22 @@ class Budget(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="budgets",
         verbose_name="Projet",
-        help_text="Renseigné pour une sous-enveloppe ; vide pour l'enveloppe du pays.",
+    )
+    team = models.ForeignKey(
+        Team,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="budgets",
+        verbose_name="Équipe",
+    )
+    manager = models.ForeignKey(
+        Manager,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="budgets",
+        verbose_name="Manager",
     )
     amount = models.DecimalField(
         "Montant",
@@ -105,19 +123,60 @@ class Budget(TimeStampedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["country", "year"],
-                condition=Q(project__isnull=True),
+                condition=Q(
+                    project__isnull=True, team__isnull=True, manager__isnull=True
+                ),
                 name="unique_enveloppe_pays_annee",
             ),
             models.UniqueConstraint(
                 fields=["country", "project", "year"],
                 name="unique_sous_enveloppe_projet_annee",
             ),
+            models.UniqueConstraint(
+                fields=["country", "team", "year"],
+                name="unique_sous_enveloppe_equipe_annee",
+            ),
+            models.UniqueConstraint(
+                fields=["country", "manager", "year"],
+                name="unique_sous_enveloppe_manager_annee",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(project__isnull=True, team__isnull=True, manager__isnull=True)
+                    | Q(project__isnull=False, team__isnull=True, manager__isnull=True)
+                    | Q(project__isnull=True, team__isnull=False, manager__isnull=True)
+                    | Q(project__isnull=True, team__isnull=True, manager__isnull=False)
+                ),
+                name="sous_enveloppe_une_seule_dimension",
+            ),
         ]
 
     def __str__(self):
-        if self.project_id:
-            return f"{self.country.name} {self.year} — {self.project.name}"
+        scope = self.scope_label
+        if scope:
+            return f"{self.country.name} {self.year} — {scope}"
         return f"{self.country.name} {self.year}"
+
+    @property
+    def scope_label(self):
+        """Dimension découpée, ou ``None`` pour l'enveloppe du pays."""
+        if self.project_id:
+            return self.project.name
+        if self.team_id:
+            return f"Équipe {self.team.name}"
+        if self.manager_id:
+            return f"Manager {self.manager.name}"
+        return None
+
+    @property
+    def scope_kind(self):
+        if self.project_id:
+            return "project"
+        if self.team_id:
+            return "team"
+        if self.manager_id:
+            return "manager"
+        return "country"
 
     @property
     def currency(self):

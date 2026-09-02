@@ -177,6 +177,9 @@ class ChangeLog(models.Model):
         PROJECT = "project", "Projet"
         EXPENSE_TITLE = "expense_title", "Intitulé de dépenses"
         MARKETING_CATEGORY = "marketing_category", "Catégorie marketing"
+        BUDGET = "budget", "Enveloppe budgétaire"
+        REALLOCATION = "reallocation", "Réallocation budgétaire"
+        EXCHANGE_RATE = "exchange_rate", "Taux de change"
 
     model_name = models.CharField(
         "Entité", max_length=32, choices=Models.choices

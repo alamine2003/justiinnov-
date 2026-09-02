@@ -546,3 +546,57 @@ class JustificationRegisterTests(ExpenseTestCase):
         response = self.client.get("/api/expenses/register/")
 
         self.assertEqual(response.data["count"], 0)
+
+
+class SubEnvelopeImputationTests(ExpenseTestCase):
+    """La sous-enveloppe la plus précise l'emporte."""
+
+    def setUp(self):
+        super().setUp()
+        from budget.models import Budget
+
+        self.enveloppe_equipe = Budget.objects.create(
+            country=self.togo, year=self.year, team=self.team,
+            amount=Decimal("500000.00"),
+        )
+        self.enveloppe_manager = Budget.objects.create(
+            country=self.togo, year=self.year, manager=self.manager,
+            amount=Decimal("400000.00"),
+        )
+        self.login(self.owner)
+
+    def _imputer(self, **kwargs):
+        expense = self.make_expense(**kwargs)
+        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        expense.refresh_from_db()
+        return expense.budget
+
+    def test_l_equipe_prime_sur_le_manager(self):
+        """Une dépense d'équipe pèse sur le budget de l'équipe, même si son
+        propriétaire dispose d'une enveloppe personnelle."""
+        self.assertEqual(
+            self._imputer(team=self.team, owner=self.manager), self.enveloppe_equipe
+        )
+
+    def test_le_manager_a_defaut_d_equipe(self):
+        self.assertEqual(
+            self._imputer(team=None, owner=self.manager), self.enveloppe_manager
+        )
+
+    def test_le_projet_prime_sur_tout(self):
+        from budget.models import Budget
+        from core.models import Project
+
+        projet = Project.objects.create(country=self.togo, name="Campagne")
+        enveloppe_projet = Budget.objects.create(
+            country=self.togo, year=self.year, project=projet,
+            amount=Decimal("300000.00"),
+        )
+
+        self.assertEqual(
+            self._imputer(project=projet, team=self.team, owner=self.manager),
+            enveloppe_projet,
+        )
+
+    def test_repli_sur_l_enveloppe_du_pays(self):
+        self.assertEqual(self._imputer(team=None, owner=None), self.budget)

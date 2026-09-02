@@ -214,6 +214,9 @@ export interface BudgetFigures {
   remaining_xof: string | null
 }
 
+/** Dimension découpée par une sous-enveloppe. */
+export type BudgetScope = "country" | "project" | "team" | "manager"
+
 export interface Budget {
   id: number
   country: number
@@ -223,6 +226,12 @@ export interface Budget {
   year: number
   project: number | null
   project_name: string | null
+  team: number | null
+  team_name: string | null
+  manager: number | null
+  manager_name: string | null
+  scope_kind: BudgetScope
+  scope_label: string | null
   amount: string
   overrun_policy: OverrunPolicy
   overrun_policy_display: string

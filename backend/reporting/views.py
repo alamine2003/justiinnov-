@@ -108,7 +108,9 @@ class DashboardView(APIView):
         for budget in budgets:
             entry = per_country[budget.country_id]
             countries[budget.country_id] = budget.country
-            if budget.project_id is None:
+            # Seule l'enveloppe du pays compose le total : projet,
+            # équipe et manager n'en sont que des découpages.
+            if budget.scope_kind == "country":
                 entry["allocated"] += budget.amount
             else:
                 entry["sub_allocated"] += budget.amount

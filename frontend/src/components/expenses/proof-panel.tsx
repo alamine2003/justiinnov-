@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react"
-import { Download, FileCheck2, Loader2, Upload, X } from "lucide-react"
+import { Download, Eye, FileCheck2, Loader2, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,9 +21,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ProofPreview } from "@/components/expenses/proof-preview"
 import { ProofStatusBadge } from "@/components/expenses/status-badge"
 import { useAuth } from "@/context/auth"
-import { downloadProof, reviewProof, uploadProof } from "@/lib/expenses"
+import {
+  downloadProof,
+  isPreviewable,
+  reviewProof,
+  uploadProof,
+} from "@/lib/expenses"
 import {
   PROOF_KIND_LABELS,
   type Proof,
@@ -55,6 +61,7 @@ export function ProofPanel({
 
   const [uploadOpen, setUploadOpen] = useState(false)
   const [reviewing, setReviewing] = useState<Proof | null>(null)
+  const [previewing, setPreviewing] = useState<Proof | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
 
@@ -138,6 +145,17 @@ export function ProofPanel({
                     {proof.uploaded_by && `par ${proof.uploaded_by}`}
                   </TableCell>
                   <TableCell className="text-right">
+                    {isPreviewable(proof) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Prévisualiser"
+                        title="Prévisualiser"
+                        onClick={() => setPreviewing(proof)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -182,6 +200,8 @@ export function ProofPanel({
         onClose={() => setReviewing(null)}
         onReviewed={onChanged}
       />
+
+      <ProofPreview proof={previewing} onClose={() => setPreviewing(null)} />
     </div>
   )
 }

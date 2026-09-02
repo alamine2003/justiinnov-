@@ -17,18 +17,32 @@ import {
   OVERRUN_POLICY_LABELS,
   type Budget,
   type CountrySummary,
+  type Manager,
   type OverrunPolicy,
   type Project,
+  type Team,
 } from "@/lib/types"
 
 export interface BudgetFormValues {
   country: number
   year: number
   project: number | null
+  team: number | null
+  manager: number | null
   amount: string
   overrun_policy: OverrunPolicy
   is_active: boolean
 }
+
+/** Dimensions selon lesquelles une enveloppe pays peut être découpée (§5.2). */
+const SCOPES = [
+  { value: "country", label: "Enveloppe du pays" },
+  { value: "project", label: "Sous-enveloppe — projet" },
+  { value: "team", label: "Sous-enveloppe — équipe" },
+  { value: "manager", label: "Sous-enveloppe — manager" },
+] as const
+
+type Scope = (typeof SCOPES)[number]["value"]
 
 interface BudgetFormProps {
   open: boolean
@@ -36,6 +50,8 @@ interface BudgetFormProps {
   onSave: (values: BudgetFormValues) => Promise<void>
   countries: CountrySummary[]
   projects: Project[]
+  teams: Team[]
+  managers: Manager[]
   editing: Budget | null
 }
 
@@ -48,11 +64,16 @@ export function BudgetForm({
   onSave,
   countries,
   projects,
+  teams,
+  managers,
   editing,
 }: BudgetFormProps) {
   const [country, setCountry] = useState<number | "">("")
   const [year, setYear] = useState(CURRENT_YEAR)
+  const [scope, setScope] = useState<Scope>("country")
   const [project, setProject] = useState<number | "">("")
+  const [team, setTeam] = useState<number | "">("")
+  const [manager, setManager] = useState<number | "">("")
   const [amount, setAmount] = useState("")
   const [policy, setPolicy] = useState<OverrunPolicy>("block")
   const [active, setActive] = useState(true)
@@ -65,22 +86,29 @@ export function BudgetForm({
     if (editing) {
       setCountry(editing.country)
       setYear(editing.year)
+      setScope(editing.scope_kind)
       setProject(editing.project ?? "")
+      setTeam(editing.team ?? "")
+      setManager(editing.manager ?? "")
       setAmount(editing.amount)
       setPolicy(editing.overrun_policy)
       setActive(editing.is_active)
     } else {
       setCountry(countries[0]?.id ?? "")
       setYear(CURRENT_YEAR)
+      setScope("country")
       setProject("")
+      setTeam("")
+      setManager("")
       setAmount("")
       setPolicy("block")
       setActive(true)
     }
   }, [open, editing, countries])
 
-  // Une sous-enveloppe ne peut porter que sur un projet du pays choisi.
+  // Une sous-enveloppe ne porte que sur une entité du pays choisi.
   const eligibleProjects = projects.filter((p) => p.country === country)
+  const eligibleTeams = teams.filter((t) => t.country === country)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -94,7 +122,11 @@ export function BudgetForm({
       await onSave({
         country,
         year,
-        project: project === "" ? null : project,
+        // Une seule dimension est transmise : les autres sont explicitement
+        // nulles, sans quoi une modification de portée en laisserait traîner.
+        project: scope === "project" && project !== "" ? project : null,
+        team: scope === "team" && team !== "" ? team : null,
+        manager: scope === "manager" && manager !== "" ? manager : null,
         amount,
         overrun_policy: policy,
         is_active: active,
@@ -117,8 +149,8 @@ export function BudgetForm({
             {editing ? "Modifier l'enveloppe" : "Attribuer une enveloppe"}
           </DialogTitle>
           <DialogDescription>
-            Laissez le projet vide pour l'enveloppe annuelle du pays ; renseignez-le
-            pour une sous-enveloppe.
+            Une sous-enveloppe découpe l'enveloppe du pays selon une seule
+            dimension : un projet, une équipe ou un manager.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
@@ -182,23 +214,86 @@ export function BudgetForm({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="budget-project">Projet (sous-enveloppe)</Label>
+            <Label htmlFor="budget-scope">Portée</Label>
             <NativeSelect
-              id="budget-project"
-              value={project}
-              onChange={(e) =>
-                setProject(e.target.value === "" ? "" : Number(e.target.value))
-              }
+              id="budget-scope"
+              value={scope}
+              onChange={(e) => setScope(e.target.value as Scope)}
               disabled={Boolean(editing)}
             >
-              <option value="">Enveloppe du pays</option>
-              {eligibleProjects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              {SCOPES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </NativeSelect>
           </div>
+
+          {scope === "project" && (
+            <div className="grid gap-2">
+              <Label htmlFor="budget-project">Projet</Label>
+              <NativeSelect
+                id="budget-project"
+                value={project}
+                onChange={(e) =>
+                  setProject(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                disabled={Boolean(editing)}
+                required
+              >
+                <option value="">—</option>
+                {eligibleProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
+
+          {scope === "team" && (
+            <div className="grid gap-2">
+              <Label htmlFor="budget-team">Équipe</Label>
+              <NativeSelect
+                id="budget-team"
+                value={team}
+                onChange={(e) =>
+                  setTeam(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                disabled={Boolean(editing)}
+                required
+              >
+                <option value="">—</option>
+                {eligibleTeams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
+
+          {scope === "manager" && (
+            <div className="grid gap-2">
+              <Label htmlFor="budget-manager">Manager</Label>
+              <NativeSelect
+                id="budget-manager"
+                value={manager}
+                onChange={(e) =>
+                  setManager(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                disabled={Boolean(editing)}
+                required
+              >
+                <option value="">—</option>
+                {managers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
 
           <div className="grid gap-2">
             <Label htmlFor="budget-policy">En cas de dépassement</Label>

@@ -36,7 +36,7 @@ api.interceptors.request.use((config) => {
 })
 
 /** Extrait un message lisible d'une réponse d'erreur DRF. */
-function readErrorMessage(data: unknown): string | null {
+export function readErrorMessage(data: unknown): string | null {
   if (typeof data === "string") return data
   if (!data || typeof data !== "object") return null
 

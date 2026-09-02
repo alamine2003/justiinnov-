@@ -16,6 +16,14 @@ class BudgetSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(
         source="project.name", read_only=True, allow_null=True
     )
+    team_name = serializers.CharField(
+        source="team.name", read_only=True, allow_null=True
+    )
+    manager_name = serializers.CharField(
+        source="manager.name", read_only=True, allow_null=True
+    )
+    scope_kind = serializers.CharField(read_only=True)
+    scope_label = serializers.CharField(read_only=True, allow_null=True)
     overrun_policy_display = serializers.CharField(
         source="get_overrun_policy_display", read_only=True
     )
@@ -25,7 +33,8 @@ class BudgetSerializer(serializers.ModelSerializer):
         model = Budget
         fields = [
             "id", "country", "country_name", "country_ref", "currency",
-            "year", "project", "project_name", "amount",
+            "year", "project", "project_name", "team", "team_name",
+            "manager", "manager_name", "scope_kind", "scope_label", "amount",
             "overrun_policy", "overrun_policy_display", "is_active",
             "figures", "created_at", "updated_at",
         ]
@@ -50,16 +59,29 @@ class BudgetSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         country = self._resolve(attrs, "country")
-        project = self._resolve(attrs, "project")
         year = self._resolve(attrs, "year")
+        dimensions = {
+            "project": self._resolve(attrs, "project"),
+            "team": self._resolve(attrs, "team"),
+            "manager": self._resolve(attrs, "manager"),
+        }
 
-        if project is not None and country is not None and project.country_id != country.pk:
+        renseignees = [name for name, value in dimensions.items() if value is not None]
+        if len(renseignees) > 1:
             raise serializers.ValidationError(
-                {"project": "Le projet doit appartenir au pays de l'enveloppe."}
+                "Une sous-enveloppe ne découpe qu'une dimension à la fois "
+                f"(reçu : {', '.join(renseignees)})."
             )
 
+        for name in ("project", "team"):
+            value = dimensions[name]
+            if value is not None and country is not None and value.country_id != country.pk:
+                raise serializers.ValidationError(
+                    {name: "Cette entité doit appartenir au pays de l'enveloppe."}
+                )
+
         if country is not None and year is not None:
-            self._check_unique(country, project, year)
+            self._check_unique(country, dimensions, year)
         return attrs
 
     def _resolve(self, attrs, field):
@@ -68,16 +90,29 @@ class BudgetSerializer(serializers.ModelSerializer):
             return attrs[field]
         return getattr(self.instance, field, None)
 
-    def _check_unique(self, country, project, year):
-        existing = Budget.objects.filter(country=country, project=project, year=year)
+    LIBELLES = {
+        "project": "ce projet",
+        "team": "cette équipe",
+        "manager": "ce manager",
+    }
+
+    def _check_unique(self, country, dimensions, year):
+        existing = Budget.objects.filter(country=country, year=year, **dimensions)
         if self.instance is not None:
             existing = existing.exclude(pk=self.instance.pk)
         if not existing.exists():
             return
-        if project is None:
+
+        portee = next(
+            (name for name, value in dimensions.items() if value is not None), None
+        )
+        if portee is None:
             message = "Une enveloppe existe déjà pour ce pays et cette année."
         else:
-            message = "Une sous-enveloppe existe déjà pour ce projet et cette année."
+            message = (
+                f"Une sous-enveloppe existe déjà pour {self.LIBELLES[portee]} "
+                "et cette année."
+            )
         raise serializers.ValidationError({"non_field_errors": [message]})
 
 

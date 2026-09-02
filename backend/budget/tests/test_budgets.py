@@ -248,3 +248,73 @@ class ReallocationTests(BudgetTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.budget_togo.refresh_from_db()
         self.assertEqual(self.budget_togo.amount, Decimal("9000000.00"))
+
+
+class SubEnvelopeTests(BudgetTestCase):
+    """§5.2 : une enveloppe se décline par projet, équipe ou manager."""
+
+    def setUp(self):
+        super().setUp()
+        from core.models import Manager, Team
+
+        self.equipe = Team.objects.create(country=self.togo, name="Équipe Lomé")
+        self.manager = Manager.objects.create(name="Kodjo Mensah")
+        self.login(self.doo)
+
+    def _creer(self, **dimension):
+        payload = {
+            "country": self.togo.pk,
+            "year": self.budget_togo.year,
+            "amount": "100000.00",
+        }
+        payload.update(dimension)
+        return self.client.post("/api/budgets/", payload)
+
+    def test_sous_enveloppe_par_equipe(self):
+        response = self._creer(team=self.equipe.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["scope_kind"], "team")
+        self.assertEqual(response.data["scope_label"], "Équipe Équipe Lomé")
+
+    def test_sous_enveloppe_par_manager(self):
+        response = self._creer(manager=self.manager.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["scope_kind"], "manager")
+
+    def test_une_seule_dimension_a_la_fois(self):
+        """Deux dimensions rendraient l'imputation d'une dépense ambiguë."""
+        projet = Project.objects.create(country=self.togo, name="Projet")
+
+        response = self._creer(team=self.equipe.pk, project=projet.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_doublon_sur_la_meme_equipe_refuse(self):
+        self._creer(team=self.equipe.pk)
+
+        response = self._creer(team=self.equipe.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("équipe", str(response.data))
+
+    def test_equipe_d_un_autre_pays_refusee(self):
+        from core.models import Team
+
+        autre = Team.objects.create(country=self.ivoire, name="Équipe Abidjan")
+
+        response = self._creer(team=autre.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_les_sous_enveloppes_ne_gonflent_pas_le_total(self):
+        self._creer(team=self.equipe.pk)
+
+        response = self.client.get("/api/budgets/summary/")
+
+        togo = next(
+            r for r in response.data["countries"] if r["country_ref"] == "TG-02"
+        )
+        self.assertEqual(togo["allocated"], "10000000.00")
+        self.assertEqual(togo["sub_allocated"], "100000.00")

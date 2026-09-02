@@ -21,27 +21,38 @@ ZERO = Decimal("0.00")
 OVERRUN_APPROVERS = frozenset({Role.SUPER_ADMIN, Role.DOO})
 
 
+#: Ordre de priorité des sous-enveloppes, du plus précis au plus large.
+#: Le projet l'emporte sur l'équipe, qui l'emporte sur le manager : une
+#: dépense de projet doit peser sur le budget de ce projet, même si son auteur
+#: dispose par ailleurs d'une enveloppe personnelle.
+SUB_ENVELOPE_ORDER = [
+    ("project_id", "project_id"),
+    ("team_id", "team_id"),
+    ("owner_id", "manager_id"),
+]
+
+
 def resolve_budget(expense):
     """Enveloppe imputable à une dépense.
 
-    La sous-enveloppe du projet est prioritaire ; à défaut, l'enveloppe du pays
+    La sous-enveloppe la plus précise l'emporte ; à défaut, l'enveloppe du pays
     pour l'année de la dépense.
     """
     year = expense.date.year
-    if expense.project_id:
-        sub_envelope = Budget.objects.filter(
-            country_id=expense.country_id,
-            year=year,
-            project_id=expense.project_id,
-            is_active=True,
-        ).first()
+    base = Budget.objects.filter(
+        country_id=expense.country_id, year=year, is_active=True
+    )
+
+    for expense_field, budget_field in SUB_ENVELOPE_ORDER:
+        value = getattr(expense, expense_field, None)
+        if not value:
+            continue
+        sub_envelope = base.filter(**{budget_field: value}).first()
         if sub_envelope is not None:
             return sub_envelope
-    return Budget.objects.filter(
-        country_id=expense.country_id,
-        year=year,
-        project__isnull=True,
-        is_active=True,
+
+    return base.filter(
+        project__isnull=True, team__isnull=True, manager__isnull=True
     ).first()
 
 

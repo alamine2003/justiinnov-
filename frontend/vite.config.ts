@@ -1,4 +1,5 @@
 import path from "path"
+/// <reference types="vitest/config" />
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -23,6 +24,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
       },
+    },
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: "./src/test/setup.ts",
+      // Les captures Playwright ne sont pas des tests unitaires.
+      include: ["src/**/*.test.{ts,tsx}"],
     },
   }
 })
