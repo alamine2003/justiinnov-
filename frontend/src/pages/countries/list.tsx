@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CountryForm, type CountryFormValues } from "@/components/countries/country-form"
 import { CountryTable } from "@/components/countries/country-table"
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
+import { PageHeader } from "@/components/ui/page-header"
 import {
   createCountry,
   fetchCountries,
@@ -69,12 +70,10 @@ export function CountriesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Gestion des pays</h1>
-        <p className="text-muted-foreground text-sm">
-          Définissez la devise, le fuseau horaire et les rattachements de chaque pays.
-        </p>
-      </div>
+      <PageHeader
+        title="Gestion des pays"
+        description="Définissez la devise, le fuseau horaire et les rattachements de chaque pays."
+      />
 
       {error && (
         <Alert variant="destructive">

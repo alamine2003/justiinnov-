@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { NativeSelect } from "@/components/ui/native-select"
+import { PageHeader } from "@/components/ui/page-header"
 import {
   Table,
   TableBody,
@@ -108,15 +109,14 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Pilotage</h1>
-          <p className="text-sm text-muted-foreground">
-            {me?.has_global_scope
-              ? "Consolidation de tous les pays, convertie en FCFA."
-              : "Consommation et alertes de votre périmètre."}
-          </p>
-        </div>
+      <PageHeader
+        title="Pilotage"
+        description={
+          me?.has_global_scope
+            ? "Consolidation de tous les pays, convertie en FCFA."
+            : "Consommation et alertes de votre périmètre."
+        }
+      >
         <div className="flex flex-wrap items-center gap-2">
           <NativeSelect
             value={year}
@@ -149,7 +149,7 @@ export function DashboardPage() {
             </NativeSelect>
           )}
         </div>
-      </div>
+      </PageHeader>
 
       {error && (
         <Alert variant="destructive">

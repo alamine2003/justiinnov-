@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
+import { PageHeader } from "@/components/ui/page-header"
+import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import {
   Table,
   TableBody,
@@ -109,13 +111,10 @@ export function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Journal d'audit</h1>
-        <p className="text-sm text-muted-foreground">
-          Qui a fait quoi, quand et depuis quelle adresse. Les entrées ne sont ni
-          modifiables ni supprimables.
-        </p>
-      </div>
+      <PageHeader
+        title="Journal d'audit"
+        description="Qui a fait quoi, quand et depuis quelle adresse. Les entrées ne sont ni modifiables ni supprimables."
+      />
 
       {error && (
         <Alert variant="destructive">
@@ -166,18 +165,14 @@ export function AuditPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-16">
-                      <div className="h-4 animate-pulse rounded bg-muted" />
-                    </TableCell>
-                  </TableRow>
+                  <SkeletonRows columns={6} />
                 ) : entries.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      <ScrollText className="mx-auto mb-2 h-6 w-6 opacity-60" />
-                      Aucune entrée.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyRow
+                    colSpan={6}
+                    icon={ScrollText}
+                    title="Aucune entrée"
+                    hint="Le journal se remplit à mesure des actions."
+                  />
                 ) : (
                   entries.map((entry) => (
                     <TableRow key={entry.id}>

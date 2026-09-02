@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PageHeader } from "@/components/ui/page-header"
 import { BudgetForm, type BudgetFormValues } from "@/components/budgets/budget-form"
 import { Reallocations } from "@/components/budgets/reallocations"
 import { useAuth } from "@/context/auth"
@@ -90,14 +91,10 @@ export function BudgetsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Budgets</h1>
-          <p className="text-sm text-muted-foreground">
-            Enveloppes annuelles par pays, sous-enveloppes par projet, équipe ou
-            manager, et réallocations.
-          </p>
-        </div>
+      <PageHeader
+        title="Budgets"
+        description="Enveloppes annuelles par pays, sous-enveloppes par projet, équipe ou manager, et réallocations."
+      >
         {canManage && (
           <Button
             onClick={() => {
@@ -109,7 +106,7 @@ export function BudgetsPage() {
             Attribuer une enveloppe
           </Button>
         )}
-      </div>
+      </PageHeader>
 
       {error && (
         <Alert variant="destructive">

@@ -24,6 +24,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
+import { PageHeader } from "@/components/ui/page-header"
+import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { useAuth } from "@/context/auth"
 import { createDossier, fetchDossiers } from "@/lib/expenses"
@@ -88,23 +90,17 @@ export function DossiersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Dossiers de justification
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Un dossier porte un N°ORDRE et regroupe les dépenses et les preuves
-            d'une même opération.
-          </p>
-        </div>
+      <PageHeader
+        title="Dossiers de justification"
+        description="Un dossier porte un N°ORDRE et regroupe les dépenses et les preuves d'une même opération."
+      >
         {canCreate && (
           <Button onClick={() => setFormOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Nouveau dossier
           </Button>
         )}
-      </div>
+      </PageHeader>
 
       {error && (
         <Alert variant="destructive">
@@ -157,18 +153,18 @@ export function DossiersPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-16">
-                      <div className="h-4 animate-pulse rounded bg-muted" />
-                    </TableCell>
-                  </TableRow>
+                  <SkeletonRows columns={8} />
                 ) : dossiers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                      <FolderOpen className="mx-auto mb-2 h-6 w-6 opacity-60" />
-                      Aucun dossier.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyRow
+                    colSpan={8}
+                    icon={FolderOpen}
+                    title="Aucun dossier"
+                    hint={
+                      canCreate
+                        ? "Créez un dossier pour y rattacher vos dépenses."
+                        : "Aucun dossier ne correspond à ces filtres."
+                    }
+                  />
                 ) : (
                   dossiers.map((dossier) => (
                     <TableRow

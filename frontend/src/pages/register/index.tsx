@@ -16,6 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { StatusBadge } from "@/components/expenses/status-badge"
+import { PageHeader } from "@/components/ui/page-header"
+import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import { useAuth } from "@/context/auth"
 import { fetchCountries } from "@/lib/countries"
 import { fetchRegister } from "@/lib/expenses"
@@ -89,15 +91,10 @@ export function RegisterPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Registre de justification
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Où est passé l'argent : chaque dépense avec sa date, son lieu, son
-          bénéficiaire — et la pièce qui l'atteste.
-        </p>
-      </div>
+      <PageHeader
+        title="Registre de justification"
+        description="Où est passé l'argent : chaque dépense avec sa date, son lieu, son bénéficiaire — et la pièce qui l'atteste."
+      />
 
       {error && (
         <Alert variant="destructive">
@@ -226,17 +223,14 @@ export function RegisterPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={11} className="h-16">
-                      <div className="h-4 animate-pulse rounded bg-muted" />
-                    </TableCell>
-                  </TableRow>
+                  <SkeletonRows columns={11} />
                 ) : entries.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
-                      Aucune dépense sur ce périmètre.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyRow
+                    colSpan={11}
+                    icon={FileWarning}
+                    title="Aucune dépense sur ce périmètre"
+                    hint="Élargissez la période ou retirez un filtre."
+                  />
                 ) : (
                   entries.map((entry) => (
                     <TableRow key={entry.id}>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { AlertTriangle, Loader2, Pencil, Plus } from "lucide-react"
+import { AlertTriangle, Loader2, Pencil, Plus, Users } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
+import { PageHeader } from "@/components/ui/page-header"
+import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import { Switch } from "@/components/ui/switch"
 import {
   Table,
@@ -72,14 +74,10 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Comptes</h1>
-          <p className="text-sm text-muted-foreground">
-            Rôles et périmètres pays. Un compte du siège voit tous les pays ; un
-            responsable pays ne voit que le sien.
-          </p>
-        </div>
+      <PageHeader
+        title="Comptes"
+        description="Rôles et périmètres pays. Un compte du siège voit tous les pays ; un responsable pays ne voit que le sien."
+      >
         <Button
           onClick={() => {
             setEditing(null)
@@ -89,7 +87,7 @@ export function UsersPage() {
           <Plus className="mr-2 h-4 w-4" />
           Créer un compte
         </Button>
-      </div>
+      </PageHeader>
 
       {error && (
         <Alert variant="destructive">
@@ -115,17 +113,14 @@ export function UsersPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-16">
-                      <div className="h-4 animate-pulse rounded bg-muted" />
-                    </TableCell>
-                  </TableRow>
+                  <SkeletonRows columns={6} />
                 ) : users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      Aucun compte.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyRow
+                    colSpan={6}
+                    icon={Users}
+                    title="Aucun compte"
+                    hint="Créez les comptes des représentants pays."
+                  />
                 ) : (
                   users.map((user) => (
                     <TableRow key={user.id}>
