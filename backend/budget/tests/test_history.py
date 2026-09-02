@@ -108,3 +108,31 @@ class BudgetHistoryTests(BudgetTestCase):
         self.assertEqual(
             response.data["results"][0]["model_name_display"], "Enveloppe budgétaire"
         )
+
+
+class SignalDurabilityTests(BudgetTestCase):
+    """Les journaux ne doivent pas dépendre du ramasse-miettes.
+
+    Django ne garde qu'une référence faible sur ses receivers. Les journaux
+    des applications branchées par ``core.signals.register`` étaient posés
+    avec des ``partial`` que rien d'autre ne référençait : le GC les
+    emportait, et une enveloppe pouvait être réduite de plusieurs millions
+    sans laisser la moindre trace. Le défaut était intermittent — il ne se
+    voyait qu'en intégration continue.
+    """
+
+    def test_le_journal_survit_a_un_ramasse_miettes(self):
+        import gc
+
+        gc.collect()
+        ChangeLog.objects.all().delete()
+        self.login(self.doo)
+
+        self.client.patch(
+            f"/api/budgets/{self.budget_togo.pk}/", {"amount": "123456.00"}
+        )
+
+        entry = ChangeLog.objects.filter(model_name=ChangeLog.Models.BUDGET).get()
+        self.assertEqual(entry.action, ChangeLog.Actions.UPDATED)
+        self.assertEqual(entry.changed_fields, ["amount"])
+        self.assertEqual(entry.performed_by, "do.innov")

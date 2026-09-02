@@ -216,9 +216,17 @@ def register(model, model_name, country_resolver=None):
     propre, comme une réallocation, rattachée au pays de son enveloppe source.
     """
     options = {"model_name": model_name, "country_resolver": country_resolver}
-    receiver(pre_save, sender=model)(partial(_track_creation_update, **options))
-    receiver(post_save, sender=model)(partial(_log_creation, **options))
-    receiver(post_delete, sender=model)(partial(_log_deletion, **options))
+    # ``weak=False`` est indispensable : Django ne garde qu'une référence
+    # faible sur ses receivers. Un ``partial`` construit ici n'est référencé
+    # nulle part ailleurs — le ramasse-miettes l'emportait, et le signal
+    # cessait silencieusement d'être écouté. Une enveloppe pouvait alors être
+    # réduite sans laisser de trace, selon le moment où le GC était passé.
+    for signal, handler in (
+        (pre_save, _track_creation_update),
+        (post_save, _log_creation),
+        (post_delete, _log_deletion),
+    ):
+        receiver(signal, sender=model, weak=False)(partial(handler, **options))
 
 
 # Le décorateur ``@receiver`` ne dissocie pas un *sender* qui est un tuple :

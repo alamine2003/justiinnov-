@@ -258,3 +258,9 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # Le préchargement n'est pas un réglage anodin : inscrite sur la liste des
+    # navigateurs, la plateforme devient inaccessible en clair, sous-domaines
+    # compris, et l'inscription ne se retire pas rapidement. Il est donc
+    # activable par l'environnement, et actif par défaut : le back-office et
+    # les justificatifs n'ont aucune raison de transiter en clair.
+    SECURE_HSTS_PRELOAD = os.environ.get("DJANGO_HSTS_PRELOAD", "1") == "1"

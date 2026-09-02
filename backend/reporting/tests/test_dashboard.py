@@ -227,6 +227,10 @@ class AlertTests(DashboardTestCase):
 
 
 class NotificationTests(DashboardTestCase):
+    # Ces tests soumettent des lignes : leur dossier est donc déjà déclaré,
+    # une ligne ne devançant jamais son dossier.
+    dossier_status = Status.SUBMITTED
+
     def notifier(self):
         """Émission des alertes, telle que la planification l'exécute."""
         call_command("notify_alerts", year=self.year, verbosity=0)
@@ -319,17 +323,12 @@ class NotificationTests(DashboardTestCase):
         )
 
     def test_rejet_previent_le_saisisseur_avec_le_motif(self):
+        # La ligne porte son auteur : c'est lui que le rejet doit prévenir, et
+        # c'est aussi lui que la séparation des tâches écarte du contrôle.
+        expense = self.make_expense(title="Taxi", created_by=self.owner.username)
         self.login(self.owner)
-        created = self.client.post(
-            "/api/expenses/",
-            {
-                "dossier": self.dossier.pk, "country": self.togo.pk,
-                "date": "2026-03-15T10:00:00Z", "title": "Taxi",
-                "amount": "1000.00",
-            },
-        )
-        expense_id = created.data["id"]
-        self.client.post(f"/api/expenses/{expense_id}/submit/")
+        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        expense_id = expense.pk
 
         self.login(self.controller)
         self.client.post(

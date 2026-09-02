@@ -1,0 +1,129 @@
+# Vérification automatique à chaque poussée.
+#
+# Les tests existaient déjà ; rien ne les exécutait. Un correctif pouvait donc
+# partir avec une régression que la suite aurait attrapée, à condition que
+# quelqu'un pense à la lancer.
+#
+# Les trois travaux sont indépendants : un échec de lint ne masque pas un
+# échec de test, et l'on voit d'un coup d'œil ce qui est cassé.
+name: Vérification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Tests backend
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: justi_innov
+          POSTGRES_USER: justi
+          POSTGRES_PASSWORD: justi
+        options: >-
+          --health-cmd "pg_isready -U justi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: justi_innov
+      POSTGRES_USER: justi
+      POSTGRES_PASSWORD: justi
+      # La clé n'a pas à être un secret : la CI ne sert aucune donnée réelle.
+      # Elle doit en revanche être longue et variée, sans quoi `check --deploy`
+      # la refuse — et c'est bien cette configuration-là qu'on veut vérifier.
+      # DEBUG reste à 0, pour tester ce qui sera déployé.
+      DJANGO_SECRET_KEY: ci-7QmX2vLp9BdTnRw4KsZjHy6FgUcAe3NoIrVtPlMqDbXhJf5Ez
+      DJANGO_DEBUG: "0"
+      # `testserver` est l'hôte que le client de test de Django présente.
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      # La redirection HTTPS est une affaire de déploiement : le client de
+      # test parle en clair, et sans cela chaque requête répondrait 301 au
+      # lieu d'exécuter la vue. Le réglage de production reste vérifié par
+      # l'étape `check --deploy`, qui tourne, elle, avec la redirection
+      # active.
+      DJANGO_SECURE_SSL_REDIRECT: "0"
+      # Aucun stockage objet : les tests écrivent en mémoire.
+      AWS_S3_ENDPOINT_URL: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Installer les dépendances
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Vérifier qu'aucune migration ne manque
+        working-directory: backend
+        # Un modèle modifié sans migration passe les tests et casse au
+        # déploiement : c'est le genre d'oubli qu'on ne voit qu'en production.
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Contrôles de déploiement Django
+        working-directory: backend
+        env:
+          DJANGO_SECURE_SSL_REDIRECT: "1"
+        run: python manage.py check --deploy --fail-level WARNING
+
+      - name: Tests
+        working-directory: backend
+        run: python manage.py test --verbosity=2
+
+  frontend:
+    name: Tests frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Types
+        run: npx tsc -b
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Images Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Le conteneur frontend a déjà été cassé par un Dockerfile qui
+      # construisait la mauvaise cible : la construction fait partie de la
+      # vérification, pas seulement les tests.
+      - name: Construire les images
+        run: docker compose build
