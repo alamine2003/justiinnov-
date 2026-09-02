@@ -143,6 +143,7 @@ GET    /api/notifications/               # centre de notifications
 Les listes acceptent `?country__country_ref=TG-02` pour cibler un pays par
 son identifiant fonctionnel, ainsi que `?year=`, `?status=` et `?search=`.
 Le registre accepte en plus `?date__gte=` et `?date__lte=` pour une période.
+Toutes les listes sont paginées : `?page=` et `?page_size=` (plafonné à 200).
 
 Toutes les listes sont filtrées par le périmètre du compte.
 

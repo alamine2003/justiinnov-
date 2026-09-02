@@ -239,6 +239,41 @@ class NotificationTests(DashboardTestCase):
         )
         self.assertEqual(notifications.count(), 1)
 
+    def test_justificatif_manquant_notifie_ceux_qui_peuvent_le_fournir(self):
+        """Le §8 cite explicitement le justificatif manquant : l'afficher au
+        tableau de bord ne suffisait pas."""
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+        self.login(self.doo)
+
+        self.client.get("/api/dashboard/", {"year": self.year})
+
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.owner, kind=Notification.Kind.PROOF_MISSING
+            ).exists()
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.controller, kind=Notification.Kind.PROOF_MISSING
+            ).exists()
+        )
+
+    def test_justificatif_manquant_notifie_une_seule_fois(self):
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+        self.login(self.doo)
+
+        self.client.get("/api/dashboard/", {"year": self.year})
+        self.client.get("/api/dashboard/", {"year": self.year})
+
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=self.owner, kind=Notification.Kind.PROOF_MISSING
+            ).count(),
+            1,
+        )
+
     def test_soumission_previent_le_controleur(self):
         expense = self.make_expense()
         self.login(self.owner)

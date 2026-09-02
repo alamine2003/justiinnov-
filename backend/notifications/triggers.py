@@ -70,21 +70,38 @@ def expense_rejected(expense, actor, motive):
     )
 
 
-def budget_alert(alert, country):
-    """Relaie une alerte budgétaire calculée par le tableau de bord.
+#: Correspondance entre le type d'alerte et le type de notification.
+ALERT_KINDS = {
+    "budget_overrun": Notification.Kind.BUDGET_OVERRUN,
+    "budget_threshold": Notification.Kind.BUDGET_THRESHOLD,
+    "proof_missing": Notification.Kind.PROOF_MISSING,
+    "proof_incomplete": Notification.Kind.PROOF_INCOMPLETE,
+}
 
-    La clé de l'alerte sert de clé d'unicité : un seuil franchi n'est signalé
-    qu'une fois, même si le tableau de bord est rouvert vingt fois.
+#: Qui doit être averti, selon la nature de l'alerte.
+ALERT_AUDIENCE = {
+    "budget_overrun": BUDGET_OWNERS + [Role.COUNTRY_MANAGER],
+    "budget_threshold": BUDGET_OWNERS + [Role.COUNTRY_MANAGER],
+    # Un justificatif manquant concerne d'abord ceux qui peuvent le fournir.
+    "proof_missing": CONTROLLERS + [Role.OWNER],
+    "proof_incomplete": CONTROLLERS + [Role.OWNER],
+}
+
+
+def alert_raised(alert, country):
+    """Relaie une alerte calculée par le tableau de bord (§8).
+
+    La clé de l'alerte sert de clé d'unicité : un même manquement n'est
+    signalé qu'une fois, même si le tableau de bord est rouvert vingt fois.
     """
+    kind = ALERT_KINDS.get(alert["kind"])
+    if kind is None:
+        return []
     critical = alert["level"] == "critical"
     return _safe(
         lambda: notify(
-            recipients_for(BUDGET_OWNERS + [Role.COUNTRY_MANAGER], country),
-            kind=(
-                Notification.Kind.BUDGET_OVERRUN
-                if alert["kind"] == "budget_overrun"
-                else Notification.Kind.BUDGET_THRESHOLD
-            ),
+            recipients_for(ALERT_AUDIENCE[alert["kind"]], country),
+            kind=kind,
             level=(
                 Notification.Level.CRITICAL if critical else Notification.Level.WARNING
             ),

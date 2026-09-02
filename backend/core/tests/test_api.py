@@ -121,3 +121,36 @@ class HistoryTests(ApiTestCase):
 
         entry = ChangeLog.objects.filter(action=ChangeLog.Actions.UPDATED).first()
         self.assertEqual(entry.performed_by, "admin.test")
+
+
+class PaginationTests(ApiTestCase):
+    """Sans taille de page réglable, l'interface paginerait dans le vide."""
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate()
+        for index in range(7):
+            Team.objects.create(country=self.country, name=f"Équipe {index}")
+
+    def test_la_taille_de_page_demandee_est_respectee(self):
+        response = self.client.get("/api/teams/", {"page_size": 3})
+
+        self.assertEqual(len(response.data["results"]), 3)
+        self.assertEqual(response.data["count"], 7)
+        self.assertIsNotNone(response.data["next"])
+
+    def test_la_taille_de_page_est_plafonnee(self):
+        """Une requête ne doit pas pouvoir réclamer la table entière."""
+        response = self.client.get("/api/teams/", {"page_size": 100000})
+
+        self.assertEqual(len(response.data["results"]), 7)
+
+    def test_navigation_entre_les_pages(self):
+        premiere = self.client.get("/api/teams/", {"page_size": 4, "page": 1})
+        seconde = self.client.get("/api/teams/", {"page_size": 4, "page": 2})
+
+        noms = {t["name"] for t in premiere.data["results"]} | {
+            t["name"] for t in seconde.data["results"]
+        }
+        self.assertEqual(len(noms), 7)
+        self.assertIsNotNone(seconde.data["previous"])

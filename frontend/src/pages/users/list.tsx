@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
+import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { Switch } from "@/components/ui/switch"
 import {
   Table,
@@ -39,6 +40,8 @@ const HEADQUARTERS_ROLES: Role[] = [
 
 export function UsersPage() {
   const [users, setUsers] = useState<AccountUser[]>([])
+  const [count, setCount] = useState(0)
+  const [page, setPage] = useState(1)
   const [countries, setCountries] = useState<CountrySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -50,17 +53,18 @@ export function UsersPage() {
     setError(null)
     try {
       const [userPage, countryPage] = await Promise.all([
-        fetchUsers({ page_size: 200 }),
+        fetchUsers({ page, page_size: PAGE_SIZE }),
         fetchCountries({ page_size: 200 }),
       ])
       setUsers(userPage.results)
+      setCount(userPage.count)
       setCountries(countryPage.results)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossible de charger les comptes")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [page])
 
   useEffect(() => {
     void load()
@@ -176,6 +180,13 @@ export function UsersPage() {
               </TableBody>
             </Table>
           </div>
+
+          <Pagination
+            page={page}
+            count={count}
+            onChange={setPage}
+            noun={["compte", "comptes"]}
+          />
         </CardContent>
       </Card>
 

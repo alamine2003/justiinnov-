@@ -57,7 +57,7 @@ class DashboardView(APIView):
 
         rows, totals, consolidated = self._per_country(budgets)
         current_alerts = alert_rules.collect(budgets, dossiers, expenses)
-        self._notify_budget_alerts(current_alerts)
+        self._notify(current_alerts)
 
         return Response(
             {
@@ -70,15 +70,17 @@ class DashboardView(APIView):
             }
         )
 
-    def _notify_budget_alerts(self, current_alerts):
-        """Transforme les alertes budgétaires en notifications persistantes.
+    def _notify(self, current_alerts):
+        """Transforme les alertes notifiables en notifications persistantes.
 
-        La clé d'unicité de chaque alerte garantit qu'un seuil franchi n'est
-        signalé qu'une fois, quelle que soit la fréquence de consultation du
-        tableau de bord.
+        Le §8 couvre les seuils budgétaires **et** les justificatifs manquants
+        ou incomplets. La clé d'unicité de chaque alerte garantit qu'un même
+        manquement n'est signalé qu'une fois, quelle que soit la fréquence de
+        consultation du tableau de bord.
         """
-        budget_kinds = {"budget_threshold", "budget_overrun"}
-        concerned = [a for a in current_alerts if a["kind"] in budget_kinds]
+        concerned = [
+            a for a in current_alerts if a["kind"] in triggers.ALERT_KINDS
+        ]
         if not concerned:
             return
         countries = {
@@ -90,7 +92,7 @@ class DashboardView(APIView):
         for alert in concerned:
             country = countries.get(alert["country"])
             if country is not None:
-                triggers.budget_alert(alert, country)
+                triggers.alert_raised(alert, country)
 
     def _per_country(self, budgets):
         """Agrège par pays ; seules les enveloppes de pays composent le total,

@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { useAuth } from "@/context/auth"
 import { createDossier, fetchDossiers } from "@/lib/expenses"
@@ -42,6 +43,8 @@ export function DossiersPage() {
   const canCreate = can("record_expenses")
 
   const [dossiers, setDossiers] = useState<Dossier[]>([])
+  const [count, setCount] = useState(0)
+  const [page, setPage] = useState(1)
   const [countries, setCountries] = useState<CountrySummary[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,7 +57,7 @@ export function DossiersPage() {
     setLoading(true)
     setError(null)
     try {
-      const params: Record<string, unknown> = { page_size: 100 }
+      const params: Record<string, unknown> = { page, page_size: PAGE_SIZE }
       if (search) params.search = search
       if (statusFilter) params.status = statusFilter
       const [dossierPage, countryPage, teamPage] = await Promise.all([
@@ -63,6 +66,7 @@ export function DossiersPage() {
         fetchTeams({ page_size: 200 }),
       ])
       setDossiers(dossierPage.results)
+      setCount(dossierPage.count)
       setCountries(countryPage.results)
       setTeams(teamPage.results)
     } catch (e) {
@@ -70,11 +74,17 @@ export function DossiersPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter])
+  }, [page, search, statusFilter])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  // Un changement de filtre ramène à la première page : rester en page 4
+  // d'un résultat qui n'en compte plus qu'une afficherait un tableau vide.
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter])
 
   return (
     <div className="space-y-6">
@@ -193,6 +203,13 @@ export function DossiersPage() {
               </TableBody>
             </Table>
           </div>
+
+          <Pagination
+            page={page}
+            count={count}
+            onChange={setPage}
+            noun={["dossier", "dossiers"]}
+          />
         </CardContent>
       </Card>
 

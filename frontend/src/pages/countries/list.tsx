@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { AlertTriangle } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CountryForm, type CountryFormValues } from "@/components/countries/country-form"
 import { CountryTable } from "@/components/countries/country-table"
+import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import {
   createCountry,
   fetchCountries,
@@ -17,6 +18,8 @@ export function CountriesPage() {
   const { can } = useAuth()
   const canManage = can("manage_countries")
   const [countries, setCountries] = useState<CountrySummary[]>([])
+  const [count, setCount] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
@@ -28,26 +31,26 @@ export function CountriesPage() {
     setLoading(true)
     setError(null)
     try {
-      const params: Record<string, unknown> = { page_size: 100 }
+      const params: Record<string, unknown> = { page, page_size: PAGE_SIZE }
       if (statusFilter !== "all") params.is_active = statusFilter === "active"
       if (search) params.search = search
       const data = await fetchCountries(params)
       setCountries(data.results)
+      setCount(data.count)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossible de charger les pays")
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter])
+  }, [page, search, statusFilter])
 
   useEffect(() => {
     load()
   }, [load])
 
-  const visibleCountries = useMemo(
-    () => countries.filter((c) => c.name.toLowerCase().includes(search.toLowerCase())),
-    [countries, search],
-  )
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter])
 
   const handleSave = async (values: CountryFormValues) => {
     if (editing) {
@@ -82,7 +85,7 @@ export function CountriesPage() {
       )}
 
       <CountryTable
-        countries={visibleCountries}
+        countries={countries}
         loading={loading}
         search={search}
         onSearchChange={setSearch}
@@ -95,6 +98,13 @@ export function CountriesPage() {
         onOpen={(id) => navigate(`/countries/${id}`)}
         onToggle={handleToggle}
         canManage={canManage}
+      />
+
+      <Pagination
+        page={page}
+        count={count}
+        onChange={setPage}
+        noun={["pays", "pays"]}
       />
 
       <CountryForm

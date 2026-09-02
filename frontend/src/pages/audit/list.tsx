@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
+import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import {
   Table,
   TableBody,
@@ -18,25 +19,35 @@ import type { AuditEntry } from "@/lib/types"
 import { formatDate } from "@/lib/utils"
 
 const ACTION_STYLE: Record<string, string> = {
+  justified: "bg-emerald-500 hover:bg-emerald-500",
+  unjustified: "bg-destructive hover:bg-destructive",
   approved: "bg-emerald-500 hover:bg-emerald-500",
   rejected: "bg-destructive hover:bg-destructive",
   submitted: "bg-blue-500 hover:bg-blue-500",
   reviewed: "bg-amber-500 hover:bg-amber-500",
+  deleted: "bg-zinc-600 hover:bg-zinc-600",
   downloaded: "bg-zinc-500 hover:bg-zinc-500",
 }
 
-const ACTIONS: Record<string, string> = {
-  created: "Création",
-  updated: "Modification",
-  submitted: "Soumission",
-  reviewed: "Mise en contrôle",
-  approved: "Validation",
-  rejected: "Rejet",
-  closed: "Clôture",
-  proof_uploaded: "Dépôt de justificatif",
-  proof_replaced: "Remplacement de justificatif",
-  downloaded: "Téléchargement",
-}
+/**
+ * Valeurs proposées au filtre. Les libellés affichés viennent du serveur
+ * (`action_display`) : les recopier ici les ferait diverger.
+ */
+const FILTERABLE_ACTIONS = [
+  ["created", "Création"],
+  ["updated", "Modification"],
+  ["deleted", "Suppression d'un brouillon"],
+  ["submitted", "Soumission"],
+  ["reviewed", "Mise en contrôle"],
+  ["justified", "Justification"],
+  ["unjustified", "Constat de non-justification"],
+  ["closed", "Clôture"],
+  ["proof_uploaded", "Dépôt de justificatif"],
+  ["proof_replaced", "Remplacement de justificatif"],
+  ["approved", "Validation d'un justificatif"],
+  ["rejected", "Rejet d'un justificatif"],
+  ["downloaded", "Téléchargement"],
+] as const
 
 /** Résume le détail JSON d'une entrée en une phrase lisible. */
 function summarize(entry: AuditEntry): string {
@@ -60,6 +71,8 @@ function summarize(entry: AuditEntry): string {
 
 export function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([])
+  const [count, setCount] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
@@ -69,21 +82,30 @@ export function AuditPage() {
     setLoading(true)
     setError(null)
     try {
-      const params: Record<string, unknown> = { page_size: 100, ordering: "-created_at" }
+      const params: Record<string, unknown> = {
+        page,
+        page_size: PAGE_SIZE,
+        ordering: "-created_at",
+      }
       if (search) params.search = search
       if (actionFilter) params.action = actionFilter
-      const page = await fetchAudit(params)
-      setEntries(page.results)
+      const result = await fetchAudit(params)
+      setEntries(result.results)
+      setCount(result.count)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossible de charger le journal")
     } finally {
       setLoading(false)
     }
-  }, [search, actionFilter])
+  }, [page, search, actionFilter])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, actionFilter])
 
   return (
     <div className="space-y-6">
@@ -120,7 +142,7 @@ export function AuditPage() {
           aria-label="Filtrer par action"
         >
           <option value="">Toutes les actions</option>
-          {Object.entries(ACTIONS).map(([value, label]) => (
+          {FILTERABLE_ACTIONS.map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
@@ -165,7 +187,7 @@ export function AuditPage() {
                       <TableCell className="font-medium">{entry.user || "—"}</TableCell>
                       <TableCell>
                         <Badge className={ACTION_STYLE[entry.action] ?? "bg-secondary"}>
-                          {ACTIONS[entry.action] ?? entry.action_display}
+                          {entry.action_display}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -187,6 +209,13 @@ export function AuditPage() {
               </TableBody>
             </Table>
           </div>
+
+          <Pagination
+            page={page}
+            count={count}
+            onChange={setPage}
+            noun={["entrée", "entrées"]}
+          />
         </CardContent>
       </Card>
     </div>
