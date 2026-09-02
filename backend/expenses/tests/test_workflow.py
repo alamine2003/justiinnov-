@@ -479,3 +479,70 @@ class DraftDeletionTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Expense.objects.filter(pk=expense.pk).exists())
+
+
+class JustificationRegisterTests(ExpenseTestCase):
+    """« On t'a donné un budget, qu'as-tu dépensé, et où est la preuve ? »"""
+
+    def setUp(self):
+        super().setUp()
+        from expenses.models import Proof
+
+        self.depense = self.make_expense(
+            amount="120000.00", justified_amount="80000.00",
+            place="Lomé", title="Hébergement mission",
+        )
+        Proof.objects.create(
+            dossier=self.dossier,
+            file="justificatifs/f.pdf",
+            original_name="facture.pdf",
+            kind=Proof.Kind.INVOICE,
+            is_complete=False,
+            sha256="b" * 64,
+        )
+        self.login(self.controller)
+
+    def test_le_registre_joint_la_depense_et_ses_preuves(self):
+        response = self.client.get("/api/expenses/register/")
+
+        ligne = next(
+            r for r in response.data["results"] if r["id"] == self.depense.pk
+        )
+        self.assertEqual(ligne["place"], "Lomé")
+        self.assertEqual(ligne["gap"], "40000.00")
+        self.assertEqual(ligne["dossier_number"], "N-0001")
+        self.assertTrue(ligne["has_proof"])
+        self.assertEqual(ligne["proofs"][0]["original_name"], "facture.pdf")
+        self.assertFalse(ligne["proofs"][0]["is_complete"])
+
+    def test_une_depense_sans_preuve_est_signalee(self):
+        from expenses.models import Dossier
+
+        vide = Dossier.objects.create(
+            number="N-0009", label="Sans pièce", country=self.togo,
+            date=self.dossier.date,
+        )
+        orpheline = self.make_expense(dossier=vide, amount="5000.00")
+
+        response = self.client.get("/api/expenses/register/")
+
+        ligne = next(
+            r for r in response.data["results"] if r["id"] == orpheline.pk
+        )
+        self.assertFalse(ligne["has_proof"])
+        self.assertEqual(ligne["proofs"], [])
+
+    def test_filtrage_par_periode(self):
+        response = self.client.get(
+            "/api/expenses/register/",
+            {"date__gte": f"{self.year + 1}-01-01T00:00:00Z"},
+        )
+
+        self.assertEqual(response.data["count"], 0)
+
+    def test_registre_limite_au_perimetre(self):
+        self.login(self.rep_ivoire)
+
+        response = self.client.get("/api/expenses/register/")
+
+        self.assertEqual(response.data["count"], 0)

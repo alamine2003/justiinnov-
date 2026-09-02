@@ -8,6 +8,7 @@ import type {
   Paginated,
   Proof,
   ProofStatus,
+  RegisterEntry,
   TransitionName,
 } from "@/lib/types"
 
@@ -45,6 +46,16 @@ export function transitionDossier(
 // ---------------------------------------------------------------------------
 export function fetchExpenses(params?: Record<string, unknown>) {
   return apiGet<Paginated<Expense>>("/expenses/", params)
+}
+
+/**
+ * Registre de justification : chaque dépense avec ses preuves.
+ *
+ * Le journal d'audit dit qui a fait quoi ; ce registre dit où est passé
+ * l'argent et ce qui l'atteste.
+ */
+export function fetchRegister(params?: Record<string, unknown>) {
+  return apiGet<Paginated<RegisterEntry>>("/expenses/register/", params)
 }
 
 export function createExpense(data: unknown) {

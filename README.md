@@ -124,7 +124,8 @@ GET/POST/PATCH /api/exchange-rates/      # taux de conversion vers le FCFA
 
 GET/POST/PATCH /api/dossiers/            # dossiers de justification (N°ORDRE)
 POST   /api/dossiers/{id}/submit|review|approve|reject|close/
-GET/POST/PATCH /api/expenses/            # lignes de dépenses (mêmes transitions)
+GET/POST/PATCH/DELETE /api/expenses/     # lignes de dépenses (DELETE : brouillon seul)
+GET    /api/expenses/register/           # registre : chaque dépense et ses preuves
 GET/POST /api/proofs/                    # justificatifs (dépôt multipart)
 GET    /api/proofs/{id}/download/        # téléchargement contrôlé et tracé
 POST   /api/proofs/{id}/review/          # contrôle documentaire
@@ -141,6 +142,7 @@ GET    /api/notifications/               # centre de notifications
 
 Les listes acceptent `?country__country_ref=TG-02` pour cibler un pays par
 son identifiant fonctionnel, ainsi que `?year=`, `?status=` et `?search=`.
+Le registre accepte en plus `?date__gte=` et `?date__lte=` pour une période.
 
 Toutes les listes sont filtrées par le périmètre du compte.
 
@@ -263,6 +265,16 @@ explicite, qui archive la version précédente. Les formats acceptés sont
 limités par liste blanche. Le téléchargement passe par une vue authentifiée
 plutôt que par une URL signée : le périmètre est vérifié à chaque accès et
 chaque téléchargement laisse une trace.
+
+## Registre de justification
+
+Le journal d'audit dit *qui a fait quoi*. Le registre, lui, répond à la
+question qui motive l'application : **où est passé l'argent ?** Chaque dépense
+y figure avec sa date et son heure, son pays, son lieu, son équipe, son
+propriétaire, son bénéficiaire, son projet, son mode de paiement, le montant
+dépensé, le montant justifié, l'écart — et les pièces qui l'attestent, avec la
+mention de celles jugées incomplètes. Une dépense sans preuve est signalée
+comme telle.
 
 ## Pilotage, alertes et exports
 

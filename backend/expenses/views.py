@@ -28,6 +28,7 @@ from .serializers import (
     BeneficiarySerializer,
     DossierDetailSerializer,
     DossierSerializer,
+    ExpenseRegisterSerializer,
     ExpenseSerializer,
     ProofReviewSerializer,
     ProofSerializer,
@@ -223,13 +224,43 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     serializer_class = ExpenseSerializer
     permission_classes = [RolePermission]
     write_roles = EXPENSE_WRITE_ROLES
-    filterset_fields = [
-        "country", "country__country_ref", "dossier", "status", "team", "owner",
-        "project", "beneficiary", "expense_title", "marketing_category",
-        "payment_method",
-    ]
+    # Forme étendue : le §5.6 demande de filtrer par période et par état
+    # multiple, ce qu'une simple liste de champs ne permet pas.
+    filterset_fields = {
+        "country": ["exact"],
+        "country__country_ref": ["exact"],
+        "dossier": ["exact"],
+        "dossier__number": ["exact"],
+        "status": ["exact", "in"],
+        "team": ["exact"],
+        "owner": ["exact"],
+        "project": ["exact"],
+        "beneficiary": ["exact"],
+        "expense_title": ["exact"],
+        "marketing_category": ["exact"],
+        "payment_method": ["exact"],
+        "date": ["gte", "lte"],
+    }
     search_fields = ["title", "place", "description", "dossier__number"]
     ordering_fields = ["date", "amount", "created_at"]
+
+    @action(detail=False, methods=["get"])
+    def register(self, request):
+        """Registre de justification : chaque dépense avec ses preuves.
+
+        Le journal d'audit dit qui a fait quoi ; ce registre dit où est passé
+        l'argent et ce qui l'atteste.
+        """
+        queryset = self.filter_queryset(
+            self.get_queryset().prefetch_related("dossier__proofs")
+        )
+        page = self.paginate_queryset(queryset)
+        serializer = ExpenseRegisterSerializer(
+            page if page is not None else queryset, many=True
+        )
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         self._check_country_scope(serializer)

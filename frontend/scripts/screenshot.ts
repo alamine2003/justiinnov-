@@ -93,6 +93,15 @@ async function main() {
     await shot(hq, "dossier_detail")
   }
 
+  await hq.goto(`${BASE}/registre`, { waitUntil: "networkidle" })
+  await hq.waitForTimeout(1200)
+  console.log("Registre - lignes :", await hq.locator("tbody tr").count())
+  console.log(
+    "Registre - pagination :",
+    (await hq.textContent("span.text-muted-foreground")) ?? "—",
+  )
+  await shot(hq, "registre")
+
   await hq.goto(`${BASE}/audit`, { waitUntil: "networkidle" })
   await hq.waitForTimeout(1200)
   console.log("Audit - entrées :", await hq.locator("tbody tr").count())

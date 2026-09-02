@@ -163,6 +163,55 @@ class ExpenseSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class ExpenseProofSerializer(serializers.ModelSerializer):
+    """Pièce vue depuis une dépense : de quoi juger sans ouvrir le dossier."""
+
+    kind_display = serializers.CharField(source="get_kind_display", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = Proof
+        fields = [
+            "id", "original_name", "kind", "kind_display",
+            "status", "status_display", "is_complete", "sha256", "version",
+        ]
+
+
+class ExpenseRegisterSerializer(ExpenseSerializer):
+    """Registre de justification : la dépense et ses preuves d'un seul tenant.
+
+    Répond à la question que l'application existe pour trancher — on vous a
+    confié un budget, qu'avez-vous dépensé, et qu'est-ce qui l'atteste ? Aucun
+    détail de la dépense n'est écarté.
+    """
+
+    proofs = ExpenseProofSerializer(
+        source="dossier.proofs", many=True, read_only=True
+    )
+    dossier_label = serializers.CharField(source="dossier.label", read_only=True)
+    expense_title_label = serializers.CharField(
+        source="expense_title.label", read_only=True, allow_null=True
+    )
+    marketing_category_name = serializers.CharField(
+        source="marketing_category.name", read_only=True, allow_null=True
+    )
+    has_proof = serializers.SerializerMethodField()
+
+    class Meta(ExpenseSerializer.Meta):
+        fields = ExpenseSerializer.Meta.fields + [
+            "dossier_label", "expense_title_label", "marketing_category_name",
+            "proofs", "has_proof",
+        ]
+
+    def get_has_proof(self, expense):
+        """Une pièce rejetée ou archivée ne prouve rien."""
+        return any(
+            proof.status
+            not in (Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED)
+            for proof in expense.dossier.proofs.all()
+        )
+
+
 class DossierSerializer(serializers.ModelSerializer):
     country_name = serializers.CharField(source="country.name", read_only=True)
     country_ref = serializers.CharField(

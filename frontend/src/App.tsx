@@ -10,6 +10,7 @@ import { DashboardPage } from "@/pages/dashboard"
 import { DossierDetailPage } from "@/pages/dossiers/detail"
 import { DossiersPage } from "@/pages/dossiers/list"
 import { LoginPage } from "@/pages/login"
+import { RegisterPage } from "@/pages/register"
 import { UsersPage } from "@/pages/users/list"
 import type { Permissions } from "@/lib/types"
 
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/dossiers" element={<DossiersPage />} />
         <Route path="/dossiers/:id" element={<DossierDetailPage />} />
+        <Route path="/registre" element={<RegisterPage />} />
         <Route
           path="/audit"
           element={

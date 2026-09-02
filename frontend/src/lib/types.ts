@@ -429,6 +429,27 @@ export interface Proof {
   updated_at: string
 }
 
+/** Pièce vue depuis une dépense, dans le registre de justification. */
+export interface ExpenseProof {
+  id: number
+  original_name: string
+  kind: string
+  kind_display: string
+  status: ProofStatus
+  status_display: string
+  is_complete: boolean
+  sha256: string
+  version: number
+}
+
+export interface RegisterEntry extends Expense {
+  dossier_label: string
+  expense_title_label: string | null
+  marketing_category_name: string | null
+  proofs: ExpenseProof[]
+  has_proof: boolean
+}
+
 export interface DossierDetail extends Dossier {
   expenses: Expense[]
   proofs: Proof[]

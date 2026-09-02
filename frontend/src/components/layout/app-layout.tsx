@@ -3,6 +3,7 @@ import {
   FolderOpen,
   Globe,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   ScrollText,
   Users,
@@ -81,6 +82,9 @@ export function AppLayout() {
             </NavItem>
             <NavItem to="/dossiers" icon={FolderOpen}>
               Dossiers
+            </NavItem>
+            <NavItem to="/registre" icon={ListChecks}>
+              Registre
             </NavItem>
             <NavItem to="/budgets" icon={Wallet}>
               Budgets
