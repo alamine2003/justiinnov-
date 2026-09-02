@@ -25,7 +25,7 @@ import {
   type RegisterEntry,
   type WorkflowStatus,
 } from "@/lib/types"
-import { formatAmount, formatDate } from "@/lib/utils"
+import { formatAmount, formatDateIn } from "@/lib/utils"
 
 /** Nombre de lignes par page — aligné sur la pagination du serveur. */
 const PAGE_SIZE = 50
@@ -211,7 +211,7 @@ export function RegisterPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date et heure</TableHead>
+                  <TableHead>Date et heure (locale)</TableHead>
                   <TableHead>N°ORDRE</TableHead>
                   <TableHead>Dépense</TableHead>
                   <TableHead>Lieu</TableHead>
@@ -241,7 +241,11 @@ export function RegisterPage() {
                   entries.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDate(entry.date)}
+                        {formatDateIn(entry.date, entry.country_timezone)}
+                        <br />
+                        <span className="opacity-70">
+                          heure locale · {entry.country_timezone}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <Link

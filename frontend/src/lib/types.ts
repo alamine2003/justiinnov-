@@ -341,6 +341,8 @@ export interface Dossier {
   country_name: string
   country_ref: string | null
   currency: string
+  /** Fuseau du pays : l'heure d'une dépense se lit sur place. */
+  country_timezone: string
   team: number | null
   team_name: string | null
   owner: number | null
@@ -363,6 +365,7 @@ export interface Expense {
   country: number
   country_name: string
   currency: string
+  country_timezone: string
   team: number | null
   team_name: string | null
   owner: number | null

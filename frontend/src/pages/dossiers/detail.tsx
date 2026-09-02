@@ -37,7 +37,7 @@ import {
   type Team,
   type TransitionName,
 } from "@/lib/types"
-import { formatAmount, formatDate } from "@/lib/utils"
+import { formatAmount, formatDateIn } from "@/lib/utils"
 
 export function DossierDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -247,7 +247,11 @@ export function DossierDetailPage() {
                         </p>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(expense.date)}
+                        {formatDateIn(expense.date, expense.country_timezone)}
+                        <br />
+                        <span className="opacity-70">
+                          heure {expense.country_timezone}
+                        </span>
                       </TableCell>
                       <TableCell className="text-right">
                         {formatAmount(expense.amount)}

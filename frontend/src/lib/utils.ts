@@ -33,6 +33,35 @@ export function formatRate(value: string | null | undefined): string {
   return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(rate * 100)} %`
 }
 
+/**
+ * Formate une date dans le fuseau d'un pays.
+ *
+ * §6 : les dates sont stockées en UTC, mais une dépense se lit à l'heure du
+ * pays où elle a eu lieu. Sans cela, un contrôleur au siège verrait l'heure de
+ * son propre fuseau, ce qui fausse le « quand ».
+ */
+export function formatDateIn(
+  value: string | null | undefined,
+  timeZone: string | null | undefined,
+): string {
+  if (!value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  try {
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: timeZone || undefined,
+    }).format(date)
+  } catch {
+    // Un fuseau inconnu de l'environnement ne doit pas casser l'affichage.
+    return formatDate(value)
+  }
+}
+
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—"
   const date = new Date(value)

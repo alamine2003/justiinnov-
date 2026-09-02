@@ -600,3 +600,32 @@ class SubEnvelopeImputationTests(ExpenseTestCase):
 
     def test_repli_sur_l_enveloppe_du_pays(self):
         self.assertEqual(self._imputer(team=None, owner=None), self.budget)
+
+
+class LocalTimeTests(ExpenseTestCase):
+    """§6 : l'heure se lit dans le fuseau du pays, pas dans celui du lecteur."""
+
+    def test_le_fuseau_du_pays_accompagne_la_depense(self):
+        expense = self.make_expense()
+        self.login(self.controller)
+
+        response = self.client.get(f"/api/expenses/{expense.pk}/")
+
+        self.assertEqual(response.data["country_timezone"], "Africa/Lome")
+
+    def test_le_fuseau_accompagne_aussi_le_dossier(self):
+        self.login(self.controller)
+
+        response = self.client.get(f"/api/dossiers/{self.dossier.pk}/")
+
+        self.assertEqual(response.data["country_timezone"], "Africa/Lome")
+
+    def test_le_registre_porte_le_fuseau(self):
+        self.make_expense()
+        self.login(self.controller)
+
+        response = self.client.get("/api/expenses/register/")
+
+        self.assertEqual(
+            response.data["results"][0]["country_timezone"], "Africa/Lome"
+        )

@@ -300,6 +300,13 @@ limités par liste blanche. Le téléchargement passe par une vue authentifiée
 plutôt que par une URL signée : le périmètre est vérifié à chaque accès et
 chaque téléchargement laisse une trace.
 
+## Heure locale
+
+Les dates sont stockées en UTC, mais une dépense se lit à l'heure du pays où
+elle a eu lieu : le registre et le détail d'un dossier affichent l'heure locale
+et nomment le fuseau (§6). Sans cela, un contrôleur au siège verrait l'heure de
+son propre fuseau, ce qui fausse le « quand » d'une dépense.
+
 ## Registre de justification
 
 Le journal d'audit dit *qui a fait quoi*. Le registre, lui, répond à la

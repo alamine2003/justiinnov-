@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { formatAmount, formatDate, formatRate } from "./utils"
+import { formatAmount, formatDate, formatDateIn, formatRate } from "./utils"
 
 /**
  * `Intl` sépare les milliers par une espace fine insécable, dont le point de
@@ -51,5 +51,29 @@ describe("formatDate", () => {
 
   it("formate une date ISO", () => {
     expect(formatDate("2026-03-15T10:00:00Z")).toMatch(/2026/)
+  })
+})
+
+describe("formatDateIn", () => {
+  const midiUTC = "2026-03-15T12:00:00Z"
+
+  it("affiche l'heure du pays, pas celle du lecteur", () => {
+    // Abidjan est à UTC+0, Nairobi à UTC+3 : la même instant se lit
+    // différemment selon le pays où la dépense a eu lieu.
+    expect(formatDateIn(midiUTC, "Africa/Abidjan")).toContain("12:00")
+    expect(formatDateIn(midiUTC, "Africa/Nairobi")).toContain("15:00")
+  })
+
+  it("retombe sur le fuseau du navigateur si aucun n'est fourni", () => {
+    expect(formatDateIn(midiUTC, null)).toBe(formatDate(midiUTC))
+  })
+
+  it("ne casse pas l'affichage sur un fuseau inconnu", () => {
+    expect(formatDateIn(midiUTC, "Mars/Olympus_Mons")).toBe(formatDate(midiUTC))
+  })
+
+  it("rend un tiret sur une date absente ou invalide", () => {
+    expect(formatDateIn(null, "Africa/Lome")).toBe("—")
+    expect(formatDateIn("n'importe quoi", "Africa/Lome")).toBe("—")
   })
 })

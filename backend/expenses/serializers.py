@@ -96,6 +96,12 @@ class ProofSerializer(serializers.ModelSerializer):
 class ExpenseSerializer(serializers.ModelSerializer):
     country_name = serializers.CharField(source="country.name", read_only=True)
     currency = serializers.CharField(source="country.currency", read_only=True)
+    # §6 : la date est conservée en UTC, mais doit se lire dans le fuseau du
+    # pays où la dépense a eu lieu. Un contrôleur au siège verrait sinon
+    # l'heure de son propre fuseau, ce qui fausse le « quand ».
+    country_timezone = serializers.CharField(
+        source="country.timezone", read_only=True
+    )
     dossier_number = serializers.CharField(source="dossier.number", read_only=True)
     team_name = serializers.CharField(
         source="team.name", read_only=True, allow_null=True
@@ -125,7 +131,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
         model = Expense
         fields = [
             "id", "dossier", "dossier_number", "country", "country_name",
-            "currency", "team", "team_name", "owner", "owner_name",
+            "currency", "country_timezone", "team", "team_name",
+            "owner", "owner_name",
             "date", "place", "title", "description",
             "project", "project_name", "expense_title", "marketing_category",
             "beneficiary", "beneficiary_name", "budget", "budget_label",
@@ -218,6 +225,9 @@ class DossierSerializer(serializers.ModelSerializer):
         source="country.country_ref", read_only=True, allow_null=True
     )
     currency = serializers.CharField(source="country.currency", read_only=True)
+    country_timezone = serializers.CharField(
+        source="country.timezone", read_only=True
+    )
     team_name = serializers.CharField(
         source="team.name", read_only=True, allow_null=True
     )
@@ -233,7 +243,8 @@ class DossierSerializer(serializers.ModelSerializer):
         model = Dossier
         fields = [
             "id", "number", "label", "country", "country_name", "country_ref",
-            "currency", "team", "team_name", "owner", "owner_name", "date",
+            "currency", "country_timezone", "team", "team_name",
+            "owner", "owner_name", "date",
             "status", "status_display", "note", "totals",
             "expense_count", "proof_count", "created_at", "updated_at",
         ]
