@@ -56,6 +56,9 @@ l'application.
 - **Toute action sensible laisse une trace** dans `ChangeLog` ou `AuditLog` :
   qui, quoi, quand, depuis quelle adresse, ancienne et nouvelle valeur.
 - **Un rejet exige un motif.**
+- **Une requête `GET` n'écrit rien.** Les alertes sont calculées à la
+  lecture ; leur notification passe par `manage.py notify_alerts`, pour ne
+  pas dépendre de quelqu'un qui ouvre une page.
 
 ## Repères
 

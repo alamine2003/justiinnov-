@@ -5,6 +5,7 @@ from decimal import Decimal
 from io import BytesIO
 
 from django.core import mail
+from django.core.management import call_command
 from openpyxl import load_workbook
 from rest_framework import status
 
@@ -226,13 +227,28 @@ class AlertTests(DashboardTestCase):
 
 
 class NotificationTests(DashboardTestCase):
-    def test_seuil_budgetaire_notifie_une_seule_fois(self):
+    def notifier(self):
+        """Émission des alertes, telle que la planification l'exécute."""
+        call_command("notify_alerts", year=self.year, verbosity=0)
+
+    def test_consulter_le_tableau_de_bord_ne_notifie_personne(self):
+        """Régression : un GET écrivait en base, et l'alerte ne partait que si
+        quelqu'un ouvrait la page — personne n'était averti un dimanche."""
         self.budget.amount = Decimal("600000.00")
         self.budget.save()
         self.login(self.doo)
 
-        self.client.get("/api/dashboard/", {"year": self.year})
-        self.client.get("/api/dashboard/", {"year": self.year})
+        response = self.client.get("/api/dashboard/", {"year": self.year})
+
+        self.assertTrue(response.data["alerts"])
+        self.assertEqual(Notification.objects.count(), 0)
+
+    def test_seuil_budgetaire_notifie_une_seule_fois(self):
+        self.budget.amount = Decimal("600000.00")
+        self.budget.save()
+
+        self.notifier()
+        self.notifier()
 
         notifications = Notification.objects.filter(
             kind=Notification.Kind.BUDGET_THRESHOLD, recipient=self.doo
@@ -240,13 +256,11 @@ class NotificationTests(DashboardTestCase):
         self.assertEqual(notifications.count(), 1)
 
     def test_justificatif_manquant_notifie_ceux_qui_peuvent_le_fournir(self):
-        """Le §8 cite explicitement le justificatif manquant : l'afficher au
-        tableau de bord ne suffisait pas."""
+        """Le §8 cite explicitement le justificatif manquant."""
         self.dossier.status = Status.SUBMITTED
         self.dossier.save()
-        self.login(self.doo)
 
-        self.client.get("/api/dashboard/", {"year": self.year})
+        self.notifier()
 
         self.assertTrue(
             Notification.objects.filter(
@@ -262,16 +276,33 @@ class NotificationTests(DashboardTestCase):
     def test_justificatif_manquant_notifie_une_seule_fois(self):
         self.dossier.status = Status.SUBMITTED
         self.dossier.save()
-        self.login(self.doo)
 
-        self.client.get("/api/dashboard/", {"year": self.year})
-        self.client.get("/api/dashboard/", {"year": self.year})
+        self.notifier()
+        self.notifier()
 
         self.assertEqual(
             Notification.objects.filter(
                 recipient=self.owner, kind=Notification.Kind.PROOF_MISSING
             ).count(),
             1,
+        )
+
+    def test_un_compte_cree_apres_coup_recoit_les_alertes_suivantes(self):
+        """Un cache global de destinataires priverait d'alerte tout compte
+        ouvert après le premier passage."""
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+        self.notifier()
+
+        nouveau = make_user("nouveau.controle", Role.CONTROLLER)
+        self.dossier.note = "second passage"
+        self.dossier.save()
+        self.notifier()
+
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=nouveau, kind=Notification.Kind.PROOF_MISSING
+            ).exists()
         )
 
     def test_soumission_previent_le_controleur(self):
@@ -450,3 +481,58 @@ class ExportTests(DashboardTestCase):
         entry = AuditLog.objects.filter(object_type="Export").first()
         self.assertEqual(entry.user, "do.innov")
         self.assertIn("depenses", entry.label)
+
+
+class DashboardCostTests(DashboardTestCase):
+    """Le coût du tableau de bord ne doit pas suivre le volume de données."""
+
+    def _requetes(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get("/api/dashboard/", {"year": self.year})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return len(captured.captured_queries), response
+
+    def _peupler(self, count, offset=0):
+        for index in range(offset, offset + count):
+            dossier = Dossier.objects.create(
+                number=f"C-{index:03d}", label=f"Dossier {index}",
+                country=self.togo, date=date(self.year, 2, 1),
+                status=Status.SUBMITTED,
+            )
+            Expense.objects.create(
+                dossier=dossier, country=self.togo,
+                date=f"{self.year}-02-01T10:00:00Z", title="Ligne",
+                amount=Decimal("1000.00"), status=Status.JUSTIFIED,
+            )
+
+    def test_le_nombre_de_requetes_ne_suit_pas_le_volume(self):
+        """Régression : chaque alerte déclenchait ses propres requêtes de
+        destinataires et d'écriture — 665 requêtes pour 130 dossiers."""
+        self.login(self.doo)
+        self._peupler(20)
+        peu, _ = self._requetes()
+
+        self._peupler(40, offset=20)
+        beaucoup, response = self._requetes()
+
+        self.assertEqual(peu, beaucoup)
+        self.assertGreater(len(response.data["alerts"]), 20)
+
+    def test_la_charge_utile_des_alertes_est_plafonnee(self):
+        from reporting.views import MAX_ALERTS
+
+        for index in range(MAX_ALERTS + 10):
+            Dossier.objects.create(
+                number=f"P-{index:03d}", label=f"Dossier {index}",
+                country=self.togo, date=date(self.year, 2, 1),
+                status=Status.SUBMITTED,
+            )
+        self.login(self.doo)
+
+        _, response = self._requetes()
+
+        self.assertEqual(len(response.data["alerts"]), MAX_ALERTS)
+        self.assertGreater(response.data["alerts_total"], MAX_ALERTS)

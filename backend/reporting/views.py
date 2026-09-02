@@ -12,9 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from budget.aggregates import budget_figures, to_xof
-from core.models import Country
 from expenses.models import AuditLog
-from notifications import triggers
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 
 from . import alerts as alert_rules
@@ -26,6 +24,9 @@ from .exports import (
 from .scope import scoped_querysets
 
 ZERO = Decimal("0.00")
+
+#: Nombre d'alertes transmises au tableau de bord, les plus graves d'abord.
+MAX_ALERTS = 50
 
 
 def _as_int(value, field):
@@ -57,7 +58,6 @@ class DashboardView(APIView):
 
         rows, totals, consolidated = self._per_country(budgets)
         current_alerts = alert_rules.collect(budgets, dossiers, expenses)
-        self._notify(current_alerts)
 
         return Response(
             {
@@ -66,33 +66,18 @@ class DashboardView(APIView):
                 "consolidated_xof": consolidated,
                 "countries": rows,
                 "workload": self._workload(dossiers, expenses),
-                "alerts": current_alerts,
+                # Les alertes sont calculées à la lecture, mais **pas
+                # notifiées** ici : une requête GET ne doit rien écrire, et
+                # faire dépendre l'alerte de l'ouverture d'une page reviendrait
+                # à n'avertir personne les jours où nul ne regarde. C'est la
+                # commande `notify_alerts` qui s'en charge.
+                #
+                # Seules les plus graves sont transmises : en renvoyer cent
+                # trente alourdirait la réponse sans que l'écran les montre.
+                "alerts": current_alerts[:MAX_ALERTS],
+                "alerts_total": len(current_alerts),
             }
         )
-
-    def _notify(self, current_alerts):
-        """Transforme les alertes notifiables en notifications persistantes.
-
-        Le §8 couvre les seuils budgétaires **et** les justificatifs manquants
-        ou incomplets. La clé d'unicité de chaque alerte garantit qu'un même
-        manquement n'est signalé qu'une fois, quelle que soit la fréquence de
-        consultation du tableau de bord.
-        """
-        concerned = [
-            a for a in current_alerts if a["kind"] in triggers.ALERT_KINDS
-        ]
-        if not concerned:
-            return
-        countries = {
-            country.pk: country
-            for country in Country.objects.filter(
-                pk__in={a["country"] for a in concerned if a["country"]}
-            )
-        }
-        for alert in concerned:
-            country = countries.get(alert["country"])
-            if country is not None:
-                triggers.alert_raised(alert, country)
 
     def _per_country(self, budgets):
         """Agrège par pays ; seules les enveloppes de pays composent le total,

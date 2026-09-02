@@ -46,6 +46,9 @@ const LEVEL_STYLE: Record<AlertLevel, string> = {
   critical: "bg-destructive hover:bg-destructive",
 }
 
+/** Alertes montrées d'emblée ; le reste est signalé par un compte. */
+const VISIBLE_ALERTS = 12
+
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2]
 
@@ -218,11 +221,11 @@ export function DashboardPage() {
         <Card className="border-border/60 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">
-              Alertes ({data.alerts.length})
+              Alertes ({data.alerts_total})
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {data.alerts.slice(0, 12).map((alert) => (
+            {data.alerts.slice(0, VISIBLE_ALERTS).map((alert) => (
               <Link
                 key={alert.key}
                 to={alert.link || "/dossiers"}
@@ -237,6 +240,12 @@ export function DashboardPage() {
                 </div>
               </Link>
             ))}
+            {data.alerts_total > VISIBLE_ALERTS && (
+              <p className="pt-1 text-xs text-muted-foreground">
+                {data.alerts_total - VISIBLE_ALERTS} autre(s) alerte(s) — les
+                plus graves sont affichées en premier.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

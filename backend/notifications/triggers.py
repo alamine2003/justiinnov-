@@ -88,19 +88,33 @@ ALERT_AUDIENCE = {
 }
 
 
-def alert_raised(alert, country):
-    """Relaie une alerte calculée par le tableau de bord (§8).
+def audience_for(alert_kind, country):
+    """Destinataires d'un type d'alerte pour un pays.
+
+    Exposé pour que l'appelant puisse résoudre une fois et réutiliser : cent
+    dossiers sans preuve interrogeraient sinon cent fois la même liste. Un
+    cache global serait pire encore — un compte créé ensuite ne recevrait
+    plus jamais d'alerte.
+    """
+    return list(recipients_for(ALERT_AUDIENCE[alert_kind], country))
+
+
+def alert_raised(alert, country, recipients=None):
+    """Relaie une alerte calculée (§8).
 
     La clé de l'alerte sert de clé d'unicité : un même manquement n'est
-    signalé qu'une fois, même si le tableau de bord est rouvert vingt fois.
+    signalé qu'une fois, quel que soit le nombre de passages.
     """
     kind = ALERT_KINDS.get(alert["kind"])
     if kind is None:
         return []
     critical = alert["level"] == "critical"
+    destinataires = (
+        recipients if recipients is not None else audience_for(alert["kind"], country)
+    )
     return _safe(
         lambda: notify(
-            recipients_for(ALERT_AUDIENCE[alert["kind"]], country),
+            destinataires,
             kind=kind,
             level=(
                 Notification.Level.CRITICAL if critical else Notification.Level.WARNING

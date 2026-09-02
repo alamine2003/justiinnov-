@@ -138,6 +138,12 @@ def unusual_expense_alerts(expenses):
     devises et aux ordres de grandeur différents n'aurait pas de sens. Elle
     exclut aussi la dépense examinée — une dépense assez grosse relèverait
     sinon sa propre moyenne au point de ne plus s'en détacher.
+
+    Cette comparaison « sans soi » se ramène à un simple seuil par pays. En
+    notant *T* le total consommé du pays, *n* son nombre de lignes et *f* le
+    facteur, la condition ``montant > f × (T − montant) / (n − 1)`` équivaut à
+    ``montant > f × T / (n − 1 + f)``. Le filtrage se fait donc en base, au
+    lieu de parcourir toutes les dépenses du pays en mémoire.
     """
     factor = Decimal(str(settings.UNUSUAL_EXPENSE_FACTOR))
     consuming = list(CONSUMING_STATUSES)
@@ -148,36 +154,45 @@ def unusual_expense_alerts(expenses):
         .annotate(total=Sum("amount"), lines=Count("id"))
     }
 
-    alerts = []
-    # Un brouillon n'est pas encore une dépense ; tout le reste l'est, y
-    # compris ce qui n'a pas trouvé sa preuve.
-    candidates = expenses.exclude(status=Status.DRAFT)
-    for expense in candidates.select_related("country", "dossier"):
-        total, lines = stats.get(expense.country_id, (None, 0))
-        if total is None:
+    conditions = Q()
+    retenu = False
+    for country_id, (total, lines) in stats.items():
+        # Il faut au moins une autre dépense pour que « hors norme » ait un sens.
+        if not total or lines < 2:
             continue
-        # Comparaison « sans soi » : la dépense examinée sort de la référence.
-        if expense.status in CONSUMING_STATUSES:
-            total -= expense.amount
-            lines -= 1
-        if lines < 1:
-            continue
-        average = total / lines
-        if average <= 0 or expense.amount <= average * factor:
-            continue
-        alerts.append(
-            _alert(
-                "unusual_expense",
-                Level.WARNING,
-                f"Dépense inhabituelle — {expense.title}",
-                f"{expense.amount} {expense.country.currency}, soit plus de "
-                f"{factor:g} fois la moyenne des autres dépenses du pays.",
-                country=expense.country,
-                link=f"/dossiers/{expense.dossier_id}",
-                key=f"unusual_expense:{expense.pk}",
-            )
+        seuil_consommee = factor * total / (lines - 1 + factor)
+        # Une dépense encore engagée n'entre pas dans le total : elle se compare
+        # à la moyenne entière.
+        seuil_engagee = factor * total / lines
+        conditions |= Q(
+            country_id=country_id, status__in=consuming, amount__gt=seuil_consommee
         )
-    return alerts
+        conditions |= ~Q(status__in=consuming) & Q(
+            country_id=country_id, amount__gt=seuil_engagee
+        )
+        retenu = True
+
+    if not retenu:
+        return []
+
+    hors_norme = (
+        expenses.exclude(status=Status.DRAFT)
+        .filter(conditions)
+        .select_related("country", "dossier")
+    )
+    return [
+        _alert(
+            "unusual_expense",
+            Level.WARNING,
+            f"Dépense inhabituelle — {expense.title}",
+            f"{expense.amount} {expense.country.currency}, soit plus de "
+            f"{factor:g} fois la moyenne des autres dépenses du pays.",
+            country=expense.country,
+            link=f"/dossiers/{expense.dossier_id}",
+            key=f"unusual_expense:{expense.pk}",
+        )
+        for expense in hors_norme
+    ]
 
 
 def collect(budgets, dossiers, expenses):

@@ -529,7 +529,9 @@ export interface Dashboard {
     expenses_unjustified: number
     dossiers_open: number
   }
+  /** Les plus graves seulement ; `alerts_total` donne le compte réel. */
   alerts: Alert[]
+  alerts_total: number
 }
 
 export interface BreakdownRow {

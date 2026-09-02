@@ -186,7 +186,26 @@ Chaque entrée conserve `label`, `performed_by` (utilisateur authentifié),
 qui combine plusieurs natures d'événement (par exemple un changement de
 rattachement *et* un renommage) produit une entrée par événement.
 
-## Rapports périodiques
+## Tâches planifiées
+
+Deux commandes à planifier sur l'hôte. Toutes deux acceptent `--dry-run`.
+
+**Alertes** — les alertes sont *calculées* à chaque lecture du tableau de bord,
+mais leur *notification* passe par cette commande. Séparer les deux évite qu'une
+requête de lecture écrive en base, et surtout que l'alerte dépende de quelqu'un
+qui regarde : sans elle, un dépassement survenu un dimanche n'avertirait
+personne.
+
+```bash
+docker compose exec backend python manage.py notify_alerts --dry-run
+```
+
+```cron
+0 * * * *  cd /chemin/du/projet && docker compose exec -T backend \
+             python manage.py notify_alerts
+```
+
+**Rapport périodique**
 
 ```bash
 docker compose exec backend python manage.py send_periodic_report \

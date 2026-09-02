@@ -48,25 +48,50 @@ def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
 
     ``dedup_key`` garantit qu'un même événement — un seuil budgétaire franchi,
     par exemple — ne notifie qu'une fois par destinataire, même si le calcul
-    d'alertes est rejoué à chaque consultation du tableau de bord.
+    d'alertes est rejoué.
+
+    L'écriture est groupée : un ``get_or_create`` par destinataire coûtait deux
+    requêtes chacun, ce qui devient ruineux dès qu'une centaine de dossiers
+    déclenchent chacun une alerte.
     """
     level = level or Notification.Level.INFO
-    created = []
-    for recipient in recipients:
-        notification, is_new = Notification.objects.get_or_create(
-            recipient=recipient,
-            dedup_key=dedup_key,
-            defaults={
-                "kind": kind,
-                "level": level,
-                "title": title,
-                "body": body,
-                "link": link,
-                "country": country,
-            },
-        )
-        if is_new:
-            created.append(notification)
+    recipients = list(recipients)
+    if not recipients:
+        return []
+
+    # Une seule requête pour savoir qui a déjà été averti de cet événement.
+    deja_avertis = set(
+        Notification.objects.filter(
+            dedup_key=dedup_key, recipient__in=recipients
+        ).values_list("recipient_id", flat=True)
+    )
+    manquants = [r for r in recipients if r.pk not in deja_avertis]
+    if not manquants:
+        return []
+
+    Notification.objects.bulk_create(
+        [
+            Notification(
+                recipient=recipient,
+                dedup_key=dedup_key,
+                kind=kind,
+                level=level,
+                title=title,
+                body=body,
+                link=link,
+                country=country,
+            )
+            for recipient in manquants
+        ],
+        # Deux processus peuvent notifier le même événement en même temps :
+        # la contrainte d'unicité tranche, sans faire échouer l'appel.
+        ignore_conflicts=True,
+    )
+    created = list(
+        Notification.objects.filter(
+            dedup_key=dedup_key, recipient__in=manquants
+        ).select_related("recipient")
+    )
 
     if send_email and created:
         _send_emails(created, title, body, link)
