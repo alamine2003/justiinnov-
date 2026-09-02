@@ -9,15 +9,7 @@ from rest_framework import serializers
 from core.models import Country
 
 from .models import Role, UserProfile
-from .permissions import (
-    AUDIT_READ_ROLES,
-    BUDGET_WRITE_ROLES,
-    EXPENSE_WRITE_ROLES,
-    REFERENTIAL_WRITE_ROLES,
-    SUBENTITY_WRITE_ROLES,
-    USER_WRITE_ROLES,
-    VALIDATION_ROLES,
-)
+from .permissions import capabilities_for
 
 
 class ScopeCountrySerializer(serializers.ModelSerializer):
@@ -92,19 +84,12 @@ class MeSerializer(serializers.ModelSerializer):
         return profile.has_global_scope
 
     def get_permissions(self, user):
-        """Droits dérivés du rôle, pour que l'interface n'ait pas à redéfinir
-        la matrice — le serveur reste seul juge, ceci ne sert qu'à masquer les
-        actions inutiles."""
-        role = self._role(user)
-        return {
-            "manage_users": role in USER_WRITE_ROLES,
-            "manage_countries": role in REFERENTIAL_WRITE_ROLES,
-            "manage_subentities": role in SUBENTITY_WRITE_ROLES,
-            "manage_budgets": role in BUDGET_WRITE_ROLES,
-            "record_expenses": role in EXPENSE_WRITE_ROLES,
-            "validate_expenses": role in VALIDATION_ROLES,
-            "view_audit": role in AUDIT_READ_ROLES,
-        }
+        """Droits dérivés du rôle.
+
+        Lus dans la même matrice que celle qui les applique : les recopier ici
+        les ferait diverger de la réalité au premier changement.
+        """
+        return capabilities_for(self._role(user))
 
 
 class ChangePasswordSerializer(serializers.Serializer):

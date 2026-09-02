@@ -16,7 +16,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
-import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -28,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { createUser, fetchUsers, updateUser } from "@/lib/accounts"
+import { useAuth } from "@/context/auth"
 import { fetchCountries } from "@/lib/countries"
 import { ROLE_LABELS, type AccountUser, type CountrySummary, type Role } from "@/lib/types"
 
@@ -40,7 +40,8 @@ const HEADQUARTERS_ROLES: Role[] = [
   "auditor",
 ]
 
-export function UsersPage() {
+export function UsersSection() {
+  const { me } = useAuth()
   const [users, setUsers] = useState<AccountUser[]>([])
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
@@ -48,6 +49,7 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [toggling, setToggling] = useState<number | null>(null)
   const [editing, setEditing] = useState<AccountUser | null>(null)
 
   const load = useCallback(async () => {
@@ -72,12 +74,31 @@ export function UsersPage() {
     void load()
   }, [load])
 
+  // Le siège ne peut pas se désactiver lui-même : le backend le refuse aussi,
+  // le bouton grisé évite simplement d'aller au-devant d'une erreur.
+  const toggle = async (user: AccountUser) => {
+    setToggling(user.id)
+    setError(null)
+    try {
+      await updateUser(user.id, { is_active: !user.is_active })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Changement de statut impossible")
+    } finally {
+      setToggling(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Comptes"
-        description="Rôles et périmètres pays. Un compte du siège voit tous les pays ; un responsable pays ne voit que le sien."
-      >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold">Comptes</h2>
+          <p className="text-xs text-muted-foreground">
+            Rôles et périmètres. Un compte du siège voit tous les pays ; un
+            responsable pays ne voit que le sien.
+          </p>
+        </div>
         <Button
           onClick={() => {
             setEditing(null)
@@ -87,7 +108,7 @@ export function UsersPage() {
           <Plus className="mr-2 h-4 w-4" />
           Créer un compte
         </Button>
-      </PageHeader>
+      </div>
 
       {error && (
         <Alert variant="destructive">
@@ -157,17 +178,32 @@ export function UsersPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Modifier"
-                          onClick={() => {
-                            setEditing(user)
-                            setFormOpen(true)
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={user.id === me?.id || toggling === user.id}
+                            title={
+                              user.id === me?.id
+                                ? "Un autre administrateur doit s'en charger."
+                                : undefined
+                            }
+                            onClick={() => void toggle(user)}
+                          >
+                            {user.is_active ? "Désactiver" : "Activer"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Modifier"
+                            onClick={() => {
+                              setEditing(user)
+                              setFormOpen(true)
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

@@ -11,7 +11,7 @@ import { DossierDetailPage } from "@/pages/dossiers/detail"
 import { DossiersPage } from "@/pages/dossiers/list"
 import { LoginPage } from "@/pages/login"
 import { RegisterPage } from "@/pages/register"
-import { UsersPage } from "@/pages/users/list"
+import { ConfigurationPage } from "@/pages/configuration"
 import type { Permissions } from "@/lib/types"
 
 function FullPageLoader() {
@@ -80,14 +80,20 @@ export default function App() {
           }
         />
         <Route
-          path="/users"
+          path="/configuration"
           element={
             <RequirePermission permission="manage_users">
-              <UsersPage />
+              <ConfigurationPage />
             </RequirePermission>
           }
         />
       </Route>
+      {/* La page Comptes a été absorbée par le back-office : les liens et
+          favoris existants doivent continuer de mener quelque part. */}
+      <Route
+        path="/users"
+        element={<Navigate to="/configuration?onglet=utilisateurs" replace />}
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

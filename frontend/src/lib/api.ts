@@ -35,9 +35,18 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-/** Extrait un message lisible d'une réponse d'erreur DRF. */
+/** Extrait un message lisible d'une réponse d'erreur DRF.
+ *
+ * Une réponse peut aussi être une page d'erreur HTML — 404 hors des routes de
+ * l'API, 502 du proxy. La recracher telle quelle déverserait la page entière
+ * dans l'interface : on lui préfère le message générique de l'appelant.
+ */
 export function readErrorMessage(data: unknown): string | null {
-  if (typeof data === "string") return data
+  if (typeof data === "string") {
+    const texte = data.trim()
+    if (!texte || texte.startsWith("<")) return null
+    return texte
+  }
   if (!data || typeof data !== "object") return null
 
   const payload = data as Record<string, unknown>

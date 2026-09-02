@@ -1,5 +1,11 @@
 import { apiGet, apiPatch, apiPost } from "@/lib/api"
-import type { AccountUser, Me, Paginated } from "@/lib/types"
+import type {
+  AccountUser,
+  Configuration,
+  Me,
+  Paginated,
+  PermissionMatrix,
+} from "@/lib/types"
 
 export function fetchMe() {
   return apiGet<Me>("/me/")
@@ -22,4 +28,15 @@ export function createUser(data: unknown) {
 
 export function updateUser(id: number, data: unknown) {
   return apiPatch<AccountUser>(`/users/${id}/`, data)
+}
+
+// ---------------------------------------------------------------------------
+// Back-office
+// ---------------------------------------------------------------------------
+export function fetchConfiguration() {
+  return apiGet<Configuration>("/configuration/")
+}
+
+export function fetchPermissionMatrix() {
+  return apiGet<PermissionMatrix>("/permissions/")
 }

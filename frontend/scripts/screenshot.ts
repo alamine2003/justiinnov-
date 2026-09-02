@@ -126,10 +126,21 @@ async function main() {
   await hq.waitForTimeout(600)
   await shot(hq, "budgets_reallocations")
 
-  await hq.goto(`${BASE}/users`, { waitUntil: "networkidle" })
+  await hq.goto(`${BASE}/configuration`, { waitUntil: "networkidle" })
   await hq.waitForTimeout(1200)
-  console.log("Comptes - lignes :", await hq.locator("tbody tr").count())
-  await shot(hq, "users")
+  console.log("Configuration - onglets :", await hq.getByRole("tab").allTextContents())
+  await shot(hq, "configuration_general")
+
+  for (const [onglet, nom] of [
+    ["Utilisateurs", "configuration_utilisateurs"],
+    ["Pays", "configuration_pays"],
+    ["Permissions", "configuration_permissions"],
+  ] as const) {
+    await hq.getByRole("tab", { name: onglet }).click()
+    await hq.waitForTimeout(900)
+    console.log(`Configuration › ${onglet} - lignes :`, await hq.locator("tbody tr").count())
+    await shot(hq, nom)
+  }
 
   // --- Parcours pays : périmètre restreint --------------------------------
   const rep = await newPage(browser)

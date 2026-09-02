@@ -26,6 +26,14 @@ describe("readErrorMessage", () => {
     expect(readErrorMessage("Erreur serveur")).toBe("Erreur serveur")
   })
 
+  it("ignore une page HTML au lieu de la déverser dans l'interface", () => {
+    // Une 404 hors des routes de l'API renvoie la page d'erreur Django.
+    expect(
+      readErrorMessage("<!DOCTYPE html><html><body>Page not found</body></html>"),
+    ).toBeNull()
+    expect(readErrorMessage("   ")).toBeNull()
+  })
+
   it("renvoie null quand rien n'est exploitable", () => {
     expect(readErrorMessage(null)).toBeNull()
     expect(readErrorMessage({})).toBeNull()

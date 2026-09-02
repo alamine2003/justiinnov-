@@ -234,3 +234,99 @@ class MeTests(ScopingTestCase):
         self.rep_togo.refresh_from_db()
         self.assertTrue(self.rep_togo.check_password("Nouveau-Motdepasse-2026"))
         self.assertFalse(self.rep_togo.profile.must_change_password)
+
+
+class BackOfficeTests(ScopingTestCase):
+    """Le back-office est réservé au siège."""
+
+    def test_la_configuration_est_lisible_par_le_siege(self):
+        self.login(self.siege)
+
+        response = self.client.get("/api/configuration/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("seuils", response.data["alertes"])
+        self.assertIn(".pdf", response.data["justificatifs"]["formats_acceptes"])
+
+    def test_un_pays_n_accede_pas_a_la_configuration(self):
+        self.login(self.rep_togo)
+
+        response = self.client.get("/api/configuration/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_le_controle_n_accede_pas_au_back_office(self):
+        """Dina contrôle les justificatifs, elle n'administre pas la plateforme."""
+        self.login(self.controleur)
+
+        response = self.client.get("/api/permissions/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_la_matrice_reflete_les_droits_appliques(self):
+        """Régression : la matrice affichée doit être celle qui est appliquée,
+        sinon le back-office documenterait une fiction."""
+        self.login(self.siege)
+
+        matrice = self.client.get("/api/permissions/").data
+        profil = self.client.get("/api/me/").data
+
+        justification = next(
+            c for c in matrice["capabilities"] if c["key"] == "validate_expenses"
+        )
+        # Le pays est exclu de la justification, la matrice doit le dire.
+        self.assertNotIn(Role.COUNTRY_MANAGER, justification["roles"])
+        self.assertIn(Role.CONTROLLER, justification["roles"])
+        # Et elle doit concorder avec les droits annoncés au titulaire.
+        for capability in matrice["capabilities"]:
+            self.assertEqual(
+                profil["permissions"][capability["key"]],
+                profil["role"] in capability["roles"],
+                f"désaccord sur {capability['key']}",
+            )
+
+    def test_la_matrice_n_est_pas_modifiable(self):
+        self.login(self.siege)
+
+        lecture = self.client.get("/api/permissions/")
+        ecriture = self.client.post("/api/permissions/", {})
+
+        self.assertFalse(lecture.data["editable"])
+        self.assertEqual(ecriture.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+class SelfLockoutTests(ScopingTestCase):
+    """On ne se retire pas ses propres droits : personne ne pourrait les rendre."""
+
+    def test_desactivation_de_son_propre_compte_refusee(self):
+        self.login(self.siege)
+
+        response = self.client.patch(
+            f"/api/users/{self.siege.pk}/", {"is_active": False}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.siege.refresh_from_db()
+        self.assertTrue(self.siege.is_active)
+
+    def test_declassement_de_son_propre_role_refuse(self):
+        self.login(self.siege)
+
+        response = self.client.patch(
+            f"/api/users/{self.siege.pk}/", {"role": Role.AUDITOR}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.siege.profile.refresh_from_db()
+        self.assertEqual(self.siege.profile.role, Role.SUPER_ADMIN)
+
+    def test_desactivation_d_un_autre_compte_autorisee(self):
+        self.login(self.siege)
+
+        response = self.client.patch(
+            f"/api/users/{self.rep_togo.pk}/", {"is_active": False}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.rep_togo.refresh_from_db()
+        self.assertFalse(self.rep_togo.is_active)

@@ -75,6 +75,68 @@ AUDIT_READ_ROLES = frozenset(
 )
 
 
+#: Matrice des capacités, source unique.
+#:
+#: Elle sert à la fois à décrire les droits (`/api/permissions/`) et à les
+#: exposer au frontend (`/api/me/`). Décrire les rôles ailleurs qu'ici les
+#: ferait diverger de ce qui est réellement appliqué.
+CAPABILITIES = [
+    {
+        "key": "manage_users",
+        "label": "Comptes et rôles",
+        "description": "Créer, modifier, activer ou désactiver un compte.",
+        "roles": USER_WRITE_ROLES,
+    },
+    {
+        "key": "manage_countries",
+        "label": "Pays et managers",
+        "description": "Créer et modifier les pays, leurs devises et leurs managers.",
+        "roles": REFERENTIAL_WRITE_ROLES,
+    },
+    {
+        "key": "manage_subentities",
+        "label": "Équipes, projets, intitulés",
+        "description": "Gérer les sous-entités d'un pays.",
+        "roles": SUBENTITY_WRITE_ROLES,
+    },
+    {
+        "key": "manage_budgets",
+        "label": "Enveloppes et réallocations",
+        "description": "Attribuer les budgets et arbitrer les transferts.",
+        "roles": BUDGET_WRITE_ROLES,
+    },
+    {
+        "key": "record_expenses",
+        "label": "Saisie et soumission",
+        "description": "Saisir des dépenses, déposer des pièces, soumettre un dossier.",
+        "roles": EXPENSE_WRITE_ROLES,
+    },
+    {
+        "key": "validate_expenses",
+        "label": "Justification",
+        "description": (
+            "Constater qu'une pièce couvre une dépense, ou l'absence de preuve. "
+            "Le pays en est exclu : il déclare, le siège constate."
+        ),
+        "roles": VALIDATION_ROLES,
+    },
+    {
+        "key": "view_audit",
+        "label": "Journal d'audit",
+        "description": "Consulter la trace des actions sensibles.",
+        "roles": AUDIT_READ_ROLES,
+    },
+]
+
+
+def capabilities_for(role):
+    """Droits d'un rôle, sous la forme attendue par le frontend."""
+    return {
+        capability["key"]: role in capability["roles"]
+        for capability in CAPABILITIES
+    }
+
+
 class RolePermission(BasePermission):
     """Autorise la requête selon le rôle porté par le profil.
 

@@ -582,3 +582,33 @@ export interface AuditEntry {
   user_agent: string
   created_at: string
 }
+// ---------------------------------------------------------------------------
+// Back-office
+// ---------------------------------------------------------------------------
+
+export interface Configuration {
+  alertes: { seuils: number[]; facteur_depense_inhabituelle: number }
+  justificatifs: {
+    taille_max_mo: number
+    formats_acceptes: string[]
+    stockage: string
+  }
+  budget: { devise_de_consolidation: string }
+  notifications: { email_configure: boolean; expediteur: string }
+  systeme: { fuseau: string; mode_debug: boolean }
+}
+
+export interface Capability {
+  key: keyof Permissions
+  label: string
+  description: string
+  roles: Role[]
+}
+
+export interface PermissionMatrix {
+  roles: { value: Role; label: string; siege: boolean }[]
+  capabilities: Capability[]
+  /** Faux : les droits sont fixés dans le code, cf. `note`. */
+  editable: boolean
+  note: string
+}
