@@ -5,7 +5,7 @@ from django.db.models import Prefetch
 from django.http import FileResponse
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import (
@@ -297,7 +297,17 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         super().perform_destroy(instance)
 
     def before_transition(self, expense, name, access):
-        """Impute l'enveloppe et applique la politique de dépassement."""
+        """Sépare la déclaration du contrôle, impute l'enveloppe et applique la
+        politique de dépassement."""
+        if name in ("justify", "reject") and expense.created_by:
+            # Quatre yeux : décaisser puis se donner quitus soi-même n'est pas
+            # un contrôle.
+            if expense.created_by == self.request.user.username:
+                raise PermissionDenied(
+                    "Vous avez saisi cette dépense : son contrôle revient à "
+                    "quelqu'un d'autre."
+                )
+
         if name not in ("submit", "justify"):
             return None
         budget = attach_budget(expense)

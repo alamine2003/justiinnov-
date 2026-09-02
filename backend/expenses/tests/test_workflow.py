@@ -5,6 +5,8 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import status
 
+from accounts.models import Role
+from accounts.tests.test_scoping import make_user
 from budget.aggregates import budget_figures
 from budget.models import Budget, OverrunPolicy
 from core.models import Project
@@ -629,3 +631,81 @@ class LocalTimeTests(ExpenseTestCase):
         self.assertEqual(
             response.data["results"][0]["country_timezone"], "Africa/Lome"
         )
+
+
+class SeparationOfDutiesTests(ExpenseTestCase):
+    """Le pays déclare, le siège constate. Personne ne se donne quitus."""
+
+    def setUp(self):
+        super().setUp()
+        self.rep_togo = make_user("togo.innov", Role.COUNTRY_MANAGER, [self.togo])
+        self.expense = self.make_expense(created_by="owner.togo")
+        self.login(self.owner)
+        self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+
+    def test_un_pays_ne_justifie_pas_ses_propres_depenses(self):
+        """Faille trouvée en recette : un responsable pays pouvait justifier
+        les dépenses de son propre pays."""
+        self.login(self.rep_togo)
+
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.expense.refresh_from_db()
+        self.assertEqual(self.expense.status, Status.SUBMITTED)
+
+    def test_un_pays_ne_declare_pas_non_plus_une_depense_non_justifiee(self):
+        self.login(self.rep_togo)
+
+        response = self.client.post(
+            f"/api/expenses/{self.expense.pk}/reject/", {"note": "Sans preuve"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_un_pays_ne_prend_pas_une_depense_en_controle(self):
+        self.login(self.rep_togo)
+
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/review/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_un_pays_ne_cloture_pas(self):
+        self.login(self.controller)
+        self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+        self.login(self.rep_togo)
+
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/close/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_le_siege_justifie(self):
+        self.login(self.controller)
+
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+
+        self.assertEqual(response.data["status"], Status.JUSTIFIED)
+
+    def test_nul_ne_justifie_la_depense_qu_il_a_saisie(self):
+        """Même au siège : décaisser puis se donner quitus n'est pas un
+        contrôle."""
+        propre = self.make_expense(created_by=self.controller.username)
+        self.login(self.owner)
+        self.client.post(f"/api/expenses/{propre.pk}/submit/")
+
+        self.login(self.controller)
+        response = self.client.post(f"/api/expenses/{propre.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("quelqu'un d'autre", str(response.data))
+
+    def test_un_autre_controleur_peut_justifier(self):
+        propre = self.make_expense(created_by=self.controller.username)
+        self.login(self.owner)
+        self.client.post(f"/api/expenses/{propre.pk}/submit/")
+
+        autre = make_user("audit.siege", Role.DOO)
+        self.login(autre)
+        response = self.client.post(f"/api/expenses/{propre.pk}/justify/")
+
+        self.assertEqual(response.data["status"], Status.JUSTIFIED)

@@ -54,12 +54,20 @@ adopte un pays préexistant plutôt que d'échouer sur son nom.
 | Rôle | Périmètre | Peut |
 |------|-----------|------|
 | `super_admin` | tous pays | tout, y compris le back-office Django |
-| `admin` | tous pays | référentiels, comptes et rôles |
-| `doo` | tous pays | attribuer les budgets, arbitrer les réallocations |
-| `controller` | tous pays | contrôler et auditer, en lecture |
+| `admin` | tous pays | référentiels, comptes, rôles, **et justification** |
+| `doo` | tous pays | attribuer les budgets, arbitrer, **justifier** |
+| `controller` | tous pays | contrôler les pièces, **justifier ou non** |
 | `auditor` | tous pays | lecture seule |
-| `country_manager` | ses pays | gérer les sous-entités de son pays |
+| `country_manager` | ses pays | gérer son pays, saisir et **soumettre** |
 | `owner` | ses pays | saisir ses dépenses et déposer les justificatifs |
+
+**Le pays déclare, le siège constate.** Un responsable pays ne peut ni
+justifier, ni déclarer non justifiée, ni prendre en contrôle, ni clôturer une
+dépense — pas même les siennes. Autrement, il pourrait décaisser puis se donner
+quitus, ce qui viderait l'application de sa raison d'être.
+
+La séparation vaut aussi **à l'intérieur du siège** : celui qui a saisi une
+dépense ne peut pas la justifier lui-même. Il faut deux personnes.
 
 Le périmètre est porté par le profil : un rôle du siège sans pays explicite
 couvre tous les pays, tandis qu'un rôle pays **sans** périmètre ne voit rien —

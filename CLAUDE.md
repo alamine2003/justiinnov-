@@ -55,6 +55,10 @@ l'application.
   créer une entité chez le voisin.
 - **Toute action sensible laisse une trace** dans `ChangeLog` ou `AuditLog` :
   qui, quoi, quand, depuis quelle adresse, ancienne et nouvelle valeur.
+- **Le pays déclare, le siège constate.** Un responsable pays ne justifie
+  jamais une dépense, pas même la sienne : il la soumet, et le siège tranche.
+  Et celui qui a saisi une dépense ne peut pas la justifier lui-même, fût-il
+  au siège — il faut deux personnes.
 - **Un rejet exige un motif.**
 - **Une requête `GET` n'écrit rien.** Les alertes sont calculées à la
   lecture ; leur notification passe par `manage.py notify_alerts`, pour ne

@@ -13,8 +13,12 @@ from .services import notify, recipients_for
 
 logger = logging.getLogger(__name__)
 
-#: Qui contrôle les dépenses d'un pays.
-CONTROLLERS = [Role.CONTROLLER, Role.COUNTRY_MANAGER, Role.DOO, Role.SUPER_ADMIN]
+#: Qui contrôle les dépenses — le siège, jamais le pays qui les a engagées.
+CONTROLLERS = [Role.CONTROLLER, Role.ADMIN, Role.DOO, Role.SUPER_ADMIN]
+
+#: Qui peut fournir une pièce manquante : ceux qui ont saisi la dépense.
+PROVIDERS = [Role.COUNTRY_MANAGER, Role.OWNER]
+
 #: Qui arbitre le budget.
 BUDGET_OWNERS = [Role.DOO, Role.SUPER_ADMIN]
 
@@ -80,11 +84,14 @@ ALERT_KINDS = {
 
 #: Qui doit être averti, selon la nature de l'alerte.
 ALERT_AUDIENCE = {
+    # Le pays reste averti de l'état de son enveloppe, même s'il ne la
+    # justifie pas lui-même.
     "budget_overrun": BUDGET_OWNERS + [Role.COUNTRY_MANAGER],
     "budget_threshold": BUDGET_OWNERS + [Role.COUNTRY_MANAGER],
-    # Un justificatif manquant concerne d'abord ceux qui peuvent le fournir.
-    "proof_missing": CONTROLLERS + [Role.OWNER],
-    "proof_incomplete": CONTROLLERS + [Role.OWNER],
+    # Un justificatif manquant concerne d'abord ceux qui peuvent le fournir —
+    # le pays — autant que ceux qui devront le contrôler.
+    "proof_missing": CONTROLLERS + PROVIDERS,
+    "proof_incomplete": CONTROLLERS + PROVIDERS,
 }
 
 

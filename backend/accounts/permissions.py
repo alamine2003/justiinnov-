@@ -59,10 +59,14 @@ EXPENSE_WRITE_ROLES = frozenset(
     {Role.SUPER_ADMIN, Role.ADMIN, Role.COUNTRY_MANAGER, Role.OWNER}
 )
 
-#: Contrôle documentaire, validation et rejet. Le responsable pays valide
-#: « selon délégation », le contrôleur exerce le contrôle documentaire.
+#: Contrôle documentaire, justification et constat de non-justification.
+#:
+#: **Le pays en est exclu, délibérément.** Un responsable pays qui pourrait
+#: justifier ses propres dépenses viderait l'application de sa raison d'être :
+#: c'est le siège qui constate qu'une pièce couvre un décaissement, jamais
+#: celui qui l'a engagé.
 VALIDATION_ROLES = frozenset(
-    {Role.SUPER_ADMIN, Role.DOO, Role.CONTROLLER, Role.COUNTRY_MANAGER}
+    {Role.SUPER_ADMIN, Role.ADMIN, Role.DOO, Role.CONTROLLER}
 )
 
 #: Consultation du journal d'audit.
