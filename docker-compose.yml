@@ -63,6 +63,39 @@ services:
     ports:
       - "8000:8000"
 
+  scheduler:
+    # Les alertes et les rapports étaient documentés comme des lignes de
+    # crontab à poser sur l'hôte — donc jamais posées. Ils tournent ici, dans
+    # leur propre conteneur : les lancer dans le backend les exécuterait une
+    # fois par worker gunicorn, soit trois notifications pour une alerte.
+    build: ./backend
+    container_name: justi_scheduler
+    entrypoint: ["python", "manage.py", "run_scheduler"]
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: justi_innov
+      POSTGRES_USER: justi
+      POSTGRES_PASSWORD: justi
+      DJANGO_DEBUG: "1"
+      DJANGO_ALLOWED_HOSTS: "*"
+      AWS_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: "justi"
+      AWS_SECRET_ACCESS_KEY: "justi-minio-dev"
+      AWS_STORAGE_BUCKET_NAME: "justificatifs"
+      # Cadences surchargeables sans reconstruire l'image.
+      SCHEDULE_ALERTS: "0 * * * *"
+      SCHEDULE_WEEKLY_REPORT: "0 7 * * 1"
+      SCHEDULE_MONTHLY_REPORT: "0 7 1 * *"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend

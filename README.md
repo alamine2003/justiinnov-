@@ -196,38 +196,43 @@ rattachement *et* un renommage) produit une entrée par événement.
 
 ## Tâches planifiées
 
-Deux commandes à planifier sur l'hôte. Toutes deux acceptent `--dry-run`.
+Elles tournent dans le service `scheduler`, démarré avec le reste de la pile.
+Elles vivaient auparavant dans ce fichier sous forme de lignes de crontab à
+poser sur l'hôte : documentées, donc jamais posées — et une alerte qui n'est
+pas planifiée n'avertit personne. Un dépassement survenu un dimanche attendait
+que quelqu'un ouvre une page.
 
-**Alertes** — les alertes sont *calculées* à chaque lecture du tableau de bord,
-mais leur *notification* passe par cette commande. Séparer les deux évite qu'une
-requête de lecture écrive en base, et surtout que l'alerte dépende de quelqu'un
-qui regarde : sans elle, un dépassement survenu un dimanche n'avertirait
-personne.
+Le service est distinct du backend : lancées dans celui-ci, les tâches
+s'exécuteraient une fois par worker gunicorn, soit trois notifications pour une
+seule alerte.
+
+```bash
+docker compose logs -f scheduler                    # ce qui est planifié
+docker compose exec scheduler python manage.py run_scheduler --list
+docker compose exec scheduler python manage.py run_scheduler --once  # tout, tout de suite
+```
+
+| Tâche | Cadence par défaut | Variable |
+|---|---|---|
+| Notification des alertes | toutes les heures | `SCHEDULE_ALERTS` |
+| Rapport de rapprochement hebdomadaire | lundi 7 h | `SCHEDULE_WEEKLY_REPORT` |
+| Rapport de rapprochement mensuel | le 1er à 7 h | `SCHEDULE_MONTHLY_REPORT` |
+
+Les cadences se surchargent par l'environnement, en syntaxe cron, sans
+reconstruire l'image. Une tâche qui échoue — SMTP injoignable, base
+momentanément indisponible — est journalisée et n'emporte pas les suivantes.
+
+Les deux commandes restent lançables à la main, avec `--dry-run` :
 
 ```bash
 docker compose exec backend python manage.py notify_alerts --dry-run
-```
-
-```cron
-0 * * * *  cd /chemin/du/projet && docker compose exec -T backend \
-             python manage.py notify_alerts
-```
-
-**Rapport périodique**
-
-```bash
 docker compose exec backend python manage.py send_periodic_report \
     --period=weekly --dry-run
 ```
 
-Sans `--dry-run`, le rapport de rapprochement est envoyé par e-mail aux rôles
-du siège et de contrôle, avec le classeur en pièce jointe. À planifier sur
-l'hôte, par exemple chaque lundi à 7 h :
-
-```cron
-0 7 * * 1  cd /chemin/du/projet && docker compose exec -T backend \
-             python manage.py send_periodic_report --period=weekly
-```
+Les alertes sont *calculées* à chaque lecture du tableau de bord ; seule leur
+*notification* passe par la commande. Séparer les deux évite qu'une requête de
+lecture écrive en base.
 
 ## Tests
 
