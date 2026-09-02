@@ -6,14 +6,17 @@ import {
   ListChecks,
   LogOut,
   ScrollText,
-  Users,
+  Settings,
   Wallet,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { AppFooter } from "@/components/layout/app-footer"
+import { BrandMark } from "@/components/layout/brand-mark"
 import { NotificationBell } from "@/components/layout/notification-bell"
 import { PasswordNotice } from "@/components/layout/password-notice"
 import { useAuth } from "@/context/auth"
+import { BRAND } from "@/lib/brand"
 import { cn } from "@/lib/utils"
 
 function NavItem({
@@ -59,17 +62,18 @@ export function AppLayout() {
     : me?.countries.map((c) => c.country_ref ?? c.name).join(", ")
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-card/85 shadow-sm backdrop-blur-md">
         <div className="flex h-16 items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            <Link to="/countries" className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/15">
-                <Globe className="h-5 w-5" />
-              </div>
+            <Link to="/" className="flex items-center gap-3">
+              <BrandMark className="h-10 w-10" />
               <div className="leading-tight">
-                <p className="font-semibold tracking-tight text-foreground">
-                  Contrôle budgétaire
+                <p className="flex items-center gap-1.5 font-semibold tracking-tight text-foreground">
+                  {BRAND.name}
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    v{BRAND.version}
+                  </span>
                 </p>
                 <p className="text-xs text-muted-foreground">{scope}</p>
               </div>
@@ -98,8 +102,8 @@ export function AppLayout() {
               </NavItem>
             )}
             {can("manage_users") && (
-              <NavItem to="/users" icon={Users}>
-                Comptes
+              <NavItem to="/configuration" icon={Settings}>
+                Configuration
               </NavItem>
             )}
 
@@ -116,10 +120,13 @@ export function AppLayout() {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl px-6 py-8">
+      {/* `min-h-0 flex-1` maintient le pied de page en bas même sur un écran
+          court, sans le coller au contenu sur un écran long. */}
+      <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
         <PasswordNotice />
         <Outlet />
       </main>
+      <AppFooter />
     </div>
   )
 }

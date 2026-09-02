@@ -12,7 +12,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { BrandMark } from "@/components/layout/brand-mark"
 import { useAuth } from "@/context/auth"
+import { BRAND, copyright } from "@/lib/brand"
 
 /** Ce que la plateforme garantit, rappelé au moment de la connexion. */
 const PROMESSES = [
@@ -77,12 +79,17 @@ export function LoginPage() {
         />
 
         <div className="relative flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-foreground/10">
-            <Wallet className="h-5 w-5" />
+          {/* Fond clair : l'emblème est en bleu nuit et vert, il disparaîtrait
+              sur le panneau sombre. */}
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-foreground p-1.5">
+            <BrandMark className="h-full w-full" />
           </div>
-          <span className="text-sm font-medium tracking-tight">
-            Contrôle budgétaire
-          </span>
+          <div className="leading-tight">
+            <p className="text-sm font-semibold tracking-tight">{BRAND.name}</p>
+            <p className="text-xs text-primary-foreground/60">
+              {BRAND.tagline}
+            </p>
+          </div>
         </div>
 
         <div className="relative flex flex-1 flex-col justify-center py-12">
@@ -115,9 +122,12 @@ export function LoginPage() {
           </div>
         </div>
 
-        <p className="relative text-xs text-primary-foreground/50">
-          Accès réservé aux comptes ouverts par le siège.
-        </p>
+        <div className="relative space-y-1 text-xs text-primary-foreground/50">
+          <p>Accès réservé aux comptes ouverts par le siège.</p>
+          <p>
+            {copyright()} Version {BRAND.version} — {BRAND.developer}.
+          </p>
+        </div>
       </aside>
 
       {/* Formulaire */}
@@ -125,16 +135,10 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Reprend l'identité sur mobile, où le panneau est masqué. */}
           <div className="mb-10 flex items-center gap-3 lg:hidden">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Wallet className="h-5 w-5" />
-            </div>
+            <BrandMark className="h-11 w-11" />
             <div className="leading-tight">
-              <p className="font-semibold tracking-tight">
-                Contrôle budgétaire
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Suivi des dépenses et des justificatifs
-              </p>
+              <p className="font-semibold tracking-tight">{BRAND.name}</p>
+              <p className="text-xs text-muted-foreground">{BRAND.tagline}</p>
             </div>
           </div>
 
@@ -215,6 +219,13 @@ export function LoginPage() {
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
             Mot de passe oublié ? Contactez un administrateur du siège.
+          </p>
+
+          {/* Le panneau porte déjà ces mentions sur grand écran. */}
+          <p className="mt-6 text-center text-xs text-muted-foreground/70 lg:hidden">
+            {copyright()}
+            <br />
+            Version {BRAND.version} — {BRAND.developer}
           </p>
         </div>
       </main>
