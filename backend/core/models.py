@@ -2,6 +2,8 @@
 
 from django.db import models
 
+from .africa import validate_african_country
+
 
 class TimeStampedModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
@@ -30,7 +32,13 @@ class Country(TimeStampedModel):
     """Pays : devise, fuseau horaire, managers, équipes et centres de coûts."""
 
     name = models.CharField("Nom", max_length=120, unique=True)
-    code = models.CharField("Code ISO", max_length=2, unique=True, help_text="ISO 3166-1 alpha-2")
+    code = models.CharField(
+        "Code ISO",
+        max_length=2,
+        unique=True,
+        help_text="ISO 3166-1 alpha-2 ; la plateforme ne suit que des pays africains.",
+        validators=[validate_african_country],
+    )
     country_ref = models.CharField(
         "Identifiant pays",
         max_length=10,

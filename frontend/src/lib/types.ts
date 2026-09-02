@@ -289,6 +289,12 @@ export interface ExchangeRate {
   created_at: string
 }
 
+/** Pays africain proposé à la création, non encore suivi. */
+export interface AvailableCountry {
+  code: string
+  name: string
+}
+
 // ---------------------------------------------------------------------------
 // Dossiers, dépenses et justificatifs
 // ---------------------------------------------------------------------------

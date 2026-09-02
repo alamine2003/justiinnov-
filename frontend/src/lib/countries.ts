@@ -1,5 +1,6 @@
 import { apiGet, apiPatch, apiPost } from "@/lib/api"
 import type {
+  AvailableCountry,
   ChangeLogEntry,
   CostCenter,
   CountryDetail,
@@ -130,4 +131,14 @@ export function updateMarketingCategory(id: number, data: unknown) {
 // ---------------------------------------------------------------------------
 export function fetchHistory(params?: Record<string, unknown>) {
   return apiGet<Paginated<ChangeLogEntry>>("/history/", params)
+}
+
+/**
+ * Pays africains que la plateforme ne suit pas encore.
+ *
+ * La liste vient du serveur, là où la validation s'applique : la recopier ici
+ * la ferait diverger au premier ajout.
+ */
+export function fetchAvailableCountries() {
+  return apiGet<AvailableCountry[]>("/countries/disponibles/")
 }

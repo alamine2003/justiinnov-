@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,7 +11,10 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
+import { fetchAvailableCountries } from "@/lib/countries"
+import type { AvailableCountry } from "@/lib/types"
 
 export interface CountryFormValues {
   name: string
@@ -48,6 +51,16 @@ export function CountryForm({
 }: CountryFormProps) {
   const [values, setValues] = useState<CountryFormValues>(initial ?? DEFAULTS)
   const [saving, setSaving] = useState(false)
+  const [disponibles, setDisponibles] = useState<AvailableCountry[]>([])
+  const creation = !initial
+
+  // Chargée à l'ouverture seulement : la liste change dès qu'un pays est créé.
+  useEffect(() => {
+    if (!open || !creation) return
+    void fetchAvailableCountries()
+      .then(setDisponibles)
+      .catch(() => setDisponibles([]))
+  }, [open, creation])
 
   const setField = (field: keyof CountryFormValues, value: unknown) => {
     setValues((v) => ({ ...v, [field]: value }))
@@ -77,33 +90,61 @@ export function CountryForm({
         <DialogHeader>
           <DialogTitle>{title ?? "Ajouter un pays"}</DialogTitle>
           <DialogDescription>
-            Définissez la devise, le fuseau horaire et le statut du pays.
+            Choisissez le pays, puis sa devise et son fuseau horaire.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
+          {creation ? (
             <div className="grid gap-2">
-              <Label htmlFor="name">Nom</Label>
-              <Input
-                id="name"
-                value={values.name}
-                onChange={(e) => setField("name", e.target.value)}
-                placeholder="France"
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="code">Code ISO</Label>
-              <Input
-                id="code"
+              <Label htmlFor="pays">Pays</Label>
+              <NativeSelect
+                id="pays"
                 value={values.code}
-                onChange={(e) => setField("code", e.target.value.toUpperCase())}
-                placeholder="FR"
-                maxLength={2}
+                onChange={(e) => {
+                  const choisi = disponibles.find((p) => p.code === e.target.value)
+                  setValues((v) => ({
+                    ...v,
+                    code: choisi?.code ?? "",
+                    name: choisi?.name ?? "",
+                  }))
+                }}
                 required
-              />
+              >
+                <option value="">Choisir un pays…</option>
+                {disponibles.map((pays) => (
+                  <option key={pays.code} value={pays.code}>
+                    {pays.name} ({pays.code})
+                  </option>
+                ))}
+              </NativeSelect>
+              <p className="text-xs text-muted-foreground">
+                La plateforme suit les filiales africaines du groupe. Les pays
+                déjà enregistrés n'apparaissent pas dans cette liste.
+              </p>
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Nom</Label>
+                <Input
+                  id="name"
+                  value={values.name}
+                  onChange={(e) => setField("name", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="code">Code ISO</Label>
+                <Input
+                  id="code"
+                  value={values.code}
+                  onChange={(e) => setField("code", e.target.value.toUpperCase())}
+                  maxLength={2}
+                  required
+                />
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="currency">Devise (ISO 4217)</Label>
@@ -111,7 +152,7 @@ export function CountryForm({
                 id="currency"
                 value={values.currency}
                 onChange={(e) => setField("currency", e.target.value.toUpperCase())}
-                placeholder="EUR"
+                placeholder="XOF"
                 maxLength={3}
                 required
               />
@@ -122,7 +163,7 @@ export function CountryForm({
                 id="currency_symbol"
                 value={values.currency_symbol}
                 onChange={(e) => setField("currency_symbol", e.target.value)}
-                placeholder="€"
+                placeholder="FCFA"
                 maxLength={4}
               />
             </div>
@@ -133,7 +174,7 @@ export function CountryForm({
               id="timezone"
               value={values.timezone}
               onChange={(e) => setField("timezone", e.target.value)}
-              placeholder="Europe/Paris"
+              placeholder="Africa/Porto-Novo"
               required
             />
           </div>

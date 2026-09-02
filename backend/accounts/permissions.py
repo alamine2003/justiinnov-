@@ -143,9 +143,10 @@ class RolePermission(BasePermission):
     - lecture : ``view.read_roles`` (tous les rôles si non déclaré) ;
     - écriture : ``view.write_roles``, qui doit être déclaré explicitement —
       une vue qui l'oublie est en lecture seule plutôt qu'ouverte à tous ;
-    - ``view.action_write_roles`` surcharge par action. Indispensable : valider
-      une dépense et la saisir relèvent de rôles différents, alors qu'il s'agit
-      de la même vue.
+    - ``view.action_write_roles`` et ``view.action_read_roles`` surchargent par
+      action. Indispensable : valider une dépense et la saisir relèvent de
+      rôles différents, alors qu'il s'agit de la même vue ; et une action de
+      lecture peut n'intéresser que ceux qui peuvent agir dessus.
     """
 
     message = "Votre rôle ne permet pas cette action."
@@ -154,12 +155,16 @@ class RolePermission(BasePermission):
         access = get_access(request.user)
         if access is None:
             return False
+        action = getattr(view, "action", None)
+
         if request.method in SAFE_METHODS:
+            per_action = getattr(view, "action_read_roles", {})
+            if action in per_action:
+                return access.role in per_action[action]
             read_roles = getattr(view, "read_roles", None)
             return read_roles is None or access.role in read_roles
 
         per_action = getattr(view, "action_write_roles", {})
-        action = getattr(view, "action", None)
         if action in per_action:
             return access.role in per_action[action]
         return access.role in getattr(view, "write_roles", frozenset())

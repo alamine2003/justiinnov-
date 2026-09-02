@@ -232,7 +232,7 @@ function RateForm({
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
                 maxLength={3}
-                placeholder="EUR"
+                placeholder="MAD"
                 required
               />
             </div>
@@ -245,7 +245,7 @@ function RateForm({
                 min="0.000001"
                 value={rate}
                 onChange={(e) => setRate(e.target.value)}
-                placeholder="655.957000"
+                placeholder="65.500000"
                 required
               />
             </div>

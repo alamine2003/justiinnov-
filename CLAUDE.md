@@ -38,6 +38,10 @@ trouvés qu'en regardant les images.
 Elles ne sont pas des préférences : les enfreindre casse la raison d'être de
 l'application.
 
+- **Le périmètre est l'Afrique.** Un pays se crée depuis la liste des codes
+  ISO d'Afrique (`backend/core/africa.py`) ; tout autre code est refusé.
+  Étendre le périmètre demande de modifier ce fichier, donc une décision
+  explicite.
 - **Une dépense soumise est irréversible.** Elle ne revient pas au brouillon,
   ne se modifie plus, ne se supprime pas. Seul un brouillon — jamais soumis,
   donc sans valeur probante — peut être retiré par son auteur.

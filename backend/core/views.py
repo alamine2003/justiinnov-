@@ -3,6 +3,8 @@
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 
 from accounts.permissions import (
@@ -12,6 +14,7 @@ from accounts.permissions import (
 )
 from accounts.scoping import CountryScopedMixin
 
+from .africa import AFRICAN_COUNTRIES
 from .mixins import NoDestroyModelViewSet
 from .models import (
     ChangeLog,
@@ -72,6 +75,8 @@ class CountryViewSet(ScopedViewSet):
     search_fields = ["name", "code", "country_ref", "timezone"]
     ordering_fields = ["name", "code", "created_at"]
     write_roles = REFERENTIAL_WRITE_ROLES
+    # La liste des pays à créer n'intéresse que ceux qui peuvent en créer.
+    action_read_roles = {"disponibles": REFERENTIAL_WRITE_ROLES}
     # Le pays est l'objet lui-même : il n'y a pas de champ « pays » à valider.
     country_lookup = "pk"
     country_field = None
@@ -82,6 +87,29 @@ class CountryViewSet(ScopedViewSet):
         if self.action == "retrieve":
             return CountryDetailSerializer
         return CountryListSerializer
+
+    @action(detail=False, methods=["get"], url_path="disponibles")
+    def disponibles(self, request):
+        """Pays africains que la plateforme ne suit pas encore.
+
+        Le formulaire de création propose cette liste plutôt que de laisser
+        deviner un code ISO : une faute de frappe se traduisait par un refus
+        sans que rien n'indique quels codes sont acceptés. La liste vit côté
+        serveur, là où la validation s'applique — la recopier dans le frontend
+        la ferait diverger.
+        """
+        deja_suivis = set(
+            Country.objects.values_list("code", flat=True)
+        )
+        return Response(
+            [
+                {"code": code, "name": nom}
+                for code, nom in sorted(
+                    AFRICAN_COUNTRIES.items(), key=lambda item: item[1]
+                )
+                if code not in deja_suivis
+            ]
+        )
 
 
 class ManagerViewSet(ScopedViewSet):

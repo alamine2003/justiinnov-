@@ -147,14 +147,14 @@ class BudgetFiguresTests(BudgetTestCase):
 class ExchangeRateTests(BudgetTestCase):
     def test_conversion_au_taux_en_vigueur_a_la_date(self):
         ExchangeRate.objects.create(
-            currency="EUR", rate_to_xof=Decimal("655.957"), valid_from=date(2026, 1, 1)
+            currency="MAD", rate_to_xof=Decimal("655.957"), valid_from=date(2026, 1, 1)
         )
         ExchangeRate.objects.create(
-            currency="EUR", rate_to_xof=Decimal("700.000000"), valid_from=date(2026, 6, 1)
+            currency="MAD", rate_to_xof=Decimal("700.000000"), valid_from=date(2026, 6, 1)
         )
 
-        self.assertEqual(to_xof(Decimal("10"), "EUR", date(2026, 3, 1)), Decimal("6559.57"))
-        self.assertEqual(to_xof(Decimal("10"), "EUR", date(2026, 9, 1)), Decimal("7000.00"))
+        self.assertEqual(to_xof(Decimal("10"), "MAD", date(2026, 3, 1)), Decimal("6559.57"))
+        self.assertEqual(to_xof(Decimal("10"), "MAD", date(2026, 9, 1)), Decimal("7000.00"))
 
     def test_devise_sans_taux_n_est_pas_convertie(self):
         """Renvoyer None plutôt que zéro : un total consolidé ne doit pas

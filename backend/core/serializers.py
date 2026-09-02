@@ -128,6 +128,14 @@ class CountryWriteSerializer(serializers.ModelSerializer):
             "timezone", "is_active", "managers",
         ]
 
+    def validate_code(self, value):
+        """Normalise le code avant de l'enregistrer.
+
+        « ci » et « CI » désignent le même pays ; sans cela, la contrainte
+        d'unicité laisserait passer un doublon de casse.
+        """
+        return value.strip().upper()
+
 
 class ChangeLogSerializer(serializers.ModelSerializer):
     action_display = serializers.CharField(source="get_action_display", read_only=True)
