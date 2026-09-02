@@ -64,7 +64,11 @@ services:
       - "8000:8000"
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      # En développement, Vite sert le code monté en volume : il faut Node,
+      # pas l'image nginx de production, qui n'a pas npm.
+      target: deps
     container_name: justi_frontend
     command: sh -c "npm install && npm run dev"
     environment:
