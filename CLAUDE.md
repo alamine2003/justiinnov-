@@ -59,6 +59,9 @@ l'application.
   jamais une dépense, pas même la sienne : il la soumet, et le siège tranche.
   Et celui qui a saisi une dépense ne peut pas la justifier lui-même, fût-il
   au siège — il faut deux personnes.
+- **Déclarer tient en une action.** Le pays remplit ses lignes, joint la
+  pièce et soumet le dossier : ses lignes partent avec lui. Un dossier vide ne
+  se soumet pas ; un dossier sans pièce se soumet avec un avertissement.
 - **Un rejet exige un motif.**
 - **Une requête `GET` n'écrit rien.** Les alertes sont calculées à la
   lecture ; leur notification passe par `manage.py notify_alerts`, pour ne

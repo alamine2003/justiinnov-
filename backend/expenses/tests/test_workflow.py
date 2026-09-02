@@ -331,6 +331,7 @@ class OverrunPolicyTests(ExpenseTestCase):
 
 class DossierWorkflowTests(ExpenseTestCase):
     def test_dossier_sans_justificatif_ne_peut_etre_valide(self):
+        self.make_expense()
         self.login(self.owner)
         self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
         self.login(self.controller)
@@ -709,3 +710,85 @@ class SeparationOfDutiesTests(ExpenseTestCase):
         response = self.client.post(f"/api/expenses/{propre.pk}/justify/")
 
         self.assertEqual(response.data["status"], Status.JUSTIFIED)
+
+
+class DossierSubmissionTests(ExpenseTestCase):
+    """Côté pays, déclarer tient en une action : remplir, joindre, soumettre."""
+
+    def setUp(self):
+        super().setUp()
+        self.login(self.owner)
+
+    def test_le_dossier_emporte_ses_lignes(self):
+        premiere = self.make_expense(amount="1000.00")
+        seconde = self.make_expense(amount="2000.00")
+
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+
+        self.assertEqual(response.data["status"], Status.SUBMITTED)
+        premiere.refresh_from_db()
+        seconde.refresh_from_db()
+        self.assertEqual(premiere.status, Status.SUBMITTED)
+        self.assertEqual(seconde.status, Status.SUBMITTED)
+
+    def test_un_dossier_sans_ligne_ne_se_soumet_pas(self):
+        """« Avant tout il doit remplir les lignes »."""
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("expenses", response.data)
+
+    def test_soumettre_sans_piece_passe_mais_avertit(self):
+        """Bloquer reviendrait à ce qu'une dépense sans reçu ne soit jamais
+        déclarée : l'argent sortirait sans laisser de trace."""
+        self.make_expense(amount="1000.00")
+
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("sans preuve", response.data["warning"])
+
+    def test_les_lignes_soumises_engagent_l_enveloppe(self):
+        self.make_expense(amount="120000.00")
+        self.make_expense(amount="80000.00")
+
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+
+        figures = budget_figures(self.budget)
+        self.assertEqual(figures["engaged"], Decimal("200000.00"))
+
+    def test_chaque_ligne_emportee_est_journalisee(self):
+        self.make_expense(amount="1000.00")
+        self.make_expense(amount="2000.00")
+
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+
+        entrees = AuditLog.objects.filter(
+            object_type="Expense", action=AuditLog.Action.SUBMITTED
+        )
+        self.assertEqual(entrees.count(), 2)
+        self.assertEqual(entrees.first().detail["note"], "soumise avec son dossier")
+
+    def test_une_ligne_deja_soumise_n_est_pas_resoumise(self):
+        deja = self.make_expense(amount="1000.00", status=Status.JUSTIFIED)
+        self.make_expense(amount="2000.00")
+
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+
+        deja.refresh_from_db()
+        self.assertEqual(deja.status, Status.JUSTIFIED)
+
+    def test_le_controle_est_prevenu_une_fois_par_dossier(self):
+        """Un dossier de vingt lignes ne doit pas produire vingt notifications."""
+        from notifications.models import Notification
+
+        for _ in range(3):
+            self.make_expense(amount="1000.00")
+
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+
+        recues = Notification.objects.filter(
+            recipient=self.controller, kind=Notification.Kind.EXPENSE_SUBMITTED
+        )
+        self.assertEqual(recues.count(), 1)
+        self.assertIn(self.dossier.number, recues.get().title)

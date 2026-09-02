@@ -293,6 +293,16 @@ suivent chacun leur circuit :
 brouillon → soumis → en contrôle → justifié / non justifié → clôturé
 ```
 
+Côté pays, déclarer une dépense tient en **une action** : remplir les lignes,
+joindre le justificatif, soumettre le dossier — ses lignes partent avec lui.
+Le reste est calculé par le système et relève du siège.
+
+Un dossier ne se soumet pas vide : les lignes viennent d'abord. En revanche,
+l'absence de justificatif **n'empêche pas** la déclaration, elle l'accompagne
+d'un avertissement. Bloquer signifierait qu'une dépense sans reçu ne serait
+jamais déclarée : l'argent sortirait sans laisser de trace, ce qui est pire que
+l'écart.
+
 Deux principes gouvernent ce circuit :
 
 **Une fois soumise, une dépense est irréversible.** Elle ne revient jamais au

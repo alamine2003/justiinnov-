@@ -35,7 +35,7 @@ from .serializers import (
     TransitionSerializer,
 )
 from .services import attach_budget, check_budget_capacity
-from .workflow import TransitionError, next_status
+from .workflow import Status, TransitionError, next_status
 
 #: Rôle habilité pour chaque action du workflow.
 ACTION_ROLES = {
@@ -45,6 +45,22 @@ ACTION_ROLES = {
     "reject": VALIDATION_ROLES,
     "close": VALIDATION_ROLES,
 }
+
+#: Signalé au pays quand il soumet sans pièce. La soumission passe quand même :
+#: bloquer reviendrait à ce qu'une dépense sans reçu ne soit jamais déclarée,
+#: donc à ce que l'argent sorte sans laisser de trace — pire que l'écart.
+SANS_PREUVE = (
+    "Aucun justificatif n'est joint : la dépense est déclarée sans preuve, "
+    "elle creusera l'écart et sera signalée au siège."
+)
+
+
+def _sans_preuve(dossier):
+    """Le dossier est-il dépourvu de pièce exploitable ?"""
+    return not dossier.proofs.exclude(
+        status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED]
+    ).exists()
+
 
 #: Action de workflow → action d'audit.
 AUDIT_ACTIONS = {
@@ -204,15 +220,68 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         super().perform_destroy(instance)
 
     def before_transition(self, dossier, name, access):
+        if name == "submit":
+            return self._soumettre_les_lignes(dossier, access)
+
         if name == "justify" and not dossier.proofs.exclude(
             status=Proof.ProofStatus.REJECTED
         ).exists():
-            # Valider un dossier sans preuve viderait de son sens l'ensemble
+            # Justifier un dossier sans preuve viderait de son sens l'ensemble
             # documentaire que le N°ORDRE représente.
             raise ValidationError(
-                {"proofs": "Un dossier ne peut être validé sans justificatif."}
+                {"proofs": "Un dossier ne peut être justifié sans justificatif."}
             )
         return None
+
+    def _soumettre_les_lignes(self, dossier, access):
+        """Le dossier et ses lignes partent ensemble.
+
+        Côté pays, déclarer une dépense doit tenir en une action : remplir les
+        lignes, joindre la pièce, soumettre. Soumettre chaque ligne puis le
+        dossier serait une cérémonie sans objet.
+        """
+        lignes = list(dossier.expenses.all())
+        if not lignes:
+            raise ValidationError(
+                {
+                    "expenses": (
+                        "Un dossier se soumet avec ses lignes de dépenses : "
+                        "ajoutez-en au moins une."
+                    )
+                }
+            )
+
+        avertissements = []
+        for expense in lignes:
+            if expense.status != Status.DRAFT:
+                continue
+            budget = attach_budget(expense)
+            # Verrou : deux soumissions simultanées ne doivent pas franchir la
+            # même enveloppe chacune de leur côté.
+            budget = Budget.objects.select_for_update().get(pk=budget.pk)
+            expense.budget = budget
+            avertissement = check_budget_capacity(expense, budget, access.role)
+            if avertissement:
+                avertissements.append(avertissement)
+
+            expense.status = Status.SUBMITTED
+            expense.save()
+            record(
+                self.request,
+                AuditLog.Action.SUBMITTED,
+                expense,
+                from_status=Status.DRAFT,
+                to_status=Status.SUBMITTED,
+                note="soumise avec son dossier",
+            )
+
+        if _sans_preuve(dossier):
+            avertissements.append(SANS_PREUVE)
+        return " ".join(avertissements) or None
+
+    def after_transition(self, request, dossier, name, note):
+        if name == "submit":
+            triggers.dossier_submitted(dossier, request.user)
 
 
 class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
@@ -310,6 +379,11 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
 
         if name not in ("submit", "justify"):
             return None
+
+        avertissements = []
+        if name == "submit" and _sans_preuve(expense.dossier):
+            avertissements.append(SANS_PREUVE)
+
         budget = attach_budget(expense)
         # Verrou sur l'enveloppe : sans lui, deux soumissions simultanées
         # liraient le même total engagé et franchiraient toutes deux une
@@ -317,9 +391,12 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         budget = Budget.objects.select_for_update().get(pk=budget.pk)
         expense.budget = budget
         # L'imputation est persistée par la sauvegarde de la transition.
-        return check_budget_capacity(
+        depassement = check_budget_capacity(
             expense, budget, access.role, at_approval=(name == "justify")
         )
+        if depassement:
+            avertissements.append(depassement)
+        return " ".join(avertissements) or None
 
     def after_transition(self, request, expense, name, note):
         if name == "submit":

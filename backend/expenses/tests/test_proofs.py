@@ -205,6 +205,7 @@ class ProofReviewTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_dossier_avec_justificatif_peut_etre_justifie(self):
+        self.make_expense()
         self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
         self.login(self.controller)
 
@@ -215,6 +216,7 @@ class ProofReviewTests(ExpenseTestCase):
     def test_une_preuve_reste_deposable_apres_soumission(self):
         """Rassembler la preuve est l'objet même de l'application : une
         dépense non justifiée doit pouvoir être couverte après coup."""
+        self.make_expense()
         self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
 
         response = self.client.post(
@@ -226,6 +228,7 @@ class ProofReviewTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_dossier_cloture_refuse_un_nouveau_justificatif(self):
+        self.make_expense()
         self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
         self.login(self.controller)
         self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")

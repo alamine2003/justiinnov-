@@ -53,6 +53,30 @@ def expense_submitted(expense, actor):
     )
 
 
+def dossier_submitted(dossier, actor):
+    """Prévient le contrôle qu'un dossier complet attend son examen.
+
+    Une notification par dossier, et non par ligne : un dossier de vingt
+    dépenses en produirait vingt, ce qui noierait l'information.
+    """
+    totaux = dossier.totals()
+    return _safe(
+        lambda: notify(
+            recipients_for(CONTROLLERS, dossier.country).exclude(pk=actor.pk),
+            kind=Notification.Kind.EXPENSE_SUBMITTED,
+            level=Notification.Level.INFO,
+            title=f"Dossier à contrôler — {dossier.number}",
+            body=(
+                f"{dossier.label} · {totaux['amount']} "
+                f"{dossier.country.currency} sur {dossier.expenses.count()} ligne(s)."
+            ),
+            link=f"/dossiers/{dossier.pk}",
+            country=dossier.country,
+            dedup_key=f"dossier_submitted:{dossier.pk}:{dossier.updated_at.isoformat()}",
+        )
+    )
+
+
 def expense_rejected(expense, actor, motive):
     """Prévient le saisisseur du rejet et de son motif."""
     from django.contrib.auth.models import User
