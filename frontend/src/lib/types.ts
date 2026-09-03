@@ -386,6 +386,10 @@ export interface Expense {
   marketing_category: number | null
   beneficiary: number | null
   beneficiary_name: string | null
+  /** Devise du décaissement ; vide si la dépense est dans celle du pays. */
+  original_currency: string
+  original_amount: string | null
+  original_rate: string | null
   budget: number | null
   budget_label: string | null
   amount: string

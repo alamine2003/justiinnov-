@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table"
 import { ExpenseForm } from "@/components/expenses/expense-form"
 import { ProofPanel } from "@/components/expenses/proof-panel"
+import { OriginalAmount } from "@/components/expenses/original-amount"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions } from "@/components/expenses/workflow-actions"
 import { useAuth } from "@/context/auth"
@@ -255,6 +256,10 @@ export function DossierDetailPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {formatAmount(expense.amount)}
+                        <OriginalAmount
+                          currency={expense.original_currency}
+                          amount={expense.original_amount}
+                        />
                       </TableCell>
                       <TableCell className="text-right">
                         {formatAmount(expense.justified_amount)}
@@ -304,6 +309,9 @@ export function DossierDetailPage() {
                           )}
                           <WorkflowActions
                             status={expense.status}
+                            // Le dossier emporte ses lignes : tant qu'il est
+                            // en brouillon, c'est lui qu'on soumet.
+                            hideSubmit={dossier.status === "draft"}
                             onTransition={(action, note) =>
                               runTransition(action, note, (a, n) =>
                                 transitionExpense(expense.id, a, n),

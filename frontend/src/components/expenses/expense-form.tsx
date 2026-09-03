@@ -56,6 +56,10 @@ export function ExpenseForm({
   const [date, setDate] = useState(toLocalInput(new Date().toISOString()))
   const [place, setPlace] = useState("")
   const [amount, setAmount] = useState("")
+  // Devise du décaissement : vide tant que la dépense est faite dans la
+  // devise du pays, cas de très loin le plus fréquent.
+  const [devise, setDevise] = useState("")
+  const [montantDevise, setMontantDevise] = useState("")
   const [justified, setJustified] = useState("0")
   const [team, setTeam] = useState<number | "">("")
   const [project, setProject] = useState<number | "">("")
@@ -73,6 +77,8 @@ export function ExpenseForm({
       setDate(toLocalInput(editing.date))
       setPlace(editing.place)
       setAmount(editing.amount)
+      setDevise(editing.original_currency ?? "")
+      setMontantDevise(editing.original_amount ?? "")
       setJustified(editing.justified_amount)
       setTeam(editing.team ?? "")
       setProject(editing.project ?? "")
@@ -84,6 +90,8 @@ export function ExpenseForm({
       setDate(toLocalInput(new Date().toISOString()))
       setPlace("")
       setAmount("")
+      setDevise("")
+      setMontantDevise("")
       setJustified("0")
       setTeam("")
       setProject("")
@@ -98,11 +106,17 @@ export function ExpenseForm({
     setSaving(true)
     setError(null)
     try {
+      const enDeviseEtrangere = devise.trim() !== "" && montantDevise !== ""
       await onSave({
         title,
         date: new Date(date).toISOString(),
         place,
-        amount,
+        // En devise étrangère, le serveur calcule le montant du pays : le lui
+        // envoyer serait lui proposer un taux, ce qui n'est pas au pays d'en
+        // décider.
+        amount: enDeviseEtrangere ? undefined : amount,
+        original_currency: enDeviseEtrangere ? devise.trim().toUpperCase() : "",
+        original_amount: enDeviseEtrangere ? montantDevise : null,
         justified_amount: justified || "0",
         team: team === "" ? null : team,
         project: project === "" ? null : project,
@@ -118,6 +132,7 @@ export function ExpenseForm({
     }
   }
 
+  const devisePresente = devise.trim() !== ""
   const gap = (Number(amount || 0) - Number(justified || 0)).toLocaleString("fr-FR")
 
   return (
@@ -181,7 +196,9 @@ export function ExpenseForm({
                 min="0"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                required
+                disabled={devisePresente}
+                placeholder={devisePresente ? "converti par le serveur" : undefined}
+                required={!devisePresente}
               />
             </div>
             <div className="grid gap-2">
@@ -200,6 +217,48 @@ export function ExpenseForm({
           <p className="text-xs text-muted-foreground">
             Écart calculé : <span className="font-medium">{gap}</span> {currency}
           </p>
+
+          {/* Décaissement dans une autre devise (§5.3). Replié par défaut :
+              la quasi-totalité des dépenses est faite dans la devise du pays,
+              et deux champs de plus alourdiraient chaque saisie. */}
+          <details
+            className="rounded-lg border border-border/60 p-3"
+            open={devisePresente}
+          >
+            <summary className="cursor-pointer text-sm font-medium">
+              Payé dans une autre devise
+            </summary>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Saisissez le montant tel qu'il figure sur la pièce. Le serveur le
+              convertit en {currency} au taux du jour de la dépense et fige ce
+              taux : le chiffre ne bougera plus.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="exp-devise">Devise (ISO 4217)</Label>
+                <Input
+                  id="exp-devise"
+                  value={devise}
+                  onChange={(e) => setDevise(e.target.value.toUpperCase())}
+                  maxLength={3}
+                  placeholder="EUR"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="exp-montant-devise">Montant décaissé</Label>
+                <Input
+                  id="exp-montant-devise"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={montantDevise}
+                  onChange={(e) => setMontantDevise(e.target.value)}
+                  placeholder="120.00"
+                  required={devisePresente}
+                />
+              </div>
+            </div>
+          </details>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">

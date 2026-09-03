@@ -435,11 +435,20 @@ class ExportTests(DashboardTestCase):
         response = self.client.get("/api/exports/expenses.xlsx", {"year": self.year})
 
         sheet = load_workbook(BytesIO(response.content)).active
+        # Les colonnes sont retrouvées par leur en-tête : les repérer par leur
+        # rang casserait au premier ajout de colonne.
+        entetes = [cell.value for cell in sheet[1]]
         lignes = list(sheet.iter_rows(min_row=2, values_only=True))
-        montants = {ligne[6] for ligne in lignes if ligne[0]}
-        self.assertIn(300000.0, montants)
+
+        def colonne(nom):
+            index = entetes.index(nom)
+            return {ligne[index] for ligne in lignes}
+
+        self.assertIn(300000.0, colonne("DEPENSES"))
         # La nuance « justif incomplet » du fichier source est conservée.
-        self.assertIn("Facture (justif incomplet)", {ligne[10] for ligne in lignes})
+        self.assertIn(
+            "Facture (justif incomplet)", colonne("PIECES JUSTIFICATIVES")
+        )
 
     def test_export_limite_au_perimetre(self):
         self.login(self.rep_ivoire)

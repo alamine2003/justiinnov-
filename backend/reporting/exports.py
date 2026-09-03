@@ -40,6 +40,11 @@ EXPENSE_COLUMNS = [
     ("OWNER", 20),
     ("LIBELLE DES TRANSACTIONS", 38),
     ("DEPENSES", 16),
+    # Ce que porte la pièce, quand le décaissement a eu lieu dans une autre
+    # devise : sans ces colonnes, le rapprochement avec le justificatif est
+    # impossible, aucun des chiffres du classeur n'y figurant.
+    ("DEVISE D'ORIGINE", 16),
+    ("MONTANT D'ORIGINE", 18),
     ("MONTANT JUSTIFIER", 18),
     ("ECART", 14),
     ("STATUT", 14),
@@ -95,6 +100,10 @@ def build_expenses_workbook(dossiers):
                 expense.owner.name if expense.owner else "",
                 expense.title,
                 float(expense.amount),
+                expense.original_currency or "",
+                float(expense.original_amount)
+                if expense.original_amount is not None
+                else "",
                 float(expense.justified_amount),
                 float(gap),
                 expense.get_status_display(),
@@ -107,9 +116,9 @@ def build_expenses_workbook(dossiers):
     if row_index > 2:
         sheet.cell(row=row_index, column=6, value="TOTAL").font = Font(bold=True)
         sheet.cell(row=row_index, column=7, value=float(totals["amount"])).font = Font(bold=True)
-        sheet.cell(row=row_index, column=8, value=float(totals["justified"])).font = Font(bold=True)
+        sheet.cell(row=row_index, column=10, value=float(totals["justified"])).font = Font(bold=True)
         sheet.cell(
-            row=row_index, column=9,
+            row=row_index, column=11,
             value=float(totals["amount"] - totals["justified"]),
         ).font = Font(bold=True)
 

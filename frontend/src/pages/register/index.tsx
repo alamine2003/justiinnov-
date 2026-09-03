@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { OriginalAmount } from "@/components/expenses/original-amount"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
@@ -277,6 +278,10 @@ export function RegisterPage() {
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatAmount(entry.amount, entry.currency)}
+                        <OriginalAmount
+                          currency={entry.original_currency}
+                          amount={entry.original_amount}
+                        />
                       </TableCell>
                       <TableCell className="text-right">
                         {formatAmount(entry.justified_amount)}

@@ -7,6 +7,8 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, compute_sha256
+from budget.aggregates import convert
+
 from .workflow import LOCKED_STATUSES, PROOF_LOCKED_STATUSES
 
 
@@ -150,13 +152,19 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "project", "project_name", "expense_title", "marketing_category",
             "beneficiary", "beneficiary_name", "budget", "budget_label",
             "amount", "justified_amount", "gap",
+            "original_currency", "original_amount", "original_rate",
             "payment_method", "payment_method_display",
             "status", "status_display", "note", "created_by",
             "created_at", "updated_at",
         ]
-        # Le statut ne se modifie que par les actions de workflow, et
-        # l'imputation budgétaire est résolue par le serveur.
-        read_only_fields = ["status", "budget", "created_by"]
+        # Le statut ne se modifie que par les actions de workflow ;
+        # l'imputation budgétaire et le taux appliqué sont résolus par le
+        # serveur — un taux fourni par le client serait un taux choisi.
+        read_only_fields = ["status", "budget", "created_by", "original_rate"]
+        extra_kwargs = {
+            # Calculé lorsque la dépense est décaissée dans une autre devise.
+            "amount": {"required": False},
+        }
 
     def get_budget_label(self, expense):
         return str(expense.budget) if expense.budget_id else None
@@ -180,7 +188,80 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {field: "Cette entité appartient à un autre pays."}
                 )
+
+        self._resoudre_la_devise(attrs, country)
         return attrs
+
+    def _resoudre_la_devise(self, attrs, country):
+        """Convertit un décaissement fait dans une autre devise (§5.3).
+
+        Une mission au Togo peut payer un hôtel en euros : la pièce porte
+        120 EUR. Le montant d'origine est conservé pour que le contrôleur
+        retrouve le chiffre du justificatif, et ``amount`` reçoit sa
+        conversion dans la devise du pays — c'est elle qui pèse sur
+        l'enveloppe, et c'est elle qui garde les agrégats monodevise.
+
+        Le taux est celui du jour de la dépense, figé à la saisie : un
+        rapport tiré l'an prochain doit donner le même chiffre
+        qu'aujourd'hui.
+        """
+        devise = attrs.get("original_currency")
+        montant = attrs.get("original_amount")
+        if devise is not None:
+            devise = devise.strip().upper()
+            attrs["original_currency"] = devise
+
+        if not devise or montant is None:
+            # Dépense dans la devise du pays : rien à convertir, et rien à
+            # conserver qui ferait croire à un décaissement étranger.
+            if not devise and montant is None:
+                attrs["original_currency"] = ""
+                attrs["original_amount"] = None
+                attrs["original_rate"] = None
+            if attrs.get("amount") is None and self.instance is None:
+                raise serializers.ValidationError(
+                    {"amount": "Le montant de la dépense est requis."}
+                )
+            if devise or montant is not None:
+                raise serializers.ValidationError(
+                    {
+                        "original_currency": (
+                            "Indiquez à la fois la devise et le montant "
+                            "décaissés, ou aucun des deux."
+                        )
+                    }
+                )
+            return
+
+        if country is None:
+            return
+
+        if devise == country.currency:
+            # Même devise : la conversion serait l'identité, et conserver un
+            # « montant d'origine » laisserait croire à un décaissement
+            # étranger.
+            attrs["amount"] = montant
+            attrs["original_currency"] = ""
+            attrs["original_amount"] = None
+            attrs["original_rate"] = None
+            return
+
+        date = attrs.get("date") or getattr(self.instance, "date", None)
+        converti, taux = convert(
+            montant, devise, country.currency, date.date() if date else None
+        )
+        if converti is None:
+            raise serializers.ValidationError(
+                {
+                    "original_currency": (
+                        f"Aucun taux connu pour convertir {devise} en "
+                        f"{country.currency} à cette date. Publiez-le dans "
+                        "Configuration › Taux de change."
+                    )
+                }
+            )
+        attrs["amount"] = converti
+        attrs["original_rate"] = taux
 
 
 class ExpenseProofSerializer(serializers.ModelSerializer):

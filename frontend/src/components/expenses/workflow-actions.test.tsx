@@ -77,3 +77,25 @@ describe("WorkflowActions", () => {
     expect(container.textContent).toBe("")
   })
 })
+
+describe("hideSubmit", () => {
+  it("masque « Soumettre » quand le dossier est encore un brouillon", () => {
+    // Le serveur refuse : une ligne ne devance pas son dossier. Le bouton ne
+    // menait qu'à un message d'erreur.
+    profil = "saisie"
+
+    render(
+      <WorkflowActions status="draft" onTransition={vi.fn()} hideSubmit />,
+    )
+
+    expect(screen.queryByRole("button", { name: /Soumettre/ })).toBeNull()
+  })
+
+  it("le laisse quand le dossier est déjà déclaré", () => {
+    profil = "saisie"
+
+    afficher("draft")
+
+    expect(screen.getByRole("button", { name: /Soumettre/ })).toBeTruthy()
+  })
+})

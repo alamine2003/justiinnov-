@@ -46,21 +46,30 @@ interface WorkflowActionsProps {
   status: WorkflowStatus
   onTransition: (action: TransitionName, note?: string) => Promise<void>
   size?: "sm" | "default"
+  /**
+   * Masque « Soumettre » sur une ligne dont le dossier est encore un
+   * brouillon. Le serveur le refuse — une ligne ne devance pas son dossier —
+   * et le bouton ne menait qu'à un message d'erreur.
+   */
+  hideSubmit?: boolean
 }
 
 export function WorkflowActions({
   status,
   onTransition,
   size = "sm",
+  hideSubmit = false,
 }: WorkflowActionsProps) {
   const { can } = useAuth()
   const [busy, setBusy] = useState<TransitionName | null>(null)
   const [rejecting, setRejecting] = useState(false)
 
   // Soumettre relève de la saisie, les autres transitions du contrôle.
-  const allowed = (AVAILABLE[status] ?? []).filter((action) =>
-    can(action === "submit" ? "record_expenses" : "validate_expenses"),
-  )
+  const allowed = (AVAILABLE[status] ?? [])
+    .filter((action) => !(hideSubmit && action === "submit"))
+    .filter((action) =>
+      can(action === "submit" ? "record_expenses" : "validate_expenses"),
+    )
 
   if (allowed.length === 0) return null
 

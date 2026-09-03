@@ -241,10 +241,40 @@ class Expense(TimeStampedModel):
     amount = models.DecimalField(
         "Dépense", max_digits=16, decimal_places=2,
         validators=[MinValueValidator(Decimal("0"))],
+        help_text="Dans la devise du pays ; c'est ce montant qui pèse sur l'enveloppe.",
     )
     justified_amount = models.DecimalField(
         "Montant justifié", max_digits=16, decimal_places=2, default=ZERO,
         validators=[MinValueValidator(Decimal("0"))],
+    )
+
+    # --- Décaissement dans une autre devise (§5.3) -------------------------
+    #
+    # Une mission au Togo peut payer un hôtel en euros. Le reçu porte alors
+    # 120 EUR, pas son équivalent en francs. Conserver le montant d'origine
+    # est nécessaire pour rapprocher la dépense de sa pièce : un contrôleur
+    # qui ne lirait que la conversion ne retrouverait aucun des deux chiffres
+    # sur le justificatif.
+    #
+    # L'enveloppe, elle, reste dans la devise du pays : ``amount`` porte la
+    # conversion, figée au taux du jour de la dépense, de sorte que les
+    # agrégats restent monodevise — et justes.
+    original_currency = models.CharField(
+        "Devise du décaissement", max_length=3, blank=True,
+        help_text="Vide si la dépense a été faite dans la devise du pays.",
+    )
+    original_amount = models.DecimalField(
+        "Montant décaissé", max_digits=16, decimal_places=2,
+        null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Tel qu'il figure sur la pièce, dans sa devise d'origine.",
+    )
+    original_rate = models.DecimalField(
+        "Taux appliqué", max_digits=18, decimal_places=6, null=True, blank=True,
+        help_text=(
+            "Figé à la saisie. Le conserver permet de refaire le calcul plus "
+            "tard, même si la table des taux a depuis été corrigée."
+        ),
     )
     payment_method = models.CharField(
         "Mode de paiement", max_length=20,

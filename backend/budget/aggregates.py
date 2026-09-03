@@ -98,3 +98,27 @@ def to_xof(amount, currency, on_date=None):
     if rate is None:
         return None
     return (Decimal(amount) * rate).quantize(CENTS)
+
+
+def convert(amount, from_currency, to_currency, on_date=None):
+    """Convertit entre deux devises, en passant par le FCFA.
+
+    Tous les taux sont donnés vers le FCFA : une conversion croisée est donc
+    le rapport des deux. Renvoie ``(montant, taux)``, ou ``(None, None)``
+    faute de taux connu — jamais zéro, qui ferait disparaître la dépense d'un
+    total sans que rien ne le signale.
+    """
+    if amount is None:
+        return None, None
+    if from_currency == to_currency:
+        return Decimal(amount).quantize(CENTS), Decimal("1")
+
+    source = rate_to_xof(from_currency, on_date)
+    cible = rate_to_xof(to_currency, on_date)
+    if source is None or cible is None or not cible:
+        return None, None
+
+    rate = source / cible
+    return (Decimal(amount) * rate).quantize(CENTS), rate.quantize(
+        Decimal("0.000001")
+    )
