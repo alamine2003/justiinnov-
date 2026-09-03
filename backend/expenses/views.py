@@ -150,14 +150,19 @@ class WorkflowMixin:
         return self.perform_transition(request, "close")
 
 
-class BeneficiaryViewSet(NoDestroyModelViewSet):
-    """Prospects et bénéficiaires — référentiel commun à tous les pays."""
+class BeneficiaryViewSet(CountryScopedMixin, NoDestroyModelViewSet):
+    """Prospects, clients, fournisseurs et bénéficiaires d'un pays.
 
-    queryset = Beneficiary.objects.all()
+    Le référentiel était commun : un pays lisait les fournisseurs et les
+    prospects du voisin, de quoi reconstituer qui il démarche et qui il paie.
+    Il est cloisonné comme le reste.
+    """
+
+    queryset = Beneficiary.objects.select_related("country").all()
     serializer_class = BeneficiarySerializer
     permission_classes = [RolePermission]
     write_roles = EXPENSE_WRITE_ROLES
-    filterset_fields = ["kind", "is_active"]
+    filterset_fields = ["kind", "is_active", "country"]
     search_fields = ["name", "contact"]
     ordering_fields = ["name", "created_at"]
 

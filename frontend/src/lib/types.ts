@@ -475,12 +475,23 @@ export interface DossierDetail extends Dossier {
 
 export interface Beneficiary {
   id: number
+  country: number
+  country_name: string | null
   name: string
   kind: string
   kind_display: string
   contact: string
   is_active: boolean
 }
+
+/** Types de bénéficiaire, dans l'ordre du modèle de données. */
+export const BENEFICIARY_KINDS: { value: string; label: string }[] = [
+  { value: "prospect", label: "Prospect" },
+  { value: "client", label: "Client" },
+  { value: "supplier", label: "Fournisseur" },
+  { value: "beneficiary", label: "Bénéficiaire" },
+  { value: "other", label: "Autre" },
+]
 
 // ---------------------------------------------------------------------------
 // Pilotage, alertes et notifications

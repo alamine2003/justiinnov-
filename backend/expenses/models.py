@@ -38,7 +38,14 @@ def proof_upload_path(instance, filename):
 
 
 class Beneficiary(TimeStampedModel):
-    """Prospect, client, fournisseur ou bénéficiaire d'une dépense."""
+    """Prospect, client, fournisseur ou bénéficiaire d'une dépense.
+
+    Rattaché à un pays, comme le reste du référentiel. Il ne l'était pas :
+    la liste était commune, si bien qu'un pays lisait les fournisseurs et les
+    prospects d'un autre — de quoi reconstituer qui le voisin démarche et qui
+    il paie. Le nom était unique globalement par-dessus le marché : deux pays
+    ne pouvaient pas déclarer le même fournisseur.
+    """
 
     class Kind(models.TextChoices):
         PROSPECT = "prospect", "Prospect"
@@ -47,7 +54,13 @@ class Beneficiary(TimeStampedModel):
         BENEFICIARY = "beneficiary", "Bénéficiaire"
         OTHER = "other", "Autre"
 
-    name = models.CharField("Nom", max_length=180, unique=True)
+    country = models.ForeignKey(
+        Country,
+        on_delete=models.CASCADE,
+        related_name="beneficiaries",
+        verbose_name="Pays",
+    )
+    name = models.CharField("Nom", max_length=180)
     kind = models.CharField(
         "Type", max_length=32, choices=Kind.choices, default=Kind.BENEFICIARY
     )
@@ -57,6 +70,11 @@ class Beneficiary(TimeStampedModel):
     class Meta:
         ordering = ["name"]
         verbose_name = "Bénéficiaire"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["country", "name"], name="unique_beneficiaire_par_pays"
+            )
+        ]
 
     def __str__(self):
         return self.name

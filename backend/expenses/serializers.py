@@ -4,6 +4,7 @@ from pathlib import Path
 
 from django.conf import settings
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, compute_sha256
 from .workflow import LOCKED_STATUSES, PROOF_LOCKED_STATUSES
@@ -11,12 +12,24 @@ from .workflow import LOCKED_STATUSES, PROOF_LOCKED_STATUSES
 
 class BeneficiarySerializer(serializers.ModelSerializer):
     kind_display = serializers.CharField(source="get_kind_display", read_only=True)
+    country_name = serializers.CharField(
+        source="country.name", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = Beneficiary
         fields = [
-            "id", "name", "kind", "kind_display", "contact", "is_active",
-            "created_at", "updated_at",
+            "id", "country", "country_name", "name", "kind", "kind_display",
+            "contact", "is_active", "created_at", "updated_at",
+        ]
+        # Le message par défaut de la contrainte d'unicité est illisible ;
+        # celui-ci dit ce qu'il faut corriger.
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Beneficiary.objects.all(),
+                fields=["country", "name"],
+                message="Ce bénéficiaire existe déjà pour ce pays.",
+            )
         ]
 
 

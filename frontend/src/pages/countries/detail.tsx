@@ -10,6 +10,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 import { ManageRows } from "@/components/countries/manage-rows"
+import { ManageBeneficiaries } from "@/components/countries/manage-beneficiaries"
 import { ManageManagers } from "@/components/countries/manage-managers"
 import { CaretHistory } from "@/components/countries/history"
 import {
@@ -159,6 +160,7 @@ export function CountryDetailPage() {
           <TabsTrigger value="projets">Projets</TabsTrigger>
           <TabsTrigger value="depenses">Intitulés de dépenses</TabsTrigger>
           <TabsTrigger value="marketing">Catégories marketing</TabsTrigger>
+          <TabsTrigger value="beneficiaires">Bénéficiaires</TabsTrigger>
           <TabsTrigger value="historique">Historique</TabsTrigger>
         </TabsList>
 
@@ -342,6 +344,14 @@ export function CountryDetailPage() {
                 canManage={canManage}
                 onSave={saveCategory}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="beneficiaires" className="mt-4">
+          <Card className="border-border/60 shadow-sm">
+            <CardContent className="pt-6">
+              <ManageBeneficiaries countryId={countryId} canManage={canManage} />
             </CardContent>
           </Card>
         </TabsContent>

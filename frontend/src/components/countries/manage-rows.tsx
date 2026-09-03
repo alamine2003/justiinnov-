@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { NativeSelect } from "@/components/ui/native-select"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -44,6 +45,10 @@ interface ManageRowsProps<T extends { id: number }> {
     label: string
     placeholder?: string
     type?: string
+    /** Rend une liste déroulante plutôt qu'un champ libre. */
+    options?: { value: string; label: string }[]
+    /** Un champ facultatif ne bloque pas l'enregistrement s'il reste vide. */
+    optional?: boolean
   }[]
   extraForm?: ReactNode
 }
@@ -191,14 +196,33 @@ export function ManageRows<T extends { id: number }>({
             {formFields.map((f) => (
               <div className="grid gap-2" key={f.key}>
                 <Label htmlFor={f.key}>{f.label}</Label>
-                <Input
-                  id={f.key}
-                  type={f.type ?? "text"}
-                  value={form[f.key] ?? ""}
-                  placeholder={f.placeholder}
-                  onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                  required
-                />
+                {f.options ? (
+                  <NativeSelect
+                    id={f.key}
+                    value={form[f.key] ?? ""}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, [f.key]: e.target.value }))
+                    }
+                    required={!f.optional}
+                  >
+                    {f.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                ) : (
+                  <Input
+                    id={f.key}
+                    type={f.type ?? "text"}
+                    value={form[f.key] ?? ""}
+                    placeholder={f.placeholder}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, [f.key]: e.target.value }))
+                    }
+                    required={!f.optional}
+                  />
+                )}
               </div>
             ))}
             {extraForm}

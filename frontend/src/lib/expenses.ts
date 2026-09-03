@@ -153,6 +153,10 @@ export function createBeneficiary(data: unknown) {
   return apiPost<Beneficiary>("/beneficiaries/", data)
 }
 
+export function updateBeneficiary(id: number, data: unknown) {
+  return apiPatch<Beneficiary>(`/beneficiaries/${id}/`, data)
+}
+
 export function fetchAudit(params?: Record<string, unknown>) {
   return apiGet<Paginated<AuditEntry>>("/audit/", params)
 }

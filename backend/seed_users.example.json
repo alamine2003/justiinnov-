@@ -7,7 +7,15 @@
     "Rôles disponibles : super_admin, admin, doo, country_manager, owner,",
     "controller, auditor.",
     "Un compte sans 'countries' relève du siège et voit tous les pays ;",
-    "un country_manager doit toujours avoir au moins un pays."
+    "un country_manager doit toujours avoir au moins un pays.",
+    "",
+    "Les pays doivent être africains : le code ISO est validé contre la liste",
+    "de backend/core/africa.py.",
+    "",
+    "Le mot de passe posé ici est provisoire : la plateforme reste fermée pour",
+    "ce compte tant que son titulaire ne l'a pas remplacé. Un mot de passe que",
+    "le titulaire a lui-même choisi n'a pas à l'être : ajoutez alors",
+    "\"must_change_password\": false sur ce compte."
   ],
   "countries": [
     {
@@ -32,7 +40,11 @@
       "username": "pays.innov",
       "password": "à renseigner",
       "role": "country_manager",
-      "countries": ["XX-00"]
+      "countries": [
+        "XX-00"
+      ],
+      "must_change_password": false,
+      "_note": "mot de passe choisi par le titulaire, pas de changement forcé"
     }
   ]
 }
