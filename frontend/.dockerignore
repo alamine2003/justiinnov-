@@ -1,0 +1,10 @@
+# Les dépendances sont installées dans l'image ; celles de l'hôte, compilées
+# pour un autre système, la casseraient. Le build précédent n'a rien à y
+# faire non plus.
+node_modules/
+dist/
+.vite/
+.env
+.env.*
+*.log
+.DS_Store

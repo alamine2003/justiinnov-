@@ -1,0 +1,238 @@
+# Livraison continue : de la poussée sur `main` à la plateforme en ligne.
+#
+#   main ─────────▶ CI ─▶ images (ghcr.io) ─▶ préproduction (automatique)
+#   tag v1.2.3 ───▶ CI ─▶ images (ghcr.io) ─▶ production (après approbation)
+#
+# Rien ne se déploie qui n'ait passé l'intégration continue : le workflow
+# `ci.yml` est appelé ici même, pas simplement supposé vert. Les images sont
+# construites une fois, étiquetées par le SHA du commit, et c'est cette
+# étiquette-là — jamais `latest` — que le serveur reçoit : on sait toujours
+# exactement quel code tourne, et revenir en arrière consiste à redéployer
+# une étiquette précédente.
+#
+# Le serveur n'a besoin que de Docker. Il reçoit `deploy/` par SSH, se
+# connecte au registre avec un jeton qui expire à la fin du travail, tire les
+# images et relance la pile ; les migrations s'appliquent au démarrage du
+# backend (`backend/entrypoint.sh`). Le déploiement n'est déclaré réussi que
+# lorsque tous les conteneurs répondent à leur contrôle de santé et que le
+# point `/api/health/` répond publiquement.
+#
+# Secrets attendus par environnement (Settings › Environments) :
+#   DEPLOY_HOST          hôte SSH
+#   DEPLOY_USER          utilisateur SSH, membre du groupe docker
+#   DEPLOY_SSH_KEY       clé privée dédiée au déploiement
+#   DEPLOY_KNOWN_HOSTS   (optionnel) empreinte du serveur ; à défaut, elle est
+#                        relevée au premier contact
+# Variables d'environnement (Settings › Environments › Variables) :
+#   APP_DOMAIN           domaine public, pour le contrôle final
+#   DEPLOY_PATH          (optionnel) répertoire sur le serveur, `~/justi-innov`
+#                        par défaut
+# Le fichier `.env` du serveur n'est jamais dans le dépôt : `deploy/.env.example`
+# en donne le modèle.
+name: Livraison continue
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environnement cible
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+  packages: write
+
+# Deux livraisons vers le même environnement ne s'entremêlent pas.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  verifier:
+    name: Vérification
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  images:
+    name: Construire et publier les images
+    needs: verifier
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      backend: ${{ steps.noms.outputs.backend }}
+      frontend: ${{ steps.noms.outputs.frontend }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Noms des images
+        id: noms
+        # ghcr.io impose des noms en minuscules ; un dépôt « JUSTI-INNOV »
+        # donnerait sinon une image introuvable.
+        run: |
+          base="${REGISTRY}/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "backend=${base}-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=${base}-frontend" >> "$GITHUB_OUTPUT"
+
+      - name: Étiquette déployée
+        id: tag
+        # Le SHA court identifie le code sans ambiguïté ; le nom du tag,
+        # quand il y en a un, sert aux humains.
+        run: echo "tag=sha-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Métadonnées backend
+        id: meta_backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.noms.outputs.backend }}
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.tag }}
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=Plateforme de contrôle budgétaire — backend
+
+      - name: Métadonnées frontend
+        id: meta_frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.noms.outputs.frontend }}
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.tag }}
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=Plateforme de contrôle budgétaire — frontend
+
+      - name: Publier l'image backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: ${{ steps.meta_backend.outputs.tags }}
+          labels: ${{ steps.meta_backend.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Publier l'image frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          target: runtime
+          push: true
+          tags: ${{ steps.meta_frontend.outputs.tags }}
+          labels: ${{ steps.meta_frontend.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+  deployer:
+    name: Déployer (${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }})
+    needs: images
+    runs-on: ubuntu-latest
+    # Les règles de protection (relecteurs obligatoires, branches autorisées)
+    # se règlent sur l'environnement GitHub, pas ici : la production attend
+    # une approbation, la préproduction part seule.
+    environment:
+      name: ${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
+      url: https://${{ vars.APP_DOMAIN }}
+    timeout-minutes: 20
+
+    env:
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '~/justi-innov' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Préparer l'accès SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          cat > ~/.ssh/config <<EOF
+          Host cible
+            HostName $HOST
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            ConnectTimeout 20
+          EOF
+
+      - name: Copier les fichiers de déploiement
+        run: |
+          ssh cible "mkdir -p '$DEPLOY_PATH'"
+          scp deploy/docker-compose.prod.yml deploy/Caddyfile deploy/deploy.sh \
+            "cible:$DEPLOY_PATH/"
+
+      - name: Déployer
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          IMAGE_TAG: ${{ needs.images.outputs.tag }}
+          BACKEND_IMAGE: ${{ needs.images.outputs.backend }}
+          FRONTEND_IMAGE: ${{ needs.images.outputs.frontend }}
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+        # Le jeton du workflow passe par l'entrée standard, jamais par la ligne
+        # de commande (visible dans `ps`), et n'est plus valable une fois le
+        # travail terminé.
+        run: |
+          printf '%s' "$GHCR_TOKEN" | ssh cible \
+            "cd '$DEPLOY_PATH' && chmod +x deploy.sh && \
+             GHCR_USER='$GHCR_USER' IMAGE_TAG='$IMAGE_TAG' \
+             BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' \
+             APP_DOMAIN='$APP_DOMAIN' ./deploy.sh"
+
+      - name: Contrôle public
+        env:
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+        # Le serveur a dit que tout allait bien ; on vérifie depuis l'extérieur
+        # que le domaine public — TLS, Caddy, nginx, Django, base — répond.
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 10 "https://$APP_DOMAIN/api/health/"; then
+              echo && echo "✔ $APP_DOMAIN répond."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "✘ $APP_DOMAIN ne répond pas sur /api/health/." >&2
+          exit 1
+
+      - name: Résumé
+        if: success()
+        run: |
+          {
+            echo "## Déployé"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Environnement | ${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }} |"
+            echo "| Domaine | https://${{ vars.APP_DOMAIN }} |"
+            echo "| Étiquette | \`${{ needs.images.outputs.tag }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

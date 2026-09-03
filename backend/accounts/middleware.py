@@ -7,7 +7,8 @@ from rest_framework.authentication import TokenAuthentication
 #:
 #: Le profil courant, sans quoi l'interface ne saurait pas quoi afficher, et le
 #: changement de mot de passe, sans quoi le blocage n'aurait pas de sortie.
-EXEMPT_URL_NAMES = frozenset({"me", "change-password", "token-auth"})
+#: Et l'état de la plateforme, qui ne dépend pas du compte qui le demande.
+EXEMPT_URL_NAMES = frozenset({"me", "change-password", "token-auth", "health"})
 
 
 class ProvisionalPasswordMiddleware:

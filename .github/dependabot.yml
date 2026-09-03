@@ -1,0 +1,51 @@
+# Mises à jour de dépendances proposées en PR, donc vérifiées par la CI
+# avant d'être fusionnées. Groupées par écosystème pour ne pas noyer la
+# liste des PR sous des bosses de version.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Africa/Dakar
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Met à jour"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Africa/Dakar
+    groups:
+      javascript:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Met à jour"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "Met à jour"
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "Met à jour"
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "Met à jour"

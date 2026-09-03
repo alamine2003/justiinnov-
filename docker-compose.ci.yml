@@ -1,0 +1,35 @@
+# Surcharge pour l'intégration continue : la pile telle qu'elle sera livrée.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
+#
+# Le backend tourne hors mode debug, comme en production ; le frontend est
+# l'image nginx finale, pas le serveur de développement Vite. C'est ainsi que
+# le proxy `/api/` de `frontend/nginx.conf` et le démarrage des images sont
+# vérifiés, et non seulement le code.
+services:
+  backend:
+    environment:
+      DJANGO_DEBUG: "0"
+      # Pas un secret : la CI ne sert aucune donnée réelle.
+      DJANGO_SECRET_KEY: ci-7QmX2vLp9BdTnRw4KsZjHy6FgUcAe3NoIrVtPlMqDbXhJf5Ez
+      DJANGO_ALLOWED_HOSTS: "*"
+      # Le navigateur parle en clair au conteneur nginx.
+      DJANGO_SECURE_SSL_REDIRECT: "0"
+      CORS_ALLOWED_ORIGINS: "http://localhost:8080"
+
+  scheduler:
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_SECRET_KEY: ci-7QmX2vLp9BdTnRw4KsZjHy6FgUcAe3NoIrVtPlMqDbXhJf5Ez
+      DJANGO_ALLOWED_HOSTS: "*"
+      DJANGO_SECURE_SSL_REDIRECT: "0"
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+    command: !reset null
+    environment: !reset {}
+    volumes: !reset []
+    ports: !override
+      - "8080:80"

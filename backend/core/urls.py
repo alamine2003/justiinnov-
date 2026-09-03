@@ -16,6 +16,8 @@ router.register("marketing-categories", views.MarketingCategoryViewSet, basename
 router.register("history", views.ChangeLogViewSet, basename="history")
 
 urlpatterns = [
+    # Sans authentification : Docker et le déploiement s'en servent.
+    path("health/", views.HealthView.as_view(), name="health"),
     path(
         "token-auth/",
         views.ThrottledObtainAuthToken.as_view(),

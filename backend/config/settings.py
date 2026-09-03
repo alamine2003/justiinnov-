@@ -27,6 +27,12 @@ ALLOWED_HOSTS = [
     for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if h
 ]
+# Le contrôle de santé du conteneur interroge le serveur sur sa propre
+# boucle locale : sans cette entrée, il répondrait 400 en production, où
+# seul le domaine public est déclaré — et Docker déclarerait mort un backend
+# en parfaite santé.
+if "127.0.0.1" not in ALLOWED_HOSTS and "*" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("127.0.0.1")
 
 INSTALLED_APPS = [
     "django.contrib.admin",

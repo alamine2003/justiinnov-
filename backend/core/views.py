@@ -1,11 +1,14 @@
 """Vues de l'API de gestion des pays et organisations."""
 
+from django.db import OperationalError, connection
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, viewsets
+from rest_framework import filters, status, viewsets
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+from rest_framework.views import APIView
 
 from accounts.permissions import (
     REFERENTIAL_WRITE_ROLES,
@@ -175,3 +178,28 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["country", "model_name", "action"]
     ordering_fields = ["created_at"]
+
+
+class HealthView(APIView):
+    """État de la plateforme, pour Docker et la livraison continue.
+
+    Ni compte, ni jeton, ni limitation de débit : le contrôle de santé du
+    conteneur l'interroge toutes les trente secondes, et un déploiement n'est
+    déclaré réussi que lorsqu'il répond. Il ne dit que deux choses — le
+    serveur répond, la base est joignable — et rien sur ce qu'elle contient.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = []
+
+    def get(self, request):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+        except OperationalError:
+            return Response(
+                {"status": "indisponible", "database": "ko"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({"status": "ok", "database": "ok"})

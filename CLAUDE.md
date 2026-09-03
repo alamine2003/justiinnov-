@@ -33,6 +33,10 @@ Pour l'interface, lancez aussi les scripts de capture décrits dans `DESIGN.md` 
 ils échouent sur toute erreur de console, et plusieurs défauts n'ont été
 trouvés qu'en regardant les images.
 
+La CI (`.github/workflows/ci.yml`) rejoue tout cela, captures comprises, sur
+la pile livrable (`docker-compose.ci.yml`). La livraison (`cd.yml`) publie
+les images et déploie `deploy/` ; voir `deploy/README.md`.
+
 ## Règles que le code doit respecter
 
 Elles ne sont pas des préférences : les enfreindre casse la raison d'être de

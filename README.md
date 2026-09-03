@@ -244,15 +244,42 @@ docker compose run --rm --entrypoint python backend manage.py test
 cd frontend && npx tsc -b && npm run lint && npm run test
 ```
 
-L'intégration continue (`.github/workflows/ci.yml`) rejoue les deux suites à
-chaque poussée, et vérifie au passage qu'aucun modèle n'a été modifié sans
-migration — un oubli qui passerait les tests mais casserait le déploiement.
+## Intégration et livraison continues
+
+L'intégration continue (`.github/workflows/ci.yml`) tourne à chaque poussée
+et sur chaque PR, en cinq travaux indépendants :
+
+| Travail | Ce qu'il vérifie |
+|---|---|
+| Backend | migrations à jour, `check --deploy`, suite Django hors mode debug |
+| Frontend | types, lint, tests unitaires, build |
+| Images Docker | les deux images se construisent |
+| Parcours complet | la pile livrable (backend en production, frontend nginx) démarre, des comptes jetables s'y connectent, les scripts de capture de `DESIGN.md` passent sans erreur de console ; les captures sont publiées en artefact |
+| Dépendances | `pip-audit` et `npm audit`, informatifs |
+
+La livraison continue (`.github/workflows/cd.yml`) enchaîne après la CI :
+
+```
+main ──────▶ CI ──▶ images ghcr.io ──▶ staging      (automatique)
+tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation requise)
+```
+
+Les images sont étiquetées par le SHA du commit ; c'est cette étiquette que
+le serveur reçoit, si bien que revenir en arrière consiste à redéployer la
+précédente. Le déploiement n'est déclaré réussi que lorsque tous les
+conteneurs passent leur contrôle de santé et que `/api/health/` répond
+depuis l'extérieur. La préparation du serveur, les secrets attendus et le
+retour arrière sont décrits dans [`deploy/README.md`](deploy/README.md).
+
+Les mises à jour de dépendances arrivent en PR via Dependabot
+(`.github/dependabot.yml`), donc passent par la CI.
 
 ## Variables d'environnement
 
 | Variable | Défaut | Rôle |
 |----------|--------|------|
 | `DJANGO_DEBUG` | `0` | `1` active le mode debug (dev uniquement) |
+| `GET /api/health/` | — | état du serveur et de la base, sans authentification ; sert aux contrôles de santé |
 | `DJANGO_SECRET_KEY` | — | **obligatoire** hors mode debug |
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | hôtes autorisés, séparés par des virgules |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | origines autorisées |

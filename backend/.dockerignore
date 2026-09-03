@@ -1,0 +1,14 @@
+# Ce qui ne doit jamais entrer dans l'image : sans ce fichier, `COPY . .`
+# embarquait les identifiants d'amorçage et les justificatifs locaux dans une
+# image publiée sur un registre.
+*.local.json
+seed_users.ci.json
+media/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+.venv/
+*.log
+.DS_Store

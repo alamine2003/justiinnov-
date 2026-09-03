@@ -1,13 +1,33 @@
+# Intégration continue : tout ce qui doit être vrai avant de livrer.
+#
+# Deux workflows faisaient la même chose avec des réglages différents (Node 22
+# ou 24, DEBUG à 0 ou à 1, le contrôle `check --deploy` dans l'un seulement).
+# Il n'en reste qu'un, réutilisable : la livraison continue (`cd.yml`)
+# l'appelle avant de construire la moindre image, si bien qu'un correctif
+# ne part jamais sans que sa suite ait tourné.
+#
+# Les travaux sont indépendants : un échec de lint ne masque pas un échec de
+# test, et l'on voit d'un coup d'œil ce qui est cassé.
 name: Intégration continue
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Une poussée sur une PR annule la vérification de la poussée précédente :
+# son résultat n'intéresse plus personne.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
-    name: Backend — tests Django
+    name: Backend — migrations, contrôles de déploiement, tests
     runs-on: ubuntu-latest
 
     services:
@@ -17,18 +37,35 @@ jobs:
           POSTGRES_DB: justi_innov
           POSTGRES_USER: justi
           POSTGRES_PASSWORD: justi
-        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U justi"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+        ports:
+          - 5432:5432
 
     env:
-      DJANGO_DEBUG: "1"
       POSTGRES_HOST: localhost
-      POSTGRES_PORT: "5432"
-      # Les tests écrivent dans un stockage en mémoire : aucun MinIO requis.
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: justi_innov
+      POSTGRES_USER: justi
+      POSTGRES_PASSWORD: justi
+      # La clé n'a pas à être un secret : la CI ne sert aucune donnée réelle.
+      # Elle doit en revanche être longue et variée, sans quoi `check --deploy`
+      # la refuse — et c'est bien cette configuration-là qu'on veut vérifier.
+      # DEBUG reste à 0, pour tester ce qui sera déployé.
+      DJANGO_SECRET_KEY: ci-7QmX2vLp9BdTnRw4KsZjHy6FgUcAe3NoIrVtPlMqDbXhJf5Ez
+      DJANGO_DEBUG: "0"
+      # `testserver` est l'hôte que le client de test de Django présente.
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      # La redirection HTTPS est une affaire de déploiement : le client de
+      # test parle en clair, et sans cela chaque requête répondrait 301 au
+      # lieu d'exécuter la vue. Le réglage de production reste vérifié par
+      # l'étape `check --deploy`, qui tourne, elle, avec la redirection
+      # active.
+      DJANGO_SECURE_SSL_REDIRECT: "0"
+      # Aucun stockage objet : les tests écrivent en mémoire.
       AWS_S3_ENDPOINT_URL: ""
 
     steps:
@@ -44,19 +81,92 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
-      - name: Vérifier que les migrations sont à jour
+      - name: Vérifier qu'aucune migration ne manque
         working-directory: backend
-        # Un modèle modifié sans migration passerait les tests mais casserait
-        # le déploiement suivant.
+        # Un modèle modifié sans migration passe les tests et casse au
+        # déploiement : c'est le genre d'oubli qu'on ne voit qu'en production.
         run: python manage.py makemigrations --check --dry-run
+
+      - name: Contrôles de déploiement Django
+        working-directory: backend
+        env:
+          DJANGO_SECURE_SSL_REDIRECT: "1"
+        run: python manage.py check --deploy --fail-level WARNING
 
       - name: Tests
         working-directory: backend
-        run: python manage.py test --verbosity 2
+        run: python manage.py test --verbosity=2 --noinput
 
   frontend:
-    name: Frontend — types, lint et tests
+    name: Frontend — types, lint, tests, build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # La même version que l'image de production (`frontend/Dockerfile`).
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Types
+        run: npx tsc -b --force
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  images:
+    name: Images Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Le conteneur frontend a déjà été cassé par un Dockerfile qui
+      # construisait la mauvaise cible : la construction fait partie de la
+      # vérification, pas seulement les tests. Le cache est partagé avec la
+      # livraison continue, qui reconstruit les mêmes couches.
+      - name: Construire l'image backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Construire l'image frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          target: runtime
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+  parcours:
+    name: Parcours complet — pile Docker et captures
+    runs-on: ubuntu-latest
+    # Les tests unitaires ne voient pas un proxy nginx mal réglé, une image
+    # qui ne démarre pas ou une page qui plante au montage. Ce travail lance
+    # la pile telle qu'elle sera livrée (backend en mode production, frontend
+    # servi par nginx), y crée des comptes jetables, et rejoue les scripts de
+    # capture de DESIGN.md — qui échouent à la moindre erreur de console.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -67,22 +177,124 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Installer les dépendances
+      - name: Installer les dépendances et Chromium
         working-directory: frontend
-        run: npm ci
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
 
-      - name: Typage
-        working-directory: frontend
-        run: npx tsc -b --force
+      - name: Générer des comptes jetables
+        # Les mots de passe sont tirés au sort à chaque exécution et masqués
+        # dans les journaux : rien de réutilisable ne sort d'ici. Le pays est
+        # africain, faute de quoi l'amorçage le refuserait.
+        run: |
+          HQ_PASSWORD="Ci-$(openssl rand -hex 12)"
+          COUNTRY_PASSWORD="Ci-$(openssl rand -hex 12)"
+          echo "::add-mask::$HQ_PASSWORD"
+          echo "::add-mask::$COUNTRY_PASSWORD"
+          echo "SHOT_HQ_PASSWORD=$HQ_PASSWORD" >> "$GITHUB_ENV"
+          echo "SHOT_COUNTRY_PASSWORD=$COUNTRY_PASSWORD" >> "$GITHUB_ENV"
+          cat > backend/seed_users.ci.json <<EOF
+          {
+            "countries": [
+              {
+                "country_ref": "TG-01",
+                "name": "Togo",
+                "code": "TG",
+                "currency": "XOF",
+                "currency_symbol": "FCFA",
+                "timezone": "Africa/Lome"
+              }
+            ],
+            "users": [
+              {
+                "username": "siege.ci",
+                "password": "$HQ_PASSWORD",
+                "first_name": "Siège",
+                "last_name": "CI",
+                "role": "super_admin",
+                "countries": [],
+                "must_change_password": false
+              },
+              {
+                "username": "togo.ci",
+                "password": "$COUNTRY_PASSWORD",
+                "first_name": "Togo",
+                "last_name": "CI",
+                "role": "country_manager",
+                "countries": ["TG-01"],
+                "must_change_password": false
+              }
+            ]
+          }
+          EOF
 
-      - name: Lint
-        working-directory: frontend
-        run: npm run lint
+      - name: Démarrer la pile
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            up -d --build --wait --wait-timeout 300
 
-      - name: Tests
-        working-directory: frontend
-        run: npm run test
+      - name: Amorcer les comptes
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            exec -T backend python manage.py seed_users --file seed_users.ci.json
 
-      - name: Build
+      - name: Captures d'écran
         working-directory: frontend
-        run: npm run build
+        env:
+          SHOT_BASE: http://localhost:8080
+          SHOT_OUT: ${{ runner.temp }}/captures
+          SHOT_HQ_USER: siege.ci
+          SHOT_COUNTRY_USER: togo.ci
+        run: |
+          mkdir -p "$SHOT_OUT"
+          npx tsx scripts/shot-login.ts
+          npx tsx scripts/screenshot.ts
+
+      - name: Publier les captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-${{ github.sha }}
+          path: ${{ runner.temp }}/captures
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Journaux de la pile
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color
+
+      - name: Arrêter la pile
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v --remove-orphans
+
+  audit:
+    name: Dépendances vulnérables (informatif)
+    runs-on: ubuntu-latest
+    # Un avis de sécurité sur une dépendance transitive ne doit pas bloquer
+    # un correctif métier ; il doit en revanche se voir. Le travail est donc
+    # visible en échec sans faire échouer le workflow.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Backend — pip-audit
+        working-directory: backend
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend — npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
