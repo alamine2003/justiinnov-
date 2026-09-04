@@ -11,7 +11,7 @@ from django.db.models import Sum
 from django.utils.translation import gettext as _
 from rest_framework.exceptions import ValidationError
 
-from accounts.models import Role
+from accounts.permissions import BUDGET_WRITE_ROLES
 from budget.models import Budget, OverrunPolicy
 
 from .workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
@@ -19,10 +19,11 @@ from .workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
 ZERO = Decimal("0.00")
 
 #: Rôles habilités à valider une dépense qui dépasse son enveloppe lorsque la
-#: politique du budget l'exige : la direction (DG, DO, CEO), qui est super
-#: administratrice. Ni la RH ni la direction financière n'arbitrent un
-#: dépassement.
-OVERRUN_APPROVERS = frozenset({Role.SUPER_ADMIN})
+#: politique du budget l'exige : ceux qui attribuent les enveloppes — la
+#: direction (DG, DO, CEO), super administratrice. Ni la RH ni la direction
+#: financière n'arbitrent un dépassement ; l'ensemble est le même que pour
+#: l'attribution, pour ne pas dériver de lui.
+OVERRUN_APPROVERS = BUDGET_WRITE_ROLES
 
 
 #: Ordre de priorité des sous-enveloppes, du plus précis au plus large.

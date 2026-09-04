@@ -845,12 +845,26 @@ class AuditTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_journal_lisible_par_le_controleur(self):
-        self.login(self.controller)
+    def test_journal_lisible_par_la_rh_et_la_direction(self):
+        for compte in (make_user("rh.admin", Role.ADMIN), self.doo):
+            with self.subTest(role=compte.profile.role):
+                self.login(compte)
 
-        response = self.client.get("/api/audit/")
+                response = self.client.get("/api/audit/")
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_journal_ferme_au_dm_et_au_df(self):
+        """Le DM et le DF contrôlent les dépenses ; ils n'auditent pas. Le
+        journal relit leurs propres décisions : c'est un acte
+        d'administration, réservé à la RH et à la direction."""
+        for compte in (self.controller, make_user("dm.innov", Role.DM)):
+            with self.subTest(role=compte.profile.role):
+                self.login(compte)
+
+                response = self.client.get("/api/audit/")
+
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class DraftDeletionTests(ExpenseTestCase):

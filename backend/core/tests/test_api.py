@@ -199,10 +199,36 @@ class HistoryScopeTests(ApiTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_le_dm_et_le_df_ne_lisent_pas_l_historique_des_comptes(self):
+        """La liste des comptes leur est fermée ; son historique — qui a été
+        promu, qui n'a pas confirmé sa 2FA — le serait sinon par la bande."""
+        for role in (Role.DF, Role.DM):
+            with self.subTest(role=role):
+                self._compte(f"{role}.hist", role, [])
+                repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
+                ChangeLog.objects.create(
+                    model_name=ChangeLog.Models.USER, object_id=1,
+                    label="kofi.innov", action=ChangeLog.Actions.CREATED,
+                )
+                ChangeLog.objects.create(
+                    model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
+                    label="Configuration", action=ChangeLog.Actions.UPDATED,
+                )
+
+                response = self.client.get("/api/history/", {"model_name": "user"})
+                caches = [e for e in response.data["results"] if e["id"] > repere]
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(caches, [])
+                tout = self.client.get("/api/history/")
+                labels = {e["model_name"] for e in tout.data["results"] if e["id"] > repere}
+                self.assertFalse(labels & {"user", "workflow_configuration"})
+
     def test_un_siege_restreint_voit_aussi_les_entrees_sans_pays(self):
-        """Taux de change, configuration, comptes : rattachés à aucun pays,
-        ils étaient invisibles pour un rôle du siège limité à quelques pays —
-        le DF comme le DM."""
+        """Taux de change et autres entrées sans pays étaient invisibles pour
+        un rôle du siège limité à quelques pays — le DF comme le DM. La
+        configuration du workflow et les comptes, eux, relèvent de
+        l'administration et restent hors de leur vue."""
         autre = Country.objects.create(name="Bénin", code="BJ", currency="XOF")
         # Un fuseau différent à chaque tour : sans changement, rien ne
         # s'écrit dans le journal.
@@ -216,6 +242,10 @@ class HistoryScopeTests(ApiTestCase):
                     model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
                     label="Configuration", action=ChangeLog.Actions.UPDATED,
                 )
+                ChangeLog.objects.create(
+                    model_name=ChangeLog.Models.EXCHANGE_RATE, object_id=1,
+                    label="EUR", action=ChangeLog.Actions.CREATED,
+                )
                 self.country.timezone = fuseau
                 self.country.save()
                 autre.timezone = fuseau
@@ -225,7 +255,7 @@ class HistoryScopeTests(ApiTestCase):
 
                 nouvelles = [e for e in response.data["results"] if e["id"] > repere]
                 labels = {e["model_name"] for e in nouvelles}
-                self.assertEqual(labels, {"workflow_configuration", "country"})
+                self.assertEqual(labels, {"exchange_rate", "country"})
                 pays = {e["country"] for e in nouvelles}
                 self.assertEqual(pays, {None, self.country.pk})
 

@@ -8,8 +8,8 @@
 
 ## 1. Rappel des objectifs
 
-- Attribuer une **enveloppe annuelle par pays** (direction financière ou
-  super administration).
+- Attribuer une **enveloppe annuelle par pays** (super administrateurs :
+  DG, DO, CEO).
 - Suivre en temps réel et de façon **traçable** l'utilisation de l'enveloppe
   par les managers et équipes.
 - Relier chaque dépense à son contexte : **date/heure, pays, utilisateur, lieu,
@@ -127,20 +127,24 @@ sans profil est refusé par l'API.**
 
 Les cinq rôles suivent l'organisation du groupe. Côté pays, un seul
 compte : le `manager` (Manager — pays) engage la dépense, la saisit,
-dépose la pièce et soumet le dossier ; il tient aussi le référentiel de son
-pays. Côté siège : le `dm` (DM — directeur manager) met en contrôle une
+dépose la pièce et soumet le dossier ; le référentiel de son pays (équipes,
+projets, intitulés, catégories, bénéficiaires) est tenu par la RH. Côté siège : le `dm` (DM — directeur manager) met en contrôle une
 dépense soumise ; le `df` (DF — directeur financier) constate — justifie,
-refuse, clôture — et fixe les enveloppes ; l'`admin` (Administrateur — RH)
-tient les comptes, l'audit, le référentiel de tous les pays, les imports
-et exports et rouvre un dossier ; le `super_admin` (DG, DO, CEO, DEV) peut
-tout. `dm` et `df` sont restrictibles à des pays, `admin` et
-`super_admin` jamais. Il n'y a ni « direction des opérations » ni
-« auditeur » distincts. Les ensembles de rôles sont dans
-`accounts/permissions.py` : `BUDGET_WRITE_ROLES` = `super_admin`, `df`
-(choix à confirmer par le produit), `EXPORT_ROLES` = `REOPEN_ROLES` =
-`super_admin`, `admin`. `/api/me/` les traduit en capacités, dont
-`review_expenses` (mise en contrôle) distincte de `validate_expenses`
-(constat).
+refuse, clôture ; l'`admin` (Administrateur — RH) tient les comptes,
+l'audit, le référentiel de tous les pays, les imports et exports et rouvre
+un dossier ; le `super_admin` (DG, DO, CEO, DEV) peut tout, et seul il
+attribue les enveloppes, arbitre les réallocations et tient les taux de
+change. **Le `dm` et le `df` n'ont aucun droit d'administration** : ils ne
+sont ni administrateurs ni super administrateurs, et n'apparaissent que
+dans `REVIEW_ROLES` (`dm`, `df`), `VALIDATION_ROLES` (`df`) et
+`HISTORY_READ_ROLES` (historique du référentiel, sur leur périmètre).
+`dm` et `df` sont restrictibles à des pays, `admin` et `super_admin`
+jamais. Il n'y a ni « direction des opérations » ni « auditeur »
+distincts. Les ensembles de rôles sont dans `accounts/permissions.py` :
+`BUDGET_WRITE_ROLES` = `OVERRUN_APPROVERS` = `super_admin` ;
+`AUDIT_READ_ROLES` = `EXPORT_ROLES` = `REOPEN_ROLES` = `super_admin`,
+`admin`. `/api/me/` les traduit en capacités, dont `review_expenses` (mise
+en contrôle) distincte de `validate_expenses` (constat).
 
 Un manager ne justifie jamais une dépense, et celui qui a saisi une
 dépense ne la justifie pas lui-même, fût-il au siège. L'adresse e-mail
@@ -209,7 +213,8 @@ l'opération ; une devise sans taux est **exclue du total et signalée**.
 | `requested_by` | Char(180) | identité en texte |
 
 `approve` exécute le transfert (montants mis à jour, entrée `ChangeLog`) ;
-`reject` exige un motif.
+`reject` exige un motif. Demander comme décider relève de
+`BUDGET_WRITE_ROLES` (`super_admin`), et celui qui demande ne décide pas.
 
 ### 4.3 `ExchangeRate` — taux de conversion
 
@@ -369,6 +374,10 @@ font évoluer, et chacune écrit une entrée `AuditLog`.
 
 ### 5.6 `AuditLog` — journal des actions sensibles
 
+Consultable par `AUDIT_READ_ROLES` (`admin`, `super_admin`) : la RH, qui
+audite, et la direction. Le DM et le DF n'y accèdent pas — le journal relit
+leurs décisions.
+
 | Champ | Type | Notes |
 |---|---|---|
 | `user` | Char(180) | identité en texte |
@@ -437,7 +446,7 @@ AuditLog, ChangeLog, Notification ─▶ Country (null)
 | 15 | Champs obligatoires à la soumission (CdC §7) | **équipe et manager** sur chaque ligne, vérifiés à la soumission seulement — pas de contrainte en base, l'import crée des brouillons incomplets. **Lieu, projet et intitulé restent facultatifs** : le classeur historique ne les porte pas, les exiger rendrait l'historique impossible à déclarer |
 | 16 | Import Excel | lit le classeur historique (en-tête cherché dans les 15 premières lignes, colonnes PAYS / devise / statut facultatives) ; équipes et managers inconnus **créés dans le pays** ; MONTANT JUSTIFIER, ECART et STATUT ignorés |
 | 17 | Périmètre géographique | **dix-sept filiales**, listées dans `core/africa.py` ; Côte d'Ivoire et Togo créées au démarrage, les autres à leur entrée dans le dispositif |
-| 18 | Rôles | **cinq** : `manager`, `dm`, `df`, `admin`, `super_admin`. Ni direction des opérations ni auditeur distincts. Enveloppes et réallocations : `BUDGET_WRITE_ROLES` = `super_admin` et `df` — la direction financière arbitre avec la direction, **choix à confirmer par le produit** ; `dm` et `df` restrictibles à des pays |
+| 18 | Rôles | **cinq** : `manager`, `dm`, `df`, `admin`, `super_admin`. Ni direction des opérations ni auditeur distincts. **Le DM et le DF n'ont aucun droit d'administration** (décision du produit) : ils ne sont ni administrateurs ni super administrateurs et gardent leurs seules fonctions de contrôle. Enveloppes, réallocations, taux de change et dépassements : `BUDGET_WRITE_ROLES` = `OVERRUN_APPROVERS` = `super_admin` seul — le DF constate, il n'attribue pas. Journal d'audit : `AUDIT_READ_ROLES` = `admin`, `super_admin` (RH et direction) ; l'historique du référentiel reste ouvert au siège entier. `dm` et `df` restrictibles à des pays |
 | 19 | Périmètre d'un manager | **ses équipes** (`UserProfile.teams`), vérifié sur le queryset (`CountryScopedMixin.team_lookup`) ; sans équipe rattachée, tout son pays. Les autres rôles ne sont pas restreints par équipe |
 | 20 | Réouverture | **seule exception à l'irréversibilité** : `REOPEN_ROLES` (`admin`, `super_admin`), motif obligatoire (`Dossier.reopen_note`), `AuditLog` `reopened` sur le dossier et ses lignes, lignes en brouillon sans imputation, notification aux `dm` et `manager` du pays ; refusée dès qu'une ligne est justifiée ou clôturée. Pour demander des comptes, jamais pour corriger en silence |
 | 21 | Fichiers | import Excel et exports (`xlsx`, `csv`, `docx`, `pdf` ; `year`, `month` facultatif, `country`) **réservés à `EXPORT_ROLES`**, lecture comprise ; tous les autres travaillent dans l'application. CSV UTF-8 avec BOM, séparateur `;` ; totaux à devise unique seulement. Chaque export est journalisé avec ses paramètres |

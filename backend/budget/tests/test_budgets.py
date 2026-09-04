@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.core.cache import cache
 from django.db import IntegrityError, connection, transaction
@@ -38,14 +39,18 @@ class BudgetTestCase(APITestCase):
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
         )
-        # Le siège arbitre ; la direction des opérations attribue et
-        # approuve (BUDGET_WRITE_ROLES). Les deux comptes sont distincts :
-        # celui qui demande une réallocation ne peut pas la décider.
+        # La direction seule attribue et arbitre (BUDGET_WRITE_ROLES =
+        # super administrateurs). Deux comptes distincts : celui qui demande
+        # une réallocation ne peut pas la décider.
         self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
         self.doo = make_user("do.innov", Role.SUPER_ADMIN)
-        # Une direction des opérations restreinte à un pays : même rôle,
-        # périmètre borné.
-        self.doo_togo = make_user("df.togo", Role.DF, [self.togo])
+        # Une direction restreinte au Togo : le périmètre n'est effectif que
+        # sous ``direction_restreinte()``, voir plus bas.
+        self.doo_togo = make_user("do.togo", Role.SUPER_ADMIN, [self.togo])
+        # Le DF constate les dépenses ; il n'attribue ni n'arbitre, global
+        # ou restreint.
+        self.df = make_user("df.innov", Role.DF)
+        self.df_togo = make_user("df.togo", Role.DF, [self.togo])
         self.rep_togo = make_user("togo.innov", Role.MANAGER, [self.togo])
 
         self.budget_togo = Budget.objects.create(
@@ -58,6 +63,18 @@ class BudgetTestCase(APITestCase):
     def login(self, user):
         token, _ = Token.objects.get_or_create(user=user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+    def direction_restreinte(self):
+        """Rend effective la restriction de périmètre de ``doo_togo``.
+
+        Aucun rôle habilité à écrire une enveloppe ne se restreint
+        aujourd'hui : les super administrateurs sont toujours globaux
+        (``ALWAYS_GLOBAL_ROLES``). Les validateurs de périmètre
+        (``PerimetreMixin``, ``_verrouiller``) restent en place pour le jour
+        où cela existera ; ces tests les couvrent en levant, le temps d'un
+        appel, la règle qui rend la direction toujours globale.
+        """
+        return mock.patch("accounts.models.ALWAYS_GLOBAL_ROLES", frozenset())
 
     def imputer(self, budget, amount, statut=Status.SUBMITTED):
         """Une dépense imputée à l'enveloppe, dans l'état demandé."""
@@ -128,26 +145,52 @@ class BudgetAccessTests(BudgetTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("project", response.data)
 
-    def test_direction_des_operations_attribue_une_enveloppe(self):
-        """Le rôle DOO, et pas seulement le super administrateur, attribue."""
-        self.login(self.doo)
+    def test_le_df_n_attribue_pas_d_enveloppe(self):
+        """Le DF constate ce qui a été dépensé ; il ne fixe pas ce qui peut
+        l'être. Global ou restreint à son pays, il lit les enveloppes et
+        n'en écrit aucune — ni création, ni montant."""
+        for compte in (self.df, self.df_togo):
+            with self.subTest(compte=compte.username):
+                self.login(compte)
+
+                lecture = self.client.get("/api/budgets/")
+                creation = self.client.post(
+                    "/api/budgets/",
+                    {"country": self.togo.pk, "year": 2027, "amount": "1.00"},
+                )
+                montant = self.client.patch(
+                    f"/api/budgets/{self.budget_togo.pk}/", {"amount": "1.00"}
+                )
+
+                self.assertEqual(lecture.status_code, status.HTTP_200_OK)
+                self.assertEqual(creation.status_code, status.HTTP_403_FORBIDDEN)
+                self.assertEqual(montant.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Budget.objects.filter(year=2027).exists())
+        self.budget_togo.refresh_from_db()
+        self.assertEqual(self.budget_togo.amount, Decimal("10000000.00"))
+
+    def test_la_rh_n_attribue_pas_d_enveloppe(self):
+        """L'administrateur tient les comptes et le référentiel ; l'argent
+        est l'affaire de la direction."""
+        self.login(make_user("rh.innov", Role.ADMIN))
 
         response = self.client.post(
             "/api/budgets/",
-            {"country": self.ivoire.pk, "year": 2027, "amount": "30000000.00"},
+            {"country": self.togo.pk, "year": 2027, "amount": "1.00"},
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_pays_hors_perimetre_simplement_invalide(self):
-        """Une DOO restreinte au Togo ne crée rien en Côte d'Ivoire — et la
-        réponse ne distingue pas « hors périmètre » d'« inexistant »."""
+        """Une direction restreinte au Togo ne crée rien en Côte d'Ivoire —
+        et la réponse ne distingue pas « hors périmètre » d'« inexistant »."""
         self.login(self.doo_togo)
 
-        response = self.client.post(
-            "/api/budgets/",
-            {"country": self.ivoire.pk, "year": 2027, "amount": "1.00"},
-        )
+        with self.direction_restreinte():
+            response = self.client.post(
+                "/api/budgets/",
+                {"country": self.ivoire.pk, "year": 2027, "amount": "1.00"},
+            )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("country", response.data)
@@ -158,13 +201,14 @@ class BudgetAccessTests(BudgetTestCase):
         self.ivoire.managers.add(manager)
         self.login(self.doo_togo)
 
-        response = self.client.post(
-            "/api/budgets/",
-            {
-                "country": self.togo.pk, "year": 2027,
-                "manager": manager.pk, "amount": "1.00",
-            },
-        )
+        with self.direction_restreinte():
+            response = self.client.post(
+                "/api/budgets/",
+                {
+                    "country": self.togo.pk, "year": 2027,
+                    "manager": manager.pk, "amount": "1.00",
+                },
+            )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("manager", response.data)
@@ -468,6 +512,25 @@ class ExchangeRateTests(BudgetTestCase):
         self.assertEqual(taux, Decimal("10.700767"))
         self.assertEqual(converti, (Decimal("12345.67") * taux).quantize(CENTS))
 
+    def test_seule_la_direction_saisit_un_taux(self):
+        """Un taux change la valeur consolidée de toutes les enveloppes : il
+        relève de ceux qui les attribuent. Le DF et la RH lisent les taux,
+        n'en posent aucun."""
+        rh = make_user("rh.innov", Role.ADMIN)
+        for compte in (self.df, self.df_togo, rh):
+            with self.subTest(compte=compte.username):
+                self.login(compte)
+
+                lecture = self.client.get("/api/exchange-rates/")
+                ecriture = self.client.post(
+                    "/api/exchange-rates/",
+                    {"currency": "MAD", "rate_to_xof": "60", "valid_from": "2026-01-01"},
+                )
+
+                self.assertEqual(lecture.status_code, status.HTTP_200_OK)
+                self.assertEqual(ecriture.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(ExchangeRate.objects.filter(currency="MAD").exists())
+
     def test_taux_nul_ou_negatif_refuse(self):
         self.login(self.doo)
 
@@ -649,13 +712,51 @@ class ReallocationTests(BudgetTestCase):
             BudgetReallocation.Status.PENDING,
         )
 
-    def test_enveloppe_hors_perimetre_simplement_invalide(self):
-        """Une DOO restreinte au Togo ne touche pas une enveloppe ivoirienne,
-        ni en source ni en destination — sans apprendre qu'elle existe."""
-        vers_ivoire = self._demander(target=self.budget_ivoire, par=self.doo_togo)
-        depuis_ivoire = self._demander(
-            source=self.budget_ivoire, target=self.budget_togo, par=self.doo_togo
+    def test_le_df_ne_decide_pas_d_une_reallocation(self):
+        """Demander, approuver, refuser : trois écritures budgétaires, toutes
+        réservées à la direction. Le DF, global ou restreint, reçoit 403 et
+        les enveloppes ne bougent pas."""
+        realloc_id = self._demander().data["id"]
+        for compte in (self.df, self.df_togo):
+            with self.subTest(compte=compte.username):
+                self.login(compte)
+
+                lecture = self.client.get("/api/reallocations/")
+                demande = self.client.post(
+                    "/api/reallocations/",
+                    {
+                        "source": self.budget_togo.pk, "target": self.sous_enveloppe.pk,
+                        "amount": "1.00", "reason": "Essai",
+                    },
+                )
+                approbation = self.client.post(
+                    f"/api/reallocations/{realloc_id}/approve/"
+                )
+                refus = self.client.post(
+                    f"/api/reallocations/{realloc_id}/reject/", {"note": "Non"}
+                )
+
+                self.assertEqual(lecture.status_code, status.HTTP_200_OK)
+                self.assertEqual(demande.status_code, status.HTTP_403_FORBIDDEN)
+                self.assertEqual(approbation.status_code, status.HTTP_403_FORBIDDEN)
+                self.assertEqual(refus.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(BudgetReallocation.objects.count(), 1)
+        self.assertEqual(
+            BudgetReallocation.objects.get(pk=realloc_id).status,
+            BudgetReallocation.Status.PENDING,
         )
+        self.budget_togo.refresh_from_db()
+        self.assertEqual(self.budget_togo.amount, Decimal("10000000.00"))
+
+    def test_enveloppe_hors_perimetre_simplement_invalide(self):
+        """Une direction restreinte au Togo ne touche pas une enveloppe
+        ivoirienne, ni en source ni en destination — sans apprendre qu'elle
+        existe."""
+        with self.direction_restreinte():
+            vers_ivoire = self._demander(target=self.budget_ivoire, par=self.doo_togo)
+            depuis_ivoire = self._demander(
+                source=self.budget_ivoire, target=self.budget_togo, par=self.doo_togo
+            )
 
         self.assertEqual(vers_ivoire.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("target", vers_ivoire.data)
@@ -665,12 +766,13 @@ class ReallocationTests(BudgetTestCase):
 
     def test_decision_hors_perimetre_repond_404(self):
         """Le queryset filtre sur le pays de la source : la destination doit
-        être vérifiée aussi, sinon une DOO togolaise approuverait un transfert
-        vers la Côte d'Ivoire."""
+        être vérifiée aussi, sinon une direction togolaise approuverait un
+        transfert vers la Côte d'Ivoire."""
         realloc_id = self._demander(target=self.budget_ivoire).data["id"]
         self.login(self.doo_togo)
 
-        response = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
+        with self.direction_restreinte():
+            response = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.budget_togo.refresh_from_db()
@@ -680,10 +782,11 @@ class ReallocationTests(BudgetTestCase):
         realloc_id = self._demander().data["id"]
         self.login(self.doo_togo)
 
-        response = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
+        with self.direction_restreinte():
+            response = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["decided_by"], "df.togo")
+        self.assertEqual(response.data["decided_by"], "do.togo")
 
 
 class ReallocationLockTests(BudgetTestCase):

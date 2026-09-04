@@ -10,7 +10,10 @@
     "son pays ; il doit toujours avoir au moins un pays. Au siège, le dm met",
     "les dossiers en contrôle et le df justifie ou rejette ; tous deux voient",
     "tous les pays sans 'countries', ou seulement ceux qui y sont listés.",
-    "admin et super_admin voient toujours tout.",
+    "Ni l'un ni l'autre n'administre : comptes, référentiel et journal",
+    "d'audit relèvent de admin (RH) et super_admin ; enveloppes,",
+    "réallocations et taux de change de super_admin seul (DG, DO, CEO,",
+    "développeurs). admin et super_admin voient toujours tout.",
     "",
     "L'adresse e-mail est obligatoire et doit appartenir à un domaine de",
     "l'entreprise (ALLOWED_EMAIL_DOMAINS, innovpharma.net par défaut) : elle",
@@ -91,7 +94,7 @@
       "password": "à renseigner",
       "role": "df",
       "countries": [],
-      "_note": "siège : justifie ou rejette ; listez des pays pour le restreindre"
+      "_note": "siège : justifie ou rejette ; n'attribue pas d'enveloppe ; listez des pays pour le restreindre"
     },
     {
       "username": "captures.ci",

@@ -1014,8 +1014,11 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
 
 
 class AuditLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
-    """Journal d'audit — consultation par le siège : administrateurs (RH,
-    qui audite) et direction financière."""
+    """Journal d'audit — consultation par la RH, qui audite, et la direction.
+
+    Le DM et le DF n'y ont pas accès : le journal relit leurs propres
+    décisions, et cette relecture est un acte d'administration.
+    """
 
     queryset = AuditLog.objects.select_related("country").all()
     serializer_class = AuditLogSerializer

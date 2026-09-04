@@ -7,12 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
-from accounts.permissions import (
-    BUDGET_WRITE_ROLES,
-    REFERENTIAL_WRITE_ROLES,
-    RolePermission,
-    get_access,
-)
+from accounts.permissions import BUDGET_WRITE_ROLES, RolePermission, get_access
 from accounts.scoping import CountryScopedMixin
 from core.mixins import NoDestroyModelViewSet
 from notifications import triggers
@@ -222,11 +217,15 @@ def disponible(budget):
 
 
 class ExchangeRateViewSet(NoDestroyModelViewSet):
-    """Taux de conversion vers le FCFA, saisis par le siège."""
+    """Taux de conversion vers le FCFA, tenus par la direction.
+
+    Un taux change la valeur consolidée de toutes les enveloppes : il relève
+    de ceux qui les attribuent, pas de la RH ni du contrôle.
+    """
 
     queryset = ExchangeRate.objects.all()
     serializer_class = ExchangeRateSerializer
     permission_classes = [RolePermission]
-    write_roles = REFERENTIAL_WRITE_ROLES | BUDGET_WRITE_ROLES
+    write_roles = BUDGET_WRITE_ROLES
     filterset_fields = ["currency"]
     ordering_fields = ["currency", "valid_from"]

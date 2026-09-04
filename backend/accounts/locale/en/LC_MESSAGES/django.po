@@ -127,8 +127,8 @@ msgstr "Maintain the countries' reference data: teams, projects, expense titles,
 msgid "Enveloppes et réallocations"
 msgstr "Budgets and reallocations"
 
-msgid "Attribuer les budgets et arbitrer les transferts."
-msgstr "Allocate budgets and decide on transfers."
+msgid "Attribuer les budgets, arbitrer les transferts, tenir les taux de change : super administrateurs."
+msgstr "Allocate budgets, decide on transfers, maintain exchange rates: super administrators."
 
 msgid "Saisie et soumission"
 msgstr "Entry and submission"
@@ -151,8 +151,8 @@ msgstr "Establish that a document covers an expense, or that proof is missing. T
 msgid "Journal d'audit"
 msgstr "Audit log"
 
-msgid "Consulter la trace des actions sensibles."
-msgstr "Review the trail of sensitive actions."
+msgid "Consulter la trace des actions sensibles : RH et direction."
+msgstr "Review the trail of sensitive actions: HR and management."
 
 msgid "Imports et exports"
 msgstr "Imports and exports"

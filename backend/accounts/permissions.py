@@ -75,10 +75,11 @@ REFERENTIAL_WRITE_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 #: il déclare dans un cadre que le siège a posé, il ne le redessine pas.
 SUBENTITY_WRITE_ROLES = REFERENTIAL_WRITE_ROLES
 
-#: Budgets et réallocations : attribution et arbitrage (§4). La direction
-#: des opérations attribue en tant que super administratrice ; la direction
-#: financière arbitre avec elle, éventuellement sur un périmètre restreint.
-BUDGET_WRITE_ROLES = frozenset({Role.SUPER_ADMIN, Role.DF})
+#: Budgets, réallocations et taux de change : attribution et arbitrage (§4),
+#: par la direction seule — DG, DO, CEO, super administrateurs. Le DF n'y
+#: est pas : il constate ce qui a été dépensé, il ne fixe pas ce qui peut
+#: l'être. Décision du produit : DM et DF n'ont aucun droit d'administration.
+BUDGET_WRITE_ROLES = frozenset({Role.SUPER_ADMIN})
 
 #: Exports (Excel, CSV, Word, PDF) et import : réservés aux administrateurs.
 #: Le reste de l'organisation travaille dans l'application, sans fichier.
@@ -111,14 +112,16 @@ REVIEW_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
 #: qui l'a engagé.
 VALIDATION_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
 
-#: Consultation du journal d'audit : le siège, RH comprise, qui audite, et
-#: le DM, qui prépare le contrôle et doit pouvoir relire qui a fait quoi.
-AUDIT_READ_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
+#: Consultation du journal d'audit : la RH, qui audite, et la direction.
+#: Le DM et le DF en sont exclus : le journal relit *leurs* décisions autant
+#: que celles des pays, et cette relecture est un acte d'administration.
+AUDIT_READ_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 
 #: Consultation de l'historique du référentiel (``/api/history/``) : le
-#: siège, chacun sur son périmètre. Un manager saisit des dépenses ;
-#: l'organisation du pays ne le regarde pas.
-HISTORY_READ_ROLES = AUDIT_READ_ROLES | {Role.DM}
+#: siège entier, chacun sur son périmètre — c'est une lecture du référentiel
+#: (qui a rattaché quoi, quel taux s'applique), pas un audit. Un manager
+#: saisit des dépenses ; l'organisation du pays ne le regarde pas.
+HISTORY_READ_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
 
 
 #: Matrice des capacités, source unique.
@@ -151,7 +154,10 @@ CAPABILITIES = [
     {
         "key": "manage_budgets",
         "label": _("Enveloppes et réallocations"),
-        "description": _("Attribuer les budgets et arbitrer les transferts."),
+        "description": _(
+            "Attribuer les budgets, arbitrer les transferts, tenir les taux "
+            "de change : super administrateurs."
+        ),
         "roles": BUDGET_WRITE_ROLES,
     },
     {
@@ -184,7 +190,9 @@ CAPABILITIES = [
     {
         "key": "view_audit",
         "label": _("Journal d'audit"),
-        "description": _("Consulter la trace des actions sensibles."),
+        "description": _(
+            "Consulter la trace des actions sensibles : RH et direction."
+        ),
         "roles": AUDIT_READ_ROLES,
     },
     {

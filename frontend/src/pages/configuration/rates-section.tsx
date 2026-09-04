@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
+import { useAuth } from "@/context/use-auth"
 import { createExchangeRate, fetchExchangeRates } from "@/lib/budgets"
 import { STATUS_TONES } from "@/lib/status-styles"
 import { useQuery } from "@/lib/use-query"
@@ -40,6 +41,7 @@ import { formatAmount, formatDay, normalizeDecimal, todayIso } from "@/lib/utils
  */
 export function RatesSection() {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const query = useQuery(
     "exchange-rates",
     (signal) => fetchExchangeRates({ page_size: 100 }, signal),
@@ -70,10 +72,14 @@ export function RatesSection() {
             {t("configuration.taux.description")}
           </p>
         </div>
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" aria-hidden />
-          {t("configuration.taux.publier")}
-        </Button>
+        {/* Les taux sont l'affaire de la direction : un administrateur qui
+            n'a pas ce droit ne voit pas un bouton qui lui répondrait 403. */}
+        {can("manage_budgets") && (
+          <Button size="sm" onClick={() => setOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" aria-hidden />
+            {t("configuration.taux.publier")}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         {query.error && (

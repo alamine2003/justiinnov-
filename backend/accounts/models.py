@@ -31,7 +31,9 @@ class Role(models.TextChoices):
     rejette. La RH administre les comptes, le référentiel de tous les pays,
     et audite ; la direction (DG, DO, CEO) et l'équipe de développement sont
     super administrateurs. RH et super administrateurs peuvent tout ce que
-    font le DM et le DF. Il n'y a ni « direction des opérations » ni
+    font le DM et le DF ; l'inverse est faux : **le DM et le DF n'ont aucun
+    droit d'administration** — ni comptes, ni référentiel, ni enveloppes,
+    ni journal d'audit. Il n'y a ni « direction des opérations » ni
     « auditeur » distincts : la DO est super administratrice, l'audit
     revient à la RH.
     """

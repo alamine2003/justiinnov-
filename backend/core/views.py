@@ -291,18 +291,29 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["country", "model_name", "action"]
     ordering_fields = ["created_at"]
 
+    #: Entrées qui relèvent de l'administration : la vie des comptes (rôles,
+    #: périmètres, 2FA) et la politique du workflow. Le DM et le DF, qui ne
+    #: gèrent ni l'un ni l'autre, n'ont pas à les lire — la liste des comptes
+    #: leur est fermée, son historique aussi.
+    ENTREES_D_ADMINISTRATION = (
+        ChangeLog.Models.USER,
+        ChangeLog.Models.WORKFLOW_CONFIGURATION,
+    )
+
     def get_queryset(self):
         queryset = super().get_queryset()
         access = get_access(self.request.user)
-        if access is None or access.has_global_scope:
+        if access is None:
             return queryset
-        if access.role in HEADQUARTERS_ROLES:
+        if not access.has_global_scope and access.role in HEADQUARTERS_ROLES:
             # Un rôle du siège restreint à quelques pays garde la vue sur ce
-            # qui n'appartient à aucun : taux de change, configuration,
-            # comptes. Le filtre du mixin les lui cachait avec le reste.
-            return ChangeLog.objects.select_related("country").filter(
+            # qui n'appartient à aucun : taux de change, par exemple. Le
+            # filtre du mixin les lui cachait avec le reste.
+            queryset = ChangeLog.objects.select_related("country").filter(
                 Q(country__in=access.country_ids) | Q(country__isnull=True)
             )
+        if access.role not in USER_WRITE_ROLES:
+            queryset = queryset.exclude(model_name__in=self.ENTREES_D_ADMINISTRATION)
         return queryset
 
 

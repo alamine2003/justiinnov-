@@ -82,24 +82,32 @@ Cinq rôles, calqués sur l'organisation du groupe :
 
 | Rôle | Libellé | Qui | Périmètre | Peut |
 |------|---------|-----|-----------|------|
-| `manager` | Manager (pays) | responsable dans une filiale | son pays, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | saisir ses dépenses, déposer les justificatifs, **soumettre** (déclarer) ; tenir le référentiel de son pays |
-| `dm` | DM — directeur manager (siège) | au siège | tous pays, **restrictible** à certains | **mettre en contrôle** une dépense soumise (`review_expenses`) |
-| `df` | DF — directeur financier (siège) | au siège | tous pays, **restrictible** à certains | fixer les enveloppes (avec `super_admin`), contrôler les pièces, **justifier ou non**, clôturer (`validate_expenses`) |
-| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | tout le circuit, comptes et rôles, référentiel de tous les pays, journal d'audit, **imports et exports**, **réouverture** d'un dossier, réinitialisation de la double authentification |
-| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, enveloppes comprises, y compris le back-office Django |
+| `manager` | Manager (pays) | responsable dans une filiale | son pays, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | saisir ses dépenses, déposer les justificatifs, **soumettre** (déclarer) ; le référentiel de son pays est tenu par la RH |
+| `dm` | DM — directeur manager (siège) | au siège | tous pays, **restrictible** à certains | **mettre en contrôle** une dépense soumise (`review_expenses`) ; lire l'historique du référentiel de son périmètre |
+| `df` | DF — directeur financier (siège) | au siège | tous pays, **restrictible** à certains | mettre en contrôle, contrôler les pièces, **justifier ou non**, clôturer (`validate_expenses`) ; lire l'historique du référentiel de son périmètre |
+| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | tout le circuit, comptes et rôles, pays et référentiel de tous les pays, **journal d'audit**, **imports et exports**, **réouverture** d'un dossier, réinitialisation de la double authentification |
+| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, et seul à écrire **les enveloppes, les réallocations et les taux de change** ; le back-office Django |
 
 Il n'y a ni « direction des opérations » ni « auditeur » distincts : la DO
-est super administratrice, l'audit revient à la RH. Les enveloppes et les
-réallocations s'écrivent par `super_admin` et `df` (`BUDGET_WRITE_ROLES`) :
-la direction financière arbitre les enveloppes avec la direction. **Choix à
-confirmer par le produit** ; il se change dans `accounts/permissions.py`.
+est super administratrice, l'audit revient à la RH.
+
+**Le DM et le DF n'ont aucun droit d'administration** — décision du
+produit : ils ne sont ni administrateurs ni super administrateurs. Ils
+gardent leurs seules fonctions de contrôle (`REVIEW_ROLES` pour le DM,
+`VALIDATION_ROLES` pour le DF) et la lecture de l'historique du
+référentiel (`HISTORY_READ_ROLES`). Comptes, pays, référentiel, fichiers,
+réouverture et journal d'audit relèvent de la RH et de la direction ;
+enveloppes, réallocations, taux de change et validation d'un dépassement,
+de la direction seule.
 
 Les rôles portent la matrice complète dans `accounts/permissions.py` :
-`BUDGET_WRITE_ROLES` (enveloppes), `EXPORT_ROLES` (imports et exports :
-`super_admin`, `admin`), `REOPEN_ROLES` (réouverture : `super_admin`,
-`admin`). `/api/permissions/` la renvoie telle qu'elle est appliquée, et
-`/api/me/` la traduit en capacités (`record_expenses`, `review_expenses`,
-`validate_expenses`…) que l'interface se contente de lire.
+`BUDGET_WRITE_ROLES` (enveloppes, réallocations, taux : `super_admin`),
+`AUDIT_READ_ROLES` (journal d'audit : `super_admin`, `admin`),
+`EXPORT_ROLES` (imports et exports : `super_admin`, `admin`),
+`REOPEN_ROLES` (réouverture : `super_admin`, `admin`). `/api/permissions/`
+la renvoie telle qu'elle est appliquée, et `/api/me/` la traduit en
+capacités (`record_expenses`, `review_expenses`, `validate_expenses`…) que
+l'interface se contente de lire.
 
 **Le manager déclare, le DM contrôle, le DF constate.** Le circuit est
 tenu par trois personnes : le `manager` soumet, le `dm` met en contrôle,
@@ -115,7 +123,8 @@ dépense ne peut pas la justifier lui-même. Il faut deux personnes.
 
 Le référentiel d'un pays — équipes, projets, intitulés, catégories,
 bénéficiaires — est tenu par la RH et les super administrateurs pour tous
-les pays, et par le `manager` pour le sien (`manage_subentities`).
+les pays (`manage_subentities`) ; ni le `manager`, ni le `dm`, ni le `df`
+n'y écrivent.
 
 Le périmètre est porté par le profil : un compte du siège sans pays
 explicite couvre tous les pays ; `dm` et `df` peuvent être restreints à
@@ -264,12 +273,12 @@ GET/POST/PATCH /api/projects/            # projets
 GET/POST/PATCH /api/expense-titles/      # intitulés de dépenses
 GET/POST/PATCH /api/marketing-categories/# catégories marketing
 
-GET/POST/PATCH /api/budgets/             # enveloppes annuelles et sous-enveloppes (?year=)
+GET/POST/PATCH /api/budgets/             # enveloppes annuelles et sous-enveloppes (?year=) ; écriture : super_admin
 GET    /api/budgets/summary/             # consolidation par pays, total en FCFA
-GET/POST /api/reallocations/             # demandes de transfert entre enveloppes
-POST   /api/reallocations/{id}/approve/  # exécute le transfert
-POST   /api/reallocations/{id}/reject/   # motif obligatoire
-GET/POST/PATCH /api/exchange-rates/      # taux de conversion vers le FCFA
+GET/POST /api/reallocations/             # demandes de transfert entre enveloppes (super_admin)
+POST   /api/reallocations/{id}/approve/  # exécute le transfert (super_admin)
+POST   /api/reallocations/{id}/reject/   # motif obligatoire (super_admin)
+GET/POST/PATCH /api/exchange-rates/      # taux de conversion vers le FCFA ; écriture : super_admin
 
 GET/POST/PATCH /api/dossiers/            # dossiers de justification (N°ORDRE)
 DELETE /api/dossiers/{id}/               # brouillon seul, par son auteur
@@ -284,7 +293,7 @@ GET/POST /api/proofs/                    # justificatifs (dépôt multipart)
 GET    /api/proofs/{id}/download/        # téléchargement contrôlé et tracé
 POST   /api/proofs/{id}/review/          # contrôle documentaire
 GET/POST/PATCH /api/beneficiaries/       # prospects et bénéficiaires, par pays
-GET    /api/audit/                       # journal d'audit
+GET    /api/audit/                       # journal d'audit : RH et direction (admin, super_admin)
 
 GET    /api/dashboard/                   # consolidation, charge et alertes
 GET    /api/dashboard/breakdown/         # répartition équipe/manager/projet/mois

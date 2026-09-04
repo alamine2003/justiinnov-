@@ -235,6 +235,41 @@ class RolePermissionTests(ScopingTestCase):
                 self.assertEqual(lecture.status_code, status.HTTP_200_OK)
                 self.assertEqual(ecriture.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_le_dm_et_le_df_ne_gerent_ni_comptes_ni_referentiel(self):
+        """Décision du produit : le DM et le DF ne sont ni administrateurs ni
+        super administrateurs. Comptes, pays, managers, référentiel : la RH
+        et la direction. Le refus vient du rôle (403), pas du périmètre."""
+        ecritures = (
+            ("/api/users/", {
+                "username": "x.innov", "email": "x@innovpharma.net",
+                "password": "Provisoire-2026-X", "role": Role.MANAGER,
+                "countries": [self.togo.pk],
+            }),
+            ("/api/countries/", {
+                "name": "Bénin", "code": "BJ", "currency": "XOF",
+                "timezone": "Africa/Porto-Novo",
+            }),
+            ("/api/managers/", {"name": "Awa Diop"}),
+            ("/api/projects/", {"country": self.togo.pk, "name": "Projet X"}),
+            ("/api/beneficiaries/", {
+                "country": self.togo.pk, "name": "Pharmacie X", "kind": "supplier",
+            }),
+        )
+        for compte in (self.controleur, self.dm):
+            self.login(compte)
+            for route, charge in ecritures:
+                with self.subTest(role=compte.profile.role, route=route):
+                    response = self.client.post(route, charge, format="json")
+
+                    self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+            with self.subTest(role=compte.profile.role, route="/api/users/ (lecture)"):
+                # La liste des comptes est elle-même un écran d'administration.
+                self.assertEqual(
+                    self.client.get("/api/users/").status_code, status.HTTP_403_FORBIDDEN
+                )
+        self.assertFalse(User.objects.filter(username="x.innov").exists())
+        self.assertFalse(Country.objects.filter(code="BJ").exists())
+
     def test_role_pays_sans_perimetre_ne_voit_rien(self):
         """L'absence de périmètre ne doit jamais valoir autorisation générale."""
         orphelin = make_user("sans-pays.innov", Role.MANAGER)
@@ -309,10 +344,12 @@ class MeTests(ScopingTestCase):
         permissions = self.client.get("/api/me/").data["permissions"]
 
         self.assertTrue(permissions["review_expenses"])
-        self.assertTrue(permissions["view_audit"])
         self.assertFalse(permissions["validate_expenses"])
         self.assertFalse(permissions["record_expenses"])
         self.assertFalse(permissions["manage_subentities"])
+        # Aucun droit d'administration : ni journal, ni enveloppes.
+        self.assertFalse(permissions["view_audit"])
+        self.assertFalse(permissions["manage_budgets"])
 
     def test_compte_sans_profil_garde_une_reponse_complete(self):
         """Un compte technique hérité n'a pas de profil : la liste des comptes
@@ -398,6 +435,14 @@ class BackOfficeTests(ScopingTestCase):
         # La RH tient le référentiel de tous les pays, pas le manager.
         self.assertIn(Role.ADMIN, capacites["manage_subentities"])
         self.assertNotIn(Role.MANAGER, capacites["manage_subentities"])
+        # Le DM et le DF n'administrent rien : les enveloppes sont à la
+        # direction seule, le journal d'audit à la RH et à la direction.
+        self.assertEqual(capacites["manage_budgets"], [Role.SUPER_ADMIN])
+        self.assertEqual(sorted(capacites["view_audit"]), [Role.ADMIN, Role.SUPER_ADMIN])
+        for capacite in ("manage_users", "manage_countries", "manage_subentities",
+                         "manage_budgets", "view_audit", "export_data", "reopen_dossiers"):
+            self.assertNotIn(Role.DM, capacites[capacite], capacite)
+            self.assertNotIn(Role.DF, capacites[capacite], capacite)
 
         # Et elle doit concorder avec les droits annoncés à chaque titulaire —
         # pas seulement au super administrateur, qui a tout et ne prouve rien.
