@@ -3,6 +3,7 @@
 from collections import defaultdict
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
@@ -10,8 +11,10 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.parsers import FormParser, MultiPartParser
 
-from budget.aggregates import budget_figures, to_xof
+from budget.aggregates import consolidation_par_pays, current_rates, to_xof
+from core.requetes import client_ip
 from expenses.models import AuditLog
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 
@@ -22,6 +25,8 @@ from .exports import (
     build_reconciliation_workbook,
 )
 from .scope import scoped_querysets
+from accounts.permissions import EXPENSE_WRITE_ROLES, RolePermission, get_access
+from .imports import audit_import, importer_depenses
 
 ZERO = Decimal("0.00")
 
@@ -38,6 +43,15 @@ def _as_int(value, field):
         raise ValidationError({field: "Valeur entière attendue."})
 
 
+def _pays_unique(request):
+    """Le seul pays du périmètre, ou ``None`` s'il y en a zéro ou plusieurs."""
+    access = get_access(request.user)
+    if access is None or access.has_global_scope:
+        return None
+    ids = list(access.country_ids)
+    return ids[0] if len(ids) == 1 else None
+
+
 def _money(value):
     return str(value if value is not None else ZERO)
 
@@ -48,6 +62,10 @@ def _ratio(numerator, denominator):
     return str((Decimal(numerator) / Decimal(denominator)).quantize(Decimal("0.0001")))
 
 
+def _as_str(value):
+    return str(value) if value is not None else None
+
+
 class DashboardView(APIView):
     """Vue de pilotage : consolidation, répartition par pays et alertes."""
 
@@ -56,13 +74,15 @@ class DashboardView(APIView):
         country_id = _as_int(request.query_params.get("country"), "country")
         budgets, dossiers, expenses = scoped_querysets(request, year, country_id)
 
-        rows, totals, consolidated = self._per_country(budgets)
+        rows, _, consolidated = self._per_country(budgets)
         current_alerts = alert_rules.collect(budgets, dossiers, expenses)
 
         return Response(
             {
                 "year": year,
-                "totals": totals,
+                # Les totaux en devise n'existent que par pays : au niveau
+                # global, seul le FCFA consolidé a un sens.
+                "totals": self._totaux_consolides(rows),
                 "consolidated_xof": consolidated,
                 "countries": rows,
                 "workload": self._workload(dossiers, expenses),
@@ -79,78 +99,76 @@ class DashboardView(APIView):
             }
         )
 
-    def _per_country(self, budgets):
-        """Agrège par pays ; seules les enveloppes de pays composent le total,
-        les sous-enveloppes en étant un découpage."""
-        per_country = defaultdict(
-            lambda: {
-                "allocated": ZERO, "sub_allocated": ZERO, "engaged": ZERO,
-                "consumed": ZERO, "justified": ZERO,
+    #: Chiffres d'une ligne de pays qui se consolident en FCFA.
+    MONTANTS = ("allocated", "engaged", "consumed", "justified", "remaining")
+
+    def _totaux_consolides(self, rows):
+        """Totaux globaux, en FCFA uniquement.
+
+        Additionner « allocated » du Togo (XOF) et du Ghana (GHS) donnait un
+        chiffre sans unité, présenté comme un total. Chaque montant est
+        converti au taux courant ; un pays dont la devise n'a pas de taux est
+        écarté et nommé, jamais absorbé.
+        """
+        rates = current_rates()
+        totaux = {key: ZERO for key in self.MONTANTS}
+        non_converties = set()
+        for row in rows:
+            montants = {
+                key: to_xof(Decimal(row[key]), row["currency"], rates=rates)
+                for key in self.MONTANTS
             }
-        )
-        countries = {}
+            if any(value is None for value in montants.values()):
+                non_converties.add(row["currency"])
+                continue
+            for key, value in montants.items():
+                totaux[key] += value
 
-        for budget in budgets:
-            entry = per_country[budget.country_id]
-            countries[budget.country_id] = budget.country
-            # Seule l'enveloppe du pays compose le total : projet,
-            # équipe et manager n'en sont que des découpages.
-            if budget.scope_kind == "country":
-                entry["allocated"] += budget.amount
-            else:
-                entry["sub_allocated"] += budget.amount
-            figures = budget_figures(budget)
-            entry["engaged"] += figures["engaged"]
-            entry["consumed"] += figures["consumed"]
-            entry["justified"] += figures["justified"]
+        used = totaux["consumed"] + totaux["engaged"]
+        return {
+            "currency": "XOF",
+            **{key: _money(value) for key, value in totaux.items()},
+            # Ce qui est sorti sans preuve à l'appui.
+            "gap": _money(totaux["consumed"] - totaux["justified"]),
+            "execution_rate": _ratio(used, totaux["allocated"]),
+            "justification_rate": _ratio(totaux["justified"], totaux["consumed"]),
+            "unconverted_currencies": sorted(non_converties),
+        }
 
-        rows = []
+    def _per_country(self, budgets):
+        """Agrège par pays via :func:`consolidation_par_pays`, seul point de
+        calcul partagé avec ``/api/budgets/summary/``."""
+        rows, consolidated = consolidation_par_pays(budgets, rates=current_rates())
+
+        # Totaux en devises locales additionnées : conservés tels quels pour
+        # ne pas changer le contrat de la vue ici ; le sens n'en est assuré
+        # que lorsque tous les pays partagent la même devise.
         totals = defaultdict(lambda: ZERO)
-        allocated_xof = ZERO
-        remaining_xof_total = ZERO
-        unconverted = set()
-
-        for country_id, entry in per_country.items():
-            country = countries[country_id]
-            used = entry["consumed"] + entry["engaged"]
-            remaining = entry["allocated"] - used
-            for key, value in entry.items():
-                totals[key] += value
-            totals["remaining"] += remaining
-
-            allocated_xof_row = to_xof(entry["allocated"], country.currency)
-            remaining_xof = to_xof(remaining, country.currency)
-            if remaining_xof is None or allocated_xof_row is None:
-                unconverted.add(country.currency)
-            else:
-                allocated_xof += allocated_xof_row
-                remaining_xof_total += remaining_xof
-
-            rows.append(
-                {
-                    "country": country_id,
-                    "country_name": country.name,
-                    "country_ref": country.country_ref,
-                    "currency": country.currency,
-                    "allocated": _money(entry["allocated"]),
-                    "sub_allocated": _money(entry["sub_allocated"]),
-                    "engaged": _money(entry["engaged"]),
-                    "consumed": _money(entry["consumed"]),
-                    "justified": _money(entry["justified"]),
-                    "gap": _money(entry["consumed"] - entry["justified"]),
-                    "remaining": _money(remaining),
-                    "execution_rate": _ratio(used, entry["allocated"]),
-                    "justification_rate": _ratio(entry["justified"], entry["consumed"]),
-                    "remaining_xof": (
-                        str(remaining_xof) if remaining_xof is not None else None
-                    ),
-                }
-            )
-
-        rows.sort(key=lambda row: row["country_name"])
+        for row in rows:
+            for key in ("allocated", "engaged", "consumed", "justified", "remaining"):
+                totals[key] += row[key]
         used_total = totals["consumed"] + totals["engaged"]
+
         return (
-            rows,
+            [
+                {
+                    "country": row["country"],
+                    "country_name": row["country_name"],
+                    "country_ref": row["country_ref"],
+                    "currency": row["currency"],
+                    "allocated": _money(row["allocated"]),
+                    "sub_allocated": _money(row["sub_allocated"]),
+                    "engaged": _money(row["engaged"]),
+                    "consumed": _money(row["consumed"]),
+                    "justified": _money(row["justified"]),
+                    "gap": _money(row["gap"]),
+                    "remaining": _money(row["remaining"]),
+                    "execution_rate": _as_str(row["execution_rate"]),
+                    "justification_rate": _as_str(row["justification_rate"]),
+                    "remaining_xof": _as_str(row["remaining_xof"]),
+                }
+                for row in rows
+            ],
             {
                 "allocated": _money(totals["allocated"]),
                 "engaged": _money(totals["engaged"]),
@@ -163,11 +181,11 @@ class DashboardView(APIView):
                 "justification_rate": _ratio(totals["justified"], totals["consumed"]),
             },
             {
-                "allocated": str(allocated_xof),
-                "remaining": str(remaining_xof_total),
+                "allocated": str(consolidated["allocated"]),
+                "remaining": str(consolidated["remaining"]),
                 # Une devise sans taux connu est exclue du total et signalée,
                 # jamais absorbée silencieusement.
-                "unconverted_currencies": sorted(unconverted),
+                "unconverted_currencies": consolidated["unconverted_currencies"],
             },
         )
 
@@ -193,6 +211,14 @@ class BreakdownView(APIView):
     def get(self, request):
         year = _as_int(request.query_params.get("year"), "year") or timezone.now().year
         country_id = _as_int(request.query_params.get("country"), "country")
+        if not country_id:
+            # Sans pays, deux équipes homonymes de pays différents — et de
+            # devises différentes — fusionneraient dans une même ligne. Un
+            # compte restreint à un seul pays n'a rien à choisir : il obtient
+            # sa répartition sans avoir à nommer ce pays.
+            country_id = _pays_unique(request)
+        if not country_id:
+            raise ValidationError({"country": "Le pays est obligatoire."})
         _, _, expenses = scoped_querysets(request, year, country_id)
 
         # Brouillons et refus ne représentent aucune consommation réelle.
@@ -265,17 +291,19 @@ class ExportView(APIView):
     filename = "export"
     audit_label = "Export"
 
-    def build(self, request, budgets, dossiers, expenses):  # pragma: no cover
+    def build(self, budgets, dossiers, expenses, year):  # pragma: no cover
         raise NotImplementedError
 
     def get(self, request):
         year = _as_int(request.query_params.get("year"), "year") or timezone.now().year
         country_id = _as_int(request.query_params.get("country"), "country")
+        # Le pays est vérifié contre le périmètre par ``scoped_querysets`` :
+        # un identifiant inconnu ou étranger répond 404 avant tout calcul.
         budgets, dossiers, expenses = scoped_querysets(request, year, country_id)
 
-        content, content_type, filename = self.build(
-            request, budgets, dossiers, expenses
-        )
+        # L'année validée sert aussi au nom du fichier : reprise brute de la
+        # requête, elle y injectait ce que le client voulait.
+        content, content_type, filename = self.build(budgets, dossiers, expenses, year)
         self._audit(request, year, country_id, filename)
 
         response = HttpResponse(content, content_type=content_type)
@@ -292,7 +320,7 @@ class ExportView(APIView):
             label=f"{self.audit_label} — {filename}",
             country_id=country_id,
             detail={"year": year, "country": country_id},
-            ip_address=request.META.get("REMOTE_ADDR") or None,
+            ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", "")[:250],
         )
 
@@ -305,10 +333,8 @@ class ExpensesExportView(ExportView):
 
     audit_label = "Export des dépenses"
 
-    def build(self, request, budgets, dossiers, expenses):
-        workbook = build_expenses_workbook(dossiers)
-        year = request.query_params.get("year") or timezone.now().year
-        return workbook, XLSX, f"depenses-{year}.xlsx"
+    def build(self, budgets, dossiers, expenses, year):
+        return build_expenses_workbook(dossiers), XLSX, f"depenses-{year}.xlsx"
 
 
 class ReconciliationExportView(ExportView):
@@ -316,9 +342,8 @@ class ReconciliationExportView(ExportView):
 
     audit_label = "Rapport de rapprochement"
 
-    def build(self, request, budgets, dossiers, expenses):
+    def build(self, budgets, dossiers, expenses, year):
         workbook = build_reconciliation_workbook(budgets, dossiers)
-        year = request.query_params.get("year") or timezone.now().year
         return workbook, XLSX, f"rapprochement-{year}.xlsx"
 
 
@@ -327,7 +352,29 @@ class CountryReportView(ExportView):
 
     audit_label = "Rapport PDF"
 
-    def build(self, request, budgets, dossiers, expenses):
-        year = _as_int(request.query_params.get("year"), "year") or timezone.now().year
+    def build(self, budgets, dossiers, expenses, year):
         pdf = build_country_report_pdf(budgets, dossiers, expenses, year)
         return pdf, "application/pdf", f"rapport-{year}.pdf"
+
+
+class ExpensesImportView(APIView):
+    """Importe le format exact de l'export des dépenses.
+
+    Réservé aux rôles de saisie : importer, c'est déclarer. Un contrôleur ou
+    la direction des opérations lisent et constatent, ils ne déclarent pas.
+    """
+
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [RolePermission]
+    write_roles = EXPENSE_WRITE_ROLES
+
+    def post(self, request):
+        self.check_permissions(request)
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            raise ValidationError({"file": "Le champ file est obligatoire."})
+        dry_run = str(request.query_params.get("dry_run", "false")).lower() == "true"
+        with transaction.atomic():
+            resultat = importer_depenses(uploaded, request.user, dry_run=dry_run)
+            audit_import(request, resultat)
+        return Response(resultat)

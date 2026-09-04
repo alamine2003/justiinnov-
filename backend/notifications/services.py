@@ -4,7 +4,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, get_connection
 from django.db.models import Q
 from django.utils import timezone
 
@@ -18,9 +18,11 @@ logger = logging.getLogger(__name__)
 def recipients_for(roles, country=None):
     """Comptes actifs portant l'un des rôles et couvrant le pays visé.
 
-    Un rôle du siège sans périmètre couvre tous les pays ; un rôle pays n'est
-    concerné que si le pays fait partie de son périmètre — la même règle que
-    le cloisonnement des données.
+    Un rôle du siège sans périmètre couvre tous les pays ; un rôle pays — ou
+    un rôle du siège au périmètre restreint — n'est concerné que si le pays
+    fait partie de son périmètre : la même règle que le cloisonnement des
+    données. Sans ``country``, tous les comptes du rôle sont renvoyés, et
+    c'est à l'appelant de cloisonner ce qu'il leur envoie.
     """
     roles = list(roles)
     users = User.objects.filter(
@@ -42,6 +44,15 @@ def recipients_for(roles, country=None):
     ).distinct()
 
 
+def _deja_avertis(dedup_key, recipients):
+    """Destinataires déjà notifiés de cet événement, en une requête."""
+    return set(
+        Notification.objects.filter(
+            dedup_key=dedup_key, recipient__in=recipients
+        ).values_list("recipient_id", flat=True)
+    )
+
+
 def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
            country=None, send_email=True):
     """Crée les notifications manquantes et envoie les e-mails correspondants.
@@ -59,13 +70,7 @@ def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
     if not recipients:
         return []
 
-    # Une seule requête pour savoir qui a déjà été averti de cet événement.
-    deja_avertis = set(
-        Notification.objects.filter(
-            dedup_key=dedup_key, recipient__in=recipients
-        ).values_list("recipient_id", flat=True)
-    )
-    manquants = [r for r in recipients if r.pk not in deja_avertis]
+    manquants = [r for r in recipients if r.pk not in _deja_avertis(dedup_key, recipients)]
     if not manquants:
         return []
 
@@ -98,28 +103,57 @@ def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
     return created
 
 
+def _sujet(title):
+    """Sujet sur une seule ligne : un retour à la ligne dans un libellé de
+    dépense ferait lever ``BadHeaderError`` — ou, pire, injecter un en-tête."""
+    return "[Contrôle budgétaire] " + " ".join(title.split())
+
+
 def _send_emails(notifications, title, body, link):
-    """Envoie l'e-mail associé, sans jamais faire échouer l'action métier."""
+    """Envoie l'e-mail associé, sans jamais faire échouer l'action métier.
+
+    Les lignes à envoyer sont d'abord **réclamées** : ``emailed_at`` est posé
+    en une seule mise à jour filtrée sur les lignes encore vierges. L'ordonnanceur
+    et une requête web peuvent notifier le même événement au même moment ;
+    avec ``ignore_conflicts``, chacun relisait ensuite la même ligne et
+    envoyait le même e-mail deux fois. Un seul des deux gagne la mise à jour.
+
+    Un message par destinataire : un envoi groupé exposait à chacun les
+    adresses de tous les autres.
+    """
     addressed = [n for n in notifications if n.recipient.email]
     if not addressed:
+        return
+
+    stamped = timezone.now()
+    Notification.objects.filter(
+        pk__in=[n.pk for n in addressed], emailed_at__isnull=True
+    ).update(emailed_at=stamped)
+    reclamees = [
+        n for n in Notification.objects.filter(
+            pk__in=[n.pk for n in addressed], emailed_at=stamped
+        ).select_related("recipient")
+    ]
+    if not reclamees:
         return
 
     url = f"{settings.APP_BASE_URL}{link}" if link else settings.APP_BASE_URL
     message = f"{body}\n\n{url}" if body else url
     try:
-        send_mail(
-            subject=f"[Contrôle budgétaire] {title}",
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[n.recipient.email for n in addressed],
-            fail_silently=False,
-        )
+        with get_connection() as connection:
+            for notification in reclamees:
+                EmailMessage(
+                    subject=_sujet(title),
+                    body=message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=[notification.recipient.email],
+                    connection=connection,
+                ).send(fail_silently=False)
     except Exception:
         # Une notification in-app reste enregistrée : l'utilisateur la verra.
+        # L'horodatage est retiré : rien n'est parti, il ne faut pas le
+        # prétendre.
         logger.exception("Envoi d'e-mail de notification impossible")
-        return
-
-    stamped = timezone.now()
-    Notification.objects.filter(pk__in=[n.pk for n in addressed]).update(
-        emailed_at=stamped
-    )
+        Notification.objects.filter(
+            pk__in=[n.pk for n in reclamees], emailed_at=stamped
+        ).update(emailed_at=None)

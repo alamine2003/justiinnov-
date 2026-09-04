@@ -16,14 +16,16 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from django.conf import settings
 from django.core.management import call_command
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.db import close_old_connections
 
 logger = logging.getLogger("scheduler")
 
 #: Tâches et leur cadence, en syntaxe cron.
 #:
-#: L'heure est celle du fuseau du serveur ; le rapport hebdomadaire part donc
-#: le lundi matin, avant que le siège n'ouvre.
+#: Les heures s'entendent dans le fuseau de l'application (``TIME_ZONE``,
+#: UTC par défaut), pas dans celui de la machine hôte ; le rapport
+#: hebdomadaire part le lundi matin, avant que le siège n'ouvre.
 JOBS = [
     {
         "id": "notify_alerts",
@@ -56,12 +58,20 @@ def run_job(job):
     indisponible — ne doit pas emporter avec elle les tâches suivantes.
     """
     name, options = job["command"]
+    # L'ordonnanceur vit des jours entiers : entre deux tâches, la connexion
+    # à la base peut avoir été fermée par le serveur (délai d'inactivité,
+    # redémarrage). Sans ce nettoyage, la tâche suivante échouait sur une
+    # connexion morte ; après, pour ne pas garder une transaction ouverte
+    # pendant des heures.
+    close_old_connections()
     try:
         logger.info("→ %s", job["label"])
         call_command(name, **options)
         logger.info("✓ %s", job["label"])
     except Exception:
         logger.exception("✗ %s a échoué ; les autres tâches continuent", job["label"])
+    finally:
+        close_old_connections()
 
 
 class Command(BaseCommand):
@@ -98,7 +108,7 @@ class Command(BaseCommand):
         for job, expression in planning:
             scheduler.add_job(
                 run_job,
-                CronTrigger.from_crontab(expression, timezone=settings.TIME_ZONE),
+                declencheur(job, expression),
                 args=[job],
                 id=job["id"],
                 # Une tâche manquée pendant un redémarrage se rattrape dans
@@ -126,3 +136,19 @@ def os_cron(job):
     import os
 
     return os.environ.get(job["cron"], job["default"]).strip()
+
+
+def declencheur(job, expression):
+    """Déclencheur cron de la tâche, ou une erreur qui dit laquelle.
+
+    Une expression fautive posée dans l'environnement faisait échouer le
+    démarrage sur une trace apscheduler sans le nom de la variable : le
+    conteneur redémarrait en boucle sans que l'on sache quoi corriger.
+    """
+    try:
+        return CronTrigger.from_crontab(expression, timezone=settings.TIME_ZONE)
+    except ValueError as exc:
+        raise CommandError(
+            f"Cadence invalide pour « {job['label']} » : {expression!r} "
+            f"(variable {job['cron']}) — {exc}"
+        ) from exc

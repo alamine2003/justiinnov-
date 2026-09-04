@@ -56,7 +56,13 @@ class Notification(models.Model):
                 fields=["recipient", "dedup_key"], name="unique_notification_par_evenement"
             )
         ]
-        indexes = [models.Index(fields=["recipient", "read_at"])]
+        indexes = [
+            models.Index(fields=["recipient", "read_at"]),
+            # ``notify`` cherche d'abord qui a déjà été averti d'un événement,
+            # par sa clé seule : sans index dédié, chaque alerte parcourait
+            # la table entière.
+            models.Index(fields=["dedup_key"], name="notification_dedup_key_idx"),
+        ]
 
     def __str__(self):
         return f"{self.get_kind_display()} — {self.recipient.username}"

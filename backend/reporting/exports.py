@@ -29,6 +29,9 @@ from expenses.models import Proof
 
 ZERO = Decimal("0.00")
 
+#: Dossiers listés au plus dans le rapport PDF, qui reste une synthèse.
+MAX_DOSSIERS_PDF = 200
+
 HEADER_FILL = PatternFill("solid", fgColor="1F3864")
 HEADER_FONT = Font(color="FFFFFF", bold=True)
 
@@ -50,6 +53,35 @@ EXPENSE_COLUMNS = [
     ("STATUT", 14),
     ("PIECES JUSTIFICATIVES", 30),
 ]
+
+
+#: Premiers caractères qu'un tableur interprète comme une formule.
+FORMULE = ("=", "+", "-", "@", "\t", "\r")
+
+
+def cellule_sure(value):
+    """Texte inoffensif pour un tableur.
+
+    Un libellé saisi par un utilisateur peut commencer par ``=`` : Excel y
+    verrait une formule, ``=HYPERLINK(...)`` ou un appel DDE, exécutée à
+    l'ouverture du classeur sur le poste d'un contrôleur. La valeur est
+    conservée telle quelle — le rapprochement doit retrouver le libellé — mais
+    marquée comme texte à l'écriture (voir :func:`ecrire`).
+    """
+    return isinstance(value, str) and value.startswith(FORMULE)
+
+
+def ecrire(sheet, row, column, value):
+    """Écrit une cellule en forçant le texte quand il ressemble à une formule.
+
+    Les montants sont écrits en ``Decimal``, sans passer par ``float`` : un
+    arrondi binaire ferait apparaître 0,1 + 0,2 ≠ 0,3 dans un rapport dont
+    la raison d'être est l'exactitude des écarts.
+    """
+    cell = sheet.cell(row=row, column=column, value=value)
+    if cellule_sure(value):
+        cell.data_type = "s"
+    return cell
 
 
 def _style_header(sheet, columns):
@@ -99,27 +131,26 @@ def build_expenses_workbook(dossiers):
                 expense.team.name if expense.team else "",
                 expense.owner.name if expense.owner else "",
                 expense.title,
-                float(expense.amount),
+                expense.amount,
                 expense.original_currency or "",
-                float(expense.original_amount)
+                expense.original_amount
                 if expense.original_amount is not None
                 else "",
-                float(expense.justified_amount),
-                float(gap),
+                expense.justified_amount,
+                gap,
                 expense.get_status_display(),
                 proofs,
             ]
             for column, value in enumerate(values, start=1):
-                sheet.cell(row=row_index, column=column, value=value)
+                ecrire(sheet, row_index, column, value)
             row_index += 1
 
     if row_index > 2:
-        sheet.cell(row=row_index, column=6, value="TOTAL").font = Font(bold=True)
-        sheet.cell(row=row_index, column=7, value=float(totals["amount"])).font = Font(bold=True)
-        sheet.cell(row=row_index, column=10, value=float(totals["justified"])).font = Font(bold=True)
-        sheet.cell(
-            row=row_index, column=11,
-            value=float(totals["amount"] - totals["justified"]),
+        ecrire(sheet, row_index, 6, "TOTAL").font = Font(bold=True)
+        ecrire(sheet, row_index, 7, totals["amount"]).font = Font(bold=True)
+        ecrire(sheet, row_index, 10, totals["justified"]).font = Font(bold=True)
+        ecrire(
+            sheet, row_index, 11, totals["amount"] - totals["justified"]
         ).font = Font(bold=True)
 
     return _to_bytes(workbook)
@@ -152,18 +183,20 @@ def build_reconciliation_workbook(budgets, dossiers):
         rate = figures["justification_rate"]
         values = [
             budget.country.name,
-            budget.project.name if budget.project else "Enveloppe du pays",
+            # ``scope_label`` distingue projet, équipe et manager : une
+            # sous-enveloppe d'équipe se lisait « Enveloppe du pays ».
+            budget.scope_label or "Enveloppe du pays",
             budget.country.currency,
-            float(budget.amount),
-            float(figures["engaged"]),
-            float(figures["consumed"]),
-            float(figures["justified"]),
-            float(figures["gap"]),
-            float(figures["remaining"]),
-            float(rate) if rate is not None else "",
+            budget.amount,
+            figures["engaged"],
+            figures["consumed"],
+            figures["justified"],
+            figures["gap"],
+            figures["remaining"],
+            rate if rate is not None else "",
         ]
         for column, value in enumerate(values, start=1):
-            sheet.cell(row=index, column=column, value=value)
+            ecrire(sheet, index, column, value)
 
     detail = workbook.create_sheet("Rapprochement dossiers")
     _style_header(
@@ -182,13 +215,13 @@ def build_reconciliation_workbook(budgets, dossiers):
             dossier.country.name,
             dossier.date.strftime("%d/%m/%Y"),
             dossier.get_status_display(),
-            float(totals["amount"]),
-            float(totals["justified"]),
-            float(totals["gap"]),
+            totals["amount"],
+            totals["justified"],
+            totals["gap"],
             dossier.counts()["proofs"],
         ]
         for column, value in enumerate(values, start=1):
-            detail.cell(row=index, column=column, value=value)
+            ecrire(detail, index, column, value)
 
     return _to_bytes(workbook)
 
@@ -232,7 +265,7 @@ def build_country_report_pdf(budgets, dossiers, expenses, year):
         figures = budget_figures(budget)
         budget_rows.append([
             budget.country.name,
-            budget.project.name if budget.project else "Enveloppe du pays",
+            budget.scope_label or "Enveloppe du pays",
             _fmt(budget.amount),
             _fmt(figures["engaged"]),
             _fmt(figures["consumed"]),
@@ -247,7 +280,11 @@ def build_country_report_pdf(budgets, dossiers, expenses, year):
     dossier_rows = [[
         "N°ORDRE", "Libellé", "Pays", "Date", "Statut", "Dépenses", "Justifié", "Écart",
     ]]
-    for dossier in dossiers.select_related("country")[:200]:
+    # Le PDF est une synthèse : au-delà de MAX_DOSSIERS_PDF dossiers, le
+    # lecteur est renvoyé au classeur Excel, et le document le dit — un
+    # rapport tronqué en silence ferait croire à un exercice plus court.
+    nombre_dossiers = dossiers.count()
+    for dossier in dossiers.select_related("country")[:MAX_DOSSIERS_PDF]:
         totals = dossier.totals()
         dossier_rows.append([
             dossier.number,
@@ -261,10 +298,24 @@ def build_country_report_pdf(budgets, dossiers, expenses, year):
         ])
 
     story.append(Paragraph("Dossiers de justification", styles["Heading2"]))
+    troncature = avertissement_troncature(nombre_dossiers)
+    if troncature:
+        story.append(Paragraph(troncature, styles["Italic"]))
     story.append(_table(dossier_rows) if len(dossier_rows) > 1 else _empty(styles))
 
     document.build(story)
     return buffer.getvalue()
+
+
+def avertissement_troncature(nombre_dossiers):
+    """Phrase qui signale les dossiers absents du PDF, ou ``None``."""
+    if nombre_dossiers <= MAX_DOSSIERS_PDF:
+        return None
+    return (
+        f"Seuls les {MAX_DOSSIERS_PDF} dossiers les plus récents sur "
+        f"{nombre_dossiers} figurent ici ; la liste complète est dans "
+        "l'export Excel des dépenses."
+    )
 
 
 def _empty(styles):

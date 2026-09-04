@@ -12,7 +12,7 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget, ExchangeRate
-from core.models import Project, Team
+from core.models import Country, Project, Team
 from expenses.models import AuditLog, Dossier, Expense, Proof
 from expenses.tests.base import ExpenseTestCase, in_memory_storage
 from expenses.workflow import Status
@@ -87,6 +87,41 @@ class DashboardTests(DashboardTestCase):
         # Le Togo reste converti : le total n'absorbe pas la devise inconnue.
         self.assertEqual(response.data["consolidated_xof"]["remaining"], "500000.00")
 
+    def test_les_totaux_ne_melangent_pas_les_devises(self):
+        """Additionner des francs et des cedis donnait un chiffre sans unité,
+        présenté comme un total."""
+        ghana = Country.objects.create(
+            name="Ghana", code="GH", country_ref="GH-03", currency="GHS",
+            timezone="Africa/Accra",
+        )
+        Budget.objects.create(country=ghana, year=self.year, amount=Decimal("5000.00"))
+        self.login(self.doo)
+
+        response = self.client.get("/api/dashboard/", {"year": self.year})
+
+        totals = response.data["totals"]
+        self.assertEqual(totals["currency"], "XOF")
+        self.assertEqual(totals["allocated"], "1500000.00")
+        self.assertEqual(totals["unconverted_currencies"], ["GHS"])
+        ghana_row = next(r for r in response.data["countries"] if r["currency"] == "GHS")
+        self.assertEqual(ghana_row["allocated"], "5000.00")
+
+    def test_une_devise_convertie_entre_dans_les_totaux(self):
+        ghana = Country.objects.create(
+            name="Ghana", code="GH", country_ref="GH-03", currency="GHS",
+            timezone="Africa/Accra",
+        )
+        Budget.objects.create(country=ghana, year=self.year, amount=Decimal("5000.00"))
+        ExchangeRate.objects.create(
+            currency="GHS", rate_to_xof=Decimal("40"), valid_from=date(2020, 1, 1)
+        )
+        self.login(self.doo)
+
+        response = self.client.get("/api/dashboard/", {"year": self.year})
+
+        self.assertEqual(response.data["totals"]["allocated"], "1700000.00")
+        self.assertEqual(response.data["totals"]["unconverted_currencies"], [])
+
     def test_conversion_utilise_le_taux_enregistre(self):
         self.ivoire.currency = "EUR"
         self.ivoire.save()
@@ -104,6 +139,16 @@ class DashboardTests(DashboardTestCase):
 
 
 class BreakdownTests(DashboardTestCase):
+    def test_un_compte_restreint_a_un_pays_obtient_sa_repartition_sans_le_nommer(self):
+        """Le pays est implicite quand le périmètre n'en contient qu'un."""
+        self.login(self.owner)
+
+        response = self.client.get("/api/dashboard/breakdown/", {"year": self.year})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        equipes = {row["label"] for row in response.data["by_team"]}
+        self.assertIn("Équipe Lomé", equipes)
+
     def test_repartition_par_equipe_et_par_mois(self):
         self.login(self.doo)
 
@@ -128,6 +173,16 @@ class BreakdownTests(DashboardTestCase):
 
         total = sum(Decimal(row["amount"]) for row in response.data["by_team"])
         self.assertEqual(total, Decimal("570000.00"))
+
+    def test_le_pays_est_obligatoire(self):
+        """Sans pays, deux équipes homonymes de pays différents fusionnent."""
+        Team.objects.create(country=self.ivoire, name="Équipe Lomé")
+        self.login(self.doo)
+
+        response = self.client.get("/api/dashboard/breakdown/", {"year": self.year})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("country", response.data)
 
     def test_repartition_par_projet(self):
         projet = Project.objects.create(country=self.togo, name="Campagne T1")
@@ -227,13 +282,19 @@ class AlertTests(DashboardTestCase):
 
 
 class NotificationTests(DashboardTestCase):
-    # Ces tests soumettent des lignes : leur dossier est donc déjà déclaré,
-    # une ligne ne devançant jamais son dossier.
-    dossier_status = Status.SUBMITTED
-
     def notifier(self):
         """Émission des alertes, telle que la planification l'exécute."""
         call_command("notify_alerts", year=self.year, verbosity=0)
+
+    def soumettre(self, dossier=None):
+        """Déclare un dossier brouillon avec une ligne, côté pays."""
+        dossier = dossier or self.dossier
+        expense = self.make_expense(dossier=dossier, title="Taxi", created_by=self.owner.username)
+        self.login(self.owner)
+        response = self.client.post(f"/api/dossiers/{dossier.pk}/submit/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        expense.refresh_from_db()
+        return expense
 
     def test_consulter_le_tableau_de_bord_ne_notifie_personne(self):
         """Régression : un GET écrivait en base, et l'alerte ne partait que si
@@ -293,14 +354,14 @@ class NotificationTests(DashboardTestCase):
 
     def test_un_compte_cree_apres_coup_recoit_les_alertes_suivantes(self):
         """Un cache global de destinataires priverait d'alerte tout compte
-        ouvert après le premier passage."""
+        ouvert après le premier passage — et le second passage ne doit pas
+        pour autant re-notifier ceux qui l'ont déjà été."""
         self.dossier.status = Status.SUBMITTED
         self.dossier.save()
         self.notifier()
+        deja = Notification.objects.filter(kind=Notification.Kind.PROOF_MISSING).count()
 
         nouveau = make_user("nouveau.controle", Role.CONTROLLER)
-        self.dossier.note = "second passage"
-        self.dossier.save()
         self.notifier()
 
         self.assertTrue(
@@ -308,33 +369,37 @@ class NotificationTests(DashboardTestCase):
                 recipient=nouveau, kind=Notification.Kind.PROOF_MISSING
             ).exists()
         )
-
-    def test_soumission_previent_le_controleur(self):
-        expense = self.make_expense()
-        self.login(self.owner)
-
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
-
-        self.assertTrue(
-            Notification.objects.filter(
-                recipient=self.controller,
-                kind=Notification.Kind.EXPENSE_SUBMITTED,
-            ).exists()
+        self.assertEqual(
+            Notification.objects.filter(kind=Notification.Kind.PROOF_MISSING).count(),
+            deja + 1,
         )
+
+    def test_soumission_du_dossier_previent_le_controleur(self):
+        self.soumettre()
+
+        notification = Notification.objects.get(
+            recipient=self.controller, kind=Notification.Kind.EXPENSE_SUBMITTED
+        )
+        self.assertIn("N-0001", notification.title)
+        # Celui qui déclare n'est pas prévenu de sa propre déclaration.
+        self.assertFalse(Notification.objects.filter(recipient=self.owner).exists())
 
     def test_rejet_previent_le_saisisseur_avec_le_motif(self):
         # La ligne porte son auteur : c'est lui que le rejet doit prévenir, et
         # c'est aussi lui que la séparation des tâches écarte du contrôle.
-        expense = self.make_expense(title="Taxi", created_by=self.owner.username)
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
-        expense_id = expense.pk
-
-        self.login(self.controller)
-        self.client.post(
-            f"/api/expenses/{expense_id}/reject/", {"note": "Reçu illisible"}
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+        expense = self.make_expense(
+            title="Taxi", created_by=self.owner.username,
+            status=Status.SUBMITTED, budget=self.budget,
         )
 
+        self.login(self.controller)
+        response = self.client.post(
+            f"/api/expenses/{expense.pk}/reject/", {"note": "Reçu illisible"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         notification = Notification.objects.get(
             recipient=self.owner, kind=Notification.Kind.EXPENSE_REJECTED
         )
@@ -344,32 +409,39 @@ class NotificationTests(DashboardTestCase):
     def test_un_email_accompagne_la_notification(self):
         self.controller.email = "dina@example.org"
         self.controller.save()
-        expense = self.make_expense()
-        self.login(self.owner)
 
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.soumettre()
 
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Dépense à contrôler", mail.outbox[0].subject)
+        self.assertIn("Dossier à contrôler", mail.outbox[0].subject)
         self.assertEqual(mail.outbox[0].to, ["dina@example.org"])
 
     def test_chacun_ne_voit_que_ses_notifications(self):
-        expense = self.make_expense()
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        """Deux destinataires réellement notifiés, chacun ne lit que sa
+        ligne ; celle de l'autre n'existe pas pour lui."""
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+        abidjan = Dossier.objects.create(
+            number="CI-0001", label="Salon Abidjan", country=self.ivoire,
+            date=date(self.year, 4, 2), status=Status.SUBMITTED,
+        )
+        self.notifier()  # justificatif manquant sur les deux dossiers
 
         self.login(self.controller)
         mine = self.client.get("/api/notifications/")
         self.login(self.rep_ivoire)
         theirs = self.client.get("/api/notifications/")
+        autrui = self.client.get(f"/api/notifications/{mine.data['results'][0]['id']}/")
 
-        self.assertEqual(mine.data["count"], 1)
-        self.assertEqual(theirs.data["count"], 0)
+        self.assertEqual(mine.data["count"], 2)
+        self.assertEqual(theirs.data["count"], 1)
+        self.assertEqual(theirs.data["results"][0]["link"], f"/dossiers/{abidjan.pk}")
+        self.assertEqual(autrui.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_marquer_comme_lu(self):
-        expense = self.make_expense()
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+        self.notifier()
 
         self.login(self.controller)
         before = self.client.get("/api/notifications/unread_count/")
@@ -380,22 +452,18 @@ class NotificationTests(DashboardTestCase):
         self.assertEqual(after.data["unread"], 0)
 
     def test_une_notification_ne_bloque_jamais_l_action(self):
-        """Une panne d'e-mail ne doit pas empêcher de soumettre une dépense."""
+        """Une panne d'e-mail ne doit pas empêcher de déclarer un dossier."""
         self.controller.email = "dina@example.org"
         self.controller.save()
-        expense = self.make_expense()
+        self.make_expense(dossier=self.dossier)
         self.login(self.owner)
 
-        with self.settings(
-            EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-            EMAIL_HOST="",
-        ):
-            from unittest.mock import patch
+        from unittest.mock import patch
 
-            with patch(
-                "notifications.services.send_mail", side_effect=OSError("SMTP HS")
-            ):
-                response = self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        with patch(
+            "notifications.services.EmailMessage.send", side_effect=OSError("SMTP HS")
+        ):
+            response = self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(
@@ -498,6 +566,11 @@ class DashboardCostTests(DashboardTestCase):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
+        from core.models import WorkflowConfiguration
+
+        # Le premier chargement de la configuration remplit le cache (six
+        # requêtes) : c'est le volume que l'on mesure, pas l'amorçage.
+        WorkflowConfiguration.charger()
         with CaptureQueriesContext(connection) as captured:
             response = self.client.get("/api/dashboard/", {"year": self.year})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -511,7 +584,7 @@ class DashboardCostTests(DashboardTestCase):
                 status=Status.SUBMITTED,
             )
             Expense.objects.create(
-                dossier=dossier, country=self.togo,
+                dossier=dossier, country=self.togo, budget=self.budget,
                 date=f"{self.year}-02-01T10:00:00Z", title="Ligne",
                 amount=Decimal("1000.00"), status=Status.JUSTIFIED,
             )

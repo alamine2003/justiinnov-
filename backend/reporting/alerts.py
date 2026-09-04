@@ -5,14 +5,16 @@ courant. Ce sont les notifications (§8) qui, elles, sont persistées, pour
 n'avertir qu'une fois d'un même franchissement.
 """
 
+from datetime import timedelta
 from decimal import Decimal
 
-from django.conf import settings
 from django.db.models import Count, Q, Sum
+from django.utils import timezone
 
 from budget.aggregates import budget_figures
-from expenses.models import Expense, Proof
+from expenses.models import Proof
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
+from core.models import WorkflowConfiguration
 
 ZERO = Decimal("0.00")
 
@@ -36,33 +38,46 @@ def _alert(kind, level, title, detail, country=None, link="", key=""):
     }
 
 
+def _pourcentage(part, total):
+    return (part / total * 100).quantize(Decimal("0.1"))
+
+
 def budget_alerts(budgets):
     """Seuils de consommation franchis et dépassements (§8)."""
-    thresholds = sorted(settings.ALERT_THRESHOLDS, reverse=True)
+    thresholds = sorted(WorkflowConfiguration.charger().alert_thresholds, reverse=True)
     alerts = []
 
     for budget in budgets:
-        if not budget.amount:
-            continue
         figures = budget_figures(budget)
         used = figures["consumed"] + figures["engaged"]
-        percentage = (used / budget.amount * 100).quantize(Decimal("0.1"))
+        if not used and not budget.amount:
+            continue
 
         if used > budget.amount:
+            # Une enveloppe à zéro sur laquelle des dépenses sont engagées est
+            # un dépassement, pas un cas à ignorer : c'est même le plus net.
+            # Le pourcentage n'a alors pas de sens et n'est pas affiché.
             overrun = used - budget.amount
+            taux = (
+                f" ({_pourcentage(used, budget.amount)} % engagés)"
+                if budget.amount else ""
+            )
             alerts.append(
                 _alert(
                     "budget_overrun",
                     Level.CRITICAL,
                     f"Dépassement — {budget}",
-                    f"{overrun} {budget.country.currency} au-delà de l'enveloppe "
-                    f"({percentage} % engagés).",
+                    f"{overrun} {budget.country.currency} au-delà de l'enveloppe"
+                    f"{taux}.",
                     country=budget.country,
                     link="/budgets",
                     key=f"budget_overrun:{budget.pk}",
                 )
             )
             continue
+        if not budget.amount:
+            continue
+        percentage = _pourcentage(used, budget.amount)
 
         # Seul le seuil le plus élevé atteint est signalé : trois alertes pour
         # la même enveloppe noieraient l'information.
@@ -86,9 +101,18 @@ def budget_alerts(budgets):
 def proof_alerts(dossiers):
     """Dossiers engagés sans preuve, ou dont une preuve est incomplète."""
     alerts = []
+    delay = WorkflowConfiguration.charger().unjustified_alert_days
     pending = dossiers.filter(
         status__in=list(ENGAGING_STATUSES) + list(CONSUMING_STATUSES)
-    ).annotate(
+    )
+    if delay:
+        # Le délai de grâce s'applique dans la requête : le tester en mémoire
+        # obligeait à charger — et à annoter — tous les dossiers récents pour
+        # les écarter ensuite un à un.
+        pending = pending.filter(
+            date__lte=timezone.now().date() - timedelta(days=delay)
+        )
+    pending = pending.annotate(
         usable_proofs=Count(
             "proofs",
             filter=~Q(proofs__status__in=[
@@ -145,11 +169,17 @@ def unusual_expense_alerts(expenses):
     ``montant > f × T / (n − 1 + f)``. Le filtrage se fait donc en base, au
     lieu de parcourir toutes les dépenses du pays en mémoire.
     """
-    factor = Decimal(str(settings.UNUSUAL_EXPENSE_FACTOR))
+    factor = WorkflowConfiguration.charger().unusual_expense_factor
     consuming = list(CONSUMING_STATUSES)
+    # La référence se calcule sur le queryset reçu — même exercice, même
+    # périmètre — et non sur toute la table : une dépense énorme d'un exercice
+    # passé relevait sinon la moyenne au point de masquer celles de l'année.
+    # Le ``order_by()`` est nécessaire : le tri par défaut du modèle entrerait
+    # sinon dans le GROUP BY et ferait éclater les totaux ligne par ligne.
     stats = {
         row["country"]: (row["total"], row["lines"])
-        for row in Expense.objects.filter(status__in=consuming)
+        for row in expenses.filter(status__in=consuming)
+        .order_by()
         .values("country")
         .annotate(total=Sum("amount"), lines=Count("id"))
     }

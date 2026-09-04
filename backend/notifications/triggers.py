@@ -32,27 +32,6 @@ def _safe(action):
         return []
 
 
-def expense_submitted(expense, actor):
-    """Prévient les contrôleurs qu'une dépense attend leur examen."""
-    return _safe(
-        lambda: notify(
-            recipients_for(CONTROLLERS, expense.country).exclude(pk=actor.pk),
-            kind=Notification.Kind.EXPENSE_SUBMITTED,
-            level=Notification.Level.INFO,
-            title=f"Dépense à contrôler — {expense.title}",
-            body=(
-                f"{expense.amount} {expense.country.currency} "
-                f"sur le dossier {expense.dossier.number}."
-            ),
-            link=f"/dossiers/{expense.dossier_id}",
-            country=expense.country,
-            # Une resoumission après correction doit re-notifier : la clé
-            # inclut donc la date de mise à jour.
-            dedup_key=f"expense_submitted:{expense.pk}:{expense.updated_at.isoformat()}",
-        )
-    )
-
-
 def dossier_submitted(dossier, actor):
     """Prévient le contrôle qu'un dossier complet attend son examen.
 

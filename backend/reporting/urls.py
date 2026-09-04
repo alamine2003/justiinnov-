@@ -22,4 +22,9 @@ urlpatterns = [
         views.CountryReportView.as_view(),
         name="export-report",
     ),
+    path(
+        "imports/expenses.xlsx",
+        views.ExpensesImportView.as_view(),
+        name="import-expenses",
+    ),
 ]
