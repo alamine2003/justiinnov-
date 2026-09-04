@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.4-alpine
     container_name: justi_db
     environment:
       POSTGRES_DB: justi_innov
@@ -13,11 +13,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # Les ports ne sont ouverts que sur la boucle locale : une machine de
+    # développement sur un réseau partagé n'expose ni sa base ni son stockage.
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
 
   minio:
-    image: minio/minio:latest
+    # La même version qu'en production (deploy/docker-compose.prod.yml).
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: justi_minio
     command: server /data --console-address ":9001"
     environment:
@@ -31,8 +34,8 @@ services:
       timeout: 5s
       retries: 20
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
 
   backend:
     build: ./backend
@@ -61,13 +64,13 @@ services:
       minio:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
   scheduler:
     # Les alertes et les rapports étaient documentés comme des lignes de
     # crontab à poser sur l'hôte — donc jamais posées. Ils tournent ici, dans
     # leur propre conteneur : les lancer dans le backend les exécuterait une
-    # fois par worker gunicorn, soit trois notifications pour une alerte.
+    # fois par worker gunicorn, soit autant de notifications pour une alerte.
     build: ./backend
     container_name: justi_scheduler
     entrypoint: ["python", "manage.py", "run_scheduler"]
@@ -117,7 +120,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
 
 volumes:
   pgdata:

@@ -15,6 +15,8 @@ services:
       DJANGO_ALLOWED_HOSTS: "*"
       # Le navigateur parle en clair au conteneur nginx.
       DJANGO_SECURE_SSL_REDIRECT: "0"
+      # Un seul proxy devant Django ici : nginx, sans Caddy.
+      DJANGO_NUM_PROXIES: "1"
       CORS_ALLOWED_ORIGINS: "http://localhost:8080"
 
   scheduler:
@@ -32,4 +34,4 @@ services:
     environment: !reset {}
     volumes: !reset []
     ports: !override
-      - "8080:80"
+      - "127.0.0.1:8080:80"

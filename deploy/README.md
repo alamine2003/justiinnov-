@@ -37,12 +37,54 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    | secret | `DEPLOY_HOST` | hôte SSH |
    | secret | `DEPLOY_USER` | `deploy` |
    | secret | `DEPLOY_SSH_KEY` | clé privée correspondante |
-   | secret | `DEPLOY_KNOWN_HOSTS` | sortie de `ssh-keyscan -H <hôte>` (recommandé) |
+   | secret | `DEPLOY_KNOWN_HOSTS` | sortie de `ssh-keyscan -H <hôte>`, **obligatoire** : le workflow refuse de partir sans, plutôt que d'accepter l'empreinte de n'importe quelle machine au premier contact |
    | variable | `APP_DOMAIN` | domaine public |
    | variable | `DEPLOY_PATH` | `~/justi-innov` par défaut |
 
-   Sur `production`, ajoutez des relecteurs obligatoires : c'est là, et pas
-   dans le workflow, que se règle l'approbation.
+   Sur `production`, réglez deux choses — c'est là, et pas dans le workflow,
+   que se décide qui déploie quoi :
+
+   - **Required reviewers** : les relecteurs dont l'approbation est attendue
+     avant que le travail `Déployer (production)` ne démarre.
+   - **Deployment branches and tags → Selected branches and tags**, avec la
+     seule règle `v*`. Sans elle, un `workflow_dispatch` depuis n'importe
+     quelle branche pourrait viser la production ; avec elle, GitHub refuse
+     le travail avant même de demander une approbation.
+
+   Sur `staging`, aucune règle : `main` part seule.
+
+   Les valeurs transmises au serveur (étiquette, noms d'images, domaine,
+   chemin) sont vérifiées par expression régulière avant tout appel SSH, et
+   passent par un fichier `.deploy-env` lu puis effacé sur le serveur ; le
+   jeton de registre, lui, ne transite que par l'entrée standard.
+
+## Ce qui se passe pendant un déploiement
+
+`deploy.sh` tire les images, puis `docker compose up --wait` remplace les
+conteneurs. **Le backend est indisponible le temps des migrations** : le
+conteneur précédent est arrêté, le nouveau applique `migrate` avant de
+lancer gunicorn, et nginx répond 502 sur `/api/` entre les deux — quelques
+secondes en général, plus si une migration réécrit une grosse table. Le
+frontend statique, lui, reste servi. Prévenez les pays avant une livraison
+en heures ouvrées si le journal des migrations est long.
+
+Le conteneur dispose d'un **délai de grâce de 90 s** (`start-period` du
+`HEALTHCHECK` de `backend/Dockerfile`) avant que ses échecs de santé ne
+comptent, et `--wait` attend jusqu'à 240 s que tous les services soient
+sains. Une migration plus longue que cela fait échouer le déploiement et
+déclenche le retour arrière décrit plus bas, qui remplace le conteneur en
+cours de migration : Postgres annule alors la transaction de la migration
+interrompue, la base reste cohérente. Faites tourner la migration longue à
+la main, puis redéployez :
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm --entrypoint python \
+    backend manage.py migrate
+```
+
+Les `mem_limit` de `docker-compose.prod.yml` sont taillés pour une machine
+de 4 Go ; `GUNICORN_WORKERS` et `GUNICORN_THREADS` dans `.env` se règlent
+d'après le nombre de cœurs (voir `.env.example`).
 
 ## Première mise en service
 
@@ -58,9 +100,17 @@ docker compose -f docker-compose.prod.yml exec backend \
 
 ## Revenir en arrière
 
-Chaque déploiement écrit l'étiquette livrée dans `.deployed`. Pour revenir à
-la précédente, relancez `deploy.sh` avec elle — l'image est encore sur le
-serveur et sur le registre :
+**Automatiquement** : si la nouvelle pile ne devient pas saine dans les
+240 s, `deploy.sh` relance la pile avec l'étiquette lue dans `.deployed`,
+puis sort en erreur — la livraison échoue, la plateforme reste en ligne sur
+la version précédente. Le journal du workflow montre les 100 dernières
+lignes du backend fautif. S'il n'y a pas d'étiquette précédente (première
+mise en service) ou si le retour échoue lui aussi, le script le dit et
+laisse la main.
+
+**À la main** : chaque déploiement écrit l'étiquette livrée dans
+`.deployed`. Pour revenir à la précédente, relancez `deploy.sh` avec elle —
+l'image est encore sur le serveur et sur le registre :
 
 ```bash
 IMAGE_TAG=sha-… BACKEND_IMAGE=ghcr.io/<org>/<dépôt>-backend \
@@ -68,7 +118,9 @@ FRONTEND_IMAGE=ghcr.io/<org>/<dépôt>-frontend ./deploy.sh
 ```
 
 Les migrations ne se défont pas seules : ne revenez pas en deçà d'une version
-dont la migration a supprimé une colonne.
+dont la migration a supprimé une colonne. Le retour automatique a la même
+limite : un code N-1 lit un schéma N tant que la migration n'a fait
+qu'ajouter, ce qui est la règle dans ce projet (rien ne se supprime).
 
 ## Sauvegardes
 

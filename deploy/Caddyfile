@@ -9,6 +9,11 @@
 {$APP_DOMAIN} {
 	encode zstd gzip
 
+	# HSTS se pose ici, au seul endroit qui termine TLS : nginx ne voit que
+	# du HTTP et Django ne couvre que `/api/`. Un an, sous-domaines compris ;
+	# le préchargement reste du ressort de Django (DJANGO_HSTS_PRELOAD).
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
 	# Les justificatifs peuvent peser jusqu'à 20 Mo (MAX_PROOF_SIZE) ; un peu
 	# de marge pour l'enveloppe multipart.
 	request_body {

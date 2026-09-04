@@ -2,16 +2,27 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
+# Les dépendances s'installent en root dans le site-packages du système ; le
+# pip de l'image de base suffit, on ne le remplace pas par un pip flottant.
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install -r requirements.txt
 
-COPY . .
+# Le serveur tourne sous un compte sans privilège : une faille dans une vue
+# ou une dépendance ne donne pas root dans le conteneur. `media/` doit rester
+# inscriptible pour le stockage local (sans MinIO, en développement).
+RUN groupadd --system --gid 1000 app \
+    && useradd --system --uid 1000 --gid app --create-home --shell /usr/sbin/nologin app
 
-RUN chmod +x /app/entrypoint.sh
+COPY --chown=app:app . .
+
+RUN chmod +x /app/entrypoint.sh && mkdir -p /app/media && chown app:app /app/media
+
+USER app
 
 EXPOSE 8000
 

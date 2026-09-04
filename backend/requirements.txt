@@ -1,10 +1,15 @@
-Django==5.1.6
-djangorestframework==3.15.2
-django-filter==24.3
-django-cors-headers==4.6.0
-psycopg[binary]==3.2.3
+# Versions épinglées ; `pip-audit` (job `audit` de la CI) bloque sur toute
+# vulnérabilité connue. Django 5.2 est une version LTS (corrigée jusqu'en
+# avril 2028) ; DRF 3.17 corrige les avis portés sur 3.15.
+Django==5.2.17
+djangorestframework==3.17.2
+django-filter==25.2
+django-cors-headers==4.9.0
+psycopg[binary]==3.2.13
 gunicorn==23.0.0
-django-storages[s3]==1.14.4
+django-storages[s3]==1.14.6
 openpyxl==3.1.5
-reportlab==4.2.5
-apscheduler==3.11.0
+reportlab==4.4.10
+apscheduler==3.11.3
+# Analyse XML durcie (openpyxl et reportlab s'en servent si elle est présente).
+defusedxml==0.7.1

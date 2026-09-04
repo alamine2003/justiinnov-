@@ -12,6 +12,9 @@
 # d'une version N-1 sait lire le schéma de N tant que la migration n'a fait
 # qu'ajouter.
 
+# Les limites de mémoire (`mem_limit`) sont dimensionnées pour une machine de
+# 4 Go ; leur somme reste sous 3 Go. Un service qui les dépasse est tué et
+# relancé par `restart`, plutôt que d'emporter la machine avec lui.
 x-backend: &backend
   image: ${BACKEND_IMAGE:?BACKEND_IMAGE manquant}:${IMAGE_TAG:?IMAGE_TAG manquant}
   env_file: .env
@@ -29,7 +32,15 @@ x-backend: &backend
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.4-alpine
+    # Postgres ne se règle pas seul : par défaut il suppose 128 Mo de cache
+    # et n'en utilise pas plus. Un quart de sa limite en tampons partagés,
+    # les trois quarts en estimation du cache disponible ; `shm_size` évite
+    # l'échec des tris parallèles, que les 64 Mo de /dev/shm par défaut de
+    # Docker font échouer.
+    command: postgres -c shared_buffers=256MB -c effective_cache_size=768MB
+    shm_size: 256m
+    mem_limit: 1g
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-justi_innov}
       POSTGRES_USER: ${POSTGRES_USER:-justi}
@@ -46,6 +57,7 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data
+    mem_limit: 512m
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID manquant}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY manquant}
@@ -60,6 +72,7 @@ services:
 
   backend:
     <<: *backend
+    mem_limit: 768m
     depends_on:
       db:
         condition: service_healthy
@@ -68,6 +81,7 @@ services:
 
   scheduler:
     <<: *backend
+    mem_limit: 256m
     entrypoint: ["python", "manage.py", "run_scheduler"]
     # L'image hérite du contrôle de santé du backend, qui interroge l'API :
     # l'ordonnanceur n'y répond pas. Il n'expose rien ; `restart` le relance
@@ -82,13 +96,15 @@ services:
 
   frontend:
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE manquant}:${IMAGE_TAG:?IMAGE_TAG manquant}
+    mem_limit: 64m
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.8-alpine
+    mem_limit: 128m
     ports:
       - "80:80"
       - "443:443"

@@ -4,10 +4,12 @@
 #   tag v1.2.3 ───▶ CI ─▶ images (ghcr.io) ─▶ production (après approbation)
 #
 # Rien ne se déploie qui n'ait passé l'intégration continue : le workflow
-# `ci.yml` est appelé ici même, pas simplement supposé vert. Les images sont
-# construites une fois, étiquetées par le SHA du commit, et c'est cette
-# étiquette-là — jamais `latest` — que le serveur reçoit : on sait toujours
-# exactement quel code tourne, et revenir en arrière consiste à redéployer
+# `ci.yml` est appelé ici même, pas simplement supposé vert — et il ne se
+# déclenche plus de lui-même sur `main`, sans quoi chaque poussée le ferait
+# tourner deux fois. Les images sont construites une fois, étiquetées par le
+# SHA du commit (et par le nom du tag, quand il y en a un) ; aucune étiquette
+# `latest` n'est publiée : le serveur ne reçoit que l'étiquette exacte, on
+# sait toujours quel code tourne, et revenir en arrière consiste à redéployer
 # une étiquette précédente.
 #
 # Le serveur n'a besoin que de Docker. Il reçoit `deploy/` par SSH, se
@@ -15,14 +17,16 @@
 # images et relance la pile ; les migrations s'appliquent au démarrage du
 # backend (`backend/entrypoint.sh`). Le déploiement n'est déclaré réussi que
 # lorsque tous les conteneurs répondent à leur contrôle de santé et que le
-# point `/api/health/` répond publiquement.
+# point `/api/health/` répond publiquement ; sinon `deploy.sh` rétablit
+# l'étiquette précédente.
 #
 # Secrets attendus par environnement (Settings › Environments) :
 #   DEPLOY_HOST          hôte SSH
 #   DEPLOY_USER          utilisateur SSH, membre du groupe docker
 #   DEPLOY_SSH_KEY       clé privée dédiée au déploiement
-#   DEPLOY_KNOWN_HOSTS   (optionnel) empreinte du serveur ; à défaut, elle est
-#                        relevée au premier contact
+#   DEPLOY_KNOWN_HOSTS   empreinte du serveur (`ssh-keyscan -H <hôte>`),
+#                        obligatoire : relever l'empreinte au premier contact
+#                        reviendrait à faire confiance à n'importe qui
 # Variables d'environnement (Settings › Environments › Variables) :
 #   APP_DOMAIN           domaine public, pour le contrôle final
 #   DEPLOY_PATH          (optionnel) répertoire sur le serveur, `~/justi-innov`
@@ -43,29 +47,35 @@ on:
         options: [staging, production]
         default: staging
 
-permissions:
-  contents: read
-  packages: write
+# Chaque travail demande ce dont il a besoin, rien de plus (voir les
+# `permissions` par travail).
+permissions: {}
 
-# Deux livraisons vers le même environnement ne s'entremêlent pas.
+# Deux livraisons vers le même environnement ne s'entremêlent pas ; une
+# livraison en préproduction n'attend pas une livraison en production.
 concurrency:
-  group: cd-${{ github.ref }}
+  group: cd-${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
   cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
-  verifier:
-    name: Vérification
+  ci:
+    name: Intégration continue
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
+    secrets: inherit
 
   images:
     name: Construire et publier les images
-    needs: verifier
+    needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       backend: ${{ steps.noms.outputs.backend }}
@@ -78,8 +88,10 @@ jobs:
         id: noms
         # ghcr.io impose des noms en minuscules ; un dépôt « JUSTI-INNOV »
         # donnerait sinon une image introuvable.
+        env:
+          REPOSITORY: ${{ github.repository }}
         run: |
-          base="${REGISTRY}/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          base="${REGISTRY}/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           echo "backend=${base}-backend" >> "$GITHUB_OUTPUT"
           echo "frontend=${base}-frontend" >> "$GITHUB_OUTPUT"
 
@@ -102,10 +114,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.noms.outputs.backend }}
+          # Pas de `latest` : une étiquette mouvante ne dit pas quel code
+          # tourne, et le déploiement ne s'en sert pas.
+          flavor: latest=false
           tags: |
             type=raw,value=${{ steps.tag.outputs.tag }}
             type=ref,event=tag
-            type=raw,value=latest,enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.title=Plateforme de contrôle budgétaire — backend
 
@@ -114,10 +128,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.noms.outputs.frontend }}
+          flavor: latest=false
           tags: |
             type=raw,value=${{ steps.tag.outputs.tag }}
             type=ref,event=tag
-            type=raw,value=latest,enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.title=Plateforme de contrôle budgétaire — frontend
 
@@ -146,9 +160,15 @@ jobs:
     name: Déployer (${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }})
     needs: images
     runs-on: ubuntu-latest
-    # Les règles de protection (relecteurs obligatoires, branches autorisées)
-    # se règlent sur l'environnement GitHub, pas ici : la production attend
-    # une approbation, la préproduction part seule.
+    # Le jeton sert au serveur pour tirer les images : lecture du registre,
+    # rien d'autre.
+    permissions:
+      contents: read
+      packages: read
+    # Les règles de protection (relecteurs obligatoires, branches et tags
+    # autorisés) se règlent sur l'environnement GitHub, pas ici : la
+    # production attend une approbation et n'accepte que les tags `v*`, la
+    # préproduction part seule.
     environment:
       name: ${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
       url: https://${{ vars.APP_DOMAIN }}
@@ -160,52 +180,92 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Vérifier les valeurs transmises au serveur
+        # Ces valeurs finissent dans une ligne de commande distante : chacune
+        # est confrontée à une expression régulière stricte, et le travail
+        # s'arrête net si l'une d'elles sort du cadre — plutôt que d'espérer
+        # qu'un guillemet fasse son office.
+        env:
+          IMAGE_TAG: ${{ needs.images.outputs.tag }}
+          BACKEND_IMAGE: ${{ needs.images.outputs.backend }}
+          FRONTEND_IMAGE: ${{ needs.images.outputs.frontend }}
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          verifier() {
+            nom="$1"; valeur="$2"; motif="$3"
+            if ! printf '%s' "$valeur" | grep -Eq "$motif"; then
+              echo "✘ $nom invalide ou absent : « $valeur »" >&2
+              exit 1
+            fi
+          }
+          verifier IMAGE_TAG      "$IMAGE_TAG"      '^sha-[0-9a-f]{12}$'
+          verifier BACKEND_IMAGE  "$BACKEND_IMAGE"  '^ghcr\.io/[a-z0-9._/-]+$'
+          verifier FRONTEND_IMAGE "$FRONTEND_IMAGE" '^ghcr\.io/[a-z0-9._/-]+$'
+          verifier APP_DOMAIN     "$APP_DOMAIN"     '^[a-z0-9.-]+$'
+          verifier GHCR_USER      "$GHCR_USER"      '^[A-Za-z0-9._\[\]-]+$'
+          verifier DEPLOY_PATH    "$DEPLOY_PATH"    '^~?[A-Za-z0-9._/-]+$'
+          # Le serveur lit ce fichier avec `set -a ; . ./.deploy-env` : les
+          # valeurs viennent d'être bornées, aucune n'a besoin de guillemets.
+          {
+            printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
+            printf 'BACKEND_IMAGE=%s\n' "$BACKEND_IMAGE"
+            printf 'FRONTEND_IMAGE=%s\n' "$FRONTEND_IMAGE"
+            printf 'APP_DOMAIN=%s\n' "$APP_DOMAIN"
+            printf 'GHCR_USER=%s\n' "$GHCR_USER"
+          } > .deploy-env
+
       - name: Préparer l'accès SSH
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_SSH: ${{ secrets.DEPLOY_USER }}
         run: |
+          for nom in SSH_KEY KNOWN_HOSTS HOST USER_SSH; do
+            eval "valeur=\$$nom"
+            if [ -z "$valeur" ]; then
+              echo "✘ Secret DEPLOY_${nom#USER_} manquant sur l'environnement." >&2
+              exit 1
+            fi
+          done
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          if [ -n "$KNOWN_HOSTS" ]; then
-            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          else
-            ssh-keyscan -H "$HOST" > ~/.ssh/known_hosts 2>/dev/null
-          fi
-          cat > ~/.ssh/config <<EOF
-          Host cible
-            HostName $HOST
-            User ${{ secrets.DEPLOY_USER }}
-            IdentityFile ~/.ssh/deploy_key
-            IdentitiesOnly yes
-            ConnectTimeout 20
-          EOF
+          # L'empreinte vient du secret, jamais du réseau : `ssh-keyscan` au
+          # premier contact accepterait l'empreinte d'un usurpateur.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          {
+            echo "Host cible"
+            echo "  HostName $HOST"
+            echo "  User $USER_SSH"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  IdentitiesOnly yes"
+            echo "  StrictHostKeyChecking yes"
+            echo "  ConnectTimeout 20"
+          } > ~/.ssh/config
 
       - name: Copier les fichiers de déploiement
+        # DEPLOY_PATH a été vérifié plus haut : il ne contient ni espace ni
+        # métacaractère, et reste non cité pour que `~` se développe sur le
+        # serveur.
         run: |
-          ssh cible "mkdir -p '$DEPLOY_PATH'"
+          ssh cible "mkdir -p $DEPLOY_PATH"
           scp deploy/docker-compose.prod.yml deploy/Caddyfile deploy/deploy.sh \
-            "cible:$DEPLOY_PATH/"
+            .deploy-env "cible:$DEPLOY_PATH/"
 
       - name: Déployer
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
-          IMAGE_TAG: ${{ needs.images.outputs.tag }}
-          BACKEND_IMAGE: ${{ needs.images.outputs.backend }}
-          FRONTEND_IMAGE: ${{ needs.images.outputs.frontend }}
-          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
         # Le jeton du workflow passe par l'entrée standard, jamais par la ligne
-        # de commande (visible dans `ps`), et n'est plus valable une fois le
-        # travail terminé.
+        # de commande (visible dans `ps`) ni par un fichier, et n'est plus
+        # valable une fois le travail terminé. Les autres valeurs viennent du
+        # fichier `.deploy-env` vérifié plus haut, qui est effacé aussitôt lu.
         run: |
           printf '%s' "$GHCR_TOKEN" | ssh cible \
-            "cd '$DEPLOY_PATH' && chmod +x deploy.sh && \
-             GHCR_USER='$GHCR_USER' IMAGE_TAG='$IMAGE_TAG' \
-             BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' \
-             APP_DOMAIN='$APP_DOMAIN' ./deploy.sh"
+            "cd $DEPLOY_PATH && set -a && . ./.deploy-env && set +a && \
+             rm -f .deploy-env && chmod +x deploy.sh && ./deploy.sh"
 
       - name: Contrôle public
         env:
@@ -225,14 +285,19 @@ jobs:
 
       - name: Résumé
         if: success()
+        env:
+          ENVIRONNEMENT: ${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+          IMAGE_TAG: ${{ needs.images.outputs.tag }}
+          COMMIT: ${{ github.sha }}
         run: |
           {
             echo "## Déployé"
             echo
             echo "| | |"
             echo "|---|---|"
-            echo "| Environnement | ${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }} |"
-            echo "| Domaine | https://${{ vars.APP_DOMAIN }} |"
-            echo "| Étiquette | \`${{ needs.images.outputs.tag }}\` |"
-            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Environnement | $ENVIRONNEMENT |"
+            echo "| Domaine | https://$APP_DOMAIN |"
+            echo "| Étiquette | \`$IMAGE_TAG\` |"
+            echo "| Commit | \`$COMMIT\` |"
           } >> "$GITHUB_STEP_SUMMARY"

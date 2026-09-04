@@ -4,23 +4,28 @@
 # ou 24, DEBUG à 0 ou à 1, le contrôle `check --deploy` dans l'un seulement).
 # Il n'en reste qu'un, réutilisable : la livraison continue (`cd.yml`)
 # l'appelle avant de construire la moindre image, si bien qu'un correctif
-# ne part jamais sans que sa suite ait tourné.
+# ne part jamais sans que sa suite ait tourné. Il ne se déclenche donc pas
+# lui-même sur `main` : une poussée y lancerait la CI deux fois, une fois
+# seule et une fois dans la livraison.
 #
 # Les travaux sont indépendants : un échec de lint ne masque pas un échec de
 # test, et l'on voit d'un coup d'œil ce qui est cassé.
 name: Intégration continue
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_call:
 
+# Lecture seule : ce workflow ne publie rien. Appelé par `cd.yml`, il ne peut
+# de toute façon pas obtenir plus que l'appelant ne lui accorde.
 permissions:
   contents: read
 
 # Une poussée sur une PR annule la vérification de la poussée précédente :
-# son résultat n'intéresse plus personne.
+# son résultat n'intéresse plus personne. Appelé par la livraison continue,
+# `github.workflow` et `github.ref` sont ceux de l'appelant : le groupe
+# devient « ci-Livraison continue-refs/heads/main », distinct du groupe
+# « cd-<environnement> » de l'appelant, et sans annulation.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -32,7 +37,8 @@ jobs:
 
     services:
       db:
-        image: postgres:16-alpine
+        # La même version qu'en production (deploy/docker-compose.prod.yml).
+        image: postgres:16.4-alpine
         env:
           POSTGRES_DB: justi_innov
           POSTGRES_USER: justi
@@ -95,6 +101,9 @@ jobs:
 
       - name: Tests
         working-directory: backend
+        # Une seule suite à la fois sur cette base : Django crée
+        # `test_justi_innov` et la détruit à la fin, deux suites en parallèle
+        # se marcheraient dessus.
         run: python manage.py test --verbosity=2 --noinput
 
   frontend:
@@ -166,6 +175,13 @@ jobs:
     # la pile telle qu'elle sera livrée (backend en mode production, frontend
     # servi par nginx), y crée des comptes jetables, et rejoue les scripts de
     # capture de DESIGN.md — qui échouent à la moindre erreur de console.
+    #
+    # Les images sont reconstruites ici par `docker compose --build`, avec le
+    # constructeur local : le cache buildx du travail « Images Docker »
+    # (type=gha) n'est pas réutilisé. Le faire demanderait de construire
+    # avec `docker/build-push-action` en `load: true` puis de nommer les
+    # images dans docker-compose.ci.yml ; le gain (deux ou trois minutes)
+    # n'a pas encore justifié la double définition.
     timeout-minutes: 25
 
     steps:
@@ -250,6 +266,7 @@ jobs:
           mkdir -p "$SHOT_OUT"
           npx tsx scripts/shot-login.ts
           npx tsx scripts/screenshot.ts
+          npx tsx scripts/shot-theme.mts
 
       - name: Publier les captures
         if: always()
@@ -269,12 +286,14 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v --remove-orphans
 
   audit:
-    name: Dépendances vulnérables (informatif)
+    name: Dépendances vulnérables
     runs-on: ubuntu-latest
-    # Un avis de sécurité sur une dépendance transitive ne doit pas bloquer
-    # un correctif métier ; il doit en revanche se voir. Le travail est donc
-    # visible en échec sans faire échouer le workflow.
-    continue-on-error: true
+    # Bloquant : une dépendance vulnérable ne se livre pas. `npm audit`
+    # s'arrête aux avis `high` et `critical` ; `pip-audit` ne gradue pas et
+    # échoue sur tout avis connu, ainsi que sur toute dépendance qu'il ne
+    # peut pas auditer (`--strict`). Un avis sans correctif disponible se
+    # traite par une mise à jour ou, à défaut, par `--ignore-vuln <id>`
+    # accompagné d'un commentaire qui dit pourquoi.
 
     steps:
       - uses: actions/checkout@v4
@@ -287,7 +306,7 @@ jobs:
         working-directory: backend
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt
+          pip-audit --strict -r requirements.txt
 
       - uses: actions/setup-node@v4
         with:
