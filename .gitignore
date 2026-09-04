@@ -24,3 +24,7 @@ media/
 
 # Captures Playwright MCP
 .playwright-mcp/
+
+# Copies générées par d'autres outils à partir de .claude/ : jamais versionnées.
+.codex/
+.agents/

@@ -62,17 +62,33 @@ l'application.
   code est refusé. Au démarrage, seules la Côte d'Ivoire et le Togo sont
   créées ; les autres le seront à leur entrée dans le dispositif. Ouvrir une
   filiale demande de modifier ce fichier, donc une décision explicite.
-- **Cinq rôles, pas un de plus.** Côté pays : `manager` saisit, `dm` (son
-  supérieur) déclare. Côté siège : `df` (direction financière) constate, et
-  peut être restreint à des pays ; `admin` (RH) tient les comptes, l'audit,
-  les imports et exports, la réouverture ; `super_admin` (DG, DO, CEO,
-  développeurs) peut tout. Les enveloppes et les réallocations s'écrivent
-  par `super_admin` et `df` (`BUDGET_WRITE_ROLES`) : la direction financière
-  arbitre avec la direction — **choix à confirmer par le produit**. Il n'y
+- **Cinq rôles, pas un de plus.** Côté pays : `manager` saisit et soumet.
+  Côté siège : `dm` (directeur manager) met en contrôle, `df` (directeur
+  financier) constate — tous deux restrictibles à des pays ; `admin` (RH)
+  tient les comptes, le référentiel, l'audit, les imports et exports, la
+  réouverture ; `super_admin` (DG, DO, CEO, développeurs) peut tout. Il n'y
   a ni « direction des opérations » ni « auditeur » distincts. Un `manager`
   rattaché à des équipes ne voit que les leurs (`team__in`, sur le queryset,
   via `CountryScopedMixin.team_lookup`) ; sans équipe, tout son pays. La
   matrice vit dans `accounts/permissions.py` et nulle part ailleurs.
+- **Le DM et le DF n'ont aucun droit d'administration.** Décision du
+  produit : ils ne sont ni administrateurs ni super administrateurs. Ils
+  gardent leurs seules fonctions de contrôle — `dm` dans `REVIEW_ROLES`,
+  `df` dans `VALIDATION_ROLES` — et lisent l'historique du référentiel
+  (`HISTORY_READ_ROLES`, `/api/history/`) sur leur périmètre. Ils ne
+  figurent dans aucun autre ensemble : ni comptes, ni pays, ni référentiel,
+  ni enveloppes, ni fichiers, ni réouverture, ni journal d'audit.
+- **Les enveloppes sont l'affaire des super administrateurs.** Attribuer
+  une enveloppe, demander, approuver ou refuser une réallocation, tenir les
+  taux de change, valider un dépassement : `BUDGET_WRITE_ROLES` =
+  `OVERRUN_APPROVERS` = `super_admin` seul. Le DF constate ce qui a été
+  dépensé, il ne fixe pas ce qui peut l'être ; la RH tient les comptes, pas
+  l'argent.
+- **Le journal d'audit est l'affaire de la RH et de la direction.**
+  `AUDIT_READ_ROLES` = `admin`, `super_admin`. Le journal relit les
+  décisions du DM et du DF autant que celles des pays : cette relecture est
+  un acte d'administration, pas de contrôle. L'historique du référentiel
+  (`/api/history/`), lui, reste ouvert au siège entier.
 - **Une dépense soumise est irréversible.** Elle ne revient pas au brouillon,
   ne se modifie plus, ne se supprime pas. Seul un brouillon — jamais soumis,
   donc sans valeur probante — peut être retiré par son auteur. **Une seule
@@ -107,9 +123,10 @@ l'application.
   lui-même, fût-il au siège — il faut deux personnes.
 - **La RH gère tous les pays.** Le référentiel d'un pays (équipes, projets,
   intitulés, catégories, bénéficiaires) est tenu par `admin` et
-  `super_admin` sur tous les pays, et par le `manager` sur le sien
-  (`manage_subentities`). `dm` et `df` sont des comptes du siège,
-  restrictibles à des pays ; `admin` et `super_admin` sont toujours globaux.
+  `super_admin` sur tous les pays (`manage_subentities`) ; ni le `manager`,
+  ni le `dm`, ni le `df` ne le modifient. `dm` et `df` sont des comptes du
+  siège, restrictibles à des pays ; `admin` et `super_admin` sont toujours
+  globaux.
 - **Déclarer tient en une action.** Le manager remplit ses lignes, joint la
   pièce et soumet le dossier : ses lignes partent avec lui. Un dossier vide ne
   se soumet pas ; un dossier sans pièce se soumet avec un avertissement.
@@ -168,3 +185,26 @@ l'application.
   marque n'apparaît dans le dépôt.
 - Frontend sans point-virgule en fin de ligne, guillemets doubles.
 - Un correctif s'accompagne du test qui l'aurait attrapé.
+
+## Outillage Claude Code
+
+Le dépôt embarque ce qu'il faut pour travailler dessus toujours de la même
+façon ; servez-vous-en plutôt que de repartir de zéro.
+
+| Besoin | Outil |
+|---|---|
+| Modifier le backend | skill `backend-django` |
+| Modifier l'interface | skills `frontend-react` puis `design-system` |
+| Relire avant de commiter | skill `revue-code`, agent `relecteur` |
+| Chercher des bugs | agent `chasseur-de-bugs` |
+| Comprendre le code sans le modifier | agent `explorateur-code` |
+| Cadrer une évolution | agent `analyste-architecture` |
+| Tout vérifier | skill `verifier` |
+| Commiter, pousser, livrer | skill `livrer` |
+
+Les agents vivent dans `.claude/agents/`, les skills dans `.claude/skills/`.
+`.claudeignore` tient hors de vue dépendances, artefacts, données locales et
+secrets. `.mcp.json` déclare le serveur MCP de CodeRabbit (jeton `GITHUB_PAT`
+dans l'environnement, jamais dans le dépôt) et `.coderabbit.yaml` règle la
+relecture automatique des pull requests, en français, sur les règles de ce
+fichier.

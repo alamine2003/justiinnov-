@@ -1,0 +1,45 @@
+# Relecture automatique des pull requests par CodeRabbit.
+# Les règles de fond vivent dans CLAUDE.md ; ce fichier les lui rappelle.
+language: fr-FR
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!**/node_modules/**"
+    - "!frontend/dist/**"
+    - "!frontend/package-lock.json"
+    - "!**/*.mo"
+    - "!frontend/public/icons/**"
+  path_instructions:
+    - path: "backend/**/*.py"
+      instructions: |
+        Plateforme de contrôle budgétaire. Vérifier : le manager déclare, le DM contrôle,
+        le DF constate ; une dépense soumise est irréversible (seule la réouverture par un
+        administrateur, motivée et tracée, ramène au brouillon) ; rien ne se supprime
+        (PROTECT, désactivation, 405) ; les chiffres se calculent côté serveur en Decimal ;
+        le cloisonnement par pays et par équipe s'applique sur le queryset et revalide les
+        clés étrangères ; toute action sensible laisse une trace avec IP ; un GET n'écrit
+        rien hors audit des exports ; chaque correctif a son test ; chaîne visible via
+        gettext et catalogue locale/en à jour ; migration pour tout changement de modèle.
+    - path: "frontend/src/**"
+      instructions: |
+        React 19 + TypeScript, sans point-virgule, guillemets doubles, français. Toute chaîne
+        visible passe par i18next avec ses clés dans fr.json et en.json. Respecter DESIGN.md :
+        composants partagés (FormError, StatCard, EmptyRow, PageHeader), aucune couleur brute,
+        accès clavier, role="alert" sur les erreurs. L'interface n'effectue aucun calcul
+        métier : elle affiche ce que le serveur renvoie. Les droits viennent de
+        permissions du serveur, jamais d'une table locale.
+    - path: "deploy/**"
+      instructions: |
+        Pile de production Docker Compose derrière Caddy. Aucun secret en clair, images
+        épinglées, healthchecks, sauvegardes et supervision Grafana intacts.
+
+chat:
+  auto_reply: true

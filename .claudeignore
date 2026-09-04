@@ -1,0 +1,54 @@
+# Ce que Claude n'a pas à lire ni à indexer : dépendances, artefacts de
+# construction, données locales et secrets. Le code source, les tests, la
+# documentation et la configuration restent visibles.
+
+# Dépendances et caches
+node_modules/
+frontend/node_modules/
+backend/.venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.vite/
+.playwright-mcp/
+
+# Artefacts de construction
+frontend/dist/
+frontend/dev-dist/
+backend/staticfiles/
+*.mo
+
+# Données locales, pièces justificatives, sauvegardes
+backend/media/
+media/
+sauvegardes/
+*.dump
+*.sql.gz
+
+# Secrets et fichiers d'amorçage locaux (jamais versionnés non plus)
+.env
+.env.*
+!.env.example
+*.local.json
+backend/seed_users.ci.json
+.claude/settings.local.json
+deploy/.deploy-env
+
+# Binaires et images lourdes
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.pdf
+*.docx
+*.xlsx
+*.woff2
+frontend/public/icons/
+
+# Verrous de dépendances (volumineux, générés)
+frontend/package-lock.json
+
+# Copies générées par d'autres outils
+.codex/
+.agents/
