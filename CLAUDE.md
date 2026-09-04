@@ -1,8 +1,13 @@
-# Plateforme de contrôle budgétaire
+# JUSTI INNOV — plateforme de contrôle budgétaire
 
-Suivi des dépenses de pays africains et de leurs justificatifs. Le but n'est
-pas d'autoriser des dépenses, mais de savoir **ce qui a été dépensé, quand, où,
-au profit de qui — et où est la preuve**.
+Suivi des dépenses des filiales africaines du groupe INNOV PHARMA et de leurs
+justificatifs. Le but n'est pas d'autoriser des dépenses, mais de savoir **ce
+qui a été dépensé, quand, où, au profit de qui — et où est la preuve**.
+
+L'équipe de développement compte **une seule personne** : la documentation
+doit se suffire à elle-même. Ce qu'un fichier ne dit pas, personne ne le
+sait ; une décision se consigne là où on la cherchera (`README.md`,
+`docs/model-de-donnees.md` §8, `deploy/README.md`), dans le même commit.
 
 ## Avant de toucher à l'interface
 
@@ -50,19 +55,41 @@ au sein de la livraison (`cd.yml`), qui publie les images et déploie
 Elles ne sont pas des préférences : les enfreindre casse la raison d'être de
 l'application.
 
-- **Le périmètre est l'Afrique.** Un pays se crée depuis la liste des codes
-  ISO d'Afrique (`backend/core/africa.py`) ; tout autre code est refusé.
-  Étendre le périmètre demande de modifier ce fichier, donc une décision
-  explicite.
+- **Le périmètre, ce sont les dix-sept filiales.** Sénégal, Mali, Côte
+  d'Ivoire, Madagascar, Cameroun, Gabon, Mauritanie, Burkina Faso, Niger,
+  Bénin, Guinée, Togo, Gambie, Djibouti, Tchad, Congo, RDC : la liste est
+  dans `backend/core/africa.py`, un pays se crée depuis elle et tout autre
+  code est refusé. Au démarrage, seules la Côte d'Ivoire et le Togo sont
+  créées ; les autres le seront à leur entrée dans le dispositif. Ouvrir une
+  filiale demande de modifier ce fichier, donc une décision explicite.
+- **Cinq rôles, pas un de plus.** Côté pays : `manager` saisit, `dm` (son
+  supérieur) déclare. Côté siège : `df` (direction financière) constate, et
+  peut être restreint à des pays ; `admin` (RH) tient les comptes, l'audit,
+  les imports et exports, la réouverture ; `super_admin` (DG, DO, CEO,
+  développeurs) peut tout. Les enveloppes et les réallocations s'écrivent
+  par `super_admin` et `df` (`BUDGET_WRITE_ROLES`) : la direction financière
+  arbitre avec la direction — **choix à confirmer par le produit**. Il n'y
+  a ni « direction des opérations » ni « auditeur » distincts. Un `manager`
+  rattaché à des équipes ne voit que les leurs (`team__in`, sur le queryset,
+  via `CountryScopedMixin.team_lookup`) ; sans équipe, tout son pays. La
+  matrice vit dans `accounts/permissions.py` et nulle part ailleurs.
 - **Une dépense soumise est irréversible.** Elle ne revient pas au brouillon,
   ne se modifie plus, ne se supprime pas. Seul un brouillon — jamais soumis,
-  donc sans valeur probante — peut être retiré par son auteur.
+  donc sans valeur probante — peut être retiré par son auteur. **Une seule
+  exception : la réouverture** (`reopen`, `REOPEN_ROLES` = `admin`,
+  `super_admin`), motivée (`note`, gardée dans `Dossier.reopen_note`),
+  tracée (`AuditLog` `reopened` sur le dossier et chaque ligne) et notifiée
+  aux `dm` et `manager` du pays — elle sert à demander des comptes, jamais
+  à corriger en silence. Les lignes reviennent en brouillon sans
+  imputation. Un dossier dont une ligne est justifiée ou clôturée ne se
+  rouvre pas : le siège a constaté.
 - **Une dépense non justifiée pèse quand même sur l'enveloppe.** L'absence de
   preuve ne fait pas revenir l'argent ; elle se lit dans l'écart entre dépensé
   et justifié.
-- **Rien ne se supprime**, hors brouillon. Le retrait d'une entité de
-  référentiel se fait par désactivation (`is_active`) ; l'API répond 405 sur
-  `DELETE`.
+- **Rien ne se supprime, rien ne se purge**, hors brouillon. Le retrait
+  d'une entité de référentiel se fait par désactivation (`is_active`) ;
+  l'API répond 405 sur `DELETE`. La conservation est illimitée : ni tâche
+  de ménage, ni rétention sur les dossiers, les pièces ou les journaux.
 - **Les chiffres se calculent côté serveur.** Solde, écart, taux : l'interface
   affiche, elle ne recalcule pas.
 - **Le cloisonnement par pays est vérifié sur le queryset**, pas seulement à
@@ -78,7 +105,27 @@ l'application.
 - **Déclarer tient en une action.** Le pays remplit ses lignes, joint la
   pièce et soumet le dossier : ses lignes partent avec lui. Un dossier vide ne
   se soumet pas ; un dossier sans pièce se soumet avec un avertissement.
-- **Un rejet exige un motif.**
+- **Un rejet exige un motif.** Une réouverture aussi.
+- **Les fichiers entrent et sortent par les administrateurs.** L'import
+  Excel et les exports (`xlsx`, `csv`, `docx`, `pdf` ; `year`, `month`
+  facultatif, `country`) sont réservés à `EXPORT_ROLES` (`admin`,
+  `super_admin`), lecture comprise ; tous les autres travaillent dans
+  l'application, où chaque chiffre est calculé et chaque action tracée. Un
+  total ne s'écrit qu'à devise unique.
+- **Tout compte est protégé par une double authentification TOTP** et
+  porte une adresse professionnelle (`ALLOWED_EMAIL_DOMAINS`, par défaut
+  `innovpharma.net`). Un compte non enrôlé n'ouvre rien (`403
+  totp_setup_required`), comme un mot de passe provisoire ; le jeton exige
+  le `code` (`400 totp_required`) ; seul un administrateur réinitialise
+  l'enrôlement (`reset-2fa`), et cela se trace (`totp_reset`). La clé
+  `totp_secret` de `seed_users` n'existe que pour les environnements
+  jetables.
+- **L'interface est bilingue**, français et anglais : les textes passent par
+  `gettext` côté serveur (catalogues `locale/en` des six applications,
+  `Accept-Language`, préférence `language` sur le profil ; notifications et
+  e-mails dans la langue du destinataire) et par le dictionnaire de
+  traduction côté client. Une chaîne en dur dans un composant est un défaut. Elle se sert sur le web et comme application de
+  bureau installable (PWA) ; l'usage mobile n'est pas un cas prévu.
 - **Une requête `GET` n'écrit rien.** Les alertes sont calculées à la
   lecture ; leur notification passe par `manage.py notify_alerts`, pour ne
   pas dépendre de quelqu'un qui ouvre une page. Une seule exception,
@@ -91,15 +138,19 @@ l'application.
 
 | Sujet | Où |
 |---|---|
-| Modèle de données (référence, tenue à jour) | `docs/model-de-donnees.md` |
-| Circuit de justification | `backend/expenses/workflow.py` |
-| Rôles et périmètres | `backend/accounts/` |
+| Modèle de données et décisions prises (référence, tenue à jour) | `docs/model-de-donnees.md` |
+| Circuit de justification, réouverture | `backend/expenses/workflow.py` |
+| Rôles, périmètres, équipes, double authentification | `backend/accounts/` |
 | Calculs budgétaires | `backend/budget/aggregates.py` |
 | Interface | `DESIGN.md` |
+| Serveur, supervision Grafana, sauvegardes | `deploy/README.md` |
 
 ## Conventions
 
 - Le code, les commentaires et les messages de commit sont **en français**,
-  comme l'interface.
+  comme l'interface — dont la version anglaise vient des catalogues de
+  traduction, jamais d'un second jeu de composants.
+- Le projet s'appelle **JUSTI INNOV**, pour INNOV PHARMA ; aucune autre
+  marque n'apparaît dans le dépôt.
 - Frontend sans point-virgule en fin de ligne, guillemets doubles.
 - Un correctif s'accompagne du test qui l'aurait attrapé.

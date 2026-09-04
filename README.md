@@ -1,13 +1,27 @@
-# Plateforme de contrôle budgétaire
+# JUSTI INNOV — plateforme de contrôle budgétaire
 
-Suivi budgétaire centralisé et traçable : référentiel pays et organisations,
-comptes et périmètres, enveloppes annuelles, dossiers de justification,
-dépenses, pièces justificatives, workflow de validation, tableaux de bord
-temps réel, alertes et exports.
+Suivi budgétaire centralisé et traçable des filiales africaines du groupe
+INNOV PHARMA : référentiel pays et organisations, comptes et périmètres,
+enveloppes annuelles, dossiers de justification, dépenses, pièces
+justificatives, circuit de justification, tableaux de bord temps réel,
+alertes, imports et exports, supervision.
 
-Les documents de cadrage d'origine (cahier des charges, architecture, plan
-de développement) sont dans [`docs/reference/`](docs/reference/) ; les
-décisions prises depuis sont dans [`docs/model-de-donnees.md`](docs/model-de-donnees.md).
+Les règles que le code doit respecter sont dans [`CLAUDE.md`](CLAUDE.md) ;
+le modèle de données et les décisions prises, dans
+[`docs/model-de-donnees.md`](docs/model-de-donnees.md) ; le serveur, la
+supervision et les sauvegardes, dans [`deploy/README.md`](deploy/README.md).
+L'équipe de développement compte une seule personne : ces trois documents
+sont écrits pour être suffisants.
+
+## Périmètre
+
+Dix-sept filiales : Sénégal, Mali, Côte d'Ivoire, Madagascar, Cameroun,
+Gabon, Mauritanie, Burkina Faso, Niger, Bénin, Guinée, Togo, Gambie,
+Djibouti, Tchad, Congo et République démocratique du Congo. La liste est
+dans `backend/core/africa.py` : un pays se crée depuis elle, tout autre code
+ISO est refusé, et l'ouvrir à une nouvelle filiale se fait dans ce fichier.
+Au démarrage, seules la Côte d'Ivoire et le Togo sont créées ; les autres le
+seront à leur entrée dans le dispositif.
 
 ## Architecture
 
@@ -18,19 +32,22 @@ décisions prises depuis sont dans [`docs/model-de-donnees.md`](docs/model-de-do
 | Base      | PostgreSQL 16                                 | 5433  |
 | Stockage  | MinIO (justificatifs, API S3)                 | 9000, console 9001 |
 | Ordonnanceur | `manage.py run_scheduler` (alertes, rapports) | —  |
+| Supervision (production) | Prometheus + Grafana, sur `/grafana/` | — |
 
-En développement, les ports ne sont ouverts que sur la boucle locale.
+En développement, les ports ne sont ouverts que sur la boucle locale. La
+supervision n'existe que dans la pile de production
+(`deploy/docker-compose.prod.yml`).
 
 Applications Django :
 
 | App        | Rôle |
 |------------|------|
 | `core`     | Référentiel (pays, managers, équipes, centres de coûts, projets, intitulés, catégories) et historique |
-| `accounts` | Profils, rôles, périmètres pays, cloisonnement |
+| `accounts` | Profils, rôles, périmètres pays et équipes, double authentification, langue |
 | `budget`   | Enveloppes annuelles, sous-enveloppes, réallocations, taux de change |
-| `expenses` | Dossiers (N°ORDRE), dépenses, justificatifs, workflow, audit |
+| `expenses` | Dossiers (N°ORDRE), dépenses, justificatifs, circuit et réouverture, audit |
 | `notifications` | Notifications in-app et e-mail |
-| `reporting` | Tableaux de bord, alertes, exports Excel et PDF |
+| `reporting` | Tableaux de bord, alertes, imports et exports (administrateurs) |
 
 ## Démarrage (Docker)
 
@@ -61,17 +78,28 @@ adopte un pays préexistant plutôt que d'échouer sur son nom.
 
 ### Rôles et périmètres
 
-| Rôle | Périmètre | Peut |
-|------|-----------|------|
-| `super_admin` | tous pays | tout, y compris le back-office Django |
-| `admin` | tous pays | référentiels, comptes, rôles, **et justification** |
-| `doo` | tous pays | attribuer les budgets, arbitrer, **justifier** |
-| `controller` | tous pays | contrôler les pièces, **justifier ou non** |
-| `auditor` | tous pays | lecture seule |
-| `country_manager` | ses pays | gérer son pays, saisir et **soumettre** |
-| `owner` | ses pays | saisir ses dépenses et déposer les justificatifs |
+Cinq rôles, calqués sur l'organisation du groupe :
 
-**Le pays déclare, le siège constate.** Un responsable pays ne peut ni
+| Rôle | Qui | Périmètre | Peut |
+|------|-----|-----------|------|
+| `manager` | responsable d'équipe dans une filiale | son pays, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | saisir ses dépenses et déposer les justificatifs |
+| `dm` | supérieur du manager, dans la filiale | ses pays | gérer son pays, saisir et **soumettre** (déclarer) |
+| `df` | direction financière, au siège | tous pays, **restrictible** à certains | fixer les enveloppes (avec `super_admin`), contrôler les pièces, **justifier ou non**, clôturer |
+| `admin` | ressources humaines, au siège | tous pays | comptes et rôles, journal d'audit, **imports et exports**, **réouverture** d'un dossier, réinitialisation de la double authentification |
+| `super_admin` | DG, DO, CEO, développeurs | tous pays | tout, enveloppes comprises, y compris le back-office Django |
+
+Il n'y a ni « direction des opérations » ni « auditeur » distincts : la DO
+est super administratrice, l'audit revient à la RH. Les enveloppes et les
+réallocations s'écrivent par `super_admin` et `df` (`BUDGET_WRITE_ROLES`) :
+la direction financière arbitre les enveloppes avec la direction. **Choix à
+confirmer par le produit** ; il se change dans `accounts/permissions.py`.
+
+Les rôles portent la matrice complète dans `accounts/permissions.py` :
+`BUDGET_WRITE_ROLES` (enveloppes), `EXPORT_ROLES` (imports et exports :
+`super_admin`, `admin`), `REOPEN_ROLES` (réouverture : `super_admin`,
+`admin`). `/api/permissions/` la renvoie telle qu'elle est appliquée.
+
+**Le pays déclare, le siège constate.** Un `manager` ou un `dm` ne peut ni
 justifier, ni déclarer non justifiée, ni prendre en contrôle, ni clôturer une
 dépense — pas même les siennes. Autrement, il pourrait décaisser puis se donner
 quitus, ce qui viderait l'application de sa raison d'être.
@@ -83,6 +111,75 @@ Le périmètre est porté par le profil : un rôle du siège sans pays explicite
 couvre tous les pays, tandis qu'un rôle pays **sans** périmètre ne voit rien —
 l'absence de périmètre ne vaut jamais autorisation générale. Un pays hors
 périmètre répond 404, sans révéler son existence.
+
+### Double authentification et adresses professionnelles
+
+Tout compte est protégé par un code à usage unique (TOTP, RFC 6238), sans
+exception de rôle : un mot de passe seul, réutilisé ou intercepté, suffirait
+à signer une justification au nom d'un autre. À la première connexion, le
+titulaire scanne un QR avec son application d'authentification et saisit un
+premier code ; tant qu'il ne l'a pas fait, la plateforme lui est fermée —
+comme avec un mot de passe provisoire. Le secret n'est remis qu'une fois.
+Un titulaire qui perd son téléphone s'adresse à un administrateur, seul à
+pouvoir réinitialiser l'enrôlement ; l'opération est journalisée (voir
+`deploy/README.md`).
+
+Dans l'API : après le mot de passe provisoire, toute route répond `403
+{"totp_setup_required": true}` tant que le compte n'est pas enrôlé ;
+`POST /api/me/2fa/enrol/` renvoie `otpauth_uri`, `qr_png_base64` et
+`secret`, `POST /api/me/2fa/confirm/ {code}` valide le premier code
+(`ChangeLog` `totp_confirmed`). Ensuite, `POST /api/token-auth/` attend
+`{username, password, code}` et répond `400 totp_required` si le code
+manque ou est faux — l'échec est journalisé (`login_failed`,
+`changed_fields: ["totp"]`). `POST /api/users/{id}/reset-2fa/` efface
+l'enrôlement (`totp_reset`) ; réservé aux administrateurs, dans le respect
+de la hiérarchie. Pour un environnement jetable (CI, démonstration),
+`seed_users` accepte une clé `totp_secret` qui enrôle et confirme
+d'emblée : à ne jamais utiliser sur un serveur réel.
+
+Chaque compte porte une adresse professionnelle : un domaine hors de
+`ALLOWED_EMAIL_DOMAINS` (`innovpharma.net` par défaut) est refusé à la
+création du compte.
+
+### Langues
+
+L'interface est bilingue, français et anglais. Le serveur répond dans la
+langue de l'en-tête `Accept-Language` ; l'interface l'envoie d'après la
+préférence enregistrée sur le profil (`UserProfile.language`, français par
+défaut), que l'utilisateur change depuis le menu de son compte. Les textes
+du serveur passent par `gettext` et les catalogues `locale/en` des six
+applications Django, notifications et e-mails compris, rendus dans la
+langue du destinataire ; les `.po` sont versionnés, les `.mo` compilés à la
+construction de l'image et au démarrage du conteneur de développement
+(`backend/entrypoint.sh`), jamais dans le dépôt. Il n'y a pas de variable
+d'environnement pour la langue : la référence est le français
+(`LANGUAGE_CODE`).
+
+### Application de bureau (PWA)
+
+L'application se sert dans un navigateur et s'installe comme application de
+bureau (manifeste et service worker de Vite). L'usage sur téléphone n'est pas
+un cas prévu : les écrans sont conçus pour un poste de travail, et les
+captures de `DESIGN.md` ne vérifient que le grand écran — l'écran de
+connexion mis à part.
+
+### Fichiers : imports et exports réservés aux administrateurs
+
+L'import du classeur Excel et les exports — Excel, CSV, Word et PDF, classés
+par exercice ou par mois — sont réservés à `admin` et `super_admin`. Tous les
+autres travaillent dans l'application : un fichier sorti du système n'est
+plus ni calculé ni tracé, et un fichier entré contourne la saisie ligne à
+ligne. Chaque export laisse une entrée dans le journal d'audit. La
+conservation est illimitée : rien n'est jamais purgé, ni dossier, ni pièce,
+ni journal, et les sauvegardes suivent la même règle (copie mensuelle gardée
+pour toujours).
+
+Les exports prennent `year` (exercice), `month` facultatif (1 à 12, pour un
+classement par mois) et `country`. Le CSV est en UTF-8 avec BOM, séparateur
+`;`, pour s'ouvrir tel quel dans Excel ; les totaux ne figurent que si une
+seule devise est concernée — additionner deux devises serait un chiffre
+faux. Le rapport périodique envoyé par l'ordonnanceur n'attache le classeur
+qu'aux administrateurs ; les autres reçoivent le message sans pièce jointe.
 
 ## Démarrage manuel (sans conteneur backend ni frontend)
 
@@ -121,14 +218,17 @@ Toutes les routes exigent un jeton `Authorization: Token <token>`.
 
 ```
 GET    /api/health/                      # état du serveur et de la base (sans jeton)
-POST   /api/token-auth/                  # obtention du jeton (username/password)
+POST   /api/token-auth/                  # obtention du jeton {username, password, code} ; 400 totp_required sans code valide
 POST   /api/logout/                      # révocation du jeton
 GET    /api/me/                          # rôle, périmètre et droits du compte
 POST   /api/me/password/                 # changement de mot de passe
 GET    /api/permissions/                 # matrice rôle × action, telle que le serveur l'applique
 GET/PATCH /api/configuration/            # réglages de la plateforme (siège)
 GET/PATCH /api/workflow-configuration/   # politique du circuit : étape de contrôle, seuils, dépassement
-GET/POST/PATCH /api/users/               # comptes (siège uniquement)
+GET/POST/PATCH /api/users/               # comptes (administrateurs)
+POST   /api/users/{id}/reset-2fa/        # efface l'enrôlement TOTP (administrateurs, hiérarchie respectée)
+POST   /api/me/2fa/enrol/                # {otpauth_uri, qr_png_base64, secret} — une seule fois
+POST   /api/me/2fa/confirm/              # {code} : premier code valide, la plateforme s'ouvre
 
 GET    /api/countries/                   # liste paginée (filtres: is_active, search, ordering)
 GET    /api/countries/disponibles/       # codes ISO africains pas encore créés
@@ -154,6 +254,7 @@ GET/POST/PATCH /api/dossiers/            # dossiers de justification (N°ORDRE)
 DELETE /api/dossiers/{id}/               # brouillon seul, par son auteur
 POST   /api/dossiers/{id}/submit/        # soumet le dossier et ses lignes (avertit s'il n'a pas de pièce)
 POST   /api/dossiers/{id}/review|justify|reject|close/
+POST   /api/dossiers/{id}/reopen/        # réouverture {note} : administrateurs, motif obligatoire
 GET/POST/PATCH /api/expenses/            # lignes de dépenses
 DELETE /api/expenses/{id}/               # brouillon seul, par son auteur
 POST   /api/expenses/{id}/review|justify|reject|close/
@@ -166,17 +267,20 @@ GET    /api/audit/                       # journal d'audit
 
 GET    /api/dashboard/                   # consolidation, charge et alertes
 GET    /api/dashboard/breakdown/         # répartition équipe/manager/projet/mois
-GET    /api/exports/expenses.xlsx        # export au format du fichier historique
-GET    /api/exports/reconciliation.xlsx  # rapprochement dépenses / justifiés
-GET    /api/exports/report.pdf           # rapport de synthèse
-POST   /api/imports/expenses.xlsx        # import : export de la plateforme ou classeur historique (rôles de saisie)
+GET    /api/exports/expenses.{xlsx,csv,docx}        # registre au format du fichier historique
+GET    /api/exports/reconciliation.{xlsx,csv,docx}  # rapprochement dépenses / justifiés
+GET    /api/exports/report.pdf                      # rapport de synthèse
+                                         # ?year= ?month= (1-12, facultatif) ?country= ; administrateurs seulement
+POST   /api/imports/expenses.xlsx        # import : export de la plateforme ou classeur historique (administrateurs)
+GET    /metrics                          # collecte Prometheus, jeton METRICS_TOKEN en Authorization: Bearer
 GET    /api/notifications/               # centre de notifications
 GET    /api/notifications/unread_count/
 POST   /api/notifications/{id}/read/ · /api/notifications/read-all/
 ```
 
-`review`, `justify`, `reject` et `close` sont les transitions du circuit de
-justification (voir plus bas) ; `reject` exige un motif.
+`review`, `justify`, `reject`, `close` et `reopen` sont les transitions du
+circuit de justification (voir plus bas) ; `reject` et `reopen` exigent un
+motif.
 
 Les listes acceptent `?country__country_ref=TG-02` pour cibler un pays par
 son identifiant fonctionnel, ainsi que `?status=` et `?search=` ; `?year=`
@@ -184,10 +288,14 @@ vaut pour les enveloppes. Le registre accepte en plus `?date__gte=` et
 `?date__lte=` pour une période. Toutes les listes sont paginées : `?page=` et
 `?page_size=` (plafonné à 200).
 
-Toutes les listes sont filtrées par le périmètre du compte. Les exports et le
+Toutes les listes sont filtrées par le périmètre du compte — par pays, et,
+pour un `manager` rattaché à des équipes, par équipe (`team__in` sur les
+dossiers, les dépenses, les pièces via leur dossier, et les équipes
+elles-mêmes ; `CountryScopedMixin.team_lookup`). Les exports et le
 téléchargement d'une pièce sont les seules requêtes `GET` qui écrivent :
-elles laissent une entrée dans le journal d'audit, parce qu'une donnée qui
-sort du système doit laisser une trace.
+elles laissent une entrée dans le journal d'audit (`downloaded`, avec
+`year`, `month`, `country` et `format` pour un export), parce qu'une donnée
+qui sort du système doit laisser une trace.
 
 ## Budgets
 
@@ -288,7 +396,7 @@ au sein de la livraison continue, en cinq travaux indépendants :
 
 | Travail | Ce qu'il vérifie |
 |---|---|
-| Backend | migrations à jour, `check --deploy`, suite Django hors mode debug |
+| Backend | migrations à jour, traductions compilées, `check --deploy`, suite Django hors mode debug |
 | Frontend | types, lint, tests unitaires, build |
 | Images Docker | les deux images se construisent |
 | Parcours complet | la pile livrable (backend en production, frontend nginx) démarre, des comptes jetables s'y connectent, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
@@ -306,15 +414,18 @@ cette étiquette que le serveur reçoit, si bien que revenir en arrière consist
 à redéployer la précédente, ce que `deploy.sh` fait de lui-même si la
 nouvelle pile ne devient pas saine. Le déploiement n'est déclaré réussi que
 lorsque tous les conteneurs passent leur contrôle de santé et que
-`/api/health/` répond depuis l'extérieur. La préparation du serveur, les
-secrets attendus, la coupure pendant les migrations, le retour arrière, le
-rôle Postgres à moindre privilège et les sauvegardes sont décrits dans
+`/api/health/` répond depuis l'extérieur. Le dossier `deploy/` est copié en
+entier sur le serveur : pile, Caddyfile, scripts de sauvegarde et de
+restauration, configuration Prometheus et provisioning Grafana. La
+préparation du serveur, les secrets attendus, la coupure pendant les
+migrations, le retour arrière, le rôle Postgres à moindre privilège, la
+supervision et les sauvegardes sont décrits dans
 [`deploy/README.md`](deploy/README.md).
 
 Les mises à jour de dépendances arrivent en PR via Dependabot
 (`.github/dependabot.yml`), donc passent par la CI.
 
-## Déploiement et sauvegardes
+## Déploiement, supervision et sauvegardes
 
 En production, nginx limite `/api/` à 20 requêtes par seconde et par
 adresse (réserve de 40) et répond `429` avec un `detail` en français ;
@@ -323,12 +434,24 @@ service Django peut tourner avec un rôle Postgres sans droit sur le schéma
 (`deploy/creer_role_applicatif.sql`), les migrations gardant le rôle
 propriétaire.
 
-La pile de production sauvegarde chaque nuit la base (`pg_dump -Fc`, gardé
-14 jours) et met en miroir le bucket des justificatifs dans le volume
-`sauvegardes` ; `deploy/restaurer.sh` restaure un dump, dans la pile ou dans
-une base jetable pour le test trimestriel. Le volume reste sur la machine :
-sa copie ailleurs est à organiser. Tout est décrit dans
-[`deploy/README.md`](deploy/README.md).
+**Supervision en temps réel.** Prometheus collecte toutes les quinze
+secondes les compteurs du backend (`django-prometheus`, exposés sur
+`/metrics` sous le jeton `METRICS_TOKEN`), ceux de la base
+(`postgres-exporter`) et ceux du serveur (`node-exporter`) ; Grafana les
+affiche sur `https://<domaine>/grafana/`, derrière un mot de passe
+(`GRAFANA_ADMIN_PASSWORD`), sur un tableau de bord provisionné depuis
+`deploy/grafana/dashboards/justi-innov.json` : requêtes par seconde et
+latence par vue, erreurs 5xx, connexions et taille de la base, processeur,
+mémoire et disque du serveur, état des cibles de collecte.
+
+**Sauvegardes.** La pile sauvegarde chaque nuit la base (`pg_dump -Fc`) et
+met en miroir le bucket des justificatifs dans le volume `sauvegardes`. Les
+dumps quotidiens sont gardés 30 jours ; le premier dump de chaque mois est
+copié dans `base/mensuel/` et **n'est jamais supprimé** — la conservation
+des données est illimitée, celle des sauvegardes aussi. `deploy/restaurer.sh`
+restaure un dump, dans la pile ou dans une base jetable pour le test
+trimestriel. Le volume reste sur la machine : sa copie ailleurs est à
+organiser. Tout est décrit dans [`deploy/README.md`](deploy/README.md).
 
 ## Variables d'environnement
 
@@ -344,6 +467,9 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `DJANGO_HSTS_PRELOAD` | `1` | inscription HSTS sur la liste de préchargement des navigateurs (hors debug) |
 | `DJANGO_NUM_PROXIES` | — | nombre de proxys de confiance devant Django (2 en production : Caddy puis nginx ; 1 en CI) pour lire la vraie adresse du client |
 | `TOKEN_MAX_AGE_DAYS` | `30` | durée de vie d'un jeton d'API |
+| `ALLOWED_EMAIL_DOMAINS` | `innovpharma.net` | domaines de messagerie admis pour les comptes, séparés par des virgules ; ne peut pas être vide |
+| `METRICS_TOKEN` | — | jeton que Prometheus présente sur `/metrics` (`Authorization: Bearer`) ; vide, le point de collecte répond 404 |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | `admin` / — | compte d'administration de Grafana (pile de production) ; le mot de passe est **obligatoire** |
 | `DJANGO_TIME_ZONE` | `UTC` | fuseau de référence du serveur |
 | `DJANGO_CREATE_SUPERUSER` | `0` | `1` crée un compte d'amorçage au démarrage, profil `super_admin` et mot de passe provisoire |
 | `DJANGO_SUPERUSER_USERNAME` / `_EMAIL` / `_PASSWORD` | `admin` / — / — | identité de ce compte ; sans mot de passe, rien n'est créé |
@@ -351,7 +477,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `DATABASE_URL` | — | `postgresql://utilisateur:motdepasse@hôte:port/base?sslmode=…` ; si définie, prime sur les `POSTGRES_*`. Parseur maison (`config.settings.parse_database_url`) : les paramètres de la chaîne de requête vont dans `OPTIONS`, le mot de passe est décodé |
 | `POSTGRES_MIGRATION_USER` / `_PASSWORD` | — | rôle propriétaire avec lequel `migrate` et `createcachetable` tournent au démarrage, quand `POSTGRES_USER` est le rôle applicatif sans DDL (`deploy/creer_role_applicatif.sql`) |
 | `DATABASE_MIGRATION_URL` | — | même chose, sous forme d'URL, quand la base est désignée par `DATABASE_URL` |
-| `SAUVEGARDE_HEURE` / `SAUVEGARDE_PIECES_HEURE` / `SAUVEGARDE_RETENTION_JOURS` | `02:00` / `02:15` / `14` | heure UTC du `pg_dump` et du miroir des justificatifs, rétention des dumps (pile de production) |
+| `SAUVEGARDE_HEURE` / `SAUVEGARDE_PIECES_HEURE` / `SAUVEGARDE_RETENTION_JOURS` | `02:00` / `02:15` / `30` | heure UTC du `pg_dump` et du miroir des justificatifs, rétention des dumps quotidiens (pile de production) ; la copie mensuelle n'expire jamais |
 | `AWS_S3_ENDPOINT_URL` | — | active le stockage objet (MinIO) ; disque local si vide |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_STORAGE_BUCKET_NAME` | — / — / `justificatifs` | accès au stockage objet |
 | `MAX_PROOF_SIZE` | `20971520` | taille maximale d'un justificatif (octets) |
@@ -371,7 +497,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 Trois scripts Playwright, décrits dans `DESIGN.md`, parcourent l'application
 et capturent les écrans : le parcours complet depuis un compte du siège
 **et** un compte pays (cloisonnement), l'écran de connexion sur grand écran et
-mobile, et les écrans principaux dans les deux thèmes. Les identifiants
+petit écran, et les écrans principaux dans les deux thèmes. Les identifiants
 viennent de l'environnement, jamais du code :
 
 ```bash
@@ -400,6 +526,8 @@ suivent chacun leur circuit :
 
 ```
 brouillon → soumis → en contrôle → justifié / non justifié → clôturé
+    ↑          │           │              │ (non justifié)
+    └──────────┴───────────┴──────────────┘  réouverture (administrateur, motif)
 ```
 
 Côté pays, déclarer une dépense tient en **une action** : remplir les lignes,
@@ -420,6 +548,19 @@ l'effacer reviendrait à en perdre la trace. Seul un brouillon — jamais
 soumis, donc sans valeur probante — peut être retiré, par son auteur, et sa
 suppression est elle-même journalisée.
 
+La **réouverture** est la seule exception, et elle est faite pour demander
+des comptes, pas pour corriger en silence : un administrateur (`admin`,
+`super_admin`) renvoie au brouillon un dossier déclaré mais pas encore
+constaté, avec un motif (`note`), conservé sur le dossier (`reopen_note`)
+et dans le journal d'audit (`reopened`, sur le dossier et sur chaque
+ligne) ; les lignes reviennent en brouillon et perdent leur imputation
+(`budget = null`), recalculée à la prochaine soumission ; les `dm` et
+`manager` du pays en sont notifiés (`dossier_reopened`) et le dossier devra
+être soumis à nouveau. Elle est refusée dès
+qu'une ligne du dossier est justifiée ou clôturée : le siège a constaté, et
+un constat ne se défait pas. Ni le pays qui a déclaré ni la direction
+financière qui constate ne peuvent rouvrir.
+
 **Une dépense non justifiée pèse malgré tout sur l'enveloppe.** L'absence de
 preuve ne fait pas revenir l'argent. Elle se lit dans l'écart entre le montant
 dépensé et le montant justifié — le chiffre que l'application existe pour
@@ -434,8 +575,8 @@ pièce.
 Une dépense soumise **engage** son enveloppe ; contrôlée, elle la **consomme**
 — qu'elle soit justifiée ou non. Le disponible retranche les deux. La
 politique de dépassement décide de la suite : bloquer, alerter, ou réserver la
-justification à la direction des opérations — le manager pouvant dans tous les
-cas déclarer la dépense.
+justification aux super administrateurs (la direction) — le pays pouvant dans
+tous les cas déclarer la dépense.
 
 ## Justificatifs
 
@@ -478,8 +619,8 @@ franchissement.
 
 ## Import Excel et N°ORDRE
 
-`POST /api/imports/expenses.xlsx` (champ `file`, rôles de saisie) lit deux
-classeurs : l'export de la plateforme, et le **classeur historique du
+`POST /api/imports/expenses.xlsx` (champ `file`, administrateurs seulement)
+lit deux classeurs : l'export de la plateforme, et le **classeur historique du
 client** — feuille « BASE DE DONNEES ACTIONS », titre et note en tête,
 en-tête en septième ligne, neuf colonnes (N°ORDRE, DATE, TEAM, OWNER,
 LIBELLE DES TRANSACTIONS, DEPENSES, MONTANT JUSTIFIER, ECART, PIECES

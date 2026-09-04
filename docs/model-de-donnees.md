@@ -1,21 +1,22 @@
-# Modèle de données — Suivi budgétaire
+# Modèle de données — JUSTI INNOV
 
 > Document de référence du modèle de données, **tenu à jour avec le code** :
 > ce qui est écrit ici correspond aux modèles Django (`backend/*/models.py`)
 > et à leurs migrations. Il fige les décisions de modélisation (section 5) et
 > sert de socle à l'API REST et au frontend. Une entité qui change se met à
-> jour ici dans le même commit. Les éléments marqués **(en cours)** sont
-> présents dans le code mais encore en cours de stabilisation.
+> jour ici dans le même commit.
 
 ## 1. Rappel des objectifs
 
-- Attribuer une **enveloppe annuelle par pays** (direction des opérations).
+- Attribuer une **enveloppe annuelle par pays** (direction financière ou
+  super administration).
 - Suivre en temps réel et de façon **traçable** l'utilisation de l'enveloppe
   par les managers et équipes.
 - Relier chaque dépense à son contexte : **date/heure, pays, utilisateur, lieu,
   montant, intitulé/projet, prospect ou bénéficiaire, statut de justification
   et preuve documentaire** (PDF, reçu, décharge, facture ou autre livrable).
-- Conserver l'historique des changements (audit).
+- Conserver l'historique des changements (audit), **sans limite de durée** :
+  rien n'est jamais purgé.
 
 Le but n'est pas d'autoriser des dépenses : c'est de savoir **ce qui a été
 dépensé, quand, où, au profit de qui — et où est la preuve**. D'où
@@ -72,9 +73,12 @@ Toutes ces entités héritent de `TimeStampedModel` (`created_at`,
 suppression : l'API répond 405 sur `DELETE`.
 
 - `Country` — pays : `country_ref` (identifiant fonctionnel, ex. `TG-01`),
-  `name`, `code` ISO validé contre la liste des pays d'Afrique
-  (`core/africa.py`), `currency`, `currency_symbol`, `timezone`, `managers`
-  (M2M), `is_active`.
+  `name`, `code` ISO validé contre la liste des **dix-sept filiales**
+  (`core/africa.py` : Sénégal, Mali, Côte d'Ivoire, Madagascar, Cameroun,
+  Gabon, Mauritanie, Burkina Faso, Niger, Bénin, Guinée, Togo, Gambie,
+  Djibouti, Tchad, Congo, RDC), `currency`, `currency_symbol`, `timezone`,
+  `managers` (M2M), `is_active`. Seules la Côte d'Ivoire et le Togo sont
+  créées au démarrage.
 - `Manager` — responsable ; peut exister sans compte utilisateur.
 - `Team` (`name` unique par pays, `unique_equipe_par_pays`), `CostCenter`
   (`code` unique par pays), `Project` (`status`, `budget` ; `name` unique
@@ -86,8 +90,11 @@ suppression : l'API répond 405 sur `DELETE`.
 - `ChangeLog` — journal des changements du référentiel et des budgets :
   `model_name`, `object_id`, `label`, `action` (création, mise à jour,
   changement de rattachement, désactivation, réactivation, suppression,
-  réinitialisation et changement de mot de passe, connexion, échec de
-  connexion, déconnexion), `from_value` / `to_value`, `changed_fields`,
+  réinitialisation et changement de mot de passe, activation
+  (`totp_confirmed`) et réinitialisation (`totp_reset`) de la double
+  authentification, connexion, échec de connexion — `login_failed`, avec
+  `changed_fields = ["totp"]` quand c'est le code qui manque ou est faux —,
+  déconnexion), `from_value` / `to_value`, `changed_fields`,
   `performed_by`, `ip_address`, `created_at`. Les suppressions faites hors
   API (admin, shell) y sont journalisées, cascades comprises.
 - `WorkflowConfiguration` — **singleton** (pk = 1, mis en cache, non
@@ -109,16 +116,30 @@ sans profil est refusé par l'API.**
 
 | Champ | Type | Notes |
 |---|---|---|
-| `role` | Char(32) | `super_admin`, `admin`, `doo`, `country_manager`, `owner`, `controller`, `auditor` |
-| `countries` | M2M → Country | périmètre ; vide pour un rôle du siège = tous les pays. Un rôle pays sans périmètre ne voit **rien** |
-| `teams` | M2M → Team | équipes du compte |
+| `role` | Char(32) | `manager`, `dm`, `df`, `admin`, `super_admin` (migration `accounts.0002` : `owner` → `manager`, `country_manager` → `dm`, `controller` → `df`, `doo` → `super_admin`, `auditor` → `admin`) |
+| `countries` | M2M → Country | périmètre ; vide pour `df` = tous les pays, et `df` est le seul rôle du siège restrictible. `admin` et `super_admin` sont toujours globaux. Un rôle pays sans périmètre ne voit **rien** |
+| `teams` | M2M → Team | pour un `manager` : restreint sa vue à ces équipes, sur le queryset (`CountryScopedMixin.team_lookup` : `team__in` pour les dossiers, les dépenses et les équipes, `dossier__team__in` pour les pièces) ; vide, il voit tout son pays. Sans effet sur les autres rôles |
 | `manager` | FK → Manager (null) | le manager du référentiel que ce compte incarne |
 | `must_change_password` | Bool | mot de passe provisoire : la plateforme reste fermée tant qu'il n'est pas remplacé |
+| `totp_secret` | Char(64) | secret TOTP (RFC 6238), vide tant que le compte n'est pas enrôlé ; remis une seule fois (`POST /api/me/2fa/enrol/` : `otpauth_uri`, `qr_png_base64`, `secret`), jamais exposé ensuite par l'API |
+| `totp_confirmed_at` | DateTime (null) | date du premier code valide (`POST /api/me/2fa/confirm/ {code}`) ; vide, la plateforme reste fermée au compte (`403 {"totp_setup_required": true}`), comme pour un mot de passe provisoire. L'obtention du jeton exige ensuite le `code` (`400 totp_required`). `POST /api/users/{id}/reset-2fa/` (administrateurs, hiérarchie respectée) efface les deux champs. `seed_users` accepte `totp_secret` pour les environnements jetables |
+| `language` | Char(8) | `fr` (défaut) ou `en` : préférence d'affichage de l'interface. La langue d'une réponse de l'API suit l'en-tête `Accept-Language` |
 
-Les rôles du siège (`super_admin`, `admin`, `doo`, `controller`, `auditor`)
-constatent ; les rôles pays (`country_manager`, `owner`) déclarent. Un
-responsable pays ne justifie jamais une dépense, et celui qui a saisi une
-dépense ne la justifie pas lui-même, fût-il au siège. Les identités
+Les cinq rôles suivent l'organisation du groupe. Côté pays : le `manager`
+engage la dépense et la saisit ; le `dm`, son supérieur, déclare le
+dossier. Côté siège : la `df` (direction financière) constate et fixe les
+enveloppes ; l'`admin` (ressources humaines) tient les comptes, l'audit,
+les imports et exports et rouvre un dossier ; le `super_admin` (DG, DO,
+CEO, développeurs) peut tout. Il n'y a ni « direction des opérations » ni
+« auditeur » distincts. Les ensembles de rôles sont dans
+`accounts/permissions.py` : `BUDGET_WRITE_ROLES` = `super_admin`, `df`
+(choix à confirmer par le produit), `EXPORT_ROLES` = `REOPEN_ROLES` =
+`super_admin`, `admin`.
+
+Un responsable pays ne justifie jamais une dépense, et celui qui a saisi
+une dépense ne la justifie pas lui-même, fût-il au siège. L'adresse e-mail
+d'un compte doit appartenir à un domaine de `ALLOWED_EMAIL_DOMAINS`
+(`innovpharma.net` par défaut ; `accounts/validators.py`). Les identités
 (`created_by`, `uploaded_by`, `requested_by`, `performed_by`, `user` du
 journal d'audit) sont stockées **en texte** (nom d'utilisateur), pas en clé
 étrangère : une trace survit à la désactivation ou au renommage du compte.
@@ -138,7 +159,7 @@ dimension à la fois : un projet, une équipe **ou** un manager.
 | `team` | FK → Team (null) | sous-enveloppe par équipe |
 | `manager` | FK → Manager (null) | sous-enveloppe par manager |
 | `amount` | Decimal(16,2) ≥ 0 | montant, dans la devise du pays |
-| `overrun_policy` | Char(20) | `block` (refuser la justification au-delà), `warn` (alerter), `approval` (réserver la justification à la direction des opérations) ; défaut lu dans `WorkflowConfiguration` |
+| `overrun_policy` | Char(20) | `block` (refuser la justification au-delà), `warn` (alerter), `approval` (réserver la justification aux super administrateurs) ; défaut lu dans `WorkflowConfiguration` |
 | `is_active` | Bool | |
 
 Contraintes en base :
@@ -225,9 +246,10 @@ appuient.
 | `date` | Date | |
 | `status` | Char(20) | circuit (5.5) |
 | `note` | Text | remarque de contrôle |
-| `created_by` | Char(180) | **(en cours)** — identité en texte de qui a ouvert le dossier : celui qui l'a ouvert ne le tranche pas (quatre yeux), et seul son auteur retire un brouillon |
+| `created_by` | Char(180) | identité en texte de qui a ouvert le dossier : celui qui l'a ouvert ne le tranche pas (quatre yeux), et seul son auteur retire un brouillon |
+| `reopen_note` | Text | motif de la dernière réouverture (`note` de `reopen`, obligatoire) ; vide si le dossier n'a jamais été rouvert. Qui et quand sont dans `AuditLog` (`reopened`) |
 
-Index **(en cours)** : `(country, status)`, `(date)`.
+Index : `(country, status)`, `(date)`.
 
 Le contexte (pays, équipe, propriétaire, date) est porté par le dossier, mais
 chaque ligne le **duplique** pour une traçabilité ligne par ligne.
@@ -253,12 +275,12 @@ chaque ligne le **duplique** pour une traçabilité ligne par ligne.
 | `payment_method` | Char(20) | `cash`, `transfer`, `mobile`, `card`, `check`, `other` |
 | `status` | Char(20) | circuit (5.5) |
 | `note` | Text | |
-| `control_note` | Text | **(en cours)** motif du contrôle (mise en contrôle, rejet) |
+| `control_note` | Text | motif du contrôle (mise en contrôle, rejet) |
 | `created_by` | Char(180) | identité en texte de qui a saisi la ligne ; ne peut pas la justifier |
 
 Champ **calculé** : `gap = amount − justified_amount`, jamais saisi.
 
-Contraintes en base **(en cours)** — les invariants sont posés en base
+Contraintes en base — les invariants sont posés en base
 parce que l'admin et les scripts ne passent pas par les sérialiseurs :
 
 - `depense_montant_positif` — `amount ≥ 0` ;
@@ -267,7 +289,7 @@ parce que l'admin et les scripts ne passent pas par les sérialiseurs :
   tous vides ou tous renseignés ;
 - `depense_declaree_imputee` — hors brouillon, `budget` est renseigné.
 
-Index **(en cours)** : `(budget, status)`, `(country, status, date)`, `(date)`.
+Index : `(budget, status)`, `(country, status, date)`, `(date)`.
 
 ### 5.4 `Proof` — pièce justificative
 
@@ -293,7 +315,7 @@ Redéposer un fichier déjà présent sur le même dossier (même `sha256`) est
 refusé, sauf remplacement explicite. Le téléchargement passe par une vue
 authentifiée, jamais par une URL signée : le périmètre est vérifié à chaque
 accès et chaque téléchargement laisse une trace dans le journal d'audit.
-Index **(en cours)** : `(dossier, status)`.
+Index : `(dossier, status)`.
 
 ### 5.5 Circuit de justification
 
@@ -303,7 +325,8 @@ Le même circuit s'applique au dossier **et** à chaque ligne
 ```
 draft ─▶ submitted ─▶ in_review ─▶ justified ──▶ closed
 brouillon   soumis     en contrôle └▶ unjustified ┘
-                                      non justifié
+   ▲           │           │          non justifié │
+   └───────────┴───────────┴───────────────────────┘  reopen (administrateur, motif)
 ```
 
 - `submit` : le pays soumet le dossier, ses lignes partent avec lui. Un
@@ -316,19 +339,32 @@ brouillon   soumis     en contrôle └▶ unjustified ┘
   laisse la ligne **non justifiée** — elle pèse toujours sur l'enveloppe.
   Une pièce déposée après coup permet de la justifier ensuite.
 - `close` : clôture.
+- `reopen` : **réouverture** (`POST /api/dossiers/{id}/reopen/ {note}`),
+  par `REOPEN_ROLES` (`admin`, `super_admin`) seulement, avec un motif
+  obligatoire (`MOTIVATED_ACTIONS = {reject, reopen}`). Ramène au brouillon
+  un dossier soumis, en contrôle ou non justifié, et ses lignes avec lui —
+  elles perdent leur imputation (`budget = null`), recalculée à la prochaine
+  soumission ; refusée dès qu'une ligne est justifiée ou clôturée
+  (`REOPEN_BLOCKING_STATUSES`, réponse `400` sur `expenses`). Les `dm` et
+  `manager` du pays sont notifiés (`dossier_reopened`) et le dossier devra
+  être soumis à nouveau. Elle sert à demander des
+  comptes — une ligne mal imputée, une pièce qui ne correspond pas —, jamais
+  à corriger en silence : le motif est conservé sur le dossier et dans
+  `AuditLog`, sur le dossier et sur chaque ligne.
 
 **Une dépense soumise est irréversible** : elle ne revient pas au brouillon,
 ne se modifie plus, ne se supprime pas. Seul un brouillon peut être retiré,
-par son auteur, et ce retrait est journalisé. Le statut n'est jamais
-modifiable par écriture de champ ; seules ces transitions le font évoluer,
-et chacune écrit une entrée `AuditLog`.
+par son auteur, et ce retrait est journalisé. La réouverture est l'unique
+exception, et elle est tracée, motivée et bornée comme ci-dessus. Le statut
+n'est jamais modifiable par écriture de champ ; seules ces transitions le
+font évoluer, et chacune écrit une entrée `AuditLog`.
 
 ### 5.6 `AuditLog` — journal des actions sensibles
 
 | Champ | Type | Notes |
 |---|---|---|
 | `user` | Char(180) | identité en texte |
-| `action` | Char(32) | `created`, `updated`, `submitted`, `reviewed`, `justified`, `unjustified`, `approved` / `rejected` (contrôle d'une pièce), `deleted` (brouillon), `closed`, `proof_uploaded`, `proof_replaced`, `proof_to_review`, `downloaded` (pièce ou export), `imported` (Excel) |
+| `action` | Char(32) | `created`, `updated`, `submitted`, `reviewed`, `justified`, `unjustified`, `approved` / `rejected` (contrôle d'une pièce), `deleted` (brouillon), `closed`, `reopened` (réouverture, avec le motif ; sur le dossier et sur chaque ligne), `proof_uploaded`, `proof_replaced`, `proof_to_review`, `downloaded` (pièce, ou export avec `detail = {year, month, country, format}`), `imported` (Excel) |
 | `object_type` / `object_id` | Char(64) / Integer | cible |
 | `label` | Char(250) | |
 | `country` | FK → Country (null) | pour le cloisonnement du journal |
@@ -337,8 +373,8 @@ et chacune écrit une entrée `AuditLog`.
 | `user_agent` | Char(250) | |
 | `created_at` | DateTime | |
 
-Index : `(object_type, object_id)` ; **(en cours)** `(created_at)`,
-`(country, created_at)`, `(user)`.
+Index : `(object_type, object_id)`, `(created_at)`, `(country, created_at)`,
+`(user)`.
 
 ## 6. Notifications (`notifications`)
 
@@ -347,7 +383,7 @@ Index : `(object_type, object_id)` ; **(en cours)** `(created_at)`,
 | Champ | Type | Notes |
 |---|---|---|
 | `recipient` | FK → User | |
-| `kind` | Char(32) | `budget_threshold`, `budget_overrun`, `expense_submitted`, `expense_rejected`, `proof_missing`, `proof_incomplete`, `reallocation_requested`, `storage_error` |
+| `kind` | Char(32) | `budget_threshold`, `budget_overrun`, `expense_submitted`, `expense_rejected`, `dossier_reopened` (aux `dm` et `manager` du pays), `proof_missing`, `proof_incomplete`, `reallocation_requested`, `storage_error` |
 | `level` | Char | `info`, `warning`, `critical` |
 | `title`, `body`, `link` | | |
 | `country` | FK → Country (null) | |
@@ -356,7 +392,9 @@ Index : `(object_type, object_id)` ; **(en cours)** `(created_at)`,
 
 Les alertes sont **calculées** à chaque lecture du tableau de bord ; seule
 leur notification (`manage.py notify_alerts`, lancé par l'ordonnanceur)
-écrit ces lignes et envoie les e-mails.
+écrit ces lignes et envoie les e-mails. Titre, corps et e-mail sont rendus
+dans la langue du destinataire (`UserProfile.language`). Le rapport
+périodique n'attache le classeur qu'aux administrateurs (`EXPORT_ROLES`).
 
 ## 7. Relations (synthèse)
 
@@ -390,16 +428,31 @@ AuditLog, ChangeLog, Notification ─▶ Country (null)
 | 14 | Nom d'équipe, nom de projet | **uniques par pays** ; le même nom reste possible dans deux pays |
 | 15 | Champs obligatoires à la soumission (CdC §7) | **équipe et manager** sur chaque ligne, vérifiés à la soumission seulement — pas de contrainte en base, l'import crée des brouillons incomplets. **Lieu, projet et intitulé restent facultatifs** : le classeur historique ne les porte pas, les exiger rendrait l'historique impossible à déclarer |
 | 16 | Import Excel | lit le classeur historique (en-tête cherché dans les 15 premières lignes, colonnes PAYS / devise / statut facultatives) ; équipes et managers inconnus **créés dans le pays** ; MONTANT JUSTIFIER, ECART et STATUT ignorés |
+| 17 | Périmètre géographique | **dix-sept filiales**, listées dans `core/africa.py` ; Côte d'Ivoire et Togo créées au démarrage, les autres à leur entrée dans le dispositif |
+| 18 | Rôles | **cinq** : `manager`, `dm`, `df`, `admin`, `super_admin`. Ni direction des opérations ni auditeur distincts. Enveloppes et réallocations : `BUDGET_WRITE_ROLES` = `super_admin` et `df` — la direction financière arbitre avec la direction, **choix à confirmer par le produit** ; `df` restrictible à des pays |
+| 19 | Périmètre d'un manager | **ses équipes** (`UserProfile.teams`), vérifié sur le queryset (`CountryScopedMixin.team_lookup`) ; sans équipe rattachée, tout son pays. Les autres rôles ne sont pas restreints par équipe |
+| 20 | Réouverture | **seule exception à l'irréversibilité** : `REOPEN_ROLES` (`admin`, `super_admin`), motif obligatoire (`Dossier.reopen_note`), `AuditLog` `reopened` sur le dossier et ses lignes, lignes en brouillon sans imputation, notification aux `dm` et `manager` du pays ; refusée dès qu'une ligne est justifiée ou clôturée. Pour demander des comptes, jamais pour corriger en silence |
+| 21 | Fichiers | import Excel et exports (`xlsx`, `csv`, `docx`, `pdf` ; `year`, `month` facultatif, `country`) **réservés à `EXPORT_ROLES`**, lecture comprise ; tous les autres travaillent dans l'application. CSV UTF-8 avec BOM, séparateur `;` ; totaux à devise unique seulement. Chaque export est journalisé avec ses paramètres |
+| 22 | Rétention | **illimitée** : aucune purge de dossier, pièce, journal ou notification ; les sauvegardes gardent une copie mensuelle pour toujours (`deploy/sauvegarder.sh`) |
+| 23 | Authentification | **TOTP obligatoire pour tous** (`totp_secret`, `totp_confirmed_at`), réinitialisation par un administrateur seulement, tracée ; adresse e-mail dans `ALLOWED_EMAIL_DOMAINS` |
+| 24 | Langue | **bilingue français / anglais** : `Accept-Language` côté API, préférence `language` sur le profil ; le français est la référence des messages, l'anglais vient des catalogues `locale/en` des six applications ; notifications et e-mails dans la langue du destinataire |
+| 25 | Supports | web et **application de bureau installable (PWA)** ; pas d'usage mobile prévu |
 
-### Décisions contraires au cahier des charges, assumées
+### Décisions contraires au cadrage initial, assumées
 
-| # | Point du cahier des charges | Choix retenu et raison |
+Le cadrage d'origine n'est plus dans le dépôt : il portait le nom d'un autre
+projet et ne décrivait pas l'application telle qu'elle est. Ce qu'il
+demandait et que l'on a choisi de ne pas faire reste consigné ici, pour que
+la question ne soit pas rouverte par oubli.
+
+| # | Ce que demandait le cadrage | Choix retenu et raison |
 |---|---|---|
-| C1 | §4 — validation par délégation au responsable pays | **Pas de délégation.** Le pays déclare, le siège constate : un responsable pays qui justifierait les dépenses de son pays viderait l'application de son objet. Les rôles de validation (`VALIDATION_ROLES`) excluent les rôles pays. |
-| C2 | §5.5 / §6 — opération de correction après soumission | **Aucune correction après soumission.** Une dépense soumise est irréversible ; la seule voie est `justify` / `reject` (motif obligatoire) puis clôture. Une erreur se traite par une nouvelle ligne ou un nouveau dossier, jamais en réécrivant la déclaration. |
-| C3 | §5.7 — rapports | **Rapport PDF par pays et exercice seulement** (`/api/exports/report.pdf?year=&country=`). Pas de rapport par équipe, manager ou période libre : ces découpages se lisent dans le tableau de bord (`/api/dashboard/breakdown/`) et l'export Excel. |
-| C4 | §5.2 — sous-enveloppes | **Par projet, équipe ou manager — pas par catégorie.** Une sous-enveloppe suit une dimension d'imputation d'une ligne ; la catégorie marketing est une étiquette d'analyse, pas une responsabilité budgétaire. |
-| C5 | Périmètre par équipe | `UserProfile.teams` existe mais **ne restreint rien aujourd'hui** : le cloisonnement se fait par pays. **Question ouverte** : faut-il un cloisonnement par équipe à l'intérieur d'un pays ? |
+| C1 | Validation par délégation au responsable pays | **Pas de délégation.** Le pays déclare, le siège constate : un responsable pays qui justifierait les dépenses de son pays viderait l'application de son objet. Les rôles de validation (`VALIDATION_ROLES`) excluent les rôles pays. |
+| C2 | Opération de correction après soumission | **Aucune correction après soumission.** Une dépense soumise est irréversible ; la seule voie est `justify` / `reject` (motif obligatoire) puis clôture. Une erreur se traite par une nouvelle ligne ou un nouveau dossier, jamais en réécrivant la déclaration. La réouverture (décision 20) n'est pas une correction : elle renvoie tout le dossier au pays, motif à l'appui, sous les yeux de l'audit. |
+| C3 | Rapports par équipe, manager ou période libre | **Rapport PDF par pays et exercice, exports par exercice ou par mois** (`/api/exports/`), réservés aux administrateurs. Les autres découpages se lisent dans le tableau de bord (`/api/dashboard/breakdown/`). |
+| C4 | Sous-enveloppes par catégorie | **Par projet, équipe ou manager — pas par catégorie.** Une sous-enveloppe suit une dimension d'imputation d'une ligne ; la catégorie marketing est une étiquette d'analyse, pas une responsabilité budgétaire. |
+| C5 | Six acteurs, dont une direction des opérations et un auditeur | **Cinq rôles** (décision 18) : la DO est super administratrice, l'audit revient à la RH. Deux rôles de plus, c'est deux listes de droits de plus à maintenir pour des personnes qui, dans le groupe, sont les mêmes. |
+| C6 | Périmètre par équipe : question laissée ouverte | **Tranchée** (décision 19) : un manager ne voit que ses équipes. |
 
 ## 9. Stockage des fichiers
 

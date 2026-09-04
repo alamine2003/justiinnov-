@@ -5,6 +5,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# gettext : nécessaire à `compilemessages` (interface bilingue).
+RUN apt-get update && apt-get install -y --no-install-recommends gettext && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Les dépendances s'installent en root dans le site-packages du système ; le
@@ -19,6 +22,15 @@ RUN groupadd --system --gid 1000 app \
     && useradd --system --uid 1000 --gid app --create-home --shell /usr/sbin/nologin app
 
 COPY --chown=app:app . .
+
+# Catalogues de traduction (interface bilingue) : les `.po` sont versionnés,
+# les `.mo` compilés ici, dans l'image — jamais dans le dépôt (.gitignore).
+# `django-admin` se lance dans chaque dossier qui porte un `locale/`, sans
+# charger les réglages du projet : rien à importer, aucune base à joindre.
+# Sans catalogue, il n'y a rien à faire et l'image se construit quand même.
+RUN find . -type d -name locale -not -path './.venv/*' | while read -r d; do \
+      (cd "$(dirname "$d")" && django-admin compilemessages -v0) || exit 1; \
+    done
 
 RUN chmod +x /app/entrypoint.sh && mkdir -p /app/media && chown app:app /app/media
 

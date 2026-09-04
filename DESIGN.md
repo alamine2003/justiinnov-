@@ -1,11 +1,14 @@
-# DESIGN.md — système d'interface
+# DESIGN.md — système d'interface de JUSTI INNOV
 
 > Référence unique de l'interface. **À lire avant toute modification d'écran.**
 > Les tokens vivent dans `frontend/src/index.css` ; ce document dit comment
 > s'en servir.
 
-L'application sert des contrôleurs et des responsables pays qui lisent des
-chiffres et cherchent des preuves. Trois principes en découlent :
+L'application sert la direction financière du siège et les responsables des
+filiales, qui lisent des chiffres et cherchent des preuves, sur un poste de
+travail — dans un navigateur ou dans l'application de bureau installée
+(PWA) ; l'usage sur téléphone n'est pas un cas prévu. Trois principes en
+découlent :
 
 1. **La lisibilité prime sur l'effet.** Pas d'ornement qui n'aide pas à lire un
    montant, un statut ou une date.
@@ -54,7 +57,7 @@ d'œil. **N'ajoutez aucune autre teinte.**
 Les teintes sont centralisées dans `lib/status-styles.ts`, les badges dans
 `components/expenses/status-badge.tsx` (`StatusBadge`, `ProofStatusBadge`,
 `ProjectStatusBadge`, libellé serveur `*_display` prioritaire) et les tables
-`*_LABELS` dans `lib/types.ts`. Un nouveau statut s'ajoute **là**, jamais dans
+`*_LABELS` dans `lib/labels.ts`, traduites dans les deux langues. Un nouveau statut s'ajoute **là**, jamais dans
 la page qui l'affiche. Le test `status-badge.test.tsx` parcourt `src/` et
 échoue sur toute classe `text-<teinte>-NNN` ou `text-white`.
 
@@ -165,11 +168,120 @@ que « Aucune donnée ».
   `can("validate_expenses")`, `can("view_audit")`… **Ne recopiez jamais une
   table de rôles dans un composant** : elle divergerait du serveur. Masquer une
   action est un confort ; le refus reste côté serveur.
+- **Aucune chaîne en dur visible par l'utilisateur.** L'interface est
+  bilingue : tout texte passe par la fonction de traduction du projet
+  (`t("…")`, dictionnaires français et anglais), y compris les `aria-label`,
+  les états vides et les messages d'erreur construits côté client. Les
+  libellés qui viennent du serveur (`*_display`, `detail`) arrivent déjà
+  dans la langue de l'en-tête `Accept-Language`, que le client fixe d'après
+  la préférence du profil : on les affiche tels quels. Le français est la
+  langue de référence des clés.
 - Les montants transitent en **chaîne** pour préserver la précision décimale.
   La conversion en `number` n'a lieu qu'au formatage.
 - Formatage : `formatAmount`, `formatRate`, `formatDate`, `formatDateIn`.
 - Les heures d'une dépense se lisent dans le **fuseau du pays**
   (`formatDateIn(date, country_timezone)`), pas dans celui du lecteur.
+
+---
+
+## Écrans et commandes imposés
+
+Ces éléments relèvent des règles du produit, pas du goût : leur emplacement
+et leur comportement sont fixés ici, et l'écran qui les porte doit s'y
+conformer.
+
+### Sélecteur de langue
+
+Dans le menu du compte (en haut à droite, à côté du sélecteur de thème),
+un `DropdownMenuRadioGroup` « Langue » avec deux choix, **Français** et
+**English**, chacun écrit dans sa propre langue. Le choix est enregistré sur
+le profil (`PATCH /api/me/`, champ `language`) et appliqué sans
+rechargement ; l'en-tête `Accept-Language` des requêtes suivantes le suit,
+et les notifications comme les e-mails arrivent dans cette langue.
+Avant la connexion, l'écran de connexion propose le même sélecteur, dont le
+choix ne vaut que pour cet écran, puis s'efface devant la préférence du
+profil. Les dates et les montants se formatent dans la langue choisie
+(`formatDate`, `formatAmount` lisent la langue courante), la devise reste
+celle du pays.
+
+### Double authentification
+
+Deux écrans, dans la même mise en page que l'écran de connexion et celui
+du mot de passe provisoire (`password-notice.tsx`) : la plateforme reste
+**fermée** tant qu'ils ne sont pas passés, comme pour un mot de passe
+provisoire.
+
+- **Enrôlement** (première connexion, ou après réinitialisation par un
+  administrateur — le serveur répond `403 {"totp_setup_required": true}`
+  et le client y va comme il va à l'écran du mot de passe provisoire) :
+  `POST /api/me/2fa/enrol/` donne `qr_png_base64`, `otpauth_uri` et
+  `secret` ; le QR au centre, le secret en clair dessous en
+  `font-mono` avec un bouton « Copier » pour qui ne peut pas scanner, un
+  champ « Code à six chiffres » (`inputMode="numeric"`, `autoComplete=
+  "one-time-code"`), un bouton principal « Confirmer »
+  (`POST /api/me/2fa/confirm/ {code}`). Une phrase dit ce
+  qu'il faut : « Scannez ce code avec votre application d'authentification,
+  puis saisissez le code qu'elle affiche. » Le secret ne sera plus montré :
+  l'écran le dit.
+- **Vérification** (chaque connexion) : le champ « Code » s'ajoute à
+  l'écran de connexion lui-même — `POST /api/token-auth/` prend
+  `{username, password, code}` et répond `400 totp_required` sans code
+  valide ; la première tentative sans code sert à faire apparaître le
+  champ, sans perdre l'identifiant ni le mot de passe. Le bouton
+  « Se connecter », et un lien « Je n'ai plus accès à mon application »
+  qui n'ouvre rien d'automatique : il explique que seul un administrateur
+  peut réinitialiser l'enrôlement, et à qui s'adresser.
+
+Un code refusé s'affiche en `<FormError>` sans vider le champ ; on ne
+désactive pas le bouton pour un champ vide (règle d'accessibilité
+ci-dessous). Aucune option « se souvenir de cet appareil » : le code est
+demandé à chaque connexion.
+
+### Réouverture d'un dossier
+
+Sur le détail d'un dossier, un bouton **« Rouvrir »** en variante
+`outline`, dans les actions de `PageHeader`, rendu **seulement** si
+`can("reopen_dossiers")` — c'est-à-dire pour `REOPEN_ROLES`, `admin` et
+`super_admin` — et si le dossier est soumis, en contrôle ou non justifié
+(`POST /api/dossiers/{id}/reopen/ {note}`). Il ouvre un
+dialogue au titre affirmatif (« Rouvrir le dossier N°… »), dont la
+description dit la conséquence : « Le dossier et ses lignes reviennent au
+brouillon ; le pays est prévenu et devra le soumettre à nouveau. Le motif
+est conservé dans le journal d'audit. » Le champ « Motif » (`note`) est
+obligatoire et se valide à la soumission ; un refus du serveur parce
+qu'une ligne est déjà justifiée (`400` sur `expenses`) s'affiche en
+`<FormError>` dans le dialogue. Bouton principal « Rouvrir », en `default`,
+pas en `destructive` : ce n'est pas une suppression.
+
+Un dossier rouvert le montre : un `<Alert>` neutre en tête du détail,
+« Rouvert — motif : … » (`reopen_note`), tant qu'il n'a pas été soumis à
+nouveau ; et la ligne `reopened` figure dans le journal d'audit du dossier.
+Quand une ligne est justifiée ou clôturée, le bouton n'apparaît pas : le
+serveur refuserait, et un bouton qui mène à un refus n'a rien à faire à
+l'écran.
+
+### Menu d'export
+
+Les exports et l'import sont réservés aux administrateurs : le menu
+n'apparaît que si `can("export_data")`. C'est un `DropdownMenu` ouvert par
+un bouton `outline` « Exporter » (icône `Download`) dans les actions de
+`PageHeader` des écrans registre, dossiers et tableau de bord, avec :
+
+- le **format** : Excel (`xlsx`), CSV (`csv`), Word (`docx`), PDF
+  (`report.pdf`) ;
+- la **période** : l'exercice (`year`) ou un mois (`month`, 1 à 12), et
+  le pays (`country`), repris des filtres de l'écran (le menu ne redemande
+  pas ce que l'écran sait déjà) ;
+- une mention « Chaque export est inscrit au journal d'audit », en
+  `text-xs text-muted-foreground`, parce que c'est vrai et que cela doit
+  se savoir.
+
+Le fichier se télécharge par la vue authentifiée (`/api/exports/…`), jamais
+par une URL construite à la main ; pendant la génération, le bouton montre
+`<Loader2 className="animate-spin" />`. L'import (`Upload`) vit sur l'écran
+des dossiers, dans le même menu, et propose la prévisualisation
+(`dry_run`) avant l'écriture. Pour tous les autres rôles, ni bouton, ni
+lien : ils travaillent dans l'application.
 
 ---
 
@@ -198,8 +310,8 @@ que « Aucune donnée ».
 cd frontend
 npx tsc -b && npm run lint && npm run test
 
-SHOT_HQ_USER=… SHOT_HQ_PASSWORD=… \
-SHOT_COUNTRY_USER=… SHOT_COUNTRY_PASSWORD=… \
+SHOT_HQ_USER=… SHOT_HQ_PASSWORD=… SHOT_HQ_TOTP_SECRET=… \
+SHOT_COUNTRY_USER=… SHOT_COUNTRY_PASSWORD=… SHOT_COUNTRY_TOTP_SECRET=… \
 npx tsx scripts/screenshot.ts     # parcours complet, siège et pays
 npx tsx scripts/shot-login.ts     # connexion, grand écran et mobile
 npx tsx scripts/shot-theme.mts    # écrans principaux, thème clair puis sombre
@@ -219,6 +331,11 @@ livrable, port 8080.
 
 ## Points connus
 
+- L'application est installable comme application de bureau (PWA) :
+  manifeste et service worker viennent du build Vite, l'icône et le nom
+  « JUSTI INNOV » y sont fixés. Le service worker ne met en cache que les
+  fichiers statiques du build, jamais une réponse de `/api/` : un chiffre
+  périmé affiché hors ligne serait pire qu'une page vide.
 - Le sélecteur de thème propose « Clair », « Sombre » et « Système ». Le choix
   est local au navigateur et le script anti-flash `public/theme-init.js`,
   chargé par `index.html`, pose la classe `.dark` avant le montage de React ;

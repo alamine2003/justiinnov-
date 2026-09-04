@@ -85,7 +85,19 @@ jobs:
 
       - name: Installer les dépendances
         working-directory: backend
-        run: pip install -r requirements.txt
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends gettext
+          pip install -r requirements.txt
+
+      - name: Compiler les traductions
+        working-directory: backend
+        # Les `.mo` ne sont pas versionnés : sans cette étape, les tests qui
+        # lisent une réponse en anglais verraient le français, et un
+        # catalogue mal formé ne serait découvert qu'au build de l'image.
+        run: |
+          find . -type d -name locale | while read -r d; do
+            (cd "$(dirname "$d")" && django-admin compilemessages -v0) || exit 1
+          done
 
       - name: Vérifier qu'aucune migration ne manque
         working-directory: backend
@@ -200,16 +212,25 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Générer des comptes jetables
-        # Les mots de passe sont tirés au sort à chaque exécution et masqués
-        # dans les journaux : rien de réutilisable ne sort d'ici. Le pays est
-        # africain, faute de quoi l'amorçage le refuserait.
+        # Les mots de passe et les secrets de double authentification sont
+        # tirés au sort à chaque exécution et masqués dans les journaux :
+        # rien de réutilisable ne sort d'ici. Les secrets (base32, 20 octets)
+        # sont donnés à l'amorçage comme déjà enrôlés, et aux scripts de
+        # capture pour calculer le code à la connexion. Le pays est africain,
+        # faute de quoi l'amorçage le refuserait.
         run: |
           HQ_PASSWORD="Ci-$(openssl rand -hex 12)"
           COUNTRY_PASSWORD="Ci-$(openssl rand -hex 12)"
+          HQ_TOTP_SECRET="$(python3 -c "import secrets,base64; print(base64.b32encode(secrets.token_bytes(20)).decode())")"
+          COUNTRY_TOTP_SECRET="$(python3 -c "import secrets,base64; print(base64.b32encode(secrets.token_bytes(20)).decode())")"
           echo "::add-mask::$HQ_PASSWORD"
           echo "::add-mask::$COUNTRY_PASSWORD"
+          echo "::add-mask::$HQ_TOTP_SECRET"
+          echo "::add-mask::$COUNTRY_TOTP_SECRET"
           echo "SHOT_HQ_PASSWORD=$HQ_PASSWORD" >> "$GITHUB_ENV"
           echo "SHOT_COUNTRY_PASSWORD=$COUNTRY_PASSWORD" >> "$GITHUB_ENV"
+          echo "SHOT_HQ_TOTP_SECRET=$HQ_TOTP_SECRET" >> "$GITHUB_ENV"
+          echo "SHOT_COUNTRY_TOTP_SECRET=$COUNTRY_TOTP_SECRET" >> "$GITHUB_ENV"
           cat > backend/seed_users.ci.json <<EOF
           {
             "countries": [
@@ -226,20 +247,24 @@ jobs:
               {
                 "username": "siege.ci",
                 "password": "$HQ_PASSWORD",
+                "email": "siege.ci@innovpharma.net",
                 "first_name": "Siège",
                 "last_name": "CI",
                 "role": "super_admin",
                 "countries": [],
-                "must_change_password": false
+                "must_change_password": false,
+                "totp_secret": "$HQ_TOTP_SECRET"
               },
               {
                 "username": "togo.ci",
                 "password": "$COUNTRY_PASSWORD",
+                "email": "togo.ci@innovpharma.net",
                 "first_name": "Togo",
                 "last_name": "CI",
-                "role": "country_manager",
+                "role": "dm",
                 "countries": ["TG-01"],
-                "must_change_password": false
+                "must_change_password": false,
+                "totp_secret": "$COUNTRY_TOTP_SECRET"
               }
             ]
           }
@@ -262,6 +287,10 @@ jobs:
           SHOT_OUT: ${{ runner.temp }}/captures
           SHOT_HQ_USER: siege.ci
           SHOT_COUNTRY_USER: togo.ci
+          # Mots de passe et secrets TOTP : posés dans l'environnement du
+          # travail par « Générer des comptes jetables », masqués.
+          SHOT_HQ_TOTP_SECRET: ${{ env.SHOT_HQ_TOTP_SECRET }}
+          SHOT_COUNTRY_TOTP_SECRET: ${{ env.SHOT_COUNTRY_TOTP_SECRET }}
         run: |
           mkdir -p "$SHOT_OUT"
           npx tsx scripts/shot-login.ts

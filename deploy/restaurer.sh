@@ -5,6 +5,8 @@
 #   ./restaurer.sh --lister                       # les dumps disponibles
 #   ./restaurer.sh justi_innov-2026-09-04T020000Z.dump
 #                                                 # restaure la base de la pile
+#   ./restaurer.sh mensuel/justi_innov-2026-09.dump
+#                                                 # depuis une copie mensuelle
 #   ./restaurer.sh <dump> --base test_restauration
 #                                                 # dans une base jetable, pour
 #                                                 # le test trimestriel
@@ -59,8 +61,10 @@ proprietaire="${POSTGRES_MIGRATION_USER:-${POSTGRES_USER:-justi}}"
 
 case "$1" in
   --lister)
-    echo "Dumps dans le volume sauvegardes :"
-    dans_sauvegarde 'ls -lh /sauvegardes/base/ 2>/dev/null || echo "(aucun)"'
+    echo "Dumps quotidiens (gardés SAUVEGARDE_RETENTION_JOURS jours) :"
+    dans_sauvegarde 'ls -lhp /sauvegardes/base/ 2>/dev/null | grep -v "/$" || echo "(aucun)"'
+    echo "Copies mensuelles (conservées sans limite), à désigner par mensuel/<nom> :"
+    dans_sauvegarde 'ls -lh /sauvegardes/base/mensuel/ 2>/dev/null || echo "(aucune)"'
     exit 0
     ;;
   --pieces)
@@ -90,7 +94,8 @@ fi
 [ $# -eq 0 ] || usage
 
 case "$dump" in
-  */*) echo "✘ Donnez le nom du dump tel que listé par --lister, sans chemin." >&2; exit 1 ;;
+  mensuel/*) ;;
+  */*) echo "✘ Donnez le nom du dump tel que listé par --lister (ou mensuel/<nom>), sans autre chemin." >&2; exit 1 ;;
 esac
 
 if ! dans_sauvegarde "test -f '/sauvegardes/base/$dump'"; then

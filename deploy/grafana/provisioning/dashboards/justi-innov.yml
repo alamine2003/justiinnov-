@@ -1,0 +1,17 @@
+# Tableaux de bord provisionnés depuis le dépôt : tout fichier JSON déposé
+# dans `deploy/grafana/dashboards/` apparaît dans Grafana, et une
+# modification faite dans l'interface est écrasée au redémarrage
+# (`allowUiUpdates: false`). Le tableau de bord se modifie donc dans le
+# dépôt — exportez-le depuis Grafana (Share › Export) et remplacez le JSON.
+apiVersion: 1
+
+providers:
+  - name: justi-innov
+    folder: ""
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -4,10 +4,24 @@
     "Copiez-le en seed_users.local.json (ignoré par git) et renseignez les",
     "identifiants réels, puis lancez : python manage.py seed_users --dry-run",
     "",
-    "Rôles disponibles : super_admin, admin, doo, country_manager, owner,",
-    "controller, auditor.",
+    "Rôles disponibles : super_admin, admin (RH), df (direction financière),",
+    "dm (supérieur du manager), manager.",
     "Un compte sans 'countries' relève du siège et voit tous les pays ;",
-    "un country_manager doit toujours avoir au moins un pays.",
+    "un dm doit toujours avoir au moins un pays.",
+    "",
+    "L'adresse e-mail est obligatoire et doit appartenir à un domaine de",
+    "l'entreprise (ALLOWED_EMAIL_DOMAINS, innovpharma.net par défaut) : elle",
+    "nomme le compte dans l'application d'authentification.",
+    "",
+    "La double authentification (TOTP) est obligatoire : chaque titulaire",
+    "enrôle son application à sa première connexion ; la plateforme lui reste",
+    "fermée d'ici là. Rien à renseigner ici en production.",
+    "",
+    "AVERTISSEMENT — \"totp_secret\" : réservé aux environnements jetables",
+    "(intégration continue, captures d'écran). Cette clé enrôle et confirme",
+    "la 2FA du compte avec le secret base32 donné, pour qu'un script calcule",
+    "le code courant sans téléphone. Un secret écrit dans un fichier n'est",
+    "plus un second facteur : ne la posez JAMAIS sur un compte réel.",
     "",
     "Les pays doivent être africains : le code ISO est validé contre la liste",
     "de backend/core/africa.py.",
@@ -39,6 +53,7 @@
   "users": [
     {
       "username": "prenom.innov",
+      "email": "prenom.nom@innovpharma.net",
       "password": "à renseigner",
       "first_name": "Prénom",
       "last_name": "Nom",
@@ -48,13 +63,24 @@
     },
     {
       "username": "pays.innov",
+      "email": "pays@innovpharma.net",
       "password": "à renseigner",
-      "role": "country_manager",
+      "role": "dm",
       "countries": [
         "XX-00"
       ],
       "must_change_password": false,
       "_note": "mot de passe choisi par le titulaire, pas de changement forcé"
+    },
+    {
+      "username": "captures.ci",
+      "email": "captures.ci@innovpharma.net",
+      "password": "à renseigner",
+      "role": "super_admin",
+      "countries": [],
+      "must_change_password": false,
+      "totp_secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "_note": "environnement jetable uniquement : 2FA enrôlée avec ce secret d'exemple, à ne jamais utiliser sur un compte réel"
     }
   ]
 }

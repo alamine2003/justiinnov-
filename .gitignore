@@ -2,6 +2,9 @@ node_modules/
 __pycache__/
 *.pyc
 *.pyo
+# Catalogues de traduction compilés (`manage.py compilemessages`) : l'image
+# Docker et l'entrypoint les produisent depuis les `.po`, seuls versionnés.
+*.mo
 .env
 .env.*
 !.env.example

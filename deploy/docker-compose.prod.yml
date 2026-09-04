@@ -13,8 +13,10 @@
 # qu'ajouter.
 
 # Les limites de mémoire (`mem_limit`) sont dimensionnées pour une machine de
-# 4 Go ; leur somme reste sous 3 Go. Un service qui les dépasse est tué et
-# relancé par `restart`, plutôt que d'emporter la machine avec lui.
+# 4 Go : la plateforme elle-même reste sous 3 Go, la supervision (Prometheus,
+# Grafana, exporteurs) ajoute 640 Mo de plafond — 8 Go sont plus confortables.
+# Un service qui dépasse sa limite est tué et relancé par `restart`, plutôt
+# que d'emporter la machine avec lui.
 
 # Deux rôles Postgres : le propriétaire (POSTGRES_MIGRATION_USER, sinon
 # POSTGRES_USER) initialise la base, joue les migrations et fait les
@@ -126,21 +128,24 @@ services:
       - "443:443/udp"
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN manquant}
-      ACME_EMAIL: ${ACME_EMAIL:-}
+      # Obligatoire : vide, la directive `email` du Caddyfile est mal formée
+      # et Caddy refuse de démarrer — donc la plateforme entière.
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - frontend
+      - grafana
     restart: unless-stopped
 
   # Sauvegardes nocturnes (sauvegarder.sh) dans le volume `sauvegardes` :
-  # un `pg_dump -Fc` par nuit, gardé 14 jours, et un miroir du bucket des
-  # justificatifs. Deux services parce que deux outils : pg_dump vient de
-  # l'image postgres, mc de l'image minio/mc. Le volume reste sur la machine ;
-  # la copie ailleurs est décrite dans README.md, et restaurer.sh fait le
-  # chemin inverse.
+  # un `pg_dump -Fc` par nuit, gardé 30 jours, plus une copie mensuelle
+  # conservée pour toujours, et un miroir du bucket des justificatifs. Deux
+  # services parce que deux outils : pg_dump vient de l'image postgres, mc de
+  # l'image minio/mc. Le volume reste sur la machine ; la copie ailleurs est
+  # décrite dans README.md, et restaurer.sh fait le chemin inverse.
   sauvegarde:
     image: postgres:16.4-alpine
     mem_limit: 128m
@@ -149,7 +154,7 @@ services:
     environment:
       <<: *proprietaire
       SAUVEGARDE_HEURE: ${SAUVEGARDE_HEURE:-02:00}
-      SAUVEGARDE_RETENTION_JOURS: ${SAUVEGARDE_RETENTION_JOURS:-14}
+      SAUVEGARDE_RETENTION_JOURS: ${SAUVEGARDE_RETENTION_JOURS:-30}
     volumes:
       - ./sauvegarder.sh:/sauvegarder.sh:ro
       - ./creer_role_applicatif.sql:/creer_role_applicatif.sql:ro
@@ -181,9 +186,122 @@ services:
     restart: unless-stopped
     logging: *journal
 
+  # --- Supervision : Prometheus → Grafana, sur https://<domaine>/grafana/ ---
+  #
+  # Prometheus collecte toutes les 15 s les compteurs du backend
+  # (django-prometheus, sous le jeton METRICS_TOKEN), ceux de la base
+  # (postgres-exporter) et ceux du serveur (node-exporter) ; Grafana les
+  # affiche sur le tableau de bord provisionné depuis grafana/dashboards/.
+  # Rien de tout cela n'est exposé : seul Caddy sert Grafana, sur le
+  # sous-chemin /grafana/, et Grafana demande un mot de passe.
+  prometheus:
+    image: prom/prometheus:v2.53.5
+    mem_limit: 256m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Les mesures ne sont pas des données métier : 90 jours suffisent à
+      # comparer un mois à l'autre, et le plafond en taille protège le disque
+      # que partagent la base et les sauvegardes.
+      - --storage.tsdb.retention.time=90d
+      - --storage.tsdb.retention.size=2GB
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    # Le jeton du backend arrive par un secret Compose, lu depuis METRICS_TOKEN
+    # du .env, monté dans /run/secrets/metrics_token : il ne figure ni dans la
+    # configuration ni dans la ligne de commande.
+    secrets:
+      - metrics_token
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *journal
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    mem_limit: 64m
+    environment:
+      # Le rôle applicatif suffit : les vues pg_stat_* se lisent sans
+      # privilège. Avec une base hors de la pile (DATABASE_URL), remplacez
+      # ces trois variables par DATA_SOURCE_NAME=<l'URL> dans un fichier
+      # docker-compose.override.yml.
+      DATA_SOURCE_URI: "db:5432/${POSTGRES_DB:-justi_innov}?sslmode=disable"
+      DATA_SOURCE_USER: ${POSTGRES_USER:-justi}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}
+      PG_EXPORTER_DISABLE_DEFAULT_METRICS: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *journal
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    mem_limit: 64m
+    # Lit /proc, /sys et les systèmes de fichiers de l'hôte, en lecture
+    # seule : c'est le seul service qui regarde hors de la pile.
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+    logging: *journal
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    mem_limit: 256m
+    environment:
+      # Servi sous /grafana/ derrière Caddy : Grafana doit connaître son
+      # adresse publique pour construire ses liens et accepter le sous-chemin.
+      GF_SERVER_ROOT_URL: "https://${APP_DOMAIN:?APP_DOMAIN manquant}/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD manquant}
+      # Un seul compte, celui de l'exploitant : pas d'inscription, pas
+      # d'accès anonyme, et rien ne part vers grafana.com.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_DEFAULT_LOCALE: "fr-FR"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *journal
+
 volumes:
   pgdata:
   miniodata:
   caddy_data:
   caddy_config:
   sauvegardes:
+  prometheus_data:
+  grafana_data:
+
+secrets:
+  metrics_token:
+    environment: METRICS_TOKEN

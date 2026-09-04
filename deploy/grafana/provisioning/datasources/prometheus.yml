@@ -1,0 +1,15 @@
+# Source de données provisionnée au démarrage de Grafana : le Prometheus de
+# la pile, sur le réseau interne. L'`uid` est celui que référence le
+# tableau de bord `dashboards/justi-innov.json` ; ne le changez pas sans lui.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s

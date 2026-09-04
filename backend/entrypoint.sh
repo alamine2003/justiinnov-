@@ -21,6 +21,15 @@ en_tant_que_proprietaire() {
   fi
 }
 
+# En développement, le code est monté en volume : les `.mo` compilés dans
+# l'image sont masqués, et un `.po` modifié doit se recompiler. Quelques
+# dizaines de millisecondes par catalogue ; sans `locale/`, rien à faire.
+# `django-admin` sans réglages du projet : aucune base à joindre.
+echo "→ Compilation des traductions…"
+find . -type d -name locale -not -path './.venv/*' | while read -r d; do
+  (cd "$(dirname "$d")" && django-admin compilemessages -v0) || exit 1
+done
+
 echo "→ Application des migrations…"
 en_tant_que_proprietaire python manage.py migrate --noinput
 

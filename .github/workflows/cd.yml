@@ -249,11 +249,13 @@ jobs:
       - name: Copier les fichiers de déploiement
         # DEPLOY_PATH a été vérifié plus haut : il ne contient ni espace ni
         # métacaractère, et reste non cité pour que `~` se développe sur le
-        # serveur.
+        # serveur. Tout `deploy/` part, README et modèle de .env compris :
+        # la pile monte les scripts de sauvegarde, le SQL du rôle applicatif,
+        # la configuration Prometheus et le provisioning Grafana. Le `.env`
+        # du serveur n'est pas touché : il n'est pas dans le dépôt.
         run: |
           ssh cible "mkdir -p $DEPLOY_PATH"
-          scp deploy/docker-compose.prod.yml deploy/Caddyfile deploy/deploy.sh \
-            .deploy-env "cible:$DEPLOY_PATH/"
+          scp -r deploy/. .deploy-env "cible:$DEPLOY_PATH/"
 
       - name: Déployer
         env:

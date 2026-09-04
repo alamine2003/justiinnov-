@@ -1,0 +1,49 @@
+# Collecte Prometheus de la pile de production (deploy/docker-compose.prod.yml).
+#
+# Trois cibles, toutes sur le réseau interne de la pile — rien n'est exposé :
+#   backend            les compteurs de django-prometheus (requêtes, latence,
+#                      réponses par statut, requêtes SQL), sous jeton ;
+#   postgres-exporter  connexions, taille et activité de la base ;
+#   node-exporter      CPU, mémoire et disque du serveur.
+#
+# Le jeton présenté au backend vient du secret Compose `metrics_token`,
+# alimenté par METRICS_TOKEN du `.env` : il n'apparaît ni ici ni dans la
+# ligne de commande du conteneur. Prometheus retire les blancs de fin du
+# fichier, un retour à la ligne n'est donc pas gênant.
+#
+# Vérification, sans lancer la pile :
+#   docker run --rm -v "$PWD/prometheus.yml:/p.yml:ro" prom/prometheus:v2.53.5 \
+#       promtool check config /p.yml
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: backend
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/metrics_token
+    static_configs:
+      - targets: ["backend:8000"]
+        labels:
+          service: backend
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          service: base
+
+  - job_name: serveur
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: serveur
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: prometheus

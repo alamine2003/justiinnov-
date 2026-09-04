@@ -3,8 +3,11 @@
 # docker-compose.prod.yml qui partagent le volume `sauvegardes` :
 #
 #   sauvegarder.sh base     dans `sauvegarde` (image postgres) : pg_dump -Fc
-#                           de la base, un fichier par nuit, rotation à
-#                           SAUVEGARDE_RETENTION_JOURS (14 par défaut).
+#                           de la base, un fichier par nuit dans base/,
+#                           rotation à SAUVEGARDE_RETENTION_JOURS (30 par
+#                           défaut) ; le premier dump de chaque mois est
+#                           copié dans base/mensuel/, où rien n'est jamais
+#                           supprimé — la conservation est illimitée.
 #   sauvegarder.sh pieces   dans `sauvegarde-pieces` (image minio/mc) :
 #                           miroir du bucket des justificatifs. Sans
 #                           `--remove` : un objet effacé du bucket reste
@@ -30,7 +33,7 @@ une_fois=0
 
 DESTINATION="${SAUVEGARDE_DESTINATION:-/sauvegardes}"
 HEURE="${SAUVEGARDE_HEURE:-02:00}"
-RETENTION_JOURS="${SAUVEGARDE_RETENTION_JOURS:-14}"
+RETENTION_JOURS="${SAUVEGARDE_RETENTION_JOURS:-30}"
 
 horodatage() { date -u +%Y-%m-%dT%H%M%SZ; }
 journal() { echo "$(date -u +%FT%TZ) $*"; }
@@ -48,10 +51,22 @@ sauvegarder_base() {
   mv "$fichier.partiel" "$fichier"
   journal "base sauvegardée : $fichier ($(du -h "$fichier" | cut -f1))"
 
-  # Rotation : les dumps plus vieux que la rétention partent. `-mtime +N`
-  # signifie « strictement plus de N jours ».
-  supprimes=$(find "$DESTINATION/base" -name '*.dump' -mtime +"$RETENTION_JOURS" -print -delete | wc -l)
-  [ "$supprimes" -gt 0 ] && journal "rotation : $supprimes dump(s) de plus de $RETENTION_JOURS jours supprimé(s)"
+  # Copie mensuelle, conservée pour toujours : le premier dump réussi du
+  # mois — le 1er en temps normal, plus tard si la sauvegarde du 1er a
+  # échoué — est lié en dur dans base/mensuel/ (une copie si le lien est
+  # impossible). Elle reste quand le quotidien part en rotation.
+  mkdir -p "$DESTINATION/base/mensuel"
+  mensuel="$DESTINATION/base/mensuel/${PGDATABASE:-justi_innov}-$(date -u +%Y-%m).dump"
+  if [ ! -f "$mensuel" ]; then
+    ln "$fichier" "$mensuel" 2>/dev/null || cp "$fichier" "$mensuel"
+    journal "copie mensuelle conservée sans limite : $mensuel"
+  fi
+
+  # Rotation des quotidiens seulement (`-maxdepth 1` épargne mensuel/) :
+  # les dumps plus vieux que la rétention partent. `-mtime +N` signifie
+  # « strictement plus de N jours ».
+  supprimes=$(find "$DESTINATION/base" -maxdepth 1 -name '*.dump' -mtime +"$RETENTION_JOURS" -print -delete | wc -l)
+  [ "$supprimes" -gt 0 ] && journal "rotation : $supprimes dump(s) quotidien(s) de plus de $RETENTION_JOURS jours supprimé(s)"
   rm -f "$DESTINATION"/base/*.partiel
 }
 

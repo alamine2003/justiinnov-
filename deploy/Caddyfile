@@ -1,7 +1,13 @@
 # Entrée publique : TLS automatique (Let's Encrypt), puis tout part au
 # conteneur nginx du frontend, qui sert l'interface et relaie `/api/` vers
-# Django. Caddy pose `X-Forwarded-Proto: https`, que nginx transmet et que
-# Django lit (`SECURE_PROXY_SSL_HEADER`) pour ne pas rediriger en boucle.
+# Django — sauf `/grafana/`, qui va à Grafana. Caddy pose
+# `X-Forwarded-Proto: https`, que nginx transmet et que Django lit
+# (`SECURE_PROXY_SSL_HEADER`) pour ne pas rediriger en boucle.
+#
+# Vérification, sans lancer la pile :
+#   docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL= \
+#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+#       caddy validate --config /etc/caddy/Caddyfile
 {
 	email {$ACME_EMAIL}
 }
@@ -12,6 +18,8 @@
 	# HSTS se pose ici, au seul endroit qui termine TLS : nginx ne voit que
 	# du HTTP et Django ne couvre que `/api/`. Un an, sous-domaines compris ;
 	# le préchargement reste du ressort de Django (DJANGO_HSTS_PRELOAD).
+	# La directive `header` s'applique avant tout `handle` : Grafana en
+	# bénéficie aussi.
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
 	# Les justificatifs peuvent peser jusqu'à 20 Mo (MAX_PROOF_SIZE) ; un peu
@@ -20,7 +28,18 @@
 		max_size 25MB
 	}
 
-	reverse_proxy frontend:80
+	# Supervision : Grafana sous /grafana/. `handle_path` retire le préfixe,
+	# Grafana (GF_SERVER_SERVE_FROM_SUB_PATH) sait qu'il vit sous /grafana/
+	# pour ses liens. Sans barre finale, on redirige plutôt que de laisser
+	# nginx répondre la page d'accueil de l'application.
+	redir /grafana /grafana/ permanent
+	handle_path /grafana/* {
+		reverse_proxy grafana:3000
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
 
 	log {
 		output stdout

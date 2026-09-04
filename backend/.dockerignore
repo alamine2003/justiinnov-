@@ -6,6 +6,8 @@ seed_users.ci.json
 media/
 __pycache__/
 *.pyc
+# Catalogues compilés : l'image compile les siens depuis les `.po`.
+*.mo
 *.pyo
 .env
 .env.*
