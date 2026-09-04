@@ -15,7 +15,16 @@
     "Le mot de passe posé ici est provisoire : la plateforme reste fermée pour",
     "ce compte tant que son titulaire ne l'a pas remplacé. Un mot de passe que",
     "le titulaire a lui-même choisi n'a pas à l'être : ajoutez alors",
-    "\"must_change_password\": false sur ce compte."
+    "\"must_change_password\": false sur ce compte.",
+    "",
+    "La commande est idempotente : relancée, elle met à jour nom, rôle et",
+    "périmètre, mais ne touche pas au mot de passe d'un compte existant.",
+    "Pour le remplacer malgré tout, ajoutez \"reset_password\": true sur le",
+    "compte — puis retirez la clé, sinon chaque relance l'écrasera.",
+    "",
+    "La boucle de captures d'écran (frontend/scripts/*.ts, DESIGN.md) exige",
+    "un compte siège SANS mot de passe provisoire : la plateforme fermée ne",
+    "montre que l'écran de changement de mot de passe."
   ],
   "countries": [
     {
@@ -34,7 +43,8 @@
       "first_name": "Prénom",
       "last_name": "Nom",
       "role": "super_admin",
-      "countries": []
+      "countries": [],
+      "_note": "mot de passe provisoire : must_change_password vaut true par défaut"
     },
     {
       "username": "pays.innov",

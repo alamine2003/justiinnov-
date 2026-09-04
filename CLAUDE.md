@@ -14,8 +14,9 @@ composant qui existe.
 ## Démarrer
 
 ```bash
-docker compose up -d          # db, minio, backend, frontend
+docker compose up -d          # db, minio, backend, scheduler, frontend
 # Frontend http://localhost:5173 · API http://localhost:8000/api/
+# Les ports ne sont ouverts que sur 127.0.0.1 (base sur 5433, MinIO sur 9000/9001).
 ```
 
 Aucun compte n'est créé automatiquement et **aucun mot de passe ne figure dans
@@ -29,13 +30,20 @@ docker compose run --rm --entrypoint python backend manage.py test
 cd frontend && npx tsc -b && npm run lint && npm run test
 ```
 
-Pour l'interface, lancez aussi les scripts de capture décrits dans `DESIGN.md` :
-ils échouent sur toute erreur de console, et plusieurs défauts n'ont été
-trouvés qu'en regardant les images.
+Ce sont les mêmes commandes que dans `README.md` et la CI ; ne documentez
+pas une variante ailleurs. **Deux suites backend ne tournent pas en parallèle
+sur la même base** : Django crée `test_<POSTGRES_DB>` puis la détruit, et la
+seconde suite détruirait celle de la première. Pour travailler à plusieurs,
+donnez à chacune sa base avec `-e POSTGRES_DB=justi_<nom>`.
+
+Pour l'interface, lancez aussi les scripts de capture décrits dans `DESIGN.md`
+(parcours, connexion, thème sombre) : ils échouent sur toute erreur de
+console, et plusieurs défauts n'ont été trouvés qu'en regardant les images.
 
 La CI (`.github/workflows/ci.yml`) rejoue tout cela, captures comprises, sur
-la pile livrable (`docker-compose.ci.yml`). La livraison (`cd.yml`) publie
-les images et déploie `deploy/` ; voir `deploy/README.md`.
+la pile livrable (`docker-compose.ci.yml`) ; elle tourne sur chaque PR et
+au sein de la livraison (`cd.yml`), qui publie les images et déploie
+`deploy/` ; voir `deploy/README.md`.
 
 ## Règles que le code doit respecter
 
@@ -73,13 +81,17 @@ l'application.
 - **Un rejet exige un motif.**
 - **Une requête `GET` n'écrit rien.** Les alertes sont calculées à la
   lecture ; leur notification passe par `manage.py notify_alerts`, pour ne
-  pas dépendre de quelqu'un qui ouvre une page.
+  pas dépendre de quelqu'un qui ouvre une page. Une seule exception,
+  assumée : le téléchargement d'un justificatif et les exports
+  (`/api/exports/…`) écrivent une entrée `AuditLog`, parce qu'une donnée
+  qui sort du système doit laisser une trace — c'est la règle « toute
+  action sensible laisse une trace » qui l'emporte.
 
 ## Repères
 
 | Sujet | Où |
 |---|---|
-| Modèle de données figé | `docs/model-de-donnees.md` |
+| Modèle de données (référence, tenue à jour) | `docs/model-de-donnees.md` |
 | Circuit de justification | `backend/expenses/workflow.py` |
 | Rôles et périmètres | `backend/accounts/` |
 | Calculs budgétaires | `backend/budget/aggregates.py` |

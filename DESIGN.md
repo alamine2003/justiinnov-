@@ -41,17 +41,22 @@ d'œil. **N'ajoutez aucune autre teinte.**
 
 | Sens | Teinte |
 |---|---|
-| Justifié, actif, validé, approuvé | `bg-emerald-500` |
-| En contrôle, alerte, incomplet, en attente | `bg-amber-500` |
-| Soumis, information | `bg-blue-500` |
-| Brouillon | `bg-slate-500` |
-| Archivé, clôturé | `bg-zinc-500`, `bg-zinc-600` |
-| Non justifié, rejeté, dépassement | `bg-destructive` |
+| Justifié, actif, validé, approuvé | `bg-statut-succes text-statut-succes-foreground` |
+| En contrôle, alerte, incomplet, en attente | `bg-statut-attente text-statut-attente-foreground` |
+| Soumis, information | `bg-statut-info text-statut-info-foreground` |
+| Brouillon | `bg-statut-neutre text-statut-neutre-foreground` |
+| Archivé, clôturé | `bg-statut-archive text-statut-archive-foreground` |
+| Non justifié, rejeté, dépassement | `bg-destructive text-destructive-foreground` |
 
-Les correspondances sont centralisées dans
-`components/expenses/status-badge.tsx` et dans les tables `*_LABELS` de
-`lib/types.ts`. Un nouveau statut s'ajoute **là**, jamais dans la page qui
-l'affiche.
+`text-white` est proscrit sur un fond destructif : le jeton
+`--destructive-foreground` garantit le contraste dans les deux thèmes.
+
+Les teintes sont centralisées dans `lib/status-styles.ts`, les badges dans
+`components/expenses/status-badge.tsx` (`StatusBadge`, `ProofStatusBadge`,
+`ProjectStatusBadge`, libellé serveur `*_display` prioritaire) et les tables
+`*_LABELS` dans `lib/types.ts`. Un nouveau statut s'ajoute **là**, jamais dans
+la page qui l'affiche. Le test `status-badge.test.tsx` parcourt `src/` et
+échoue sur toute classe `text-<teinte>-NNN` ou `text-white`.
 
 ---
 
@@ -135,8 +140,18 @@ Titre affirmatif, description qui dit la conséquence. Actions en bas à droite 
 | Chargement d'un tableau | `<SkeletonRows columns={n} />` |
 | Tableau vide | `<EmptyRow colSpan={n} icon={…} title="…" hint="…" />` |
 | Erreur de page | `<Alert variant="destructive">` |
-| Erreur de formulaire | encadré `bg-destructive/10` avec `role="alert"` |
+| Erreur de formulaire | `<FormError message={…} />` (`role="alert"`) |
+| Erreur de rendu | `<ErrorBoundary>` autour du layout (`components/ui/error-boundary.tsx`) |
 | Avertissement métier | `<Alert>` neutre |
+| Indicateur chiffré | `<StatCard label value hint />` (`components/ui/stat-card.tsx`) |
+| Liste plafonnée par le serveur | `<TruncatedNotice count shown />` dès que `count > results.length` |
+
+Le chargement des données passe par `useQuery(clé, fetcher)` (annulation de la
+requête précédente, `loading` distinct de `refreshing`) et, pour les
+référentiels, par `useReferentiel(clé, fetcher)` (cache mémoire cinq minutes,
+`invalidateReferentiel` après une écriture). Les recherches sont différées par
+`useDebounced`. La remise à la première page se fait dans le gestionnaire du
+filtre, jamais dans un effet.
 
 Un état vide doit dire **quoi faire**, pas seulement constater le vide.
 « Aucun dossier — Créez un dossier pour y rattacher vos dépenses » vaut mieux
@@ -166,6 +181,14 @@ que « Aucune donnée ».
   n'explique rien. Validez à la soumission et affichez la raison.
 - Conservez l'anneau de focus sur tout élément interactif construit à la main.
 - Libellés liés par `htmlFor` / `id`.
+- Une ligne de tableau ne se clique pas : le nom ou le numéro est un `<Link>`,
+  atteignable au clavier.
+- Un choix exclusif dans un menu (thème) utilise `DropdownMenuRadioGroup`,
+  qui expose `aria-checked`.
+- Un champ de recherche sans libellé visible porte un `aria-label` ; un
+  groupe de filtres à bascule expose `aria-pressed`.
+- Le plugin `jsx-a11y` d'oxlint est actif : `npm run lint` refuse un bouton à
+  icône sans libellé.
 
 ---
 
@@ -179,19 +202,32 @@ SHOT_HQ_USER=… SHOT_HQ_PASSWORD=… \
 SHOT_COUNTRY_USER=… SHOT_COUNTRY_PASSWORD=… \
 npx tsx scripts/screenshot.ts     # parcours complet, siège et pays
 npx tsx scripts/shot-login.ts     # connexion, grand écran et mobile
+npx tsx scripts/shot-theme.mts    # écrans principaux, thème clair puis sombre
 ```
 
-Les deux scripts **échouent si la console du navigateur a produit la moindre
+Les trois scripts **échouent si la console du navigateur a produit la moindre
 erreur**. Regardez les captures : plusieurs défauts de ce projet — un
 `method-wrapper` affiché en clair, une page qui plantait, un bouton d'édition
-jamais rendu — n'ont été trouvés que là.
+jamais rendu — n'ont été trouvés que là. Le compte siège utilisé ne doit pas
+avoir de mot de passe provisoire (`must_change_password: false`), sans quoi
+la plateforme fermée ne montre que l'écran de changement de mot de passe.
+`SHOT_BASE` (défaut `http://localhost:5173`) et `SHOT_OUT` (défaut `/tmp`)
+ciblent une autre pile ou un autre dossier ; la CI les pointe sur la pile
+livrable, port 8080.
 
 ---
 
 ## Points connus
 
-- Le thème sombre est **entièrement défini** dans les tokens, mais aucun
-  sélecteur ne pose la classe `.dark` : il est inatteignable. Ajouter un
-  basculement suffirait, tout le système suivrait.
-- Les couleurs de statut sont des couleurs Tailwind brutes, hors tokens :
-  elles ne varient pas avec le thème. Assumé tant que le thème sombre dort.
+- Le sélecteur de thème propose « Clair », « Sombre » et « Système ». Le choix
+  est local au navigateur et le script anti-flash `public/theme-init.js`,
+  chargé par `index.html`, pose la classe `.dark` avant le montage de React ;
+  `ThemeProvider` suit ensuite les changements de préférence du système. Le
+  script est un **fichier**, pas un bloc `<script>` en ligne : la politique
+  de sécurité de contenu de `frontend/nginx.conf` n'autorise que
+  `script-src 'self'`, et un bloc en ligne serait bloqué en production sans
+  rien casser en développement.
+- **`PageHeader` (`components/ui/page-header.tsx`) est obligatoire sur toute
+  page** : titre, description et actions y prennent la même place partout.
+  Une page qui compose son propre en-tête rompt cet alignement ; ajoutez
+  une option au composant plutôt qu'une exception dans la page.
