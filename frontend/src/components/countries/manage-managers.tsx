@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { Link2, Loader2, Pencil, Plus, Unlink } from "lucide-react"
+import { Link2, Loader2, Pencil, Plus, Unlink, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,9 +10,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { EmptyRow } from "@/components/ui/table-states"
 import {
   Table,
   TableBody,
@@ -26,23 +28,16 @@ import {
   updateCountryManagers,
   updateManager,
 } from "@/lib/countries"
+import { STATUS_TONES } from "@/lib/status-styles"
 import type { Manager } from "@/lib/types"
 
 interface ManageManagersProps {
   countryId: number
   managers: Manager[]
-  onRefresh: () => void
+  onRefresh: () => void | Promise<void>
   /** Le référentiel des managers relève du siège. */
   canManage: boolean
 }
-
-interface ManagerForm {
-  name: string
-  email: string
-  title: string
-}
-
-const EMPTY_FORM: ManagerForm = { name: "", email: "", title: "" }
 
 export function ManageManagers({
   countryId,
@@ -50,64 +45,21 @@ export function ManageManagers({
   onRefresh,
   canManage,
 }: ManageManagersProps) {
-  const [open, setOpen] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState<ManagerForm>(EMPTY_FORM)
-  const [active, setActive] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState<Manager | null | "nouveau">(null)
   const [busyId, setBusyId] = useState<number | null>(null)
-
-  const setField = (field: keyof ManagerForm, value: string) => {
-    setForm((f) => ({ ...f, [field]: value }))
-  }
-
-  const openCreate = () => {
-    setEditingId(null)
-    setForm(EMPTY_FORM)
-    setActive(true)
-    setOpen(true)
-  }
-
-  const openEdit = (manager: Manager) => {
-    setEditingId(manager.id)
-    setForm({
-      name: manager.name,
-      email: manager.email ?? "",
-      title: manager.title ?? "",
-    })
-    setActive(manager.is_active)
-    setOpen(true)
-  }
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      const payload = { ...form, is_active: active }
-      if (editingId !== null) {
-        await updateManager(editingId, payload)
-      } else {
-        const created = await createManager(payload)
-        await updateCountryManagers(countryId, [
-          ...managers.map((m) => m.id),
-          created.id,
-        ])
-      }
-      setOpen(false)
-      await onRefresh()
-    } finally {
-      setSaving(false)
-    }
-  }
+  const [error, setError] = useState<string | null>(null)
 
   const handleDetach = async (manager: Manager) => {
     setBusyId(manager.id)
+    setError(null)
     try {
       await updateCountryManagers(
         countryId,
         managers.filter((m) => m.id !== manager.id).map((m) => m.id),
       )
       await onRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Retrait impossible")
     } finally {
       setBusyId(null)
     }
@@ -123,31 +75,38 @@ export function ManageManagers({
           </p>
         </div>
         {canManage && (
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="mr-1 h-4 w-4" />
+          <Button size="sm" onClick={() => setEditing("nouveau")}>
+            <Plus className="mr-1 h-4 w-4" aria-hidden />
             Ajouter
           </Button>
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border/60 shadow-sm">
+      <FormError>{error}</FormError>
+
+      <div className="overflow-x-auto rounded-lg border border-border/60 shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Manager</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Fonction</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead scope="col">Manager</TableHead>
+              <TableHead scope="col">Email</TableHead>
+              <TableHead scope="col">Fonction</TableHead>
+              <TableHead scope="col">Statut</TableHead>
+              <TableHead scope="col" className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {managers.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="h-16 text-center text-muted-foreground">
-                  Aucun manager rattaché.
-                </TableCell>
-              </TableRow>
+              <EmptyRow
+                colSpan={5}
+                icon={Users}
+                title="Aucun manager rattaché"
+                hint={
+                  canManage
+                    ? "Ajoutez un manager pour lui rattacher des dépenses et une sous-enveloppe."
+                    : "Le siège n'a rattaché aucun manager à ce pays."
+                }
+              />
             ) : (
               managers.map((manager) => (
                 <TableRow key={manager.id}>
@@ -162,9 +121,7 @@ export function ManageManagers({
                   </TableCell>
                   <TableCell>
                     {manager.is_active ? (
-                      <Badge className="bg-emerald-500 shadow-sm shadow-emerald-500/20 hover:bg-emerald-500">
-                        Actif
-                      </Badge>
+                      <Badge className={STATUS_TONES.SUCCES}>Actif</Badge>
                     ) : (
                       <Badge variant="secondary">Inactif</Badge>
                     )}
@@ -175,17 +132,16 @@ export function ManageManagers({
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => openEdit(manager)}
-                          aria-label="Modifier"
+                          onClick={() => setEditing(manager)}
+                          aria-label={`Modifier ${manager.name}`}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDetach(manager)}
-                          aria-label="Retirer du pays"
-                          title="Retirer ce manager du pays"
+                          onClick={() => void handleDetach(manager)}
+                          aria-label={`Retirer ${manager.name} du pays`}
                           disabled={busyId === manager.id}
                           className="text-muted-foreground hover:text-destructive"
                         >
@@ -207,75 +163,126 @@ export function ManageManagers({
         </Table>
       </div>
 
-      <Dialog
-        open={open}
-        onOpenChange={(o) => {
-          if (!o) {
-            setOpen(false)
-            setEditingId(null)
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Link2 className="h-4 w-4" />
-              {editingId !== null ? "Modifier" : "Ajouter"} un manager
-            </DialogTitle>
-            <DialogDescription>
-              {editingId !== null
-                ? "Mettez à jour les informations du manager."
-                : "Créer le manager et le rattacher à ce pays."}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="m-name">Nom</Label>
-              <Input
-                id="m-name"
-                value={form.name}
-                onChange={(e) => setField("name", e.target.value)}
-                placeholder="Jean Dupont"
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="m-email">Email</Label>
-              <Input
-                id="m-email"
-                type="email"
-                value={form.email}
-                onChange={(e) => setField("email", e.target.value)}
-                placeholder="jean.dupont@exemple.fr"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="m-title">Fonction</Label>
-              <Input
-                id="m-title"
-                value={form.title}
-                onChange={(e) => setField("title", e.target.value)}
-                placeholder="Responsable commercial"
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <p className="text-sm">Actif</p>
-              <Switch checked={active} onCheckedChange={setActive} />
-            </div>
-            <DialogFooter>
-              <div>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                  Annuler
-                </Button>
-                <Button type="submit" disabled={saving} className="ml-2">
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Enregistrer
-                </Button>
-              </div>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {editing !== null && (
+        <ManagerDialog
+          key={editing === "nouveau" ? "nouveau" : editing.id}
+          manager={editing === "nouveau" ? null : editing}
+          countryId={countryId}
+          managers={managers}
+          onClose={() => setEditing(null)}
+          onSaved={onRefresh}
+        />
+      )}
     </div>
+  )
+}
+
+function ManagerDialog({
+  manager,
+  countryId,
+  managers,
+  onClose,
+  onSaved,
+}: {
+  manager: Manager | null
+  countryId: number
+  managers: Manager[]
+  onClose: () => void
+  onSaved: () => void | Promise<void>
+}) {
+  const [name, setName] = useState(manager?.name ?? "")
+  const [email, setEmail] = useState(manager?.email ?? "")
+  const [title, setTitle] = useState(manager?.title ?? "")
+  const [active, setActive] = useState(manager?.is_active ?? true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const payload = { name, email, title, is_active: active }
+      if (manager) {
+        await updateManager(manager.id, payload)
+      } else {
+        const created = await createManager(payload)
+        await updateCountryManagers(countryId, [
+          ...managers.map((m) => m.id),
+          created.id,
+        ])
+      }
+      await onSaved()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Enregistrement impossible")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Link2 className="h-4 w-4" aria-hidden />
+            {manager ? "Modifier" : "Ajouter"} un manager
+          </DialogTitle>
+          <DialogDescription>
+            {manager
+              ? "Mettez à jour les informations du manager."
+              : "Créer le manager et le rattacher à ce pays."}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
+          <FormError>{error}</FormError>
+          <div className="grid gap-2">
+            <Label htmlFor="m-name">Nom</Label>
+            <Input
+              id="m-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jean Dupont"
+              required
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="m-email">Email</Label>
+            <Input
+              id="m-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="jean.dupont@exemple.fr"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="m-title">Fonction</Label>
+            <Input
+              id="m-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Responsable commercial"
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <Label htmlFor="m-active" className="text-sm">Actif</Label>
+            <Switch id="m-active" checked={active} onCheckedChange={setActive} />
+          </div>
+          <DialogFooter>
+            <div>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={saving} className="ml-2">
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Enregistrer
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

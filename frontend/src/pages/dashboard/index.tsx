@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import { Link } from "react-router-dom"
 import {
   AlertTriangle,
@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { NativeSelect } from "@/components/ui/native-select"
 import { PageHeader } from "@/components/ui/page-header"
+import { StatCard } from "@/components/ui/stat-card"
+import { EmptyRow } from "@/components/ui/table-states"
 import {
   Table,
   TableBody,
@@ -23,28 +25,20 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useAuth } from "@/context/auth"
+import { TruncatedNotice } from "@/components/ui/truncated-notice"
+import { useAuth } from "@/context/use-auth"
 import { fetchCountries } from "@/lib/countries"
+import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import {
   downloadExport,
   fetchBreakdown,
   fetchDashboard,
   type ExportKind,
 } from "@/lib/reporting"
-import type {
-  AlertLevel,
-  Breakdown,
-  BreakdownRow,
-  CountrySummary,
-  Dashboard,
-} from "@/lib/types"
-import { formatAmount, formatRate } from "@/lib/utils"
-
-const LEVEL_STYLE: Record<AlertLevel, string> = {
-  info: "bg-blue-500 hover:bg-blue-500",
-  warning: "bg-amber-500 hover:bg-amber-500",
-  critical: "bg-destructive hover:bg-destructive",
-}
+import { ALERT_LEVEL_STYLE } from "@/lib/status-styles"
+import { ALERT_LEVEL_LABELS, type BreakdownRow } from "@/lib/types"
+import { useQuery } from "@/lib/use-query"
+import { cn, formatAmount, formatRate, pluralize } from "@/lib/utils"
 
 /** Alertes montrées d'emblée ; le reste est signalé par un compte. */
 const VISIBLE_ALERTS = 12
@@ -56,56 +50,60 @@ export function DashboardPage() {
   const { me } = useAuth()
   const [year, setYear] = useState(CURRENT_YEAR)
   const [countryId, setCountryId] = useState<number | "">("")
-  const [countries, setCountries] = useState<CountrySummary[]>([])
-  const [data, setData] = useState<Dashboard | null>(null)
-  const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState<ExportKind | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    const params: Record<string, unknown> = { year }
-    if (countryId !== "") params.country = countryId
-    try {
-      const [dashboard, detail, countryPage] = await Promise.all([
-        fetchDashboard(params),
-        fetchBreakdown(params),
-        fetchCountries({ page_size: 200 }),
+  const countries = useReferentiel(
+    "countries",
+    () => fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+    { enabled: Boolean(me?.has_global_scope) },
+  )
+  const query = useQuery(
+    JSON.stringify({ year, countryId }),
+    async (signal) => {
+      const params: Record<string, unknown> = { year }
+      if (countryId !== "") params.country = countryId
+      // La répartition n'a de sens que pour un pays : sans pays choisi, le
+      // serveur la refuse à un compte siège (deux équipes homonymes de pays
+      // différents fusionneraient). Un compte restreint à un pays l'obtient
+      // sans le nommer.
+      const repartitionPossible = countryId !== "" || !me?.has_global_scope
+      const [dashboard, breakdown] = await Promise.all([
+        fetchDashboard(params, signal),
+        repartitionPossible ? fetchBreakdown(params, signal) : Promise.resolve(null),
       ])
-      setData(dashboard)
-      setBreakdown(detail)
-      setCountries(countryPage.results)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de charger le tableau de bord")
-    } finally {
-      setLoading(false)
-    }
-  }, [year, countryId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+      return { dashboard, breakdown }
+    },
+    { fallback: "Impossible de charger le tableau de bord" },
+  )
+  const data = query.data?.dashboard ?? null
+  const breakdown = query.data?.breakdown ?? null
+  const symbolOf = (id: number, fallback: string) =>
+    countries.data?.results.find((c) => c.id === id)?.currency_symbol || fallback
+  // La consolidation se fait en XOF ; le symbole vient du premier pays qui
+  // l'utilise, pour ne pas écrire « FCFA » en dur à côté d'un « XOF ».
+  const consolidatedSymbol =
+    countries.data?.results.find((c) => c.currency === "XOF")?.currency_symbol || "XOF"
 
   const runExport = async (kind: ExportKind) => {
     setExporting(kind)
-    setError(null)
+    setExportError(null)
     try {
       const params: Record<string, unknown> = { year }
       if (countryId !== "") params.country = countryId
       await downloadExport(kind, params)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Export impossible")
+      setExportError(e instanceof Error ? e.message : "Export impossible")
     } finally {
       setExporting(null)
     }
   }
 
-  if (loading && !data) {
+  if (query.loading && !data) {
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="flex h-64 items-center justify-center" aria-busy="true">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="sr-only">Chargement du tableau de bord…</span>
       </div>
     )
   }
@@ -116,7 +114,7 @@ export function DashboardPage() {
         title="Pilotage"
         description={
           me?.has_global_scope
-            ? "Consolidation de tous les pays, convertie en FCFA."
+            ? `Consolidation de tous les pays, convertie en ${consolidatedSymbol}.`
             : "Consommation et alertes de votre périmètre."
         }
       >
@@ -143,7 +141,7 @@ export function DashboardPage() {
               className="w-48"
             >
               <option value="">Tous les pays</option>
-              {countries.map((country) => (
+              {(countries.data?.results ?? []).map((country) => (
                 <option key={country.id} value={country.id}>
                   {country.country_ref ? `${country.country_ref} — ` : ""}
                   {country.name}
@@ -151,16 +149,20 @@ export function DashboardPage() {
               ))}
             </NativeSelect>
           )}
+          {query.refreshing && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Actualisation" />
+          )}
         </div>
       </PageHeader>
 
-      {error && (
+      {(query.error || exportError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{exportError ?? query.error}</AlertDescription>
         </Alert>
       )}
+      <TruncatedNotice page={countries.data} noun="pays" />
 
       {data && data.consolidated_xof.unconverted_currencies.length > 0 && (
         <Alert>
@@ -175,44 +177,56 @@ export function DashboardPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat
+        <StatCard
+          icon={TrendingUp}
           label="Enveloppe"
           value={formatAmount(data?.totals.allocated)}
-          hint={`${formatAmount(data?.consolidated_xof.allocated)} FCFA consolidés`}
+          hint={`${formatAmount(data?.consolidated_xof.allocated, consolidatedSymbol)} consolidés`}
         />
-        <Stat
+        <StatCard
+          icon={TrendingUp}
           label="Consommé"
           value={formatAmount(data?.totals.consumed)}
           hint={`Taux d'exécution ${formatRate(data?.totals.execution_rate)}`}
         />
-        <Stat
+        <StatCard
+          icon={TrendingUp}
           label="Engagé"
           value={formatAmount(data?.totals.engaged)}
           hint="Soumis ou en contrôle"
         />
-        <Stat
+        <StatCard
+          icon={TrendingUp}
           label="Sans preuve"
           value={formatAmount(data?.totals.gap)}
           hint={`Justifié à ${formatRate(data?.totals.justification_rate)}`}
         />
-        <Stat
+        <StatCard
+          icon={TrendingUp}
           label="Disponible"
           value={formatAmount(data?.totals.remaining)}
-          hint={`${formatAmount(data?.consolidated_xof.remaining)} FCFA`}
+          hint={formatAmount(data?.consolidated_xof.remaining, consolidatedSymbol)}
         />
       </div>
 
+      {/* Les trois premiers comptes portent sur des lignes : ils mènent au
+          registre, filtré sur le même statut. Le dernier compte des
+          dossiers. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Workload
-          label="À contrôler"
+          label="Lignes à contrôler"
           value={data?.workload.expenses_to_review ?? 0}
-          to="/dossiers?status=submitted"
+          to="/registre?status=submitted"
         />
-        <Workload label="Brouillons" value={data?.workload.expenses_draft ?? 0} to="/dossiers" />
         <Workload
-          label="Non justifiées"
+          label="Lignes en brouillon"
+          value={data?.workload.expenses_draft ?? 0}
+          to="/registre?status=draft"
+        />
+        <Workload
+          label="Lignes non justifiées"
           value={data?.workload.expenses_unjustified ?? 0}
-          to="/dossiers?status=unjustified"
+          to="/registre?status=unjustified"
         />
         <Workload label="Dossiers ouverts" value={data?.workload.dossiers_open ?? 0} to="/dossiers" />
       </div>
@@ -221,7 +235,7 @@ export function DashboardPage() {
         <Card className="border-border/60 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">
-              Alertes ({data.alerts_total})
+              {pluralize(data.alerts_total, "alerte")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -229,10 +243,10 @@ export function DashboardPage() {
               <Link
                 key={alert.key}
                 to={alert.link || "/dossiers"}
-                className="flex items-start gap-3 rounded-lg border border-border/60 p-3 transition-colors hover:bg-accent/30"
+                className="flex items-start gap-3 rounded-lg border border-border/60 p-3 transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <Badge className={LEVEL_STYLE[alert.level]}>
-                  {alert.level === "critical" ? "Critique" : "Alerte"}
+                <Badge className={ALERT_LEVEL_STYLE[alert.level]}>
+                  {ALERT_LEVEL_LABELS[alert.level]}
                 </Badge>
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{alert.title}</p>
@@ -242,7 +256,7 @@ export function DashboardPage() {
             ))}
             {data.alerts_total > VISIBLE_ALERTS && (
               <p className="pt-1 text-xs text-muted-foreground">
-                {data.alerts_total - VISIBLE_ALERTS} autre(s) alerte(s) — les
+                {pluralize(data.alerts_total - VISIBLE_ALERTS, "autre alerte")} — les
                 plus graves sont affichées en premier.
               </p>
             )}
@@ -278,34 +292,35 @@ export function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-lg border border-border/60">
+          <div className="overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Pays</TableHead>
-                  <TableHead className="text-right">Enveloppe</TableHead>
-                  <TableHead className="text-right">Engagé</TableHead>
-                  <TableHead className="text-right">Consommé</TableHead>
-                  <TableHead className="text-right">Justifié</TableHead>
-                  <TableHead className="text-right">Sans preuve</TableHead>
-                  <TableHead className="text-right">Disponible</TableHead>
-                  <TableHead>Exécution</TableHead>
+                  <TableHead scope="col">Pays</TableHead>
+                  <TableHead scope="col" className="text-right">Enveloppe</TableHead>
+                  <TableHead scope="col" className="text-right">Engagé</TableHead>
+                  <TableHead scope="col" className="text-right">Consommé</TableHead>
+                  <TableHead scope="col" className="text-right">Justifié</TableHead>
+                  <TableHead scope="col" className="text-right">Sans preuve</TableHead>
+                  <TableHead scope="col" className="text-right">Disponible</TableHead>
+                  <TableHead scope="col">Exécution</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {!data || data.countries.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                      Aucune enveloppe sur la période.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyRow
+                    colSpan={8}
+                    icon={TrendingUp}
+                    title="Aucune enveloppe sur la période"
+                    hint="Attribuez une enveloppe depuis la page Budgets pour suivre la consommation."
+                  />
                 ) : (
                   data.countries.map((row) => (
                     <TableRow key={row.country}>
                       <TableCell>
                         <p className="font-medium">{row.country_name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {row.country_ref ?? "—"} · {row.currency}
+                          {row.country_ref ?? "—"} · {symbolOf(row.country, row.currency)}
                         </p>
                       </TableCell>
                       <TableCell className="text-right">
@@ -320,14 +335,13 @@ export function DashboardPage() {
                       <TableCell className="text-right">
                         {formatAmount(row.justified)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {Number(row.gap) > 0 ? (
-                          <span className="font-medium text-destructive">
-                            {formatAmount(row.gap)}
-                          </span>
-                        ) : (
-                          formatAmount(row.gap)
+                      <TableCell
+                        className={cn(
+                          "text-right",
+                          Number(row.gap) > 0 && "font-medium text-destructive",
                         )}
+                      >
+                        {formatAmount(row.gap)}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatAmount(row.remaining)}
@@ -343,6 +357,13 @@ export function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {!breakdown && !query.loading && me?.has_global_scope && (
+        <p className="text-sm text-muted-foreground">
+          Choisissez un pays pour afficher sa répartition par mois, équipe,
+          manager, projet, catégorie et intitulé.
+        </p>
+      )}
 
       {breakdown && (
         <Card className="border-border/60 shadow-sm">
@@ -377,31 +398,6 @@ export function DashboardPage() {
   )
 }
 
-function Stat({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: string
-  hint?: string
-}) {
-  return (
-    <Card className="border-border/60 shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          <TrendingUp className="h-3.5 w-3.5" />
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
-        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
-  )
-}
-
 function Workload({
   label,
   value,
@@ -414,7 +410,7 @@ function Workload({
   return (
     <Link
       to={to}
-      className="flex items-center justify-between rounded-lg border border-border/60 bg-card p-4 shadow-sm transition-colors hover:bg-accent/30"
+      className="flex items-center justify-between rounded-lg border border-border/60 bg-card p-4 shadow-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className="text-sm text-muted-foreground">{label}</span>
       <span className="text-xl font-semibold">{value}</span>
@@ -428,14 +424,14 @@ function ExecutionBar({ rate }: { rate: string | null }) {
   const near = rate ? Number(rate) >= 0.8 : false
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+      <div aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
         <div
           className={
             over
               ? "h-full bg-destructive"
               : near
-                ? "h-full bg-amber-500"
-                : "h-full bg-emerald-500"
+                ? "h-full bg-statut-attente"
+                : "h-full bg-statut-succes"
           }
           style={{ width: `${value}%` }}
         />
@@ -446,35 +442,40 @@ function ExecutionBar({ rate }: { rate: string | null }) {
 }
 
 function BreakdownTable({ rows }: { rows: BreakdownRow[] }) {
-  if (rows.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Aucune dépense sur la période.
-      </p>
-    )
-  }
   return (
-    <div className="overflow-hidden rounded-lg border border-border/60">
+    <div className="overflow-x-auto rounded-lg border border-border/60">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Libellé</TableHead>
-            <TableHead className="text-center">Lignes</TableHead>
-            <TableHead className="text-right">Dépenses</TableHead>
-            <TableHead className="text-right">Justifié</TableHead>
-            <TableHead className="text-right">Écart</TableHead>
+            <TableHead scope="col">Libellé</TableHead>
+            <TableHead scope="col" className="text-center">Lignes</TableHead>
+            <TableHead scope="col" className="text-right">Dépenses</TableHead>
+            <TableHead scope="col" className="text-right">Justifié</TableHead>
+            <TableHead scope="col" className="text-right">Écart</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.label}>
-              <TableCell className="font-medium">{row.label}</TableCell>
-              <TableCell className="text-center">{row.lines}</TableCell>
-              <TableCell className="text-right">{formatAmount(row.amount)}</TableCell>
-              <TableCell className="text-right">{formatAmount(row.justified)}</TableCell>
-              <TableCell className="text-right">{formatAmount(row.gap)}</TableCell>
-            </TableRow>
-          ))}
+          {rows.length === 0 ? (
+            <EmptyRow
+              colSpan={5}
+              title="Aucune dépense sur la période"
+              hint="Changez d'année ou de pays pour voir une répartition."
+            />
+          ) : (
+            rows.map((row) => (
+              <TableRow key={row.label}>
+                <TableCell className="font-medium">{row.label}</TableCell>
+                <TableCell className="text-center">{row.lines}</TableCell>
+                <TableCell className="text-right">{formatAmount(row.amount)}</TableCell>
+                <TableCell className="text-right">{formatAmount(row.justified)}</TableCell>
+                <TableCell
+                  className={cn("text-right", Number(row.gap) > 0 && "font-medium text-destructive")}
+                >
+                  {formatAmount(row.gap)}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>
@@ -499,12 +500,12 @@ function ExportButton({
       variant="outline"
       size="sm"
       disabled={busy !== null}
-      onClick={() => onExport(kind)}
+      onClick={() => void onExport(kind)}
     >
       {busy === kind ? (
         <Loader2 className="mr-1 h-4 w-4 animate-spin" />
       ) : (
-        <Icon className="mr-1 h-4 w-4" />
+        <Icon className="mr-1 h-4 w-4" aria-hidden />
       )}
       {label}
     </Button>

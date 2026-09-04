@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
+import { AlertTriangle, ArrowLeft, FileText, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import { PageHeader } from "@/components/ui/page-header"
+import { StatCard } from "@/components/ui/stat-card"
+import { EmptyRow } from "@/components/ui/table-states"
 import {
   Table,
   TableBody,
@@ -12,12 +15,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { ExpenseForm } from "@/components/expenses/expense-form"
 import { ProofPanel } from "@/components/expenses/proof-panel"
 import { OriginalAmount } from "@/components/expenses/original-amount"
 import { StatusBadge } from "@/components/expenses/status-badge"
-import { WorkflowActions } from "@/components/expenses/workflow-actions"
-import { useAuth } from "@/context/auth"
+import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
+import { useAuth } from "@/context/use-auth"
 import {
   createExpense,
   deleteExpenseDraft,
@@ -27,18 +31,16 @@ import {
   transitionExpense,
   updateExpense,
 } from "@/lib/expenses"
-import { fetchProjects, fetchTeams } from "@/lib/countries"
+import { fetchCountry } from "@/lib/countries"
+import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import {
   DELETABLE_STATUSES,
   LOCKED_STATUSES,
-  type Beneficiary,
-  type DossierDetail,
   type Expense,
-  type Project,
-  type Team,
   type TransitionName,
 } from "@/lib/types"
-import { formatAmount, formatDateIn } from "@/lib/utils"
+import { useQuery } from "@/lib/use-query"
+import { cn, formatAmount, formatDateIn, formatDay } from "@/lib/utils"
 
 export function DossierDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -46,75 +48,97 @@ export function DossierDetailPage() {
   const { can } = useAuth()
   const canWrite = can("record_expenses")
 
-  const [dossier, setDossier] = useState<DossierDetail | null>(null)
-  const [teams, setTeams] = useState<Team[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
-  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const query = useQuery(
+    `dossier:${dossierId}`,
+    (signal) => fetchDossier(dossierId, signal),
+    { fallback: "Impossible de charger le dossier" },
+  )
+  const dossier = query.data
+  const countryId = dossier?.country
+
+  // Le référentiel du pays vient de sa fiche, mise en cache : une transition
+  // ne recharge que le dossier, pas les équipes et projets.
+  const country = useReferentiel(
+    `country:${countryId}`,
+    () => fetchCountry(Number(countryId)),
+    { enabled: countryId !== undefined },
+  )
+  const beneficiaries = useReferentiel(
+    `beneficiaries:${countryId}`,
+    () => fetchBeneficiaries({ country: countryId, page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+    { enabled: countryId !== undefined },
+  )
+
+  const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await fetchDossier(dossierId)
-      setDossier(data)
-      const [teamPage, projectPage, beneficiaryPage] = await Promise.all([
-        fetchTeams({ country: data.country, page_size: 200 }),
-        fetchProjects({ country: data.country, page_size: 200 }),
-        fetchBeneficiaries({ page_size: 200 }),
-      ])
-      setTeams(teamPage.results)
-      setProjects(projectPage.results)
-      setBeneficiaries(beneficiaryPage.results)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de charger le dossier")
-    } finally {
-      setLoading(false)
-    }
-  }, [dossierId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  const runTransition = async (
+  const runExpenseTransition = async (
+    expense: Expense,
     action: TransitionName,
-    note: string | undefined,
-    apply: (action: TransitionName, note?: string) => Promise<{ warning?: string }>,
+    payload?: TransitionPayload,
   ) => {
-    setError(null)
+    setActionError(null)
     setNotice(null)
     try {
-      const result = await apply(action, note)
+      const result = await transitionExpense(expense.id, action, payload)
       if (result.warning) setNotice(result.warning)
-      await load()
+      // La ligne est remplacée sur place ; le dossier (totaux, statut) est
+      // relu en arrière-plan, sans repasser par l'écran de chargement.
+      query.setData((current) =>
+        current
+          ? {
+              ...current,
+              expenses: current.expenses.map((e) => (e.id === expense.id ? { ...e, ...result } : e)),
+            }
+          : current,
+      )
+      query.reload()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Action impossible")
+      setActionError(e instanceof Error ? e.message : "Action impossible")
+      throw e
+    }
+  }
+
+  const runDossierTransition = async (action: TransitionName, payload?: TransitionPayload) => {
+    if (!dossier) return
+    setActionError(null)
+    setNotice(null)
+    try {
+      const result = await transitionDossier(dossier.id, action, payload)
+      if (result.warning) setNotice(result.warning)
+      query.reload()
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Action impossible")
+      throw e
     }
   }
 
   const removeDraft = async (expense: Expense) => {
     setDeletingId(expense.id)
-    setError(null)
+    setActionError(null)
     try {
       await deleteExpenseDraft(expense.id)
-      await load()
+      query.setData((current) =>
+        current
+          ? { ...current, expenses: current.expenses.filter((e) => e.id !== expense.id) }
+          : current,
+      )
+      query.reload()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Suppression impossible")
+      setActionError(e instanceof Error ? e.message : "Suppression impossible")
     } finally {
       setDeletingId(null)
     }
   }
 
-  if (loading) {
+  if (query.loading && !dossier) {
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="flex h-64 items-center justify-center" aria-busy="true">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="sr-only">Chargement du dossier…</span>
       </div>
     )
   }
@@ -123,12 +147,22 @@ export function DossierDetailPage() {
     return (
       <div className="space-y-4">
         <BackLink />
-        <p className="text-muted-foreground">{error ?? "Dossier introuvable."}</p>
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Dossier introuvable</AlertTitle>
+          <AlertDescription>{query.error ?? "Ce dossier n'existe pas ou n'est pas dans votre périmètre."}</AlertDescription>
+        </Alert>
       </div>
     )
   }
 
   const locked = LOCKED_STATUSES.includes(dossier.status)
+  const currencySymbol = country.data?.currency_symbol || dossier.currency
+  const teams = (country.data?.teams ?? []).filter((t) => t.is_active)
+  const projects = (country.data?.projects ?? []).filter((p) => p.is_active)
+  const expenseTitles = (country.data?.expense_titles ?? []).filter((t) => t.is_active)
+  const marketingCategories = (country.data?.marketing_categories ?? []).filter((c) => c.is_active)
+  const managers = (country.data?.managers ?? []).filter((m) => m.is_active)
 
   const saveExpense = async (values: Record<string, unknown>) => {
     if (editing) {
@@ -141,18 +175,25 @@ export function DossierDetailPage() {
       })
     }
     setEditing(null)
-    await load()
+    query.reload()
   }
 
   return (
     <div className="space-y-6">
       <BackLink />
 
-      {error && (
+      {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{actionError ?? query.error}</AlertDescription>
+        </Alert>
+      )}
+      {country.error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Référentiel du pays indisponible</AlertTitle>
+          <AlertDescription>{country.error}</AlertDescription>
         </Alert>
       )}
       {notice && (
@@ -162,36 +203,44 @@ export function DossierDetailPage() {
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       )}
+      <TruncatedNotice page={beneficiaries.data} noun="bénéficiaires" />
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{dossier.number}</h1>
-            <StatusBadge status={dossier.status} />
-          </div>
-          <p className="text-sm text-muted-foreground">
+      <PageHeader
+        title={dossier.number}
+        description={
+          <>
+            <span className="mr-2 inline-flex align-middle">
+              <StatusBadge status={dossier.status} label={dossier.status_display} />
+            </span>
             {dossier.label} · {dossier.country_ref ?? dossier.country_name} ·{" "}
-            {new Date(dossier.date).toLocaleDateString("fr-FR")}
+            {formatDay(dossier.date)}
             {dossier.team_name && ` · ${dossier.team_name}`}
-          </p>
-          {dossier.note && (
-            <p className="mt-1 text-sm italic text-muted-foreground">
-              Contrôle : {dossier.note}
-            </p>
-          )}
-        </div>
+            {dossier.owner_name && ` · ${dossier.owner_name}`}
+            {dossier.created_by && ` · créé par ${dossier.created_by}`}
+            {query.refreshing && (
+              <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin align-middle" aria-label="Actualisation" />
+            )}
+            {dossier.note && (
+              <span className="mt-1 block italic">Contrôle : {dossier.note}</span>
+            )}
+          </>
+        }
+      >
         <WorkflowActions
           status={dossier.status}
-          onTransition={(action, note) =>
-            runTransition(action, note, (a, n) => transitionDossier(dossier.id, a, n))
-          }
+          subject="dossier"
+          onTransition={runDossierTransition}
         />
-      </div>
+      </PageHeader>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Dépenses" value={formatAmount(dossier.totals.amount, dossier.currency)} />
-        <StatCard label="Montant justifié" value={formatAmount(dossier.totals.justified)} />
-        <StatCard label="Écart" value={formatAmount(dossier.totals.gap)} />
+        <StatCard label="Dépenses" value={formatAmount(dossier.totals.amount, currencySymbol)} />
+        <StatCard label="Montant justifié" value={formatAmount(dossier.totals.justified, currencySymbol)} />
+        <StatCard
+          label="Écart"
+          value={formatAmount(dossier.totals.gap, currencySymbol)}
+          hint={Number(dossier.totals.gap) > 0 ? "Dépensé sans preuve à l'appui" : undefined}
+        />
       </div>
 
       <Card className="border-border/60 shadow-sm">
@@ -211,32 +260,37 @@ export function DossierDetailPage() {
                   setFormOpen(true)
                 }}
               >
-                <Plus className="mr-1 h-4 w-4" />
+                <Plus className="mr-1 h-4 w-4" aria-hidden />
                 Ajouter
               </Button>
             )}
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-border/60">
+          <div className="overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Libellé</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Dépense</TableHead>
-                  <TableHead className="text-right">Justifié</TableHead>
-                  <TableHead className="text-right">Écart</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead scope="col">Libellé</TableHead>
+                  <TableHead scope="col">Date</TableHead>
+                  <TableHead scope="col" className="text-right">Dépense</TableHead>
+                  <TableHead scope="col" className="text-right">Justifié</TableHead>
+                  <TableHead scope="col" className="text-right">Écart</TableHead>
+                  <TableHead scope="col">Statut</TableHead>
+                  <TableHead scope="col" className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {dossier.expenses.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-16 text-center text-muted-foreground">
-                      Aucune ligne.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyRow
+                    colSpan={7}
+                    icon={FileText}
+                    title="Aucune ligne"
+                    hint={
+                      canWrite && !locked
+                        ? "Ajoutez les dépenses de ce dossier avant de le soumettre."
+                        : "Ce dossier ne contient aucune dépense."
+                    }
+                  />
                 ) : (
                   dossier.expenses.map((expense) => (
                     <TableRow key={expense.id}>
@@ -245,6 +299,7 @@ export function DossierDetailPage() {
                         <p className="text-xs text-muted-foreground">
                           {expense.place || "—"}
                           {expense.budget_label && ` · imputé sur ${expense.budget_label}`}
+                          {expense.created_by && ` · saisie par ${expense.created_by}`}
                         </p>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
@@ -264,11 +319,21 @@ export function DossierDetailPage() {
                       <TableCell className="text-right">
                         {formatAmount(expense.justified_amount)}
                       </TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell
+                        className={cn(
+                          "text-right font-medium",
+                          Number(expense.gap) > 0 && "text-destructive",
+                        )}
+                      >
                         {formatAmount(expense.gap)}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={expense.status} />
+                        <StatusBadge status={expense.status} label={expense.status_display} />
+                        {expense.control_note && (
+                          <p className="mt-1 max-w-[14rem] text-xs italic text-muted-foreground">
+                            Contrôle : {expense.control_note}
+                          </p>
+                        )}
                         {expense.note && (
                           <p className="mt-1 max-w-[14rem] text-xs italic text-muted-foreground">
                             {expense.note}
@@ -281,7 +346,7 @@ export function DossierDetailPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              aria-label="Modifier"
+                              aria-label={`Modifier ${expense.title}`}
                               onClick={() => {
                                 setEditing(expense)
                                 setFormOpen(true)
@@ -294,11 +359,10 @@ export function DossierDetailPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              aria-label="Supprimer le brouillon"
-                              title="Supprimer ce brouillon"
+                              aria-label={`Supprimer le brouillon ${expense.title}`}
                               className="text-destructive hover:text-destructive"
                               disabled={deletingId === expense.id}
-                              onClick={() => removeDraft(expense)}
+                              onClick={() => void removeDraft(expense)}
                             >
                               {deletingId === expense.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -309,13 +373,13 @@ export function DossierDetailPage() {
                           )}
                           <WorkflowActions
                             status={expense.status}
+                            amount={expense.amount}
+                            currency={currencySymbol}
                             // Le dossier emporte ses lignes : tant qu'il est
                             // en brouillon, c'est lui qu'on soumet.
                             hideSubmit={dossier.status === "draft"}
-                            onTransition={(action, note) =>
-                              runTransition(action, note, (a, n) =>
-                                transitionExpense(expense.id, a, n),
-                              )
+                            onTransition={(action, payload) =>
+                              runExpenseTransition(expense, action, payload)
                             }
                           />
                         </div>
@@ -335,7 +399,9 @@ export function DossierDetailPage() {
             dossierId={dossier.id}
             proofs={dossier.proofs}
             canUpload={canWrite && !locked}
-            onChanged={load}
+            onChanged={async () => {
+              query.reload()
+            }}
           />
         </CardContent>
       </Card>
@@ -350,8 +416,12 @@ export function DossierDetailPage() {
         editing={editing}
         teams={teams}
         projects={projects}
-        beneficiaries={beneficiaries}
-        currency={dossier.currency}
+        beneficiaries={beneficiaries.data?.results ?? []}
+        expenseTitles={expenseTitles}
+        marketingCategories={marketingCategories}
+        managers={managers}
+        currency={currencySymbol}
+        timezone={dossier.country_timezone}
       />
     </div>
   )
@@ -361,25 +431,10 @@ function BackLink() {
   return (
     <Link
       to="/dossiers"
-      className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+      className="inline-flex items-center rounded text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <ArrowLeft className="mr-2 h-4 w-4" />
+      <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
       Retour aux dossiers
     </Link>
-  )
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="border-border/60 shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
-      </CardContent>
-    </Card>
   )
 }

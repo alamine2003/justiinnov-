@@ -8,8 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FormError } from "@/components/ui/form-error"
 import { downloadProof, loadProofBlob } from "@/lib/expenses"
 import type { Proof } from "@/lib/types"
+
+interface Source {
+  proofId: number
+  url: string | null
+  type: string
+  error: string | null
+}
 
 /**
  * Prévisualisation d'une pièce justificative (§5.4).
@@ -24,21 +32,19 @@ export function ProofPreview({
   proof: Proof | null
   onClose: () => void
 }) {
-  const [source, setSource] = useState<{ url: string; type: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  // L'état porte l'identifiant de la pièce chargée : « en cours » se déduit
+  // de la comparaison, sans écrire dans l'état au début de l'effet.
+  const [source, setSource] = useState<Source | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
-    if (!proof) {
-      setSource(null)
-      return
-    }
+    if (!proof) return
 
     let revoked = false
     let objectUrl: string | null = null
+    const proofId = proof.id
 
-    setLoading(true)
-    setError(null)
     loadProofBlob(proof)
       .then((loaded) => {
         // La fenêtre peut avoir été refermée pendant le chargement : publier
@@ -48,12 +54,17 @@ export function ProofPreview({
           return
         }
         objectUrl = loaded.url
-        setSource(loaded)
+        setSource({ proofId, url: loaded.url, type: loaded.type, error: null })
       })
-      .catch((e) =>
-        setError(e instanceof Error ? e.message : "Aperçu indisponible"),
-      )
-      .finally(() => setLoading(false))
+      .catch((e: unknown) => {
+        if (revoked) return
+        setSource({
+          proofId,
+          url: null,
+          type: "",
+          error: e instanceof Error ? e.message : "Aperçu indisponible",
+        })
+      })
 
     return () => {
       revoked = true
@@ -63,7 +74,21 @@ export function ProofPreview({
 
   if (!proof) return null
 
-  const isImage = source?.type.startsWith("image/")
+  const current = source?.proofId === proof.id ? source : null
+  const loading = current === null
+  const isImage = current?.type.startsWith("image/")
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    setDownloadError(null)
+    try {
+      await downloadProof(proof)
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : "Téléchargement impossible")
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -78,33 +103,36 @@ export function ProofPreview({
 
         <div className="min-h-[24rem] overflow-auto rounded-lg border border-border/60 bg-muted/30">
           {loading && (
-            <div className="flex h-96 items-center justify-center">
+            <div className="flex h-96 items-center justify-center" aria-busy="true">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="sr-only">Chargement de l'aperçu…</span>
             </div>
           )}
-          {error && (
-            <p className="p-6 text-sm text-destructive">{error}</p>
-          )}
-          {source && !loading && !error && (
-            isImage ? (
+          {current?.error && <FormError className="m-4">{current.error}</FormError>}
+          {current?.url &&
+            (isImage ? (
               <img
-                src={source.url}
+                src={current.url}
                 alt={proof.original_name}
                 className="mx-auto max-h-[70vh] object-contain"
               />
             ) : (
               <iframe
-                src={source.url}
+                src={current.url}
                 title={proof.original_name}
                 className="h-[70vh] w-full border-0"
               />
-            )
-          )}
+            ))}
         </div>
 
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => downloadProof(proof)}>
-            <Download className="mr-1 h-4 w-4" />
+        <div className="flex items-center justify-end gap-3">
+          <FormError className="flex-1 py-2">{downloadError}</FormError>
+          <Button variant="outline" size="sm" disabled={downloading} onClick={() => void handleDownload()}>
+            {downloading ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-1 h-4 w-4" aria-hidden />
+            )}
             Télécharger
           </Button>
         </div>

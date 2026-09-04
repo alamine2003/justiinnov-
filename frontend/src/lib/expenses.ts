@@ -1,4 +1,5 @@
 import { api, apiGet, apiPatch, apiPost } from "@/lib/api"
+import type { AxiosProgressEvent } from "axios"
 import type {
   AuditEntry,
   Beneficiary,
@@ -15,12 +16,12 @@ import type {
 // ---------------------------------------------------------------------------
 // Dossiers (N°ORDRE)
 // ---------------------------------------------------------------------------
-export function fetchDossiers(params?: Record<string, unknown>) {
-  return apiGet<Paginated<Dossier>>("/dossiers/", params)
+export function fetchDossiers(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<Dossier>>("/dossiers/", params, signal)
 }
 
-export function fetchDossier(id: number) {
-  return apiGet<DossierDetail>(`/dossiers/${id}/`)
+export function fetchDossier(id: number, signal?: AbortSignal) {
+  return apiGet<DossierDetail>(`/dossiers/${id}/`, undefined, signal)
 }
 
 export function createDossier(data: unknown) {
@@ -31,13 +32,19 @@ export function updateDossier(id: number, data: unknown) {
   return apiPatch<Dossier>(`/dossiers/${id}/`, data)
 }
 
+/** Charge utile d'une transition : motif, et montant justifié pour `justify`. */
+export interface TransitionData {
+  note?: string
+  justified_amount?: string
+}
+
 export function transitionDossier(
   id: number,
   action: TransitionName,
-  note?: string,
+  data: TransitionData = {},
 ) {
-  return apiPost<Dossier & { warning?: string }>(`/dossiers/${id}/${action}/`, {
-    note: note ?? "",
+  return apiPost<DossierDetail & { warning?: string }>(`/dossiers/${id}/${action}/`, {
+    note: data.note ?? "",
   })
 }
 
@@ -54,8 +61,8 @@ export function fetchExpenses(params?: Record<string, unknown>) {
  * Le journal d'audit dit qui a fait quoi ; ce registre dit où est passé
  * l'argent et ce qui l'atteste.
  */
-export function fetchRegister(params?: Record<string, unknown>) {
-  return apiGet<Paginated<RegisterEntry>>("/expenses/register/", params)
+export function fetchRegister(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<RegisterEntry>>("/expenses/register/", params, signal)
 }
 
 export function createExpense(data: unknown) {
@@ -79,19 +86,26 @@ export function deleteExpenseDraft(id: number) {
 export function transitionExpense(
   id: number,
   action: TransitionName,
-  note?: string,
+  data: TransitionData = {},
 ) {
-  return apiPost<Expense & { warning?: string }>(`/expenses/${id}/${action}/`, {
-    note: note ?? "",
-  })
+  const payload: Record<string, string> = { note: data.note ?? "" }
+  // Le montant justifié n'a de sens qu'à la justification ; le serveur le
+  // prend égal à la dépense s'il est absent, et le remet à zéro au rejet.
+  if (action === "justify" && data.justified_amount !== undefined) {
+    payload.justified_amount = data.justified_amount
+  }
+  return apiPost<Expense & { warning?: string }>(`/expenses/${id}/${action}/`, payload)
 }
 
 // ---------------------------------------------------------------------------
 // Justificatifs
 // ---------------------------------------------------------------------------
-export function uploadProof(form: FormData) {
+export function uploadProof(
+  form: FormData,
+  onUploadProgress?: (event: AxiosProgressEvent) => void,
+) {
   // Axios détecte le FormData et pose lui-même la frontière multipart.
-  return apiPost<Proof>("/proofs/", form)
+  return apiPost<Proof>("/proofs/", form, { onUploadProgress })
 }
 
 export function reviewProof(id: number, status: ProofStatus, reason?: string) {
@@ -139,14 +153,16 @@ export async function downloadProof(proof: Proof) {
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+  // Révoquée après coup : certains navigateurs n'ont pas encore lu le blob
+  // au retour de `click()`, et le téléchargement tombait vide.
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 // ---------------------------------------------------------------------------
 // Bénéficiaires et audit
 // ---------------------------------------------------------------------------
-export function fetchBeneficiaries(params?: Record<string, unknown>) {
-  return apiGet<Paginated<Beneficiary>>("/beneficiaries/", params)
+export function fetchBeneficiaries(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<Beneficiary>>("/beneficiaries/", params, signal)
 }
 
 export function createBeneficiary(data: unknown) {
@@ -157,6 +173,6 @@ export function updateBeneficiary(id: number, data: unknown) {
   return apiPatch<Beneficiary>(`/beneficiaries/${id}/`, data)
 }
 
-export function fetchAudit(params?: Record<string, unknown>) {
-  return apiGet<Paginated<AuditEntry>>("/audit/", params)
+export function fetchAudit(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<AuditEntry>>("/audit/", params, signal)
 }

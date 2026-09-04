@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react"
-import { Loader2, Pencil, Plus } from "lucide-react"
+import { Inbox, Loader2, Pencil, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -8,10 +8,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import {
   Table,
   TableBody,
@@ -27,6 +29,19 @@ export interface ColumnDef<T> {
   render?: (item: T) => ReactNode
 }
 
+export interface FormField {
+  key: string
+  label: string
+  placeholder?: string
+  type?: string
+  /** Rend une liste déroulante plutôt qu'un champ libre. */
+  options?: { value: string; label: string }[]
+  /** Un champ facultatif ne bloque pas l'enregistrement s'il reste vide. */
+  optional?: boolean
+  /** Saisie décimale : clavier numérique, virgule acceptée. */
+  decimal?: boolean
+}
+
 interface ManageRowsProps<T extends { id: number }> {
   title: string
   description?: string
@@ -40,16 +55,7 @@ interface ManageRowsProps<T extends { id: number }> {
   canManage?: boolean
   detectActive?: (item: T) => boolean
   defaultForm: Record<string, string>
-  formFields: {
-    key: string
-    label: string
-    placeholder?: string
-    type?: string
-    /** Rend une liste déroulante plutôt qu'un champ libre. */
-    options?: { value: string; label: string }[]
-    /** Un champ facultatif ne bloque pas l'enregistrement s'il reste vide. */
-    optional?: boolean
-  }[]
+  formFields: FormField[]
   extraForm?: ReactNode
 }
 
@@ -68,43 +74,7 @@ export function ManageRows<T extends { id: number }>({
   formFields,
   extraForm,
 }: ManageRowsProps<T>) {
-  const [open, setOpen] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState<Record<string, string>>(defaultForm)
-  const [active, setActive] = useState(true)
-  const [saving, setSaving] = useState(false)
-
-  const openCreate = () => {
-    setEditingId(null)
-    setForm(defaultForm)
-    setActive(true)
-    setOpen(true)
-  }
-
-  const openEdit = (item: T) => {
-    setEditingId(item.id)
-    setForm(
-      Object.fromEntries(
-        formFields.map((f) => [
-          f.key,
-          String((item as unknown as Record<string, unknown>)[f.key] ?? ""),
-        ]),
-      ),
-    )
-    setActive(detectActive ? detectActive(item) : true)
-    setOpen(true)
-  }
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      await onSave({ ...form, is_active: active }, editingId ?? undefined)
-      setOpen(false)
-    } finally {
-      setSaving(false)
-    }
-  }
+  const [editing, setEditing] = useState<T | "nouveau" | null>(null)
 
   return (
     <div className="space-y-3">
@@ -116,36 +86,33 @@ export function ManageRows<T extends { id: number }>({
           )}
         </div>
         {canManage && (
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="mr-1 h-4 w-4" />
+          <Button size="sm" onClick={() => setEditing("nouveau")}>
+            <Plus className="mr-1 h-4 w-4" aria-hidden />
             {createLabel}
           </Button>
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border/60 shadow-sm">
+      <div className="overflow-x-auto rounded-lg border border-border/60 shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
               {columns.map((col) => (
-                <TableHead key={String(col.key)}>{col.header}</TableHead>
+                <TableHead scope="col" key={String(col.key)}>{col.header}</TableHead>
               ))}
-              {canManage && <TableHead className="text-right">Actions</TableHead>}
+              {canManage && <TableHead scope="col" className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell colSpan={columns.length + (canManage ? 1 : 0)} className="h-16">
-                  <div className="h-4 animate-pulse rounded bg-muted" />
-                </TableCell>
-              </TableRow>
+              <SkeletonRows columns={columns.length + (canManage ? 1 : 0)} rows={3} />
             ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length + (canManage ? 1 : 0)} className="h-16 text-center text-muted-foreground">
-                  {emptyMessage}
-                </TableCell>
-              </TableRow>
+              <EmptyRow
+                colSpan={columns.length + (canManage ? 1 : 0)}
+                icon={Inbox}
+                title={emptyMessage}
+                hint={canManage ? `Cliquez sur « ${createLabel} » pour créer la première entrée.` : undefined}
+              />
             ) : (
               rows.map((item) => (
                 <TableRow key={item.id}>
@@ -161,8 +128,8 @@ export function ManageRows<T extends { id: number }>({
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => openEdit(item)}
-                        aria-label="Modifier"
+                        onClick={() => setEditing(item)}
+                        aria-label={`Modifier ${String((item as Record<string, unknown>).name ?? (item as Record<string, unknown>).label ?? (item as Record<string, unknown>).code ?? item.id)}`}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -175,75 +142,139 @@ export function ManageRows<T extends { id: number }>({
         </Table>
       </div>
 
-      <Dialog
-        open={open}
-        onOpenChange={(o) => {
-          if (!o) {
-            setOpen(false)
-            setEditingId(null)
-          } else {
-            setOpen(true)
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingId !== null ? "Modifier" : "Ajouter"} — {title}
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-            {formFields.map((f) => (
-              <div className="grid gap-2" key={f.key}>
-                <Label htmlFor={f.key}>{f.label}</Label>
-                {f.options ? (
-                  <NativeSelect
-                    id={f.key}
-                    value={form[f.key] ?? ""}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, [f.key]: e.target.value }))
-                    }
-                    required={!f.optional}
-                  >
-                    {f.options.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                ) : (
-                  <Input
-                    id={f.key}
-                    type={f.type ?? "text"}
-                    value={form[f.key] ?? ""}
-                    placeholder={f.placeholder}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, [f.key]: e.target.value }))
-                    }
-                    required={!f.optional}
-                  />
-                )}
-              </div>
-            ))}
-            {extraForm}
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <p className="text-sm">Actif</p>
-              <Switch checked={active} onCheckedChange={setActive} />
-            </div>
-            <DialogFooter>
-              <div>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                  Annuler
-                </Button>
-                <Button type="submit" disabled={saving} className="ml-2">
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Enregistrer
-                </Button>
-              </div>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {editing !== null && (
+        <RowDialog
+          key={editing === "nouveau" ? "nouveau" : editing.id}
+          title={title}
+          item={editing === "nouveau" ? null : editing}
+          defaultForm={defaultForm}
+          formFields={formFields}
+          extraForm={extraForm}
+          detectActive={detectActive}
+          onSave={onSave}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function RowDialog<T extends { id: number }>({
+  title,
+  item,
+  defaultForm,
+  formFields,
+  extraForm,
+  detectActive,
+  onSave,
+  onClose,
+}: {
+  title: string
+  item: T | null
+  defaultForm: Record<string, string>
+  formFields: FormField[]
+  extraForm?: ReactNode
+  detectActive?: (item: T) => boolean
+  onSave: (data: Record<string, unknown>, id?: number) => Promise<void>
+  onClose: () => void
+}) {
+  const [form, setForm] = useState<Record<string, string>>(() =>
+    item
+      ? Object.fromEntries(
+          formFields.map((f) => [
+            f.key,
+            String((item as unknown as Record<string, unknown>)[f.key] ?? ""),
+          ]),
+        )
+      : defaultForm,
+  )
+  const [active, setActive] = useState(item && detectActive ? detectActive(item) : true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    const manquant = formFields.find((f) => !f.optional && !form[f.key]?.trim())
+    if (manquant) {
+      setError(`Le champ « ${manquant.label} » est obligatoire.`)
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave({ ...form, is_active: active }, item?.id)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Enregistrement impossible")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {item ? "Modifier" : "Ajouter"} — {title}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
+          <FormError>{error}</FormError>
+          {formFields.map((f) => (
+            <div className="grid gap-2" key={f.key}>
+              <Label htmlFor={`row-${f.key}`}>
+                {f.label}
+                {f.optional && <span className="ml-1 text-xs text-muted-foreground">(facultatif)</span>}
+              </Label>
+              {f.options ? (
+                <NativeSelect
+                  id={`row-${f.key}`}
+                  value={form[f.key] ?? ""}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, [f.key]: e.target.value }))
+                  }
+                  required={!f.optional}
+                >
+                  {f.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+              ) : (
+                <Input
+                  id={`row-${f.key}`}
+                  type={f.type ?? "text"}
+                  inputMode={f.decimal ? "decimal" : undefined}
+                  value={form[f.key] ?? ""}
+                  placeholder={f.placeholder}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, [f.key]: e.target.value }))
+                  }
+                  required={!f.optional}
+                />
+              )}
+            </div>
+          ))}
+          {extraForm}
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <Label htmlFor="row-active" className="text-sm">Actif</Label>
+            <Switch id="row-active" checked={active} onCheckedChange={setActive} />
+          </div>
+          <DialogFooter>
+            <div>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={saving} className="ml-2">
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Enregistrer
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

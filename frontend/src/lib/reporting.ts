@@ -9,12 +9,12 @@ import type {
 // ---------------------------------------------------------------------------
 // Pilotage
 // ---------------------------------------------------------------------------
-export function fetchDashboard(params?: Record<string, unknown>) {
-  return apiGet<Dashboard>("/dashboard/", params)
+export function fetchDashboard(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Dashboard>("/dashboard/", params, signal)
 }
 
-export function fetchBreakdown(params?: Record<string, unknown>) {
-  return apiGet<Breakdown>("/dashboard/breakdown/", params)
+export function fetchBreakdown(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Breakdown>("/dashboard/breakdown/", params, signal)
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,8 @@ export async function downloadExport(
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+  // Révoquée après coup : le navigateur n'a pas forcément fini de lire le blob.
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 // ---------------------------------------------------------------------------

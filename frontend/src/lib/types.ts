@@ -32,6 +32,13 @@ export interface CostCenter {
 
 export type ProjectStatus = "planned" | "active" | "on_hold" | "completed"
 
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  planned: "Planifié",
+  active: "En cours",
+  on_hold: "En pause",
+  completed: "Terminé",
+}
+
 export interface Project {
   id: number
   country: number
@@ -168,12 +175,15 @@ export interface Me {
   first_name: string
   last_name: string
   email: string
-  role: Role
+  /** `null` pour un compte technique hérité, sans profil. */
+  role: Role | null
   role_display: string
   countries: ScopeCountry[]
   has_global_scope: boolean
   must_change_password: boolean
   permissions: Permissions
+  /** Politique du workflow, lue par l'interface pour ne proposer que les transitions permises. */
+  workflow: { require_review_step: boolean }
 }
 
 export interface AccountUser {
@@ -204,6 +214,8 @@ export const OVERRUN_POLICY_LABELS: Record<OverrunPolicy, string> = {
 
 /** Indicateurs calculés côté serveur — jamais recalculés dans l'interface. */
 export interface BudgetFigures {
+  /** Soumis ou en contrôle : sorti de l'enveloppe, pas encore constaté. */
+  engaged: string
   consumed: string
   justified: string
   gap: string
@@ -360,6 +372,8 @@ export interface Dossier {
   totals: DossierTotals
   expense_count: number
   proof_count: number
+  /** Vide pour un dossier importé ou créé par un compte supprimé. */
+  created_by: string
   created_at: string
   updated_at: string
 }
@@ -400,6 +414,9 @@ export interface Expense {
   status: WorkflowStatus
   status_display: string
   note: string
+  /** Motif du contrôleur (justification partielle, rejet). Lecture seule. */
+  control_note: string
+  /** Vide pour une dépense importée ou saisie par un compte supprimé. */
   created_by: string
   created_at: string
   updated_at: string
@@ -446,7 +463,6 @@ export interface Proof {
   replaces: number | null
   uploaded_by: string
   rejection_reason: string
-  download_url: string
   created_at: string
   updated_at: string
 }
@@ -502,6 +518,12 @@ export const BENEFICIARY_KINDS: { value: string; label: string }[] = [
 // ---------------------------------------------------------------------------
 
 export type AlertLevel = "info" | "warning" | "critical"
+
+export const ALERT_LEVEL_LABELS: Record<AlertLevel, string> = {
+  info: "Info",
+  warning: "Alerte",
+  critical: "Critique",
+}
 
 export interface Alert {
   kind: string
@@ -588,6 +610,27 @@ export interface AppNotification {
   created_at: string
 }
 
+/**
+ * Actions proposées au filtre du journal. Les entrées affichent le libellé du
+ * serveur (`action_display`) ; cette table ne sert qu'à proposer les valeurs
+ * avant qu'une entrée soit chargée.
+ */
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  created: "Création",
+  updated: "Modification",
+  deleted: "Suppression d'un brouillon",
+  submitted: "Soumission",
+  reviewed: "Mise en contrôle",
+  justified: "Justification",
+  unjustified: "Constat de non-justification",
+  closed: "Clôture",
+  proof_uploaded: "Dépôt de justificatif",
+  proof_replaced: "Remplacement de justificatif",
+  approved: "Validation d'un justificatif",
+  rejected: "Rejet d'un justificatif",
+  downloaded: "Téléchargement",
+}
+
 export interface AuditEntry {
   id: number
   user: string
@@ -617,6 +660,17 @@ export interface Configuration {
   budget: { devise_de_consolidation: string }
   notifications: { email_configure: boolean; expediteur: string }
   systeme: { fuseau: string; mode_debug: boolean }
+  workflow: WorkflowConfiguration
+}
+
+export interface WorkflowConfiguration {
+  require_review_step: boolean
+  unjustified_alert_days: number
+  alert_thresholds: number[]
+  unusual_expense_factor: string
+  default_overrun_policy: OverrunPolicy
+  default_overrun_policy_display: string
+  warn_without_proof_submission: boolean
 }
 
 export interface Capability {

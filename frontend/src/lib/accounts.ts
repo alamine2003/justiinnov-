@@ -5,21 +5,23 @@ import type {
   Me,
   Paginated,
   PermissionMatrix,
+  WorkflowConfiguration,
 } from "@/lib/types"
 
 export function fetchMe() {
   return apiGet<Me>("/me/")
 }
 
+/** Renvoie le nouveau jeton : l'ancien est révoqué avec l'ancien mot de passe. */
 export function changePassword(currentPassword: string, newPassword: string) {
-  return apiPost<void>("/me/password/", {
+  return apiPost<{ token?: string }>("/me/password/", {
     current_password: currentPassword,
     new_password: newPassword,
   })
 }
 
-export function fetchUsers(params?: Record<string, unknown>) {
-  return apiGet<Paginated<AccountUser>>("/users/", params)
+export function fetchUsers(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<AccountUser>>("/users/", params, signal)
 }
 
 export function createUser(data: unknown) {
@@ -39,4 +41,8 @@ export function fetchConfiguration() {
 
 export function fetchPermissionMatrix() {
   return apiGet<PermissionMatrix>("/permissions/")
+}
+
+export function updateWorkflowConfiguration(data: Partial<WorkflowConfiguration>) {
+  return apiPatch<WorkflowConfiguration>("/workflow-configuration/", data)
 }

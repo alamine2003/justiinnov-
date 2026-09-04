@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, type FormEvent } from "react"
+import { Link, useSearchParams } from "react-router-dom"
 import { AlertTriangle, FolderOpen, Loader2, Plus, Search } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -26,67 +27,71 @@ import {
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
+import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { StatusBadge } from "@/components/expenses/status-badge"
-import { useAuth } from "@/context/auth"
+import { useAuth } from "@/context/use-auth"
 import { createDossier, fetchDossiers } from "@/lib/expenses"
-import { fetchCountries, fetchTeams } from "@/lib/countries"
+import { fetchCountries, fetchCountry } from "@/lib/countries"
+import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import {
   WORKFLOW_LABELS,
   type CountrySummary,
-  type Dossier,
-  type Team,
   type WorkflowStatus,
 } from "@/lib/types"
-import { formatAmount } from "@/lib/utils"
+import { useDebouncedValue } from "@/lib/use-debounced"
+import { useQuery } from "@/lib/use-query"
+import { cn, formatAmount, formatDay, todayIso } from "@/lib/utils"
+
+const STATUSES = Object.keys(WORKFLOW_LABELS) as WorkflowStatus[]
 
 export function DossiersPage() {
-  const navigate = useNavigate()
   const { can } = useAuth()
   const canCreate = can("record_expenses")
+  const [params, setParams] = useSearchParams()
 
-  const [dossiers, setDossiers] = useState<Dossier[]>([])
-  const [count, setCount] = useState(0)
+  // Le statut vit dans l'URL : une tuile du tableau de bord ou un favori
+  // doivent rouvrir la même vue.
+  const statusParam = params.get("status") ?? ""
+  const statusFilter = (STATUSES as string[]).includes(statusParam)
+    ? (statusParam as WorkflowStatus)
+    : ""
+
   const [page, setPage] = useState(1)
-  const [countries, setCountries] = useState<CountrySummary[]>([])
-  const [teams, setTeams] = useState<Team[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<WorkflowStatus | "">("")
+  const debouncedSearch = useDebouncedValue(search)
   const [formOpen, setFormOpen] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const params: Record<string, unknown> = { page, page_size: PAGE_SIZE }
-      if (search) params.search = search
-      if (statusFilter) params.status = statusFilter
-      const [dossierPage, countryPage, teamPage] = await Promise.all([
-        fetchDossiers(params),
-        fetchCountries({ page_size: 200 }),
-        fetchTeams({ page_size: 200 }),
-      ])
-      setDossiers(dossierPage.results)
-      setCount(dossierPage.count)
-      setCountries(countryPage.results)
-      setTeams(teamPage.results)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de charger les dossiers")
-    } finally {
-      setLoading(false)
-    }
-  }, [page, search, statusFilter])
+  const query = useQuery(
+    JSON.stringify({ page, search: debouncedSearch, statusFilter }),
+    (signal) => {
+      const requestParams: Record<string, unknown> = { page, page_size: PAGE_SIZE }
+      if (debouncedSearch) requestParams.search = debouncedSearch
+      if (statusFilter) requestParams.status = statusFilter
+      return fetchDossiers(requestParams, signal)
+    },
+    { fallback: "Impossible de charger les dossiers" },
+  )
+  const countries = useReferentiel("countries", () =>
+    fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+  )
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  const dossiers = query.data?.results ?? []
+  const count = query.data?.count ?? 0
 
   // Un changement de filtre ramène à la première page : rester en page 4
   // d'un résultat qui n'en compte plus qu'une afficherait un tableau vide.
-  useEffect(() => {
+  const changeStatus = (value: string) => {
     setPage(1)
-  }, [search, statusFilter])
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (value) next.set("status", value)
+        else next.delete("status")
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -96,40 +101,45 @@ export function DossiersPage() {
       >
         {canCreate && (
           <Button onClick={() => setFormOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 h-4 w-4" aria-hidden />
             Nouveau dossier
           </Button>
         )}
       </PageHeader>
 
-      {error && (
+      {query.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{query.error}</AlertDescription>
         </Alert>
       )}
+      <TruncatedNotice page={countries.data} noun="pays" />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
             placeholder="N°ORDRE ou libellé…"
+            aria-label="Rechercher un dossier"
             className="pl-9"
           />
         </div>
         <NativeSelect
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as WorkflowStatus | "")}
+          onChange={(e) => changeStatus(e.target.value)}
           className="sm:max-w-[12rem]"
           aria-label="Filtrer par statut"
         >
           <option value="">Tous les statuts</option>
-          {Object.entries(WORKFLOW_LABELS).map(([value, label]) => (
+          {STATUSES.map((value) => (
             <option key={value} value={value}>
-              {label}
+              {WORKFLOW_LABELS[value]}
             </option>
           ))}
         </NativeSelect>
@@ -137,22 +147,22 @@ export function DossiersPage() {
 
       <Card className="border-border/60 shadow-sm">
         <CardContent className="pt-6">
-          <div className="overflow-hidden rounded-lg border border-border/60">
+          <div className="overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>N°ORDRE</TableHead>
-                  <TableHead>Pays</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-center">Lignes</TableHead>
-                  <TableHead className="text-center">Preuves</TableHead>
-                  <TableHead className="text-right">Dépenses</TableHead>
-                  <TableHead className="text-right">Écart</TableHead>
-                  <TableHead>Statut</TableHead>
+                  <TableHead scope="col">N°ORDRE</TableHead>
+                  <TableHead scope="col">Pays</TableHead>
+                  <TableHead scope="col">Date</TableHead>
+                  <TableHead scope="col" className="text-center">Lignes</TableHead>
+                  <TableHead scope="col" className="text-center">Preuves</TableHead>
+                  <TableHead scope="col" className="text-right">Dépenses</TableHead>
+                  <TableHead scope="col" className="text-right">Écart</TableHead>
+                  <TableHead scope="col">Statut</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {query.loading ? (
                   <SkeletonRows columns={8} />
                 ) : dossiers.length === 0 ? (
                   <EmptyRow
@@ -167,31 +177,39 @@ export function DossiersPage() {
                   />
                 ) : (
                   dossiers.map((dossier) => (
-                    <TableRow
-                      key={dossier.id}
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/dossiers/${dossier.id}`)}
-                    >
+                    <TableRow key={dossier.id}>
                       <TableCell>
-                        <p className="font-medium">{dossier.number}</p>
+                        {/* Le lien porte la navigation : accessible au
+                            clavier, ouvrable dans un nouvel onglet. */}
+                        <Link
+                          to={`/dossiers/${dossier.id}`}
+                          className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {dossier.number}
+                        </Link>
                         <p className="text-xs text-muted-foreground">{dossier.label}</p>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {dossier.country_ref ?? dossier.country_name}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {new Date(dossier.date).toLocaleDateString("fr-FR")}
+                        {formatDay(dossier.date)}
                       </TableCell>
                       <TableCell className="text-center">{dossier.expense_count}</TableCell>
                       <TableCell className="text-center">{dossier.proof_count}</TableCell>
                       <TableCell className="text-right">
                         {formatAmount(dossier.totals.amount, dossier.currency)}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell
+                        className={cn(
+                          "text-right",
+                          Number(dossier.totals.gap) > 0 && "font-medium text-destructive",
+                        )}
+                      >
                         {formatAmount(dossier.totals.gap)}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={dossier.status} />
+                        <StatusBadge status={dossier.status} label={dossier.status_display} />
                       </TableCell>
                     </TableRow>
                   ))
@@ -209,52 +227,53 @@ export function DossiersPage() {
         </CardContent>
       </Card>
 
-      <DossierForm
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        countries={countries}
-        teams={teams}
-        onSaved={load}
-      />
+      {formOpen && (
+        <DossierForm
+          onOpenChange={setFormOpen}
+          countries={countries.data?.results ?? []}
+          onSaved={async () => {
+            query.reload()
+          }}
+        />
+      )}
     </div>
   )
 }
 
 function DossierForm({
-  open,
   onOpenChange,
   countries,
-  teams,
   onSaved,
 }: {
-  open: boolean
   onOpenChange: (open: boolean) => void
   countries: CountrySummary[]
-  teams: Team[]
   onSaved: () => Promise<void>
 }) {
   const [number, setNumber] = useState("")
   const [label, setLabel] = useState("")
-  const [country, setCountry] = useState<number | "">("")
+  const [country, setCountry] = useState<number | "">(countries[0]?.id ?? "")
   const [team, setTeam] = useState<number | "">("")
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [owner, setOwner] = useState<number | "">("")
+  const [date, setDate] = useState(todayIso())
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
-    setNumber("")
-    setLabel("")
-    setCountry(countries[0]?.id ?? "")
-    setTeam("")
-    setDate(new Date().toISOString().slice(0, 10))
-    setError(null)
-  }, [open, countries])
-
-  const eligibleTeams = teams.filter((t) => t.country === country)
+  // Équipes et managers du pays choisi, depuis sa fiche : la seule liste qui
+  // sache quel manager est rattaché à quel pays.
+  const detail = useReferentiel(
+    `country:${country}`,
+    () => fetchCountry(Number(country)),
+    { enabled: country !== "" },
+  )
+  const teams = (detail.data?.teams ?? []).filter((t) => t.is_active)
+  const managers = (detail.data?.managers ?? []).filter((m) => m.is_active)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (country === "") {
+      setError("Choisissez un pays.")
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -263,6 +282,7 @@ function DossierForm({
         label,
         country,
         team: team === "" ? null : team,
+        owner: owner === "" ? null : owner,
         date,
       })
       await onSaved()
@@ -275,7 +295,7 @@ function DossierForm({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Nouveau dossier</DialogTitle>
@@ -283,12 +303,8 @@ function DossierForm({
             Le N°ORDRE identifie l'ensemble documentaire ; il doit être unique.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-          {error && (
-            <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+        <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
+          <FormError>{error}</FormError>
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="dos-number">N°ORDRE</Label>
@@ -321,25 +337,28 @@ function DossierForm({
               required
             />
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="dos-country">Pays</Label>
+            <NativeSelect
+              id="dos-country"
+              value={country}
+              onChange={(e) => {
+                setCountry(e.target.value === "" ? "" : Number(e.target.value))
+                setTeam("")
+                setOwner("")
+              }}
+              required
+            >
+              {countries.length === 0 && <option value="">Aucun pays disponible</option>}
+              {countries.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.country_ref ? `${c.country_ref} — ` : ""}
+                  {c.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="dos-country">Pays</Label>
-              <NativeSelect
-                id="dos-country"
-                value={country}
-                onChange={(e) => {
-                  setCountry(Number(e.target.value))
-                  setTeam("")
-                }}
-              >
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.country_ref ? `${c.country_ref} — ` : ""}
-                    {c.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
             <div className="grid gap-2">
               <Label htmlFor="dos-team">Équipe</Label>
               <NativeSelect
@@ -348,16 +367,36 @@ function DossierForm({
                 onChange={(e) =>
                   setTeam(e.target.value === "" ? "" : Number(e.target.value))
                 }
+                disabled={detail.loading}
               >
                 <option value="">—</option>
-                {eligibleTeams.map((t) => (
+                {teams.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
                   </option>
                 ))}
               </NativeSelect>
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="dos-owner">Manager responsable</Label>
+              <NativeSelect
+                id="dos-owner"
+                value={owner}
+                onChange={(e) =>
+                  setOwner(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                disabled={detail.loading}
+              >
+                <option value="">—</option>
+                {managers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
           </div>
+          {detail.error && <FormError>{detail.error}</FormError>}
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

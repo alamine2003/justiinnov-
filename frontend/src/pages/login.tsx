@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
 import {
   Eye,
   EyeOff,
@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { BrandMark } from "@/components/layout/brand-mark"
-import { useAuth } from "@/context/auth"
+import { ThemeToggle } from "@/components/layout/theme-toggle"
+import { useAuth } from "@/context/use-auth"
 import { BRAND, copyright } from "@/lib/brand"
 
 /** Ce que la plateforme garantit, rappelé au moment de la connexion. */
@@ -36,13 +37,18 @@ const PROMESSES = [
 ]
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Une session ouverte n'a rien à faire sur l'écran de connexion.
+  if (isAuthenticated && !loading) {
+    return <Navigate to="/" replace />
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -65,7 +71,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
+    <div className="relative grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
+      <div className="absolute right-6 top-6 z-10">
+        <ThemeToggle />
+      </div>
       {/* Panneau de présentation — masqué sur petit écran, où seul le
           formulaire compte. */}
       <aside className="relative hidden flex-col overflow-hidden bg-primary p-12 text-primary-foreground lg:flex">
@@ -79,8 +88,8 @@ export function LoginPage() {
         />
 
         <div className="relative flex items-center gap-3">
-          {/* Fond clair : l'emblème est en bleu nuit et vert, il disparaîtrait
-              sur le panneau sombre. */}
+          {/* Fond clair : l'emblème est en couleur, il disparaîtrait sur le
+              panneau sombre. */}
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-foreground p-1.5">
             <BrandMark className="h-full w-full" />
           </div>
@@ -108,7 +117,7 @@ export function LoginPage() {
               {PROMESSES.map(({ icon: Icon, titre, texte }) => (
                 <li key={titre} className="flex gap-4">
                   <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/10">
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-4 w-4" aria-hidden />
                   </div>
                   <div>
                     <p className="text-sm font-medium">{titre}</p>
@@ -157,7 +166,7 @@ export function LoginPage() {
                 role="alert"
                 className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
               >
-                <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+                <Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                 {error}
               </p>
             )}
@@ -170,7 +179,6 @@ export function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="prenom.innov"
                 autoComplete="username"
-                autoFocus
                 required
                 className="h-10"
               />
@@ -196,6 +204,7 @@ export function LoginPage() {
                       ? "Masquer le mot de passe"
                       : "Afficher le mot de passe"
                   }
+                  aria-pressed={visible}
                   className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {visible ? (

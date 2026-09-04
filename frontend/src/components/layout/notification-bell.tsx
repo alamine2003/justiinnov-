@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { Bell, CheckCheck, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { FormError } from "@/components/ui/form-error"
 import {
   Sheet,
   SheetContent,
@@ -20,8 +21,8 @@ import type { AlertLevel, AppNotification } from "@/lib/types"
 import { cn, formatDate } from "@/lib/utils"
 
 const LEVEL_DOT: Record<AlertLevel, string> = {
-  info: "bg-blue-500",
-  warning: "bg-amber-500",
+  info: "bg-statut-info",
+  warning: "bg-statut-attente",
   critical: "bg-destructive",
 }
 
@@ -34,6 +35,7 @@ export function NotificationBell() {
   const [unread, setUnread] = useState(0)
   const [items, setItems] = useState<AppNotification[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const refreshCount = useCallback(async () => {
     try {
@@ -45,16 +47,55 @@ export function NotificationBell() {
   }, [])
 
   useEffect(() => {
-    void refreshCount()
-    const timer = window.setInterval(refreshCount, POLL_INTERVAL)
-    return () => window.clearInterval(timer)
-  }, [refreshCount])
+    // Un onglet en arrière-plan n'a pas besoin de compter ses notifications :
+    // vingt onglets ouverts interrogeaient le serveur toutes les minutes
+    // chacun. Le compteur se remet à jour au retour.
+    let active = true
+    let timer: number | null = null
+    const poll = () => {
+      fetchUnreadCount()
+        .then(({ unread: count }) => {
+          if (active) setUnread(count)
+        })
+        .catch(() => {
+          // Voir `refreshCount`.
+        })
+    }
+    const start = () => {
+      if (timer !== null) return
+      timer = window.setInterval(poll, POLL_INTERVAL)
+    }
+    const stop = () => {
+      if (timer === null) return
+      window.clearInterval(timer)
+      timer = null
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        poll()
+        start()
+      } else {
+        stop()
+      }
+    }
+    poll()
+    if (document.visibilityState === "visible") start()
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      active = false
+      stop()
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [])
 
   const loadItems = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const page = await fetchNotifications({ page_size: 30 })
       setItems(page.results)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Notifications indisponibles")
     } finally {
       setLoading(false)
     }
@@ -66,19 +107,29 @@ export function NotificationBell() {
   }
 
   const handleClick = async (notification: AppNotification) => {
-    if (!notification.read_at) {
-      await markNotificationRead(notification.id)
-      await Promise.all([loadItems(), refreshCount()])
-    }
-    if (notification.link) {
-      setOpen(false)
-      navigate(notification.link)
+    setError(null)
+    try {
+      if (!notification.read_at) {
+        await markNotificationRead(notification.id)
+        await Promise.all([loadItems(), refreshCount()])
+      }
+      if (notification.link) {
+        setOpen(false)
+        navigate(notification.link)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Action impossible")
     }
   }
 
   const markAll = async () => {
-    await markAllNotificationsRead()
-    await Promise.all([loadItems(), refreshCount()])
+    setError(null)
+    try {
+      await markAllNotificationsRead()
+      await Promise.all([loadItems(), refreshCount()])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Action impossible")
+    }
   }
 
   return (
@@ -88,7 +139,7 @@ export function NotificationBell() {
         size="icon"
         aria-label={`Notifications${unread ? ` (${unread} non lues)` : ""}`}
         className="relative"
-        onClick={openPanel}
+        onClick={() => void openPanel()}
       >
         <Bell className="h-4 w-4" />
         {unread > 0 && (
@@ -109,15 +160,17 @@ export function NotificationBell() {
           </SheetHeader>
 
           <div className="mt-4 space-y-3 px-4 pb-6">
+            <FormError>{error}</FormError>
+
             {unread > 0 && (
-              <Button variant="outline" size="sm" onClick={markAll}>
-                <CheckCheck className="mr-1 h-4 w-4" />
+              <Button variant="outline" size="sm" onClick={() => void markAll()}>
+                <CheckCheck className="mr-1 h-4 w-4" aria-hidden />
                 Tout marquer comme lu
               </Button>
             )}
 
             {loading ? (
-              <div className="flex h-24 items-center justify-center">
+              <div className="flex h-24 items-center justify-center" aria-busy="true">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : items.length === 0 ? (
@@ -128,14 +181,17 @@ export function NotificationBell() {
               items.map((notification) => (
                 <button
                   key={notification.id}
-                  onClick={() => handleClick(notification)}
+                  type="button"
+                  aria-label={notification.title}
+                  onClick={() => void handleClick(notification)}
                   className={cn(
-                    "w-full rounded-lg border border-border/60 p-3 text-left transition-colors hover:bg-accent/40",
+                    "w-full rounded-lg border border-border/60 p-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     !notification.read_at && "bg-accent/20",
                   )}
                 >
                   <div className="flex items-start gap-2">
                     <span
+                      aria-hidden
                       className={cn(
                         "mt-1.5 h-2 w-2 shrink-0 rounded-full",
                         LEVEL_DOT[notification.level],

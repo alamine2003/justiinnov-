@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { WorkflowActions } from "./workflow-actions"
@@ -11,17 +11,22 @@ const DROITS: Record<string, Partial<Permissions>> = {
 }
 
 let profil: keyof typeof DROITS = "saisie"
+let controleObligatoire = false
 
-vi.mock("@/context/auth", () => ({
+vi.mock("@/context/use-auth", () => ({
   useAuth: () => ({
     can: (permission: keyof Permissions) =>
       Boolean(DROITS[profil][permission]),
+    me: { workflow: { require_review_step: controleObligatoire } },
   }),
 }))
 
-function afficher(status: Parameters<typeof WorkflowActions>[0]["status"]) {
+function afficher(
+  status: Parameters<typeof WorkflowActions>[0]["status"],
+  props: Partial<Parameters<typeof WorkflowActions>[0]> = {},
+) {
   return render(
-    <WorkflowActions status={status} onTransition={vi.fn()} />,
+    <WorkflowActions status={status} onTransition={vi.fn()} {...props} />,
   )
 }
 
@@ -42,10 +47,33 @@ describe("WorkflowActions", () => {
 
   it("propose au contrôleur de justifier ou non une dépense soumise", () => {
     profil = "controle"
+    controleObligatoire = false
     const { container } = afficher("submitted")
 
     expect(container.textContent).toContain("Marquer justifié")
     expect(container.textContent).toContain("Marquer non justifié")
+  })
+
+  it("impose de prendre en contrôle avant de justifier quand la politique l'exige", () => {
+    // `require_review_step` : le serveur refuse `justify` depuis « Soumis ».
+    // Le bouton ne menait qu'à un message d'erreur.
+    profil = "controle"
+    controleObligatoire = true
+    afficher("submitted")
+
+    expect(screen.queryByRole("button", { name: "Marquer justifié" })).toBeNull()
+    expect(screen.getByRole("button", { name: "Prendre en contrôle" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Marquer non justifié" })).toBeInTheDocument()
+    controleObligatoire = false
+  })
+
+  it("laisse justifier depuis « En contrôle » même quand le contrôle est obligatoire", () => {
+    profil = "controle"
+    controleObligatoire = true
+    afficher("in_review")
+
+    expect(screen.getByRole("button", { name: "Marquer justifié" })).toBeInTheDocument()
+    controleObligatoire = false
   })
 
   it("n'offre aucun retour au brouillon depuis une dépense non justifiée", () => {
@@ -97,5 +125,99 @@ describe("hideSubmit", () => {
     afficher("draft")
 
     expect(screen.getByRole("button", { name: /Soumettre/ })).toBeTruthy()
+  })
+})
+
+describe("dialogue de justification", () => {
+  it("propose le montant de la dépense par défaut et l'envoie en chaîne", async () => {
+    profil = "controle"
+    const onTransition = vi.fn().mockResolvedValue(undefined)
+    render(
+      <WorkflowActions
+        status="in_review"
+        amount="1500.00"
+        currency="XOF"
+        onTransition={onTransition}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Marquer justifié" }))
+    const champ = screen.getByLabelText(/Montant justifié/) as HTMLInputElement
+    expect(champ.value).toBe("1500.00")
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirmer" }))
+
+    await waitFor(() =>
+      expect(onTransition).toHaveBeenCalledWith("justify", {
+        note: "",
+        justified_amount: "1500.00",
+      }),
+    )
+  })
+
+  it("accepte la virgule décimale et la normalise", async () => {
+    profil = "controle"
+    const onTransition = vi.fn().mockResolvedValue(undefined)
+    render(
+      <WorkflowActions status="in_review" amount="1500.00" onTransition={onTransition} />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Marquer justifié" }))
+    fireEvent.change(screen.getByLabelText(/Montant justifié/), {
+      target: { value: "1 200,50" },
+    })
+    fireEvent.change(screen.getByLabelText(/Note/), { target: { value: "partiel" } })
+    fireEvent.click(screen.getByRole("button", { name: "Confirmer" }))
+
+    await waitFor(() =>
+      expect(onTransition).toHaveBeenCalledWith("justify", {
+        note: "partiel",
+        justified_amount: "1200.50",
+      }),
+    )
+  })
+
+  it("refuse un montant qui n'est pas un nombre sans appeler le serveur", () => {
+    profil = "controle"
+    const onTransition = vi.fn()
+    render(<WorkflowActions status="in_review" amount="10" onTransition={onTransition} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Marquer justifié" }))
+    fireEvent.change(screen.getByLabelText(/Montant justifié/), {
+      target: { value: "abc" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Confirmer" }))
+
+    expect(screen.getByRole("alert")).toHaveTextContent("montant")
+    expect(onTransition).not.toHaveBeenCalled()
+  })
+})
+
+describe("dialogue de rejet", () => {
+  it("exige un motif", () => {
+    profil = "controle"
+    const onTransition = vi.fn()
+    render(<WorkflowActions status="submitted" onTransition={onTransition} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Marquer non justifié" }))
+    fireEvent.click(screen.getByRole("button", { name: "Confirmer" }))
+
+    expect(screen.getByRole("alert")).toHaveTextContent("motivé")
+    expect(onTransition).not.toHaveBeenCalled()
+  })
+
+  it("reste ouvert et affiche l'erreur du serveur en cas d'échec", async () => {
+    profil = "controle"
+    const onTransition = vi.fn().mockRejectedValue(new Error("Deux personnes sont nécessaires."))
+    render(<WorkflowActions status="submitted" onTransition={onTransition} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Marquer non justifié" }))
+    fireEvent.change(screen.getByLabelText("Motif du refus"), {
+      target: { value: "Facture illisible" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Confirmer" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Deux personnes sont nécessaires.")
+    expect(screen.getByLabelText("Motif du refus")).toHaveValue("Facture illisible")
   })
 })

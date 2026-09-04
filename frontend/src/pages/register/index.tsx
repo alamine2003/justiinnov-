@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
 import { AlertTriangle, FileWarning, Paperclip, Search } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -17,78 +17,90 @@ import {
 } from "@/components/ui/table"
 import { OriginalAmount } from "@/components/expenses/original-amount"
 import { StatusBadge } from "@/components/expenses/status-badge"
+import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
-import { useAuth } from "@/context/auth"
+import { TruncatedNotice } from "@/components/ui/truncated-notice"
+import { useAuth } from "@/context/use-auth"
 import { fetchCountries } from "@/lib/countries"
 import { fetchRegister } from "@/lib/expenses"
+import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
+import { WORKFLOW_LABELS, type WorkflowStatus } from "@/lib/types"
+import { useDebouncedValue } from "@/lib/use-debounced"
+import { useQuery } from "@/lib/use-query"
 import {
-  WORKFLOW_LABELS,
-  type CountrySummary,
-  type RegisterEntry,
-  type WorkflowStatus,
-} from "@/lib/types"
-import { formatAmount, formatDateIn } from "@/lib/utils"
+  cn,
+  formatAmount,
+  formatDateIn,
+  fromCountryLocalInput,
+  pluralize,
+} from "@/lib/utils"
 
-/** Nombre de lignes par page — aligné sur la pagination du serveur. */
-const PAGE_SIZE = 50
+const STATUSES = Object.keys(WORKFLOW_LABELS) as WorkflowStatus[]
 
 export function RegisterPage() {
   const { me } = useAuth()
-  const [entries, setEntries] = useState<RegisterEntry[]>([])
-  const [count, setCount] = useState(0)
-  const [page, setPage] = useState(1)
-  const [countries, setCountries] = useState<CountrySummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [params, setParams] = useSearchParams()
 
+  const statusParam = params.get("status") ?? ""
+  const statusFilter = (STATUSES as string[]).includes(statusParam)
+    ? (statusParam as WorkflowStatus)
+    : ""
+
+  const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<WorkflowStatus | "">("")
+  const debouncedSearch = useDebouncedValue(search)
   const [countryId, setCountryId] = useState<number | "">("")
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const params: Record<string, unknown> = {
+  const countries = useReferentiel(
+    "countries",
+    () => fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+    { enabled: Boolean(me?.has_global_scope) },
+  )
+  const selectedCountry = countries.data?.results.find((c) => c.id === countryId)
+  // Les bornes de période sont des jours du pays filtré : « du 1er au 3 »
+  // à Nairobi ne commence pas à la même seconde qu'à Paris. Sans pays, ce
+  // sont des jours locaux du lecteur.
+  const timezone = selectedCountry?.timezone ?? null
+
+  const query = useQuery(
+    JSON.stringify({ page, debouncedSearch, statusFilter, countryId, from, to, timezone }),
+    (signal) => {
+      const requestParams: Record<string, unknown> = {
         page,
         page_size: PAGE_SIZE,
         ordering: "-date",
       }
-      if (search) params.search = search
-      if (statusFilter) params.status = statusFilter
-      if (countryId !== "") params.country = countryId
-      if (from) params.date__gte = `${from}T00:00:00Z`
-      if (to) params.date__lte = `${to}T23:59:59Z`
+      if (debouncedSearch) requestParams.search = debouncedSearch
+      if (statusFilter) requestParams.status = statusFilter
+      if (countryId !== "") requestParams.country = countryId
+      const debut = from ? fromCountryLocalInput(`${from}T00:00`, timezone) : null
+      const fin = to ? fromCountryLocalInput(`${to}T23:59:59`, timezone) : null
+      if (debut) requestParams.date__gte = debut
+      if (fin) requestParams.date__lte = fin
+      return fetchRegister(requestParams, signal)
+    },
+    { fallback: "Impossible de charger le registre" },
+  )
 
-      const [registerPage, countryPage] = await Promise.all([
-        fetchRegister(params),
-        fetchCountries({ page_size: 200 }),
-      ])
-      setEntries(registerPage.results)
-      setCount(registerPage.count)
-      setCountries(countryPage.results)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de charger le registre")
-    } finally {
-      setLoading(false)
-    }
-  }, [page, search, statusFilter, countryId, from, to])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  // Tout changement de filtre ramène à la première page : rester en page 4
-  // d'un résultat qui n'en compte plus qu'une afficherait un tableau vide.
-  useEffect(() => {
-    setPage(1)
-  }, [search, statusFilter, countryId, from, to])
-
-  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
+  const entries = query.data?.results ?? []
+  const count = query.data?.count ?? 0
   const withoutProof = entries.filter((e) => !e.has_proof).length
+
+  const changeStatus = (value: string) => {
+    setPage(1)
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (value) next.set("status", value)
+        else next.delete("status")
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -97,19 +109,20 @@ export function RegisterPage() {
         description="Où est passé l'argent : chaque dépense avec sa date, son lieu, son bénéficiaire — et la pièce qui l'atteste."
       />
 
-      {error && (
+      {query.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{query.error}</AlertDescription>
         </Alert>
       )}
+      <TruncatedNotice page={countries.data} noun="pays" />
 
       {withoutProof > 0 && (
         <Alert>
           <FileWarning className="h-4 w-4" />
           <AlertTitle>
-            {withoutProof} dépense(s) sans pièce sur cette page
+            {pluralize(withoutProof, "dépense sans pièce", "dépenses sans pièce")} sur cette page
           </AlertTitle>
           <AlertDescription>
             Un décaissement sans justificatif reste au débit du budget.
@@ -128,11 +141,14 @@ export function RegisterPage() {
                 Recherche
               </Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                 <Input
                   id="reg-search"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value)
+                    setPage(1)
+                  }}
                   placeholder="Libellé, lieu, N°ORDRE…"
                   className="pl-9"
                 />
@@ -145,12 +161,12 @@ export function RegisterPage() {
               <NativeSelect
                 id="reg-status"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as WorkflowStatus | "")}
+                onChange={(e) => changeStatus(e.target.value)}
               >
                 <option value="">Tous</option>
-                {Object.entries(WORKFLOW_LABELS).map(([value, label]) => (
+                {STATUSES.map((value) => (
                   <option key={value} value={value}>
-                    {label}
+                    {WORKFLOW_LABELS[value]}
                   </option>
                 ))}
               </NativeSelect>
@@ -163,12 +179,13 @@ export function RegisterPage() {
                 <NativeSelect
                   id="reg-country"
                   value={countryId}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setCountryId(e.target.value === "" ? "" : Number(e.target.value))
-                  }
+                    setPage(1)
+                  }}
                 >
                   <option value="">Tous les pays</option>
-                  {countries.map((country) => (
+                  {(countries.data?.results ?? []).map((country) => (
                     <option key={country.id} value={country.id}>
                       {country.country_ref ? `${country.country_ref} — ` : ""}
                       {country.name}
@@ -179,13 +196,16 @@ export function RegisterPage() {
             )}
             <div className="grid gap-1.5">
               <Label htmlFor="reg-from" className="text-xs">
-                Du
+                Du{timezone ? ` (heure ${timezone})` : ""}
               </Label>
               <Input
                 id="reg-from"
                 type="date"
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(e) => {
+                  setFrom(e.target.value)
+                  setPage(1)
+                }}
               />
             </div>
             <div className="grid gap-1.5">
@@ -196,7 +216,10 @@ export function RegisterPage() {
                 id="reg-to"
                 type="date"
                 value={to}
-                onChange={(e) => setTo(e.target.value)}
+                onChange={(e) => {
+                  setTo(e.target.value)
+                  setPage(1)
+                }}
               />
             </div>
           </div>
@@ -209,21 +232,21 @@ export function RegisterPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date et heure (locale)</TableHead>
-                  <TableHead>N°ORDRE</TableHead>
-                  <TableHead>Dépense</TableHead>
-                  <TableHead>Lieu</TableHead>
-                  <TableHead>Bénéficiaire</TableHead>
-                  <TableHead>Équipe / Manager</TableHead>
-                  <TableHead className="text-right">Montant</TableHead>
-                  <TableHead className="text-right">Justifié</TableHead>
-                  <TableHead className="text-right">Écart</TableHead>
-                  <TableHead>Preuve</TableHead>
-                  <TableHead>Statut</TableHead>
+                  <TableHead scope="col">Date et heure (locale)</TableHead>
+                  <TableHead scope="col">N°ORDRE</TableHead>
+                  <TableHead scope="col">Dépense</TableHead>
+                  <TableHead scope="col">Lieu</TableHead>
+                  <TableHead scope="col">Bénéficiaire</TableHead>
+                  <TableHead scope="col">Équipe / Manager</TableHead>
+                  <TableHead scope="col" className="text-right">Montant</TableHead>
+                  <TableHead scope="col" className="text-right">Justifié</TableHead>
+                  <TableHead scope="col" className="text-right">Écart</TableHead>
+                  <TableHead scope="col">Preuve</TableHead>
+                  <TableHead scope="col">Statut</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {query.loading ? (
                   <SkeletonRows columns={11} />
                 ) : entries.length === 0 ? (
                   <EmptyRow
@@ -245,7 +268,7 @@ export function RegisterPage() {
                       <TableCell>
                         <Link
                           to={`/dossiers/${entry.dossier}`}
-                          className="font-medium hover:underline"
+                          className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           {entry.dossier_number}
                         </Link>
@@ -274,7 +297,7 @@ export function RegisterPage() {
                       <TableCell className="text-xs text-muted-foreground">
                         {entry.team_name ?? "—"}
                         <br />
-                        {entry.owner_name ?? entry.created_by ?? "—"}
+                        {entry.owner_name || entry.created_by || "—"}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatAmount(entry.amount, entry.currency)}
@@ -286,20 +309,19 @@ export function RegisterPage() {
                       <TableCell className="text-right">
                         {formatAmount(entry.justified_amount)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {Number(entry.gap) > 0 ? (
-                          <span className="font-medium text-destructive">
-                            {formatAmount(entry.gap)}
-                          </span>
-                        ) : (
-                          formatAmount(entry.gap)
+                      <TableCell
+                        className={cn(
+                          "text-right",
+                          Number(entry.gap) > 0 && "font-medium text-destructive",
                         )}
+                      >
+                        {formatAmount(entry.gap)}
                       </TableCell>
                       <TableCell>
                         {entry.has_proof ? (
                           <div className="flex items-center gap-1 text-xs">
-                            <Paperclip className="h-3 w-3 text-muted-foreground" />
-                            {entry.proofs.length}
+                            <Paperclip className="h-3 w-3 text-muted-foreground" aria-hidden />
+                            {pluralize(entry.proofs.length, "pièce")}
                             {entry.proofs.some((p) => !p.is_complete) && (
                               <Badge variant="outline" className="ml-1 text-[10px]">
                                 incomplet
@@ -313,7 +335,7 @@ export function RegisterPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={entry.status} />
+                        <StatusBadge status={entry.status} label={entry.status_display} />
                       </TableCell>
                     </TableRow>
                   ))
@@ -324,50 +346,12 @@ export function RegisterPage() {
 
           <Pagination
             page={page}
-            totalPages={totalPages}
             count={count}
             onChange={setPage}
+            noun={["dépense", "dépenses"]}
           />
         </CardContent>
       </Card>
-    </div>
-  )
-}
-
-function Pagination({
-  page,
-  totalPages,
-  count,
-  onChange,
-}: {
-  page: number
-  totalPages: number
-  count: number
-  onChange: (page: number) => void
-}) {
-  return (
-    <div className="mt-4 flex items-center justify-between text-sm">
-      <span className="text-muted-foreground">
-        {count} dépense{count > 1 ? "s" : ""} · page {page} sur {totalPages}
-      </span>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={() => onChange(page - 1)}
-          className="rounded-lg border border-border/60 px-3 py-1.5 transition-colors hover:bg-accent disabled:opacity-40 disabled:hover:bg-transparent"
-        >
-          Précédent
-        </button>
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={() => onChange(page + 1)}
-          className="rounded-lg border border-border/60 px-3 py-1.5 transition-colors hover:bg-accent disabled:opacity-40 disabled:hover:bg-transparent"
-        >
-          Suivant
-        </button>
-      </div>
     </div>
   )
 }

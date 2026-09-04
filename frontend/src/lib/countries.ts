@@ -16,12 +16,12 @@ import type {
 // ---------------------------------------------------------------------------
 // Pays
 // ---------------------------------------------------------------------------
-export function fetchCountries(params?: Record<string, unknown>) {
-  return apiGet<Paginated<CountrySummary>>("/countries/", params)
+export function fetchCountries(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<CountrySummary>>("/countries/", params, signal)
 }
 
-export function fetchCountry(id: number) {
-  return apiGet<CountryDetail>(`/countries/${id}/`)
+export function fetchCountry(id: number, signal?: AbortSignal) {
+  return apiGet<CountryDetail>(`/countries/${id}/`, undefined, signal)
 }
 
 export function createCountry(data: unknown) {
@@ -129,8 +129,8 @@ export function updateMarketingCategory(id: number, data: unknown) {
 // ---------------------------------------------------------------------------
 // Historique
 // ---------------------------------------------------------------------------
-export function fetchHistory(params?: Record<string, unknown>) {
-  return apiGet<Paginated<ChangeLogEntry>>("/history/", params)
+export function fetchHistory(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<ChangeLogEntry>>("/history/", params, signal)
 }
 
 /**

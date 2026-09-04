@@ -1,50 +1,42 @@
-import { useCallback, useEffect, useState } from "react"
 import { History } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { FormError } from "@/components/ui/form-error"
+import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { fetchHistory } from "@/lib/countries"
+import { ACTION_STYLE } from "@/lib/status-styles"
 import type { ChangeLogEntry } from "@/lib/types"
+import { useQuery } from "@/lib/use-query"
 import { formatDate } from "@/lib/utils"
 
-const ACTION_COLOR: Record<string, string> = {
-  created: "bg-emerald-500 hover:bg-emerald-500",
-  updated: "bg-blue-500 hover:bg-blue-500",
-  reassigned: "bg-amber-500 hover:bg-amber-500",
-  deactivated: "bg-zinc-500 hover:bg-zinc-500",
-  reactivated: "bg-emerald-500 hover:bg-emerald-500",
-  deleted: "bg-destructive hover:bg-destructive",
-}
-
-const ACTION_LABEL: Record<string, string> = {
-  created: "Création",
-  updated: "Mise à jour",
-  reassigned: "Rattachement",
-  deactivated: "Désactivation",
-  reactivated: "Réactivation",
-  deleted: "Suppression",
+/** Ce qui a changé, selon l'action, à partir des valeurs du serveur. */
+function describe(entry: ChangeLogEntry): string {
+  const parts = [entry.model_name_display]
+  if (entry.action === "reassigned") {
+    if (entry.from_value) parts.push(`de : ${entry.from_value}`)
+    if (entry.to_value) parts.push(`vers : ${entry.to_value}`)
+  } else if (entry.action === "updated") {
+    if (entry.changed_fields.length > 0) parts.push(`champs : ${entry.changed_fields.join(", ")}`)
+    if (entry.from_value || entry.to_value) {
+      parts.push(`${entry.from_value || "—"} → ${entry.to_value || "—"}`)
+    }
+  } else if (entry.to_value) {
+    parts.push(entry.to_value)
+  }
+  return parts.join(" · ")
 }
 
 export function CaretHistory({ countryId }: { countryId: number }) {
-  const [entries, setEntries] = useState<ChangeLogEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  const query = useQuery(
+    `history:${countryId}`,
+    (signal) => fetchHistory({ country: countryId, page_size: 100 }, signal),
+    { fallback: "Historique indisponible" },
+  )
+  const entries = query.data?.results ?? []
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await fetchHistory({ country: countryId, page_size: 100 })
-      setEntries(data.results)
-    } finally {
-      setLoading(false)
-    }
-  }, [countryId])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  if (loading) {
+  if (query.loading) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-3" aria-busy="true">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="h-14 animate-pulse rounded-lg bg-muted" />
         ))}
@@ -52,10 +44,14 @@ export function CaretHistory({ countryId }: { countryId: number }) {
     )
   }
 
+  if (query.error) {
+    return <FormError>{query.error}</FormError>
+  }
+
   if (entries.length === 0) {
     return (
       <Card className="flex flex-col items-center justify-center gap-2 border-dashed border-border/60 p-10 text-center">
-        <History className="h-8 w-8 text-muted-foreground/60" />
+        <History className="h-8 w-8 text-muted-foreground/60" aria-hidden />
         <p className="text-sm font-medium">Aucun historique</p>
         <p className="text-xs text-muted-foreground">
           Les changements de rattachement et de configuration apparaîtront ici.
@@ -66,6 +62,7 @@ export function CaretHistory({ countryId }: { countryId: number }) {
 
   return (
     <div className="space-y-2">
+      <TruncatedNotice page={query.data} noun="entrées" />
       {entries.map((entry) => (
         <div
           key={entry.id}
@@ -73,16 +70,13 @@ export function CaretHistory({ countryId }: { countryId: number }) {
         >
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className={ACTION_COLOR[entry.action] ?? "bg-secondary"}>
-                {ACTION_LABEL[entry.action] ?? entry.action_display}
+              <Badge className={ACTION_STYLE[entry.action] ?? "bg-secondary"}>
+                {entry.action_display}
               </Badge>
               <span className="font-medium">{entry.label}</span>
             </div>
             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-              {entry.model_name_display}
-              {entry.from_value ? ` · de : ${entry.from_value}` : ""}
-              {entry.from_value && entry.to_value ? " → " : ""}
-              {entry.action === "reassigned" ? entry.to_value : ""}
+              {describe(entry)}
             </p>
           </div>
           <div className="shrink-0 text-right text-xs text-muted-foreground">

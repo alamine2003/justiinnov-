@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState } from "react"
 import { AlertTriangle } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CountryForm, type CountryFormValues } from "@/components/countries/country-form"
@@ -11,47 +10,42 @@ import {
   fetchCountries,
   updateCountry,
 } from "@/lib/countries"
-import { useAuth } from "@/context/auth"
+import { useAuth } from "@/context/use-auth"
+import { invalidateReferentiel } from "@/lib/referentiel"
 import type { CountrySummary } from "@/lib/types"
+import { useDebouncedValue } from "@/lib/use-debounced"
+import { useQuery } from "@/lib/use-query"
+
+type StatusFilter = "all" | "active" | "inactive"
 
 export function CountriesPage() {
-  const navigate = useNavigate()
   const { can } = useAuth()
   const canManage = can("manage_countries")
-  const [countries, setCountries] = useState<CountrySummary[]>([])
-  const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
+  const debouncedSearch = useDebouncedValue(search)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CountrySummary | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
+  const query = useQuery(
+    JSON.stringify({ page, debouncedSearch, statusFilter }),
+    (signal) => {
       const params: Record<string, unknown> = { page, page_size: PAGE_SIZE }
       if (statusFilter !== "all") params.is_active = statusFilter === "active"
-      if (search) params.search = search
-      const data = await fetchCountries(params)
-      setCountries(data.results)
-      setCount(data.count)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de charger les pays")
-    } finally {
-      setLoading(false)
-    }
-  }, [page, search, statusFilter])
+      if (debouncedSearch) params.search = debouncedSearch
+      return fetchCountries(params, signal)
+    },
+    { fallback: "Impossible de charger les pays" },
+  )
 
-  useEffect(() => {
-    load()
-  }, [load])
-
-  useEffect(() => {
-    setPage(1)
-  }, [search, statusFilter])
+  const afterWrite = () => {
+    // Les listes déroulantes des autres pages gardent une copie en cache.
+    invalidateReferentiel("countries")
+    query.reload()
+  }
 
   const handleSave = async (values: CountryFormValues) => {
     if (editing) {
@@ -59,13 +53,21 @@ export function CountriesPage() {
     } else {
       await createCountry(values)
     }
-    await load()
     setEditing(null)
+    afterWrite()
   }
 
   const handleToggle = async (country: CountrySummary) => {
-    await updateCountry(country.id, { is_active: !country.is_active })
-    await load()
+    setTogglingId(country.id)
+    setActionError(null)
+    try {
+      await updateCountry(country.id, { is_active: !country.is_active })
+      afterWrite()
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Changement de statut impossible")
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   return (
@@ -75,40 +77,53 @@ export function CountriesPage() {
         description="Définissez la devise, le fuseau horaire et les rattachements de chaque pays."
       />
 
-      {error && (
+      {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{actionError ?? query.error}</AlertDescription>
         </Alert>
       )}
 
       <CountryTable
-        countries={countries}
-        loading={loading}
+        countries={query.data?.results ?? []}
+        loading={query.loading}
         search={search}
-        onSearchChange={setSearch}
-        onFilterStatus={setStatusFilter}
+        onSearchChange={(value) => {
+          setSearch(value)
+          setPage(1)
+        }}
+        onFilterStatus={(status) => {
+          setStatusFilter(status)
+          setPage(1)
+        }}
         statusFilter={statusFilter}
         onAdd={() => {
           setEditing(null)
           setFormOpen(true)
         }}
-        onOpen={(id) => navigate(`/countries/${id}`)}
-        onToggle={handleToggle}
+        onEdit={(country) => {
+          setEditing(country)
+          setFormOpen(true)
+        }}
+        onToggle={(country) => void handleToggle(country)}
+        togglingId={togglingId}
         canManage={canManage}
       />
 
       <Pagination
         page={page}
-        count={count}
+        count={query.data?.count ?? 0}
         onChange={setPage}
         noun={["pays", "pays"]}
       />
 
       <CountryForm
         open={formOpen}
-        onOpenChange={setFormOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open)
+          if (!open) setEditing(null)
+        }}
         onSave={handleSave}
         initial={
           editing

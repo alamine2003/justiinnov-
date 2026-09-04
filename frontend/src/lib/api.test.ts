@@ -1,6 +1,16 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import axios, { AxiosError, type AxiosAdapter, type InternalAxiosRequestConfig } from "axios"
 
-import { ApiError, readErrorMessage } from "./api"
+import {
+  ApiError,
+  api,
+  apiGet,
+  onPasswordChangeRequired,
+  onUnauthorized,
+  readErrorMessage,
+  readFieldErrors,
+  setToken,
+} from "./api"
 
 describe("readErrorMessage", () => {
   it("retient le champ detail de DRF", () => {
@@ -13,13 +23,13 @@ describe("readErrorMessage", () => {
     ).toBe("Une enveloppe existe déjà.")
   })
 
-  it("assemble plusieurs erreurs de champs", () => {
+  it("assemble plusieurs erreurs de champs en les nommant", () => {
     const message = readErrorMessage({
       amount: ["Montant invalide."],
       note: ["Un refus doit être motivé."],
     })
-    expect(message).toContain("Montant invalide.")
-    expect(message).toContain("Un refus doit être motivé.")
+    expect(message).toContain("Montant : Montant invalide.")
+    expect(message).toContain("Motif : Un refus doit être motivé.")
   })
 
   it("accepte une réponse en texte brut", () => {
@@ -40,10 +50,108 @@ describe("readErrorMessage", () => {
   })
 })
 
+describe("readFieldErrors", () => {
+  it("aplatit les erreurs imbriquées avec leur chemin", () => {
+    expect(
+      readFieldErrors({
+        amount: ["Montant invalide."],
+        figures: { remaining: ["Insuffisant."] },
+        lignes: [{}, { title: ["Obligatoire."] }],
+      }),
+    ).toEqual({
+      amount: ["Montant invalide."],
+      "figures.remaining": ["Insuffisant."],
+      "lignes.1.title": ["Obligatoire."],
+    })
+  })
+
+  it("ne renvoie rien pour une réponse qui n'est pas un objet", () => {
+    expect(readFieldErrors("texte")).toEqual({})
+    expect(readFieldErrors(null)).toEqual({})
+  })
+})
+
 describe("ApiError", () => {
   it("conserve le code HTTP pour que l'appelant puisse le distinguer", () => {
     const error = new ApiError(403, "Interdit")
     expect(error.status).toBe(403)
+    expect(error.fields).toEqual({})
     expect(error).toBeInstanceOf(Error)
+  })
+})
+
+/**
+ * Remplace l'adaptateur HTTP d'axios par une réponse fixe : le test exerce
+ * l'intercepteur sans réseau ni serveur.
+ */
+function repondre(status: number, data: unknown) {
+  const adapter: AxiosAdapter = async (config: InternalAxiosRequestConfig) => {
+    const response = { status, statusText: "", headers: {}, config, data }
+    if (status >= 400) {
+      throw new AxiosError("Request failed", "ERR_BAD_REQUEST", config, {}, response)
+    }
+    return response
+  }
+  api.defaults.adapter = adapter
+}
+
+function couperLeReseau() {
+  api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+    throw new AxiosError("Network Error", AxiosError.ERR_NETWORK, config)
+  }
+}
+
+describe("intercepteur de réponse", () => {
+  const adaptateurInitial = axios.defaults.adapter
+
+  afterEach(() => {
+    api.defaults.adapter = adaptateurInitial
+    localStorage.clear()
+  })
+
+  it("expose la carte des champs en erreur", async () => {
+    repondre(400, { amount: ["Montant invalide."] })
+
+    await expect(api.post("/expenses/", {})).rejects.toMatchObject({
+      status: 400,
+      fields: { amount: ["Montant invalide."] },
+      message: "Montant : Montant invalide.",
+    })
+  })
+
+  it("prévient les abonnés et efface le jeton sur un 401", async () => {
+    setToken("périmé")
+    const listener = vi.fn()
+    const off = onUnauthorized(listener)
+    repondre(401, { detail: "Jeton invalide." })
+
+    await expect(apiGet("/me/")).rejects.toBeInstanceOf(ApiError)
+
+    expect(listener).toHaveBeenCalledOnce()
+    expect(localStorage.getItem("justi_token")).toBeNull()
+    off()
+  })
+
+  it("signale un refus pour mot de passe provisoire", async () => {
+    const listener = vi.fn()
+    const off = onPasswordChangeRequired(listener)
+    repondre(403, {
+      detail: "Remplacez votre mot de passe.",
+      must_change_password: true,
+    })
+
+    await expect(apiGet("/dossiers/")).rejects.toMatchObject({ status: 403 })
+
+    expect(listener).toHaveBeenCalledOnce()
+    off()
+  })
+
+  it("dit que le serveur est injoignable plutôt que « Network Error »", async () => {
+    couperLeReseau()
+
+    await expect(apiGet("/dossiers/")).rejects.toMatchObject({
+      status: 0,
+      message: expect.stringContaining("injoignable"),
+    })
   })
 })

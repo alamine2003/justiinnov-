@@ -10,8 +10,8 @@ import type {
 // ---------------------------------------------------------------------------
 // Enveloppes
 // ---------------------------------------------------------------------------
-export function fetchBudgets(params?: Record<string, unknown>) {
-  return apiGet<Paginated<Budget>>("/budgets/", params)
+export function fetchBudgets(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<Budget>>("/budgets/", params, signal)
 }
 
 export function fetchBudgetSummary(params?: Record<string, unknown>) {
@@ -29,8 +29,8 @@ export function updateBudget(id: number, data: unknown) {
 // ---------------------------------------------------------------------------
 // Réallocations
 // ---------------------------------------------------------------------------
-export function fetchReallocations(params?: Record<string, unknown>) {
-  return apiGet<Paginated<Reallocation>>("/reallocations/", params)
+export function fetchReallocations(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<Reallocation>>("/reallocations/", params, signal)
 }
 
 export function createReallocation(data: unknown) {
@@ -48,8 +48,8 @@ export function rejectReallocation(id: number, note: string) {
 // ---------------------------------------------------------------------------
 // Taux de change
 // ---------------------------------------------------------------------------
-export function fetchExchangeRates(params?: Record<string, unknown>) {
-  return apiGet<Paginated<ExchangeRate>>("/exchange-rates/", params)
+export function fetchExchangeRates(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<ExchangeRate>>("/exchange-rates/", params, signal)
 }
 
 export function createExchangeRate(data: unknown) {

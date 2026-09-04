@@ -7,6 +7,10 @@
  *   SHOT_HQ_USER=admin.innov SHOT_HQ_PASSWORD=… \
  *   SHOT_COUNTRY_USER=togo.innov SHOT_COUNTRY_PASSWORD=… \
  *   npx tsx scripts/screenshot.ts
+ *
+ * Le script échoue (code de sortie 1) sur toute erreur de console et sur
+ * toute attente non tenue : un compte qui verrait des lignes hors de son
+ * périmètre, une redirection absente, un titre qui manque.
  */
 import { chromium, type Browser, type Page } from "playwright"
 
@@ -25,9 +29,20 @@ function credentials(prefix: string) {
 }
 
 const errors: string[] = []
+const failures: string[] = []
 
-async function newPage(browser: Browser) {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+/** Attente vérifiée : consignée, elle fait échouer le script sans l'arrêter. */
+function expect(condition: boolean, message: string) {
+  if (condition) {
+    console.log(`  ✓ ${message}`)
+  } else {
+    console.log(`  ✗ ${message}`)
+    failures.push(message)
+  }
+}
+
+async function newPage(browser: Browser, viewport = { width: 1440, height: 900 }) {
+  const page = await browser.newPage({ viewport })
   page.on("console", (m) => {
     if (m.type() === "error") errors.push(`[console] ${m.text()}`)
   })
@@ -52,6 +67,11 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${OUT}/shot_${name}.png`, fullPage: false })
 }
 
+async function goto(page: Page, path: string, settle = 1000) {
+  await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" })
+  await page.waitForTimeout(settle)
+}
+
 async function main() {
   const browser = await chromium.launch()
 
@@ -59,63 +79,87 @@ async function main() {
   const hq = await newPage(browser)
   const hqUser = await login(hq, "HQ")
   console.log(`\n=== SIÈGE (${hqUser}) ===`)
-  console.log("Navigation :", await hq.locator("header a").allTextContents())
-  console.log("Pilotage - titre :", await hq.textContent("h1"))
-  console.log("Pilotage - onglets :", await hq.getByRole("tab").allTextContents())
+  const hqNav = await hq.locator("nav[aria-label='Navigation principale'] a").allTextContents()
+  expect(hqNav.some((t) => t.includes("Configuration")), "le siège voit « Configuration »")
+  expect(hqNav.some((t) => t.includes("Audit")), "le siège voit « Audit »")
+  expect((await hq.textContent("h1"))?.includes("Pilotage") ?? false, "le tableau de bord s'ouvre")
+  // Sans pays choisi, la consolidation ne propose pas de répartition : deux
+  // équipes homonymes de pays différents fusionneraient. Le siège doit
+  // d'abord choisir un pays.
+  expect(
+    ((await hq.textContent("main")) ?? "").includes("Choisissez un pays"),
+    "la consolidation invite à choisir un pays pour la répartition",
+  )
   await shot(hq, "pilotage")
+  await hq.getByLabel("Pays").selectOption({ index: 1 })
+  await hq.waitForTimeout(1200)
+  expect((await hq.getByRole("tab").count()) >= 6, "la répartition d'un pays propose ses onglets")
+  await shot(hq, "pilotage_pays")
 
   await hq.locator('button[aria-label^="Notifications"]').click()
   await hq.waitForTimeout(900)
-  console.log(
-    "Notifications ouvertes :",
-    (await hq.textContent("h2, [data-slot=sheet-title]")) ?? "—",
+  expect(
+    ((await hq.textContent("[data-slot=sheet-title]")) ?? "").includes("Notifications"),
+    "le panneau de notifications s'ouvre",
   )
   await shot(hq, "notifications")
   await hq.keyboard.press("Escape")
   await hq.waitForTimeout(400)
 
-  await hq.goto(`${BASE}/dossiers`, { waitUntil: "networkidle" })
-  await hq.waitForTimeout(1000)
-  console.log("Dossiers visibles :", await hq.locator("tbody tr").count())
+  await goto(hq, "/dossiers")
+  const hqDossiers = await hq.locator("tbody tr").count()
+  expect(hqDossiers > 0, `des dossiers sont listés (${hqDossiers})`)
   await shot(hq, "dossiers")
 
-  // Premier dossier : lignes de dépenses, justificatifs et workflow.
-  const firstDossier = hq.locator("tbody tr").first()
+  // Premier dossier : lignes de dépenses, justificatifs, workflow, aperçu.
+  const firstDossier = hq.locator("tbody tr a").first()
   if (await firstDossier.count()) {
     await firstDossier.click()
     await hq.waitForURL("**/dossiers/*", { timeout: 15000 })
     await hq.waitForTimeout(1200)
-    console.log("Dossier - N°ORDRE :", await hq.textContent("h1"))
-    console.log(
-      "Dossier - lignes :",
-      await hq.locator("table").first().locator("tbody tr").count(),
-    )
+    expect(Boolean(await hq.textContent("h1")), "la fiche du dossier porte son N°ORDRE")
     await shot(hq, "dossier_detail")
+
+    // Un dialogue : la justification ou, à défaut, le dépôt de pièce.
+    const dialogueBouton = hq.getByRole("button", { name: /Marquer justifié|Déposer|Ajouter/ }).first()
+    if (await dialogueBouton.count()) {
+      await dialogueBouton.click()
+      await hq.waitForTimeout(600)
+      expect((await hq.getByRole("dialog").count()) > 0, "un dialogue s'ouvre sur la fiche")
+      await shot(hq, "dossier_dialogue")
+      await hq.keyboard.press("Escape")
+      await hq.waitForTimeout(400)
+    }
+
+    // L'aperçu d'une pièce, s'il en existe une prévisualisable.
+    const apercu = hq.locator('button[aria-label^="Prévisualiser"]').first()
+    if (await apercu.count()) {
+      await apercu.click()
+      await hq.waitForTimeout(1500)
+      expect((await hq.getByRole("dialog").count()) > 0, "l'aperçu d'une pièce s'ouvre")
+      await shot(hq, "dossier_apercu")
+      await hq.keyboard.press("Escape")
+      await hq.waitForTimeout(400)
+    } else {
+      console.log("  – aucune pièce prévisualisable sur ce dossier")
+    }
   }
 
-  await hq.goto(`${BASE}/registre`, { waitUntil: "networkidle" })
-  await hq.waitForTimeout(1200)
-  console.log("Registre - lignes :", await hq.locator("tbody tr").count())
-  console.log(
-    "Registre - pagination :",
-    (await hq.textContent("span.text-muted-foreground")) ?? "—",
-  )
+  await goto(hq, "/registre", 1200)
+  expect((await hq.locator("tbody tr").count()) > 0, "le registre a des lignes")
   await shot(hq, "registre")
 
-  await hq.goto(`${BASE}/audit`, { waitUntil: "networkidle" })
-  await hq.waitForTimeout(1200)
-  console.log("Audit - entrées :", await hq.locator("tbody tr").count())
+  await goto(hq, "/audit", 1200)
+  expect((await hq.locator("tbody tr").count()) > 0, "le journal d'audit a des entrées")
   await shot(hq, "audit")
 
-  await hq.goto(`${BASE}/countries`, { waitUntil: "networkidle" })
-  await hq.waitForTimeout(1000)
-  console.log("Pays visibles :", await hq.locator("tbody tr").count())
+  await goto(hq, "/countries")
+  const hqCountries = await hq.locator("tbody tr").count()
+  expect(hqCountries > 1, `le siège voit plusieurs pays (${hqCountries})`)
   await shot(hq, "countries_hq")
 
-  await hq.goto(`${BASE}/budgets`, { waitUntil: "networkidle" })
-  await hq.waitForTimeout(1200)
-  console.log("Budgets - titre :", await hq.textContent("h1"))
-  console.log("Budgets - onglets :", await hq.getByRole("tab").allTextContents())
+  await goto(hq, "/budgets", 1200)
+  expect((await hq.textContent("h1"))?.includes("Budgets") ?? false, "la page Budgets s'ouvre")
   await shot(hq, "budgets_pays")
 
   await hq.getByRole("tab", { name: "Enveloppes" }).click()
@@ -126,9 +170,9 @@ async function main() {
   await hq.waitForTimeout(600)
   await shot(hq, "budgets_reallocations")
 
-  await hq.goto(`${BASE}/configuration`, { waitUntil: "networkidle" })
-  await hq.waitForTimeout(1200)
-  console.log("Configuration - onglets :", await hq.getByRole("tab").allTextContents())
+  await goto(hq, "/configuration", 1200)
+  const onglets = await hq.getByRole("tab").allTextContents()
+  expect(onglets.includes("Permissions"), "la configuration propose l'onglet Permissions")
   await shot(hq, "configuration_general")
 
   for (const [onglet, nom] of [
@@ -138,7 +182,7 @@ async function main() {
   ] as const) {
     await hq.getByRole("tab", { name: onglet }).click()
     await hq.waitForTimeout(900)
-    console.log(`Configuration › ${onglet} - lignes :`, await hq.locator("tbody tr").count())
+    expect((await hq.locator("tbody tr").count()) > 0, `Configuration › ${onglet} a des lignes`)
     await shot(hq, nom)
   }
 
@@ -146,31 +190,58 @@ async function main() {
   const rep = await newPage(browser)
   const repUser = await login(rep, "COUNTRY")
   console.log(`\n=== REPRÉSENTANT PAYS (${repUser}) ===`)
-  console.log("Périmètre affiché :", await rep.textContent("header p.text-xs"))
-  console.log("Navigation :", await rep.locator("header a").allTextContents())
-  console.log("Dossiers visibles :", await rep.locator("tbody tr").count())
+  const perimetre = (await rep.textContent("header p.text-xs")) ?? ""
+  expect(!perimetre.includes("Siège"), `le périmètre affiché est celui d'un pays (${perimetre})`)
+  const repNav = await rep.locator("nav[aria-label='Navigation principale'] a").allTextContents()
+  expect(!repNav.some((t) => t.includes("Configuration")), "le pays ne voit pas « Configuration »")
+  expect(!repNav.some((t) => t.includes("Audit")), "le pays ne voit pas « Audit »")
+  await goto(rep, "/dossiers")
+  const repDossiers = await rep.locator("tbody tr").count()
+  expect(repDossiers <= hqDossiers, `le pays voit au plus autant de dossiers que le siège (${repDossiers})`)
   await shot(rep, "dossiers_representant")
 
-  await rep.goto(`${BASE}/countries`, { waitUntil: "networkidle" })
-  await rep.waitForTimeout(1000)
-  console.log("Pays visibles :", await rep.locator("tbody tr").count())
-  console.log(
-    "Bouton « Ajouter » visible :",
-    await rep.locator('button:has-text("Ajouter")').count(),
-  )
+  await goto(rep, "/countries")
+  expect((await rep.locator("tbody tr").count()) <= 1, "le pays ne voit que son pays")
+  expect((await rep.locator('button:has-text("Ajouter")').count()) === 0, "le pays n'a pas de bouton « Ajouter »")
   await shot(rep, "countries_representant")
 
-  await rep.goto(`${BASE}/budgets`, { waitUntil: "networkidle" })
-  await rep.waitForTimeout(1200)
-  console.log(
-    "Bouton « Attribuer une enveloppe » visible :",
-    await rep.locator('button:has-text("Attribuer")').count(),
+  await goto(rep, "/budgets", 1200)
+  expect(
+    (await rep.locator('button:has-text("Attribuer")').count()) === 0,
+    "le pays n'a pas de bouton « Attribuer une enveloppe »",
   )
   await shot(rep, "budgets_representant")
 
+  // Pages réservées au siège : la garde ramène au tableau de bord.
+  for (const chemin of ["/configuration", "/audit"]) {
+    await rep.goto(`${BASE}${chemin}`)
+    await rep.waitForURL((url) => url.pathname === "/", { timeout: 10000 }).catch(() => {})
+    await rep.waitForTimeout(800)
+    expect(new URL(rep.url()).pathname === "/", `${chemin} redirige le pays vers le tableau de bord`)
+  }
+  expect(
+    ((await rep.textContent("main")) ?? "").includes("réservée au siège"),
+    "la redirection est expliquée",
+  )
+  await shot(rep, "garde_siege")
+
+  // --- Mobile : une page interne ne doit pas défiler horizontalement -------
+  const mobile = await newPage(browser, { width: 390, height: 844 })
+  await login(mobile, "COUNTRY")
+  await goto(mobile, "/dossiers")
+  const deborde = await mobile.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  )
+  expect(!deborde, "la page ne défile pas horizontalement à 390 px")
+  await mobile.getByRole("button", { name: "Ouvrir le menu" }).click()
+  await mobile.waitForTimeout(500)
+  expect((await mobile.getByRole("dialog").count()) > 0, "le menu replié s'ouvre")
+  await shot(mobile, "dossiers_mobile")
+
   console.log("\nErreurs console :", errors.length ? errors : "aucune")
+  console.log("Attentes non tenues :", failures.length ? failures : "aucune")
   await browser.close()
-  if (errors.length) process.exitCode = 1
+  if (errors.length || failures.length) process.exitCode = 1
 }
 
 main().catch((e) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import { AlertTriangle, ScrollText, Search } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -17,39 +17,11 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { fetchAudit } from "@/lib/expenses"
-import type { AuditEntry } from "@/lib/types"
+import { ACTION_STYLE } from "@/lib/status-styles"
+import { AUDIT_ACTION_LABELS, type AuditEntry } from "@/lib/types"
+import { useDebouncedValue } from "@/lib/use-debounced"
+import { useQuery } from "@/lib/use-query"
 import { formatDate } from "@/lib/utils"
-
-const ACTION_STYLE: Record<string, string> = {
-  justified: "bg-emerald-500 hover:bg-emerald-500",
-  unjustified: "bg-destructive hover:bg-destructive",
-  approved: "bg-emerald-500 hover:bg-emerald-500",
-  rejected: "bg-destructive hover:bg-destructive",
-  submitted: "bg-blue-500 hover:bg-blue-500",
-  reviewed: "bg-amber-500 hover:bg-amber-500",
-  deleted: "bg-zinc-600 hover:bg-zinc-600",
-  downloaded: "bg-zinc-500 hover:bg-zinc-500",
-}
-
-/**
- * Valeurs proposées au filtre. Les libellés affichés viennent du serveur
- * (`action_display`) : les recopier ici les ferait diverger.
- */
-const FILTERABLE_ACTIONS = [
-  ["created", "Création"],
-  ["updated", "Modification"],
-  ["deleted", "Suppression d'un brouillon"],
-  ["submitted", "Soumission"],
-  ["reviewed", "Mise en contrôle"],
-  ["justified", "Justification"],
-  ["unjustified", "Constat de non-justification"],
-  ["closed", "Clôture"],
-  ["proof_uploaded", "Dépôt de justificatif"],
-  ["proof_replaced", "Remplacement de justificatif"],
-  ["approved", "Validation d'un justificatif"],
-  ["rejected", "Rejet d'un justificatif"],
-  ["downloaded", "Téléchargement"],
-] as const
 
 /** Résume le détail JSON d'une entrée en une phrase lisible. */
 function summarize(entry: AuditEntry): string {
@@ -72,42 +44,27 @@ function summarize(entry: AuditEntry): string {
 }
 
 export function AuditPage() {
-  const [entries, setEntries] = useState<AuditEntry[]>([])
-  const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search)
   const [actionFilter, setActionFilter] = useState("")
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
+  const query = useQuery(
+    JSON.stringify({ page, debouncedSearch, actionFilter }),
+    (signal) => {
       const params: Record<string, unknown> = {
         page,
         page_size: PAGE_SIZE,
         ordering: "-created_at",
       }
-      if (search) params.search = search
+      if (debouncedSearch) params.search = debouncedSearch
       if (actionFilter) params.action = actionFilter
-      const result = await fetchAudit(params)
-      setEntries(result.results)
-      setCount(result.count)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de charger le journal")
-    } finally {
-      setLoading(false)
-    }
-  }, [page, search, actionFilter])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  useEffect(() => {
-    setPage(1)
-  }, [search, actionFilter])
+      return fetchAudit(params, signal)
+    },
+    { fallback: "Impossible de charger le journal" },
+  )
+  const entries = query.data?.results ?? []
+  const count = query.data?.count ?? 0
 
   return (
     <div className="space-y-6">
@@ -116,32 +73,39 @@ export function AuditPage() {
         description="Qui a fait quoi, quand et depuis quelle adresse. Les entrées ne sont ni modifiables ni supprimables."
       />
 
-      {error && (
+      {query.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{query.error}</AlertDescription>
         </Alert>
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
             placeholder="Utilisateur ou libellé…"
+            aria-label="Rechercher dans le journal"
             className="pl-9"
           />
         </div>
         <NativeSelect
           value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
+          onChange={(e) => {
+            setActionFilter(e.target.value)
+            setPage(1)
+          }}
           className="sm:max-w-[16rem]"
           aria-label="Filtrer par action"
         >
           <option value="">Toutes les actions</option>
-          {FILTERABLE_ACTIONS.map(([value, label]) => (
+          {Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
@@ -151,20 +115,20 @@ export function AuditPage() {
 
       <Card className="border-border/60 shadow-sm">
         <CardContent className="pt-6">
-          <div className="overflow-hidden rounded-lg border border-border/60">
+          <div className="overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Utilisateur</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Objet</TableHead>
-                  <TableHead>Détail</TableHead>
-                  <TableHead>Origine</TableHead>
+                  <TableHead scope="col">Date</TableHead>
+                  <TableHead scope="col">Utilisateur</TableHead>
+                  <TableHead scope="col">Action</TableHead>
+                  <TableHead scope="col">Objet</TableHead>
+                  <TableHead scope="col">Détail</TableHead>
+                  <TableHead scope="col">Origine</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {query.loading ? (
                   <SkeletonRows columns={6} />
                 ) : entries.length === 0 ? (
                   <EmptyRow

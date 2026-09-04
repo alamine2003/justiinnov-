@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import { AlertTriangle, Pencil, Plus, Wallet } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import { StatCard } from "@/components/ui/stat-card"
+import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import {
   Table,
   TableBody,
@@ -14,9 +16,11 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageHeader } from "@/components/ui/page-header"
+import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { BudgetForm, type BudgetFormValues } from "@/components/budgets/budget-form"
 import { Reallocations } from "@/components/budgets/reallocations"
-import { useAuth } from "@/context/auth"
+import { useAuth } from "@/context/use-auth"
+import { fetchConfiguration } from "@/lib/accounts"
 import {
   createBudget,
   fetchBudgetSummary,
@@ -24,60 +28,60 @@ import {
   updateBudget,
 } from "@/lib/budgets"
 import { fetchCountries, fetchManagers, fetchProjects, fetchTeams } from "@/lib/countries"
-import type {
-  Budget,
-  BudgetSummary,
-  CountrySummary,
-  Manager,
-  Project,
-  Team,
-} from "@/lib/types"
-import { formatAmount, formatRate } from "@/lib/utils"
+import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
+import type { Budget } from "@/lib/types"
+import { useQuery } from "@/lib/use-query"
+import { cn, formatAmount, formatRate } from "@/lib/utils"
 
 export function BudgetsPage() {
   const { can } = useAuth()
   const canManage = can("manage_budgets")
 
-  const [budgets, setBudgets] = useState<Budget[]>([])
-  const [summary, setSummary] = useState<BudgetSummary | null>(null)
-  const [countries, setCountries] = useState<CountrySummary[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
-  const [teams, setTeams] = useState<Team[]>([])
-  const [managers, setManagers] = useState<Manager[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const query = useQuery(
+    "budgets",
+    async (signal) => {
+      const [budgets, summary] = await Promise.all([
+        fetchBudgets({ page_size: REFERENTIEL_PAGE_SIZE }, signal),
+        fetchBudgetSummary(),
+      ])
+      return { budgets, summary }
+    },
+    { fallback: "Impossible de charger les budgets" },
+  )
+  const budgets = query.data?.budgets.results ?? []
+  const summary = query.data?.summary ?? null
+
+  // Le référentiel du formulaire n'est lu que par qui peut attribuer.
+  const countries = useReferentiel(
+    "countries",
+    () => fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+  )
+  const projects = useReferentiel(
+    "projects",
+    () => fetchProjects({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+    { enabled: canManage },
+  )
+  const teams = useReferentiel(
+    "teams",
+    () => fetchTeams({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+    { enabled: canManage },
+  )
+  const managers = useReferentiel(
+    "managers",
+    () => fetchManagers({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+    { enabled: canManage },
+  )
+  const configuration = useReferentiel("configuration", fetchConfiguration, {
+    enabled: canManage && can("manage_users"),
+  })
+
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [budgetPage, summaryData, countryPage, projectPage, teamPage, managerPage] =
-        await Promise.all([
-          fetchBudgets({ page_size: 200 }),
-          fetchBudgetSummary(),
-          fetchCountries({ page_size: 200 }),
-          fetchProjects({ page_size: 200 }),
-          fetchTeams({ page_size: 200 }),
-          fetchManagers({ page_size: 200 }),
-        ])
-      setBudgets(budgetPage.results)
-      setSummary(summaryData)
-      setCountries(countryPage.results)
-      setProjects(projectPage.results)
-      setTeams(teamPage.results)
-      setManagers(managerPage.results)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de charger les budgets")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const symbolOf = (countryId: number, fallback: string) =>
+    countries.data?.results.find((c) => c.id === countryId)?.currency_symbol || fallback
+  const consolidatedSymbol =
+    countries.data?.results.find((c) => c.currency === "XOF")?.currency_symbol || "XOF"
 
   const handleSave = async (values: BudgetFormValues) => {
     if (editing) {
@@ -86,8 +90,10 @@ export function BudgetsPage() {
       await createBudget(values)
     }
     setEditing(null)
-    await load()
+    query.reload()
   }
+
+  const referentielError = countries.error ?? projects.error ?? teams.error ?? managers.error
 
   return (
     <div className="space-y-6">
@@ -102,19 +108,21 @@ export function BudgetsPage() {
               setFormOpen(true)
             }}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 h-4 w-4" aria-hidden />
             Attribuer une enveloppe
           </Button>
         )}
       </PageHeader>
 
-      {error && (
+      {(query.error || referentielError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{query.error ?? referentielError}</AlertDescription>
         </Alert>
       )}
+      <TruncatedNotice page={query.data?.budgets} noun="enveloppes" />
+      <TruncatedNotice page={countries.data} noun="pays" />
 
       {summary && summary.unconverted_currencies.length > 0 && (
         <Alert>
@@ -129,12 +137,13 @@ export function BudgetsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
+          icon={Wallet}
           label="Disponible consolidé"
-          value={formatAmount(summary?.total_remaining_xof, "FCFA")}
+          value={formatAmount(summary?.total_remaining_xof, consolidatedSymbol)}
           hint="Converti au taux en vigueur"
         />
-        <StatCard label="Pays dotés" value={String(summary?.countries.length ?? 0)} />
-        <StatCard label="Enveloppes" value={String(budgets.length)} />
+        <StatCard icon={Wallet} label="Pays dotés" value={summary?.countries.length ?? 0} />
+        <StatCard icon={Wallet} label="Enveloppes" value={query.data?.budgets.count ?? 0} />
       </div>
 
       <Tabs defaultValue="pays">
@@ -147,40 +156,39 @@ export function BudgetsPage() {
         <TabsContent value="pays" className="mt-4">
           <Card className="border-border/60 shadow-sm">
             <CardContent className="pt-6">
-              <div className="overflow-hidden rounded-lg border border-border/60">
+              <div className="overflow-x-auto rounded-lg border border-border/60">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Pays</TableHead>
-                      <TableHead className="text-right">Enveloppe</TableHead>
-                      <TableHead className="text-right">Consommé</TableHead>
-                      <TableHead className="text-right">Disponible</TableHead>
-                      <TableHead className="text-right">Disponible (FCFA)</TableHead>
+                      <TableHead scope="col">Pays</TableHead>
+                      <TableHead scope="col" className="text-right">Enveloppe</TableHead>
+                      <TableHead scope="col" className="text-right">Engagé</TableHead>
+                      <TableHead scope="col" className="text-right">Consommé</TableHead>
+                      <TableHead scope="col" className="text-right">Disponible</TableHead>
+                      <TableHead scope="col" className="text-right">Disponible ({consolidatedSymbol})</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-16">
-                          <div className="h-4 animate-pulse rounded bg-muted" />
-                        </TableCell>
-                      </TableRow>
+                    {query.loading ? (
+                      <SkeletonRows columns={6} />
                     ) : !summary || summary.countries.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={5}
-                          className="h-24 text-center text-muted-foreground"
-                        >
-                          Aucune enveloppe attribuée.
-                        </TableCell>
-                      </TableRow>
+                      <EmptyRow
+                        colSpan={6}
+                        icon={Wallet}
+                        title="Aucune enveloppe attribuée"
+                        hint={
+                          canManage
+                            ? "Attribuez une enveloppe annuelle à chaque pays suivi."
+                            : "Le siège n'a pas encore attribué d'enveloppe à votre périmètre."
+                        }
+                      />
                     ) : (
                       summary.countries.map((row) => (
                         <TableRow key={row.country}>
                           <TableCell>
                             <p className="font-medium">{row.country_name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {row.country_ref ?? "—"} · {row.currency}
+                              {row.country_ref ?? "—"} · {symbolOf(row.country, row.currency)}
                             </p>
                           </TableCell>
                           <TableCell className="text-right">
@@ -192,9 +200,17 @@ export function BudgetsPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
+                            {formatAmount(row.engaged)}
+                          </TableCell>
+                          <TableCell className="text-right">
                             {formatAmount(row.consumed)}
                           </TableCell>
-                          <TableCell className="text-right font-medium">
+                          <TableCell
+                            className={cn(
+                              "text-right font-medium",
+                              Number(row.remaining) < 0 && "text-destructive",
+                            )}
+                          >
                             {formatAmount(row.remaining)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
@@ -215,29 +231,34 @@ export function BudgetsPage() {
         <TabsContent value="enveloppes" className="mt-4">
           <Card className="border-border/60 shadow-sm">
             <CardContent className="pt-6">
-              <div className="overflow-hidden rounded-lg border border-border/60">
+              <div className="overflow-x-auto rounded-lg border border-border/60">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Enveloppe</TableHead>
-                      <TableHead>Année</TableHead>
-                      <TableHead className="text-right">Montant</TableHead>
-                      <TableHead className="text-right">Disponible</TableHead>
-                      <TableHead>Exécution</TableHead>
-                      <TableHead>Dépassement</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead scope="col">Enveloppe</TableHead>
+                      <TableHead scope="col">Année</TableHead>
+                      <TableHead scope="col" className="text-right">Montant</TableHead>
+                      <TableHead scope="col" className="text-right">Engagé</TableHead>
+                      <TableHead scope="col" className="text-right">Disponible</TableHead>
+                      <TableHead scope="col">Exécution</TableHead>
+                      <TableHead scope="col">Dépassement</TableHead>
+                      {canManage && <TableHead scope="col" className="text-right">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {budgets.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={7}
-                          className="h-24 text-center text-muted-foreground"
-                        >
-                          Aucune enveloppe.
-                        </TableCell>
-                      </TableRow>
+                    {query.loading ? (
+                      <SkeletonRows columns={canManage ? 8 : 7} />
+                    ) : budgets.length === 0 ? (
+                      <EmptyRow
+                        colSpan={canManage ? 8 : 7}
+                        icon={Wallet}
+                        title="Aucune enveloppe"
+                        hint={
+                          canManage
+                            ? "Attribuez une enveloppe pour commencer le suivi."
+                            : "Aucune enveloppe sur votre périmètre."
+                        }
+                      />
                     ) : (
                       budgets.map((budget) => (
                         <TableRow key={budget.id}>
@@ -245,13 +266,22 @@ export function BudgetsPage() {
                             <p className="font-medium">{budget.country_name}</p>
                             <p className="text-xs text-muted-foreground">
                               {budget.scope_label ?? "Enveloppe du pays"}
+                              {!budget.is_active && " · inactive"}
                             </p>
                           </TableCell>
                           <TableCell>{budget.year}</TableCell>
                           <TableCell className="text-right">
-                            {formatAmount(budget.amount, budget.currency)}
+                            {formatAmount(budget.amount, symbolOf(budget.country, budget.currency))}
                           </TableCell>
-                          <TableCell className="text-right font-medium">
+                          <TableCell className="text-right">
+                            {formatAmount(budget.figures.engaged)}
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              "text-right font-medium",
+                              Number(budget.figures.remaining) < 0 && "text-destructive",
+                            )}
+                          >
                             {formatAmount(budget.figures.remaining)}
                           </TableCell>
                           <TableCell>
@@ -262,12 +292,12 @@ export function BudgetsPage() {
                               {budget.overrun_policy_display}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">
-                            {canManage && (
+                          {canManage && (
+                            <TableCell className="text-right">
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label="Modifier"
+                                aria-label={`Modifier l'enveloppe ${budget.country_name} ${budget.year}`}
                                 onClick={() => {
                                   setEditing(budget)
                                   setFormOpen(true)
@@ -275,8 +305,8 @@ export function BudgetsPage() {
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
-                            )}
-                          </TableCell>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))
                     )}
@@ -293,7 +323,7 @@ export function BudgetsPage() {
               <Reallocations
                 budgets={budgets}
                 canDecide={canManage}
-                onChanged={load}
+                onChanged={query.reload}
               />
             </CardContent>
           </Card>
@@ -307,37 +337,13 @@ export function BudgetsPage() {
           if (!open) setEditing(null)
         }}
         onSave={handleSave}
-        countries={countries}
-        projects={projects}
-        teams={teams}
-        managers={managers}
+        countries={countries.data?.results ?? []}
+        projects={projects.data?.results ?? []}
+        teams={teams.data?.results ?? []}
+        managers={managers.data?.results ?? []}
         editing={editing}
+        defaultPolicy={configuration.data?.workflow.default_overrun_policy}
       />
     </div>
-  )
-}
-
-function StatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: string
-  hint?: string
-}) {
-  return (
-    <Card className="border-border/60 shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          <Wallet className="h-3.5 w-3.5" />
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
-        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
   )
 }

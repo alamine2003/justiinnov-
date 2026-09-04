@@ -8,12 +8,12 @@
 export const BRAND = {
   name: "JUSTI INNOV",
   tagline: "Application de contrôle budgétaire",
-  version: "1.0",
+  version: "1.0.0",
   developer: "Al Amine DEV",
   /** Année de première mise en service, pour la mention de copyright. */
   since: 2026,
-  logo: "/justi-innov.png",
-  mark: "/justi-innov-mark.png",
+  /** Emblème vectoriel : net à toute taille, et le seul fichier d'identité servi. */
+  mark: "/favicon.svg",
 } as const
 
 /** Mention de copyright, l'année courante si elle dépasse la mise en service. */

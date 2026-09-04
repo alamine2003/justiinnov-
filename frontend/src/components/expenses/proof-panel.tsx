@@ -9,9 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
+import { EmptyRow } from "@/components/ui/table-states"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Table,
@@ -23,13 +25,15 @@ import {
 } from "@/components/ui/table"
 import { ProofPreview } from "@/components/expenses/proof-preview"
 import { ProofStatusBadge } from "@/components/expenses/status-badge"
-import { useAuth } from "@/context/auth"
+import { useAuth } from "@/context/use-auth"
+import { fetchConfiguration } from "@/lib/accounts"
 import {
   downloadProof,
   isPreviewable,
   reviewProof,
   uploadProof,
 } from "@/lib/expenses"
+import { useReferentiel } from "@/lib/referentiel"
 import {
   PROOF_KIND_LABELS,
   type Proof,
@@ -41,6 +45,13 @@ function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} o`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} ko`
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+}
+
+/** Contraintes de dépôt, quand la configuration est lisible. */
+interface UploadRules {
+  accept?: string
+  maxBytes?: number
+  formats: string[]
 }
 
 interface ProofPanelProps {
@@ -58,6 +69,22 @@ export function ProofPanel({
 }: ProofPanelProps) {
   const { can } = useAuth()
   const canReview = can("validate_expenses")
+
+  // Les formats et la taille acceptés vivent dans la configuration du
+  // serveur, réservée au siège. Un compte pays dépose sans ces garde-fous :
+  // le serveur reste seul juge, l'écran ne fait qu'éviter un aller-retour.
+  const configuration = useReferentiel("configuration", fetchConfiguration, {
+    enabled: canUpload && can("manage_users"),
+  })
+  const rules: UploadRules = configuration.data
+    ? {
+        accept: configuration.data.justificatifs.formats_acceptes
+          .map((f) => (f.startsWith(".") ? f : `.${f}`))
+          .join(","),
+        maxBytes: configuration.data.justificatifs.taille_max_mo * 1024 * 1024,
+        formats: configuration.data.justificatifs.formats_acceptes,
+      }
+    : { formats: [] }
 
   const [uploadOpen, setUploadOpen] = useState(false)
   const [reviewing, setReviewing] = useState<Proof | null>(null)
@@ -88,36 +115,37 @@ export function ProofPanel({
         </div>
         {canUpload && (
           <Button size="sm" onClick={() => setUploadOpen(true)}>
-            <Upload className="mr-1 h-4 w-4" />
+            <Upload className="mr-1 h-4 w-4" aria-hidden />
             Déposer
           </Button>
         )}
       </div>
 
-      {error && (
-        <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      <FormError>{error}</FormError>
 
-      <div className="overflow-hidden rounded-lg border border-border/60 shadow-sm">
+      <div className="overflow-x-auto rounded-lg border border-border/60 shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Fichier</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead>Dépôt</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead scope="col">Fichier</TableHead>
+              <TableHead scope="col">Type</TableHead>
+              <TableHead scope="col">Statut</TableHead>
+              <TableHead scope="col">Dépôt</TableHead>
+              <TableHead scope="col" className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {proofs.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="h-16 text-center text-muted-foreground">
-                  Aucun justificatif.
-                </TableCell>
-              </TableRow>
+              <EmptyRow
+                colSpan={5}
+                icon={FileCheck2}
+                title="Aucun justificatif"
+                hint={
+                  canUpload
+                    ? "Déposez la facture, le reçu ou la décharge qui atteste la dépense."
+                    : "Le dossier a été déclaré sans pièce."
+                }
+              />
             ) : (
               proofs.map((proof) => (
                 <TableRow key={proof.id}>
@@ -129,10 +157,10 @@ export function ProofPanel({
                     </p>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {PROOF_KIND_LABELS[proof.kind] ?? proof.kind_display}
+                    {proof.kind_display || PROOF_KIND_LABELS[proof.kind] || proof.kind}
                   </TableCell>
                   <TableCell>
-                    <ProofStatusBadge status={proof.status} />
+                    <ProofStatusBadge status={proof.status} label={proof.status_display} />
                     {proof.rejection_reason && (
                       <p className="mt-1 max-w-[16rem] text-xs italic text-muted-foreground">
                         {proof.rejection_reason}
@@ -149,8 +177,7 @@ export function ProofPanel({
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="Prévisualiser"
-                        title="Prévisualiser"
+                        aria-label={`Prévisualiser ${proof.original_name}`}
                         onClick={() => setPreviewing(proof)}
                       >
                         <Eye className="h-4 w-4" />
@@ -159,9 +186,9 @@ export function ProofPanel({
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label="Télécharger"
+                      aria-label={`Télécharger ${proof.original_name}`}
                       disabled={busyId === proof.id}
-                      onClick={() => handleDownload(proof)}
+                      onClick={() => void handleDownload(proof)}
                     >
                       {busyId === proof.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -173,7 +200,7 @@ export function ProofPanel({
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="Contrôler"
+                        aria-label={`Contrôler ${proof.original_name}`}
                         onClick={() => setReviewing(proof)}
                       >
                         <FileCheck2 className="h-4 w-4" />
@@ -187,19 +214,26 @@ export function ProofPanel({
         </Table>
       </div>
 
-      <UploadDialog
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
-        dossierId={dossierId}
-        proofs={proofs}
-        onUploaded={onChanged}
-      />
+      {uploadOpen && (
+        <UploadDialog
+          onOpenChange={setUploadOpen}
+          dossierId={dossierId}
+          proofs={proofs}
+          rules={rules}
+          onUploaded={onChanged}
+        />
+      )}
 
-      <ReviewDialog
-        proof={reviewing}
-        onClose={() => setReviewing(null)}
-        onReviewed={onChanged}
-      />
+      {/* Clé sur la pièce : l'état du dialogue (décision, motif) repart de
+          zéro d'une pièce à l'autre. */}
+      {reviewing && (
+        <ReviewDialog
+          key={reviewing.id}
+          proof={reviewing}
+          onClose={() => setReviewing(null)}
+          onReviewed={onChanged}
+        />
+      )}
 
       <ProofPreview proof={previewing} onClose={() => setPreviewing(null)} />
     </div>
@@ -207,16 +241,16 @@ export function ProofPanel({
 }
 
 function UploadDialog({
-  open,
   onOpenChange,
   dossierId,
   proofs,
+  rules,
   onUploaded,
 }: {
-  open: boolean
   onOpenChange: (open: boolean) => void
   dossierId: number
   proofs: Proof[]
+  rules: UploadRules
   onUploaded: () => Promise<void>
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -224,6 +258,7 @@ function UploadDialog({
   const [replaces, setReplaces] = useState<number | "">("")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [progress, setProgress] = useState<number | null>(null)
 
   const replaceable = proofs.filter((p) => p.status !== "archived")
 
@@ -234,44 +269,57 @@ function UploadDialog({
       setError("Sélectionnez un fichier.")
       return
     }
+    if (rules.maxBytes && file.size > rules.maxBytes) {
+      setError(
+        `Le fichier pèse ${formatSize(file.size)} ; la limite est de ${formatSize(rules.maxBytes)}.`,
+      )
+      return
+    }
     setSaving(true)
     setError(null)
+    setProgress(0)
     try {
       const form = new FormData()
       form.append("dossier", String(dossierId))
       form.append("kind", kind)
       form.append("file", file)
       if (replaces !== "") form.append("replaces", String(replaces))
-      await uploadProof(form)
+      await uploadProof(form, (event) => {
+        if (event.total) setProgress(Math.round((event.loaded / event.total) * 100))
+      })
       await onUploaded()
       onOpenChange(false)
-      setReplaces("")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Dépôt impossible")
     } finally {
       setSaving(false)
+      setProgress(null)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Déposer un justificatif</DialogTitle>
           <DialogDescription>
-            PDF, image ou document. Un fichier déjà présent sur ce dossier est
-            refusé, sauf s'il remplace explicitement une version antérieure.
+            {rules.formats.length > 0
+              ? `Formats acceptés : ${rules.formats.join(", ")}.`
+              : "PDF, image ou document."}{" "}
+            Un fichier déjà présent sur ce dossier est refusé, sauf s'il
+            remplace explicitement une version antérieure.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-          {error && (
-            <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+        <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
+          <FormError>{error}</FormError>
           <div className="grid gap-2">
             <Label htmlFor="proof-file">Fichier</Label>
-            <Input id="proof-file" type="file" ref={fileRef} required />
+            <Input id="proof-file" type="file" ref={fileRef} accept={rules.accept} required />
+            {rules.maxBytes && (
+              <p className="text-xs text-muted-foreground">
+                Taille maximale : {formatSize(rules.maxBytes)}.
+              </p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="proof-kind">Type</Label>
@@ -306,6 +354,17 @@ function UploadDialog({
               </NativeSelect>
             </div>
           )}
+          {progress !== null && (
+            <div className="grid gap-1">
+              <progress
+                aria-label="Envoi du fichier"
+                value={progress}
+                max={100}
+                className="h-1.5 w-full overflow-hidden rounded-full bg-muted [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
+              />
+              <p className="text-xs text-muted-foreground">Envoi… {progress} %</p>
+            </div>
+          )}
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -336,7 +395,7 @@ function ReviewDialog({
   onClose,
   onReviewed,
 }: {
-  proof: Proof | null
+  proof: Proof
   onClose: () => void
   onReviewed: () => Promise<void>
 }) {
@@ -347,14 +406,16 @@ function ReviewDialog({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!proof) return
+    if (status === "rejected" && !reason.trim()) {
+      setError("Un rejet doit être motivé.")
+      return
+    }
     setSaving(true)
     setError(null)
     try {
       await reviewProof(proof.id, status, reason)
       await onReviewed()
       onClose()
-      setReason("")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Contrôle impossible")
     } finally {
@@ -363,20 +424,16 @@ function ReviewDialog({
   }
 
   return (
-    <Dialog open={proof !== null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Contrôle documentaire</DialogTitle>
           <DialogDescription>
-            {proof?.original_name} — un rejet doit être motivé.
+            {proof.original_name} — un rejet doit être motivé.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-          {error && (
-            <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+        <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
+          <FormError>{error}</FormError>
           <div className="grid gap-2">
             <Label htmlFor="review-status">Décision</Label>
             <NativeSelect
@@ -405,7 +462,7 @@ function ReviewDialog({
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={onClose}>
-                <X className="mr-1 h-4 w-4" />
+                <X className="mr-1 h-4 w-4" aria-hidden />
                 Annuler
               </Button>
               <Button type="submit" disabled={saving} className="ml-2">
