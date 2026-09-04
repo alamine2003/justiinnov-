@@ -60,7 +60,10 @@
     "deconnexion": "Sign out",
     "menu_utilisateur": "Account menu",
     "reservee_siege": "This page is restricted to headquarters: you have been taken back to the dashboard.",
-    "equipes": "Teams"
+    "equipes": "Teams",
+    "supervision": "Monitoring",
+    "activer_2fa": "Enable two-factor authentication",
+    "totp_active": "2FA active"
   },
   "erreurs": {
     "injoignable": "Server unreachable. Check your connection.",
@@ -124,9 +127,9 @@
     "roles": {
       "super_admin": "Super administrator (CEO, COO, DEV)",
       "admin": "Administrator (HR)",
-      "df": "CFO — finance department",
-      "dm": "DM — manager's supervisor",
-      "manager": "Manager"
+      "df": "DF — finance director (headquarters)",
+      "dm": "DM — director manager (headquarters)",
+      "manager": "Manager (country)"
     },
     "workflow": {
       "draft": "Draft",
@@ -283,7 +286,10 @@
       "code_six_chiffres": "The code has six digits.",
       "enrolement_impossible": "Unable to start enrolment",
       "confirmation_impossible": "Unable to confirm",
-      "aide_connexion": "Enter the six-digit code from your authenticator app. Leave empty if you are not enrolled yet."
+      "aide_connexion": "Only if you have enabled two-factor authentication.",
+      "volontaire_titre": "Enable two-factor authentication",
+      "volontaire_texte": "A one-time code will be added to your password at every sign-in. It is optional until headquarters requires it, and recommended for anyone who reviews or justifies expenses.",
+      "plus_tard": "Later"
     }
   },
   "dossiers": {
@@ -405,7 +411,7 @@
     },
     "circuit": {
       "soumettre": "Submit",
-      "prendre_en_controle": "Take under review",
+      "prendre_en_controle": "Put under review",
       "marquer_justifie": "Mark as justified",
       "marquer_non_justifie": "Mark as unjustified",
       "cloturer": "Close"
@@ -761,7 +767,7 @@
     },
     "managers": {
       "titre": "Manager(s)",
-      "description": "Country managers assigned to this country.",
+      "description": "Managers attached to this country.",
       "fonction": "Position",
       "retrait_impossible": "Unable to remove",
       "vide_titre": "No manager assigned",
@@ -870,13 +876,13 @@
     },
     "utilisateurs": {
       "titre": "Accounts",
-      "description": "Roles and scopes. A headquarters account sees every country; a country manager sees only their own.",
+      "description": "Roles and scopes. DM and DF are headquarters accounts that can be restricted to countries; the manager is a country account and sees only their own country.",
       "creer": "Create an account",
       "chargement_impossible": "Unable to load the accounts",
       "statut_impossible": "Unable to change the status",
       "perimetre": "Scope",
       "vide_titre": "No account",
-      "vide_aide": "Create the accounts of the country representatives.",
+      "vide_aide": "Create the headquarters accounts and those of the country managers.",
       "mdp_provisoire": "temporary password",
       "soi_meme": "Another administrator has to do it.",
       "modifier_aria": "Edit {{nom}}",
@@ -891,17 +897,19 @@
         "role_siege": "{{role}} — headquarters",
         "role_pays": "{{role}} — country",
         "perimetre_legend": "Countries in scope",
-        "siege_aide": "Headquarters role: access to every country, with no attachment.",
         "aucun_pays": "No active country.",
         "mot_de_passe": "Password",
         "mot_de_passe_optionnel": "Password (leave blank to keep it)",
         "compte_actif": "Account active",
         "role_requis": "Choose a role.",
-        "pays_requis": "A country role must be attached to at least one country.",
+        "pays_requis": "A country account must be attached to at least one country.",
         "mdp_requis": "A temporary password is required to create an account.",
         "email_requis": "An e-mail address is required.",
         "email_aide": "@innovpharma.net address: it names the account in the authenticator app.",
-        "email_exemple": "first.last@innovpharma.net"
+        "email_exemple": "first.last@innovpharma.net",
+        "role_aide": "DM and DF are headquarters accounts that can be restricted to countries; the manager is a country account. The administrator (HR) and the super administrator see everything.",
+        "perimetre_aide_siege": "Optional for a headquarters account: with no country ticked, it sees every country. Tick countries to restrict a DM or a DF.",
+        "perimetre_aide_pays": "A manager is attached to at least one country."
       },
       "totp_active": "2FA active",
       "totp_a_enroler": "2FA to set up",

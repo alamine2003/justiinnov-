@@ -267,10 +267,18 @@ services:
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD manquant}
-      # Un seul compte, celui de l'exploitant : pas d'inscription, pas
-      # d'accès anonyme, et rien ne part vers grafana.com.
+      # Trois comptes, créés par l'administrateur (README.md, « Supervision ») :
+      # « direction » (Viewer), « technique » (Editor) et l'administrateur
+      # lui-même. Pas d'inscription, pas d'accès anonyme, et rien ne part
+      # vers grafana.com. Un Viewer ne modifie rien, pas même « pour voir ».
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_VIEWERS_CAN_EDIT: "false"
+      GF_USERS_EDITORS_CAN_ADMIN: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Le tableau de bord provisionné accueille chacun à la connexion, dans
+      # le thème de l'application ; personne n'a à le chercher.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/justi-innov.json
+      GF_USERS_DEFAULT_THEME: light
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"

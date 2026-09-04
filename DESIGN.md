@@ -4,7 +4,7 @@
 > Les tokens vivent dans `frontend/src/index.css` ; ce document dit comment
 > s'en servir.
 
-L'application sert la direction financière du siège et les responsables des
+L'application sert le siège — DM, DF, RH, direction — et les managers des
 filiales, qui lisent des chiffres et cherchent des preuves, sur un poste de
 travail — dans un navigateur ou dans l'application de bureau installée
 (PWA) ; l'usage sur téléphone n'est pas un cas prévu. Trois principes en
@@ -204,38 +204,63 @@ profil. Les dates et les montants se formatent dans la langue choisie
 (`formatDate`, `formatAmount` lisent la langue courante), la devise reste
 celle du pays.
 
+### Menu du compte
+
+En haut à droite, à côté des sélecteurs de thème et de langue
+(`user-menu.tsx`). Il porte, dans l'ordre : l'identité (`username ·
+role_display`) avec une pastille **« 2FA active »** (`Badge`,
+`STATUS_TONES.SUCCES`) quand `totp_confirmed` est vrai ; les équipes d'un
+manager qui y est rattaché ; **« Activer la double authentification »**
+(icône `ShieldCheck`, lien vers `/2fa`) tant que `totp_confirmed` est
+faux — rien quand le serveur ne connaît pas la 2FA ; **« Supervision »**
+(icône `Activity`) pour les administrateurs seulement (`can("manage_users")`),
+qui ouvre `/grafana/` — chemin relatif à l'origine, servi par Caddy — dans
+un nouvel onglet avec `rel="noopener noreferrer"`, parce que Grafana a sa
+propre session ; « Installer l'application » quand le navigateur le
+permet ; « Déconnexion ». Les libellés de menu vivent dans un
+`DropdownMenuGroup` : base-ui refuse un `DropdownMenuLabel` orphelin.
+
 ### Double authentification
 
-Deux écrans, dans la même mise en page que l'écran de connexion et celui
-du mot de passe provisoire (`password-notice.tsx`) : la plateforme reste
-**fermée** tant qu'ils ne sont pas passés, comme pour un mot de passe
-provisoire.
+Elle est **proposée, pas imposée** — décision reportée par la direction.
+`GET /api/me/` porte la politique (`totp_required`, faux par défaut) et
+l'état (`totp_confirmed`) ; `platformClosed` et `totpEnrolmentRequired`
+(`lib/accounts.ts`) en tirent les conséquences, jamais une page.
 
-- **Enrôlement** (première connexion, ou après réinitialisation par un
-  administrateur — le serveur répond `403 {"totp_setup_required": true}`
-  et le client y va comme il va à l'écran du mot de passe provisoire) :
-  `POST /api/me/2fa/enrol/` donne `qr_png_base64`, `otpauth_uri` et
-  `secret` ; le QR au centre, le secret en clair dessous en
-  `font-mono` avec un bouton « Copier » pour qui ne peut pas scanner, un
-  champ « Code à six chiffres » (`inputMode="numeric"`, `autoComplete=
-  "one-time-code"`), un bouton principal « Confirmer »
-  (`POST /api/me/2fa/confirm/ {code}`). Une phrase dit ce
-  qu'il faut : « Scannez ce code avec votre application d'authentification,
-  puis saisissez le code qu'elle affiche. » Le secret ne sera plus montré :
-  l'écran le dit.
-- **Vérification** (chaque connexion) : le champ « Code » s'ajoute à
-  l'écran de connexion lui-même — `POST /api/token-auth/` prend
-  `{username, password, code}` et répond `400 totp_required` sans code
-  valide ; la première tentative sans code sert à faire apparaître le
-  champ, sans perdre l'identifiant ni le mot de passe. Le bouton
-  « Se connecter », et un lien « Je n'ai plus accès à mon application »
-  qui n'ouvre rien d'automatique : il explique que seul un administrateur
-  peut réinitialiser l'enrôlement, et à qui s'adresser.
+- **Enrôlement** (`/2fa`, `totp-notice.tsx`, dans la même mise en page que
+  l'écran du mot de passe provisoire) : `POST /api/me/2fa/enrol/` donne
+  `qr_png_base64`, `otpauth_uri` et `secret` ; le QR au centre, le secret
+  en clair dessous en `font-mono` avec un bouton « Copier » pour qui ne
+  peut pas scanner, un champ « Code à six chiffres » (`inputMode="numeric"`,
+  `autoComplete="one-time-code"`), un bouton principal « Confirmer »
+  (`POST /api/me/2fa/confirm/ {code}`). Une phrase dit ce qu'il faut :
+  « Scannez ce code avec votre application d'authentification, puis
+  saisissez le code qu'elle affiche. » Le secret ne sera plus montré :
+  l'écran le dit. On y vient de deux façons :
+  - **volontairement**, par le menu du compte : `<Alert>` neutre
+    « Activer la double authentification », bouton `outline` « Plus tard »
+    qui ramène à l'accueil, navigation ordinaire autour ;
+  - **imposé**, quand `totp_required` est vrai et le compte non enrôlé
+    (première connexion, ou après réinitialisation par un administrateur —
+    le serveur répond `403 {"totp_setup_required": true}` et le client y
+    va comme il va à l'écran du mot de passe provisoire) : `<Alert>` en
+    `statut-attente`, pas de « Plus tard », et la plateforme reste
+    **fermée** — aucun menu — tant que l'écran n'est pas passé, après
+    celui du mot de passe provisoire.
+- **Vérification** (chaque connexion d'un compte enrôlé) : le champ
+  « Code » est sur l'écran de connexion lui-même, toujours visible et
+  **facultatif**, avec l'aide « Uniquement si vous avez activé la double
+  authentification » — `POST /api/token-auth/` prend `{username, password,
+  code}` et répond `400 totp_required` sans code valide à un compte
+  enrôlé ; le champ devient alors exigé, sans perdre l'identifiant ni le
+  mot de passe. Le bouton « Se connecter », et un lien « Je n'ai plus accès
+  à mon application » qui n'ouvre rien d'automatique : il explique que seul
+  un administrateur peut réinitialiser l'enrôlement, et à qui s'adresser.
 
 Un code refusé s'affiche en `<FormError>` sans vider le champ ; on ne
 désactive pas le bouton pour un champ vide (règle d'accessibilité
 ci-dessous). Aucune option « se souvenir de cet appareil » : le code est
-demandé à chaque connexion.
+demandé à chaque connexion d'un compte enrôlé.
 
 ### Réouverture d'un dossier
 
@@ -323,6 +348,10 @@ erreur**. Regardez les captures : plusieurs défauts de ce projet — un
 jamais rendu — n'ont été trouvés que là. Le compte siège utilisé ne doit pas
 avoir de mot de passe provisoire (`must_change_password: false`), sans quoi
 la plateforme fermée ne montre que l'écran de changement de mot de passe.
+`SHOT_*_TOTP_SECRET` ne sert qu'à un compte enrôlé ; le parcours du siège
+attend la pastille « 2FA active », donc un compte siège enrôlé. Le menu du
+compte ne s'ouvre pas dans jsdom (base-ui) : c'est ce parcours qui le
+vérifie.
 `SHOT_BASE` (défaut `http://localhost:5173`) et `SHOT_OUT` (défaut `/tmp`)
 ciblent une autre pile ou un autre dossier ; la CI les pointe sur la pile
 livrable, port 8080.

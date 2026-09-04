@@ -40,9 +40,24 @@ export function resetTwoFactor(userId: number) {
   return apiPost<AccountUser>(`/users/${userId}/reset-2fa/`, {})
 }
 
-/** Vrai tant que le compte n'a pas droit à l'application : mot de passe provisoire ou 2FA à enrôler. */
+/** Chemin de l'écran de remplacement du mot de passe provisoire. */
+export const PASSWORD_PATH = "/mot-de-passe"
+
+/** Chemin de l'écran d'enrôlement de la double authentification. */
+export const TOTP_PATH = "/2fa"
+
+/**
+ * Vrai quand le serveur impose la double authentification à un compte qui
+ * ne l'a pas encore enrôlée. Par défaut elle est seulement proposée : un
+ * serveur qui ne connaît pas `totp_required` n'impose rien.
+ */
+export function totpEnrolmentRequired(me: Me | null): boolean {
+  return Boolean(me && me.totp_required === true && me.totp_confirmed === false)
+}
+
+/** Vrai tant que le compte n'a pas droit à l'application : mot de passe provisoire ou 2FA imposée à enrôler. */
 export function platformClosed(me: Me | null): boolean {
-  return Boolean(me && (me.must_change_password || me.totp_confirmed === false))
+  return Boolean(me && (me.must_change_password || totpEnrolmentRequired(me)))
 }
 
 export function fetchUsers(params?: Record<string, unknown>, signal?: AbortSignal) {

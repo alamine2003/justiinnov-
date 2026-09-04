@@ -11,8 +11,8 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
     first_name: "",
     last_name: "",
     email: "",
-    role: "dm",
-    role_display: "Responsable pays",
+    role: "manager",
+    role_display: "Manager (pays)",
     countries: [{ id: 1, name: "Togo", code: "TG", country_ref: "TG" }],
     teams: [],
     has_global_scope: false,
@@ -26,6 +26,7 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
       manage_subentities: false,
       manage_budgets: false,
       record_expenses: true,
+      review_expenses: false,
       validate_expenses: false,
       view_audit: false,
       export_data: false,
@@ -126,8 +127,8 @@ describe("garde des routes", () => {
     expect(await screen.findByRole("heading", { name: "Pilotage" })).toBeInTheDocument()
   })
 
-  it("n'ouvre que l'écran d'enrôlement tant que la double authentification n'est pas confirmée", async () => {
-    me = profil({ totp_confirmed: false })
+  it("n'ouvre que l'écran d'enrôlement quand le serveur impose la 2FA à un compte non enrôlé", async () => {
+    me = profil({ totp_required: true, totp_confirmed: false })
     ouvrir("/dossiers")
 
     expect(
@@ -136,9 +137,35 @@ describe("garde des routes", () => {
     await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/2fa"))
   })
 
+  it("laisse entrer un compte non enrôlé quand la 2FA n'est pas imposée", async () => {
+    // Politique par défaut : la double authentification se propose, elle
+    // ne ferme rien.
+    me = profil({ totp_required: false, totp_confirmed: false })
+    ouvrir("/")
+
+    expect(await screen.findByRole("heading", { name: "Pilotage" })).toBeInTheDocument()
+    expect(screen.getByTestId("pathname")).toHaveTextContent("/")
+  })
+
+  it("laisse entrer un compte non enrôlé quand le serveur ne dit pas sa politique", async () => {
+    me = profil({ totp_required: undefined, totp_confirmed: false })
+    ouvrir("/")
+
+    expect(await screen.findByRole("heading", { name: "Pilotage" })).toBeInTheDocument()
+  })
+
+  it("ouvre l'écran d'enrôlement à qui vient l'activer de lui-même", async () => {
+    me = profil({ totp_required: false, totp_confirmed: false })
+    ouvrir("/2fa")
+
+    expect(
+      await screen.findByRole("heading", { name: "Lier votre application d'authentification" }),
+    ).toBeInTheDocument()
+  })
+
   it("fait passer le mot de passe provisoire avant l'enrôlement", async () => {
     // Le serveur refuse tout dans cet ordre : d'abord le mot de passe.
-    me = profil({ must_change_password: true, totp_confirmed: false })
+    me = profil({ must_change_password: true, totp_required: true, totp_confirmed: false })
     ouvrir("/2fa")
 
     expect(

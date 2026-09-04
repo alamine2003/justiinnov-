@@ -79,8 +79,8 @@ export function AppLayout() {
     navigate("/login")
   }
 
-  // Un représentant pays n'a qu'un périmètre : l'afficher évite toute
-  // ambiguïté sur les données consultées.
+  // Un manager, ou un DM/DF restreint à des pays, n'a qu'un périmètre :
+  // l'afficher évite toute ambiguïté sur les données consultées.
   const scope = me?.has_global_scope
     ? t("commun.siege_tous_pays")
     : me?.countries.map((c) => c.country_ref ?? c.name).join(", ")

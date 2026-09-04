@@ -119,9 +119,10 @@ docker compose -f docker-compose.prod.yml exec backend \
 ```
 
 Chaque compte porte une adresse en `ALLOWED_EMAIL_DOMAINS`
-(`innovpharma.net`), un mot de passe provisoire, et s'enrôle à la double
-authentification à sa première connexion (voir plus bas). Seules la Côte
-d'Ivoire et le Togo existent au départ ; les quinze autres filiales se
+(`innovpharma.net`), un mot de passe provisoire, et peut activer la double
+authentification depuis le menu de son compte — ou doit le faire à sa
+première connexion si `DJANGO_TOTP_REQUIRED=1` (voir plus bas). Seules la
+Côte d'Ivoire et le Togo existent au départ ; les quinze autres filiales se
 créent depuis l'écran des pays, parmi les codes de `backend/core/africa.py`.
 
 Vérifiez ensuite la supervision : `https://<domaine>/grafana/` demande le
@@ -129,14 +130,30 @@ compte `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`, et le tableau de
 bord « JUSTI INNOV — supervision » doit montrer ses quatre cibles « en
 ligne ». Une cible `backend` « hors ligne » alors que l'API répond signifie
 presque toujours un `METRICS_TOKEN` vide ou différent entre `.env` et le
-conteneur (relancez la pile après l'avoir changé).
+conteneur (relancez la pile après l'avoir changé). Créez alors les comptes
+« direction » et « technique » (« Supervision », plus bas).
 
-## Double authentification : réinitialiser un enrôlement
+## Double authentification
 
-Tout compte doit présenter un code TOTP en plus de son mot de passe, et la
-plateforme reste fermée à un compte non enrôlé. Un titulaire qui a perdu son
-téléphone ou son application ne peut donc plus rien faire, et personne ne
-peut lui « donner » un code : le secret n'a été remis qu'à lui.
+Elle est **facultative par défaut** : la direction a reporté son
+obligation, le code reste prêt. Chacun l'active depuis le menu de son
+compte (« Activer la double authentification »), et un compte enrôlé
+présente son code à chaque connexion — le champ « Code » de l'écran de
+connexion est là pour lui, facultatif pour les autres. Recommandez-la à qui
+contrôle ou justifie.
+
+Pour l'imposer à tous, posez `DJANGO_TOTP_REQUIRED=1` dans `.env` et
+relancez la pile : la plateforme reste alors fermée à tout compte non
+enrôlé jusqu'à son premier code, comme pour un mot de passe provisoire,
+et `GET /api/me/` l'annonce (`totp_required`). Prévenez les comptes avant :
+chacun devra avoir une application d'authentification sous la main à sa
+connexion suivante.
+
+### Réinitialiser un enrôlement
+
+Un titulaire enrôlé qui a perdu son téléphone ou son application ne peut
+plus se connecter, et personne ne peut lui « donner » un code : le secret
+n'a été remis qu'à lui.
 
 Seul un administrateur (`admin` ou `super_admin`) réinitialise l'enrôlement,
 depuis la fiche du compte dans l'écran des comptes (`POST
@@ -151,7 +168,7 @@ d'identité par un autre canal — un appel, pas un e-mail : c'est exactement
 le cas où un compte de messagerie compromis chercherait à se faire
 réinitialiser.
 
-Les administrateurs eux-mêmes ne sont pas exemptés. Prévoyez donc **deux
+Les administrateurs enrôlés ne sont pas exemptés. Prévoyez donc **deux
 comptes `super_admin`** au moins, pour que l'un puisse réinitialiser
 l'autre ; à défaut, la réinitialisation passe par le back-office Django
 (`/admin/`, réservé à `super_admin`) ou par le shell, ce qui ne laisse une
@@ -342,8 +359,54 @@ rien n'est arrêté :
 ## Supervision (Prometheus et Grafana)
 
 Quatre services de la pile, sur le réseau interne ; seul Grafana est
-atteignable, par Caddy, sur `https://<domaine>/grafana/`, derrière son
-propre mot de passe (`GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`).
+atteignable, par Caddy, sur `https://<domaine>/grafana/`, derrière ses
+propres comptes — distincts de ceux de l'application. Les administrateurs
+de l'application y arrivent par l'entrée « Supervision » du menu de leur
+compte, qui ouvre `/grafana/` dans un nouvel onglet.
+
+### Comptes Grafana
+
+Grafana est partagé avec la direction et l'équipe technique. Trois comptes,
+pas plus : l'administrateur (`GRAFANA_ADMIN_USER` /
+`GRAFANA_ADMIN_PASSWORD`, réservé à l'exploitation), **« direction »** en
+lecture seule et **« technique »** en édition. `docker-compose.prod.yml`
+règle ce qui rend le partage sûr et confortable :
+
+| Variable | Effet |
+|---|---|
+| `GF_USERS_VIEWERS_CAN_EDIT=false` | un Viewer ne modifie rien, pas même « pour voir » : la direction lit |
+| `GF_USERS_EDITORS_CAN_ADMIN=false` | un Editor ne gère ni comptes ni organisation |
+| `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH` | le tableau de bord « JUSTI INNOV — supervision » est la page d'accueil de chacun |
+| `GF_USERS_DEFAULT_THEME=light` | thème clair par défaut, comme l'application ; chacun change le sien |
+| `GF_USERS_ALLOW_SIGN_UP=false`, `GF_AUTH_ANONYMOUS_ENABLED=false` | pas d'inscription, pas d'accès anonyme |
+
+Les deux comptes se créent une fois, depuis l'administrateur — dans
+Grafana (Administration › Users and access › Users › New user, puis le rôle
+dans l'organisation) ou par l'API, depuis n'importe quel poste :
+
+```bash
+GRAFANA=https://<domaine>/grafana
+AUTH="$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD"
+# Un nouveau compte reçoit le rôle Viewer (GF_USERS_AUTO_ASSIGN_ORG_ROLE) :
+# « direction » n'a rien de plus à régler.
+curl -fsS -u "$AUTH" -H 'Content-Type: application/json' \
+    -X POST "$GRAFANA/api/admin/users" \
+    -d '{"name":"Direction","login":"direction","password":"<mot de passe 1>"}'
+curl -fsS -u "$AUTH" -H 'Content-Type: application/json' \
+    -X POST "$GRAFANA/api/admin/users" \
+    -d '{"name":"Équipe technique","login":"technique","password":"<mot de passe 2>"}'
+# « technique » passe Editor ; l'identifiant est celui renvoyé ("id") par la
+# création, ou se lit dans GET /api/org/users.
+curl -fsS -u "$AUTH" -H 'Content-Type: application/json' \
+    -X PATCH "$GRAFANA/api/org/users/<id de technique>" -d '{"role":"Editor"}'
+```
+
+Remettez chaque mot de passe par un autre canal que l'e-mail, et
+changez-le si la personne change : ce sont des comptes de fonction, pas de
+personne. Un Viewer voit les mesures d'exploitation, jamais une donnée
+métier (voir plus bas) ; un Editor peut composer d'autres tableaux de bord
+et poser des alertes, mais le tableau de bord de la plateforme vient du
+dépôt et reste en lecture seule pour tous.
 
 | Service | Image | Rôle |
 |---|---|---|

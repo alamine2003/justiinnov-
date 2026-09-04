@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { AppLayout } from "@/components/layout/app-layout"
 import { ErrorBoundary } from "@/components/ui/error-boundary"
 import { useAuth } from "@/context/use-auth"
+import { PASSWORD_PATH, TOTP_PATH, totpEnrolmentRequired } from "@/lib/accounts"
 import type { Permissions } from "@/lib/types"
 
 // Chaque page est un fichier chargé à la première visite : l'écran de
@@ -31,12 +32,6 @@ export function FullPageLoader() {
     </div>
   )
 }
-
-/** Chemin de l'écran de remplacement du mot de passe provisoire. */
-export const PASSWORD_PATH = "/mot-de-passe"
-
-/** Chemin de l'écran d'enrôlement de la double authentification. */
-export const TOTP_PATH = "/2fa"
 
 function Protected({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
@@ -71,9 +66,10 @@ function Protected({ children }: { children: ReactNode }) {
   if (me.must_change_password && location.pathname !== PASSWORD_PATH) {
     return <Navigate to={PASSWORD_PATH} replace />
   }
-  // Puis, mot de passe remplacé, la double authentification : même
-  // fermeture tant que l'application d'authentification n'est pas liée.
-  if (!me.must_change_password && me.totp_confirmed === false && location.pathname !== TOTP_PATH) {
+  // Puis, mot de passe remplacé, la double authentification — seulement
+  // quand le serveur l'impose (`totp_required`). Sinon elle se propose
+  // depuis le menu du compte, et l'application s'ouvre.
+  if (!me.must_change_password && totpEnrolmentRequired(me) && location.pathname !== TOTP_PATH) {
     return <Navigate to={TOTP_PATH} replace />
   }
   return <>{children}</>
@@ -113,6 +109,12 @@ function PasswordRoute() {
   return <PasswordPage />
 }
 
+/**
+ * L'écran d'enrôlement se rend à qui n'a pas encore lié son application —
+ * qu'il y soit envoyé par la politique du serveur ou qu'il y vienne de
+ * lui-même. Un compte déjà enrôlé, ou un serveur qui ignore la 2FA, n'y a
+ * rien à faire.
+ */
 function TwoFactorRoute() {
   const { me } = useAuth()
   if (!me || me.totp_confirmed !== false) {

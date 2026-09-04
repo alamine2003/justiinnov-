@@ -14,7 +14,7 @@ function compte(overrides: Partial<AccountUser>): AccountUser {
     last_name: "Togo",
     email: "ama.togo@innovpharma.net",
     is_active: true,
-    role: "dm",
+    role: "manager",
     countries: [1],
     countries_detail: [{ id: 1, name: "Togo", code: "TG", country_ref: "TG-01" }],
     must_change_password: false,
@@ -32,7 +32,8 @@ vi.mock("@/lib/accounts", () => ({
     Promise.resolve({
       roles: [
         { value: "super_admin", label: "Super administrateur", siege: true },
-        { value: "dm", label: "DM", siege: false },
+        { value: "dm", label: "DM", siege: true },
+        { value: "manager", label: "Manager", siege: false },
       ],
       capabilities: [],
       editable: false,
@@ -41,7 +42,13 @@ vi.mock("@/lib/accounts", () => ({
 }))
 
 vi.mock("@/lib/countries", () => ({
-  fetchCountries: () => Promise.resolve({ count: 0, next: null, previous: null, results: [] }),
+  fetchCountries: () =>
+    Promise.resolve({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{ id: 1, name: "Togo", code: "TG", country_ref: "TG-01", is_active: true }],
+    }),
 }))
 
 vi.mock("@/context/use-auth", () => ({
@@ -125,5 +132,35 @@ describe("UsersSection — double authentification", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Hors de votre hiérarchie.")
     expect(screen.getByRole("dialog")).toBeInTheDocument()
+  })
+})
+
+describe("UsersSection — périmètre selon le rôle", () => {
+  beforeEach(() => {
+    fetchUsers.mockReset()
+    fetchUsers.mockResolvedValue(page([]))
+  })
+
+  it("exige un pays pour un compte de pays", async () => {
+    render(<UsersSection />)
+    fireEvent.click(await screen.findByRole("button", { name: "Créer un compte" }))
+
+    const role = await screen.findByLabelText("Rôle")
+    fireEvent.change(role, { target: { value: "manager" } })
+
+    expect(screen.getByText("Un manager est rattaché à au moins un pays.")).toBeInTheDocument()
+  })
+
+  it("propose le périmètre, facultatif, à un compte du siège restrictible", async () => {
+    // Le DM est au siège : sans pays coché il voit tout, un pays coché le
+    // restreint. La liste reste donc affichée.
+    render(<UsersSection />)
+    fireEvent.click(await screen.findByRole("button", { name: "Créer un compte" }))
+
+    const role = await screen.findByLabelText("Rôle")
+    fireEvent.change(role, { target: { value: "dm" } })
+
+    expect(screen.getByText(/Facultatif pour un compte du siège/)).toBeInTheDocument()
+    expect(screen.getByRole("checkbox", { name: /Togo/ })).toBeInTheDocument()
   })
 })

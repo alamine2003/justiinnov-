@@ -96,13 +96,19 @@ export function WorkflowActions({
   // « En contrôle » : proposer « Marquer justifié » mènerait à un refus.
   const requireReview = Boolean(me?.workflow?.require_review_step)
 
-  // Soumettre relève de la saisie, les autres transitions du contrôle.
+  // Soumettre relève de la saisie (le manager), la mise en contrôle du DM,
+  // le constat — justifier, refuser, clôturer — du DF. Un serveur qui ne
+  // distingue pas encore la mise en contrôle la range avec le constat.
+  const canReview = me?.permissions?.review_expenses ?? can("validate_expenses")
+  const permitted = (action: TransitionName): boolean => {
+    if (action === "submit") return can("record_expenses")
+    if (action === "review") return canReview
+    return can("validate_expenses")
+  }
   const allowed = (AVAILABLE[status] ?? [])
     .filter((action) => !(hideSubmit && action === "submit"))
     .filter((action) => !(requireReview && status === "submitted" && action === "justify"))
-    .filter((action) =>
-      can(action === "submit" ? "record_expenses" : "validate_expenses"),
-    )
+    .filter(permitted)
 
   if (allowed.length === 0) return null
 

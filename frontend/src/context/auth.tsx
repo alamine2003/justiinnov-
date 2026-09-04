@@ -12,7 +12,7 @@ import {
   onUnauthorized,
   setToken,
 } from "@/lib/api"
-import { fetchMe } from "@/lib/accounts"
+import { TOTP_PATH, fetchMe } from "@/lib/accounts"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import type { Me, Permissions } from "@/lib/types"
 import { AuthContext } from "@/context/auth-context"
@@ -127,12 +127,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     }
     const unsubscribePassword = onPasswordChangeRequired(relire)
-    const unsubscribeTotp = onTotpSetupRequired(relire)
+    // Le serveur a refusé une requête faute d'enrôlement : sa politique
+    // fait foi, quoi que dise le profil en mémoire. On relit le profil et on
+    // mène à l'écran d'enrôlement.
+    const unsubscribeTotp = onTotpSetupRequired(() => {
+      relire()
+      navigate(TOTP_PATH, { replace: true })
+    })
     return () => {
       unsubscribePassword()
       unsubscribeTotp()
     }
-  }, [refreshProfile])
+  }, [navigate, refreshProfile])
 
   const can = useCallback(
     (permission: keyof Permissions) => Boolean(me?.permissions?.[permission]),

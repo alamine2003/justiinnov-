@@ -98,13 +98,27 @@ l'application.
   créer une entité chez le voisin.
 - **Toute action sensible laisse une trace** dans `ChangeLog` ou `AuditLog` :
   qui, quoi, quand, depuis quelle adresse, ancienne et nouvelle valeur.
-- **Le pays déclare, le siège constate.** Un responsable pays ne justifie
-  jamais une dépense, pas même la sienne : il la soumet, et le siège tranche.
-  Et celui qui a saisi une dépense ne peut pas la justifier lui-même, fût-il
-  au siège — il faut deux personnes.
-- **Déclarer tient en une action.** Le pays remplit ses lignes, joint la
+- **Le manager déclare, le DM contrôle, le DF constate.** Côté pays, seul
+  le `manager` saisit et soumet. Au siège, le `dm` (directeur manager) met
+  en contrôle (`review_expenses`), le `df` (directeur financier) justifie,
+  refuse ou clôture (`validate_expenses`) ; `admin` (RH) et `super_admin`
+  peuvent tout. Un manager ne justifie jamais une dépense, pas même la
+  sienne. Et celui qui a saisi une dépense ne peut pas la justifier
+  lui-même, fût-il au siège — il faut deux personnes.
+- **La RH gère tous les pays.** Le référentiel d'un pays (équipes, projets,
+  intitulés, catégories, bénéficiaires) est tenu par `admin` et
+  `super_admin` sur tous les pays, et par le `manager` sur le sien
+  (`manage_subentities`). `dm` et `df` sont des comptes du siège,
+  restrictibles à des pays ; `admin` et `super_admin` sont toujours globaux.
+- **Déclarer tient en une action.** Le manager remplit ses lignes, joint la
   pièce et soumet le dossier : ses lignes partent avec lui. Un dossier vide ne
   se soumet pas ; un dossier sans pièce se soumet avec un avertissement.
+- **La double authentification est proposée, pas imposée** — décision
+  reportée par la direction. `GET /api/me/` expose `totp_required`
+  (politique du serveur, `DJANGO_TOTP_REQUIRED`, faux par défaut) et
+  `totp_confirmed`. L'interface ne ferme la plateforme que si le premier
+  est vrai et le second faux ; sinon elle propose l'enrôlement depuis le
+  menu du compte. Un compte enrôlé présente son code à chaque connexion.
 - **Un rejet exige un motif.** Une réouverture aussi.
 - **Les fichiers entrent et sortent par les administrateurs.** L'import
   Excel et les exports (`xlsx`, `csv`, `docx`, `pdf` ; `year`, `month`

@@ -147,6 +147,12 @@ export interface Permissions {
   manage_subentities: boolean
   manage_budgets: boolean
   record_expenses: boolean
+  /**
+   * Mise en contrôle d'une dépense soumise : le DM, au siège. Absente sur un
+   * serveur qui ne la connaît pas encore — `validate_expenses` fait alors foi.
+   */
+  review_expenses?: boolean
+  /** Justifier, constater l'absence de preuve, clôturer : le DF, au siège. */
   validate_expenses: boolean
   view_audit: boolean
   /** Exports et import de classeurs : administrateurs seulement. */
@@ -177,8 +183,15 @@ export interface Me {
   has_global_scope: boolean
   must_change_password: boolean
   /**
+   * Politique du serveur (`DJANGO_TOTP_REQUIRED`) : vrai, la plateforme
+   * reste fermée à un compte non enrôlé ; faux (défaut) ou absent, la
+   * double authentification est proposée, jamais imposée.
+   */
+  totp_required?: boolean
+  /**
    * Double authentification enrôlée. `false` ferme la plateforme jusqu'à
-   * l'enrôlement ; absent sur un serveur qui ne la connaît pas encore.
+   * l'enrôlement si `totp_required` ; absent sur un serveur qui ne la
+   * connaît pas encore.
    */
   totp_confirmed?: boolean
   /** Langue de l'interface enregistrée sur le profil ; absente sur un serveur qui ne la connaît pas encore. */

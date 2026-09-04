@@ -80,13 +80,13 @@ adopte un pays préexistant plutôt que d'échouer sur son nom.
 
 Cinq rôles, calqués sur l'organisation du groupe :
 
-| Rôle | Qui | Périmètre | Peut |
-|------|-----|-----------|------|
-| `manager` | responsable d'équipe dans une filiale | son pays, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | saisir ses dépenses et déposer les justificatifs |
-| `dm` | supérieur du manager, dans la filiale | ses pays | gérer son pays, saisir et **soumettre** (déclarer) |
-| `df` | direction financière, au siège | tous pays, **restrictible** à certains | fixer les enveloppes (avec `super_admin`), contrôler les pièces, **justifier ou non**, clôturer |
-| `admin` | ressources humaines, au siège | tous pays | comptes et rôles, journal d'audit, **imports et exports**, **réouverture** d'un dossier, réinitialisation de la double authentification |
-| `super_admin` | DG, DO, CEO, développeurs | tous pays | tout, enveloppes comprises, y compris le back-office Django |
+| Rôle | Libellé | Qui | Périmètre | Peut |
+|------|---------|-----|-----------|------|
+| `manager` | Manager (pays) | responsable dans une filiale | son pays, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | saisir ses dépenses, déposer les justificatifs, **soumettre** (déclarer) ; tenir le référentiel de son pays |
+| `dm` | DM — directeur manager (siège) | au siège | tous pays, **restrictible** à certains | **mettre en contrôle** une dépense soumise (`review_expenses`) |
+| `df` | DF — directeur financier (siège) | au siège | tous pays, **restrictible** à certains | fixer les enveloppes (avec `super_admin`), contrôler les pièces, **justifier ou non**, clôturer (`validate_expenses`) |
+| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | tout le circuit, comptes et rôles, référentiel de tous les pays, journal d'audit, **imports et exports**, **réouverture** d'un dossier, réinitialisation de la double authentification |
+| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, enveloppes comprises, y compris le back-office Django |
 
 Il n'y a ni « direction des opérations » ni « auditeur » distincts : la DO
 est super administratrice, l'audit revient à la RH. Les enveloppes et les
@@ -97,45 +97,66 @@ confirmer par le produit** ; il se change dans `accounts/permissions.py`.
 Les rôles portent la matrice complète dans `accounts/permissions.py` :
 `BUDGET_WRITE_ROLES` (enveloppes), `EXPORT_ROLES` (imports et exports :
 `super_admin`, `admin`), `REOPEN_ROLES` (réouverture : `super_admin`,
-`admin`). `/api/permissions/` la renvoie telle qu'elle est appliquée.
+`admin`). `/api/permissions/` la renvoie telle qu'elle est appliquée, et
+`/api/me/` la traduit en capacités (`record_expenses`, `review_expenses`,
+`validate_expenses`…) que l'interface se contente de lire.
 
-**Le pays déclare, le siège constate.** Un `manager` ou un `dm` ne peut ni
-justifier, ni déclarer non justifiée, ni prendre en contrôle, ni clôturer une
-dépense — pas même les siennes. Autrement, il pourrait décaisser puis se donner
-quitus, ce qui viderait l'application de sa raison d'être.
+**Le manager déclare, le DM contrôle, le DF constate.** Le circuit est
+tenu par trois personnes : le `manager` soumet, le `dm` met en contrôle,
+le `df` tranche — justifie, refuse ou clôture. Un `manager` ne peut ni
+justifier, ni déclarer non justifiée, ni mettre en contrôle, ni clôturer
+une dépense — pas même les siennes. Autrement, il pourrait décaisser puis
+se donner quitus, ce qui viderait l'application de sa raison d'être. Un
+`dm` ne constate pas ; un `df` ne met pas en contrôle. `admin` et
+`super_admin` peuvent tout.
 
 La séparation vaut aussi **à l'intérieur du siège** : celui qui a saisi une
 dépense ne peut pas la justifier lui-même. Il faut deux personnes.
 
-Le périmètre est porté par le profil : un rôle du siège sans pays explicite
-couvre tous les pays, tandis qu'un rôle pays **sans** périmètre ne voit rien —
-l'absence de périmètre ne vaut jamais autorisation générale. Un pays hors
-périmètre répond 404, sans révéler son existence.
+Le référentiel d'un pays — équipes, projets, intitulés, catégories,
+bénéficiaires — est tenu par la RH et les super administrateurs pour tous
+les pays, et par le `manager` pour le sien (`manage_subentities`).
+
+Le périmètre est porté par le profil : un compte du siège sans pays
+explicite couvre tous les pays ; `dm` et `df` peuvent être restreints à
+certains, `admin` et `super_admin` jamais. Un `manager` **sans** périmètre
+ne voit rien — l'absence de périmètre ne vaut jamais autorisation générale.
+Un pays hors périmètre répond 404, sans révéler son existence.
 
 ### Double authentification et adresses professionnelles
 
-Tout compte est protégé par un code à usage unique (TOTP, RFC 6238), sans
-exception de rôle : un mot de passe seul, réutilisé ou intercepté, suffirait
-à signer une justification au nom d'un autre. À la première connexion, le
-titulaire scanne un QR avec son application d'authentification et saisit un
-premier code ; tant qu'il ne l'a pas fait, la plateforme lui est fermée —
-comme avec un mot de passe provisoire. Le secret n'est remis qu'une fois.
-Un titulaire qui perd son téléphone s'adresse à un administrateur, seul à
-pouvoir réinitialiser l'enrôlement ; l'opération est journalisée (voir
-`deploy/README.md`).
+Chaque compte peut se protéger par un code à usage unique (TOTP, RFC 6238)
+en plus de son mot de passe : un mot de passe seul, réutilisé ou
+intercepté, suffirait à signer une justification au nom d'un autre. **Elle
+est facultative par défaut** — la direction a reporté son obligation — et
+se propose depuis le menu du compte (« Activer la double authentification ») :
+le titulaire scanne un QR avec son application d'authentification et
+saisit un premier code ; le secret n'est remis qu'une fois. Un compte
+enrôlé présente ensuite son code à chaque connexion, et le menu le montre
+(« 2FA active »). Elle est recommandée à qui contrôle ou justifie.
 
-Dans l'API : après le mot de passe provisoire, toute route répond `403
-{"totp_setup_required": true}` tant que le compte n'est pas enrôlé ;
-`POST /api/me/2fa/enrol/` renvoie `otpauth_uri`, `qr_png_base64` et
-`secret`, `POST /api/me/2fa/confirm/ {code}` valide le premier code
-(`ChangeLog` `totp_confirmed`). Ensuite, `POST /api/token-auth/` attend
-`{username, password, code}` et répond `400 totp_required` si le code
-manque ou est faux — l'échec est journalisé (`login_failed`,
-`changed_fields: ["totp"]`). `POST /api/users/{id}/reset-2fa/` efface
-l'enrôlement (`totp_reset`) ; réservé aux administrateurs, dans le respect
-de la hiérarchie. Pour un environnement jetable (CI, démonstration),
-`seed_users` accepte une clé `totp_secret` qui enrôle et confirme
-d'emblée : à ne jamais utiliser sur un serveur réel.
+`DJANGO_TOTP_REQUIRED=1` l'impose à tous : la plateforme reste alors
+fermée à un compte non enrôlé jusqu'à son premier code, comme avec un mot
+de passe provisoire. La politique se lit dans `GET /api/me/`
+(`totp_required`, aux côtés de `totp_confirmed`) ; l'interface n'y redirige
+que si les deux le demandent. Un titulaire qui perd son téléphone s'adresse
+à un administrateur, seul à pouvoir réinitialiser l'enrôlement ;
+l'opération est journalisée (voir `deploy/README.md`).
+
+Dans l'API : quand elle est imposée, toute route répond `403
+{"totp_setup_required": true}` tant que le compte n'est pas enrôlé, après
+le mot de passe provisoire ; `POST /api/me/2fa/enrol/` renvoie
+`otpauth_uri`, `qr_png_base64` et `secret`, `POST /api/me/2fa/confirm/
+{code}` valide le premier code (`ChangeLog` `totp_confirmed`). Pour un
+compte enrôlé, `POST /api/token-auth/` attend `{username, password, code}`
+et répond `400 totp_required` si le code manque ou est faux — l'échec est
+journalisé (`login_failed`, `changed_fields: ["totp"]`) ; le champ
+« Code » de l'écran de connexion reste visible et facultatif pour les
+autres. `POST /api/users/{id}/reset-2fa/` efface l'enrôlement
+(`totp_reset`) ; réservé aux administrateurs, dans le respect de la
+hiérarchie. Pour un environnement jetable (CI, démonstration), `seed_users`
+accepte une clé `totp_secret` qui enrôle et confirme d'emblée : à ne jamais
+utiliser sur un serveur réel.
 
 Chaque compte porte une adresse professionnelle : un domaine hors de
 `ALLOWED_EMAIL_DOMAINS` (`innovpharma.net` par défaut) est refusé à la
@@ -220,7 +241,7 @@ Toutes les routes exigent un jeton `Authorization: Token <token>`.
 GET    /api/health/                      # état du serveur et de la base (sans jeton)
 POST   /api/token-auth/                  # obtention du jeton {username, password, code} ; 400 totp_required sans code valide
 POST   /api/logout/                      # révocation du jeton
-GET    /api/me/                          # rôle, périmètre et droits du compte
+GET    /api/me/                          # rôle, périmètre, droits, politique 2FA (totp_required) et enrôlement (totp_confirmed)
 POST   /api/me/password/                 # changement de mot de passe
 GET    /api/permissions/                 # matrice rôle × action, telle que le serveur l'applique
 GET/PATCH /api/configuration/            # réglages de la plateforme (siège)
@@ -253,7 +274,7 @@ GET/POST/PATCH /api/exchange-rates/      # taux de conversion vers le FCFA
 GET/POST/PATCH /api/dossiers/            # dossiers de justification (N°ORDRE)
 DELETE /api/dossiers/{id}/               # brouillon seul, par son auteur
 POST   /api/dossiers/{id}/submit/        # soumet le dossier et ses lignes (avertit s'il n'a pas de pièce)
-POST   /api/dossiers/{id}/review|justify|reject|close/
+POST   /api/dossiers/{id}/review|justify|reject|close/  # review : DM ; justify, reject, close : DF
 POST   /api/dossiers/{id}/reopen/        # réouverture {note} : administrateurs, motif obligatoire
 GET/POST/PATCH /api/expenses/            # lignes de dépenses
 DELETE /api/expenses/{id}/               # brouillon seul, par son auteur
@@ -438,11 +459,18 @@ propriétaire.
 secondes les compteurs du backend (`django-prometheus`, exposés sur
 `/metrics` sous le jeton `METRICS_TOKEN`), ceux de la base
 (`postgres-exporter`) et ceux du serveur (`node-exporter`) ; Grafana les
-affiche sur `https://<domaine>/grafana/`, derrière un mot de passe
-(`GRAFANA_ADMIN_PASSWORD`), sur un tableau de bord provisionné depuis
-`deploy/grafana/dashboards/justi-innov.json` : requêtes par seconde et
-latence par vue, erreurs 5xx, connexions et taille de la base, processeur,
-mémoire et disque du serveur, état des cibles de collecte.
+affiche sur `https://<domaine>/grafana/`, sur un tableau de bord
+provisionné depuis `deploy/grafana/dashboards/justi-innov.json` :
+requêtes par seconde et latence par vue, erreurs 5xx, connexions et taille
+de la base, processeur, mémoire et disque du serveur, état des cibles de
+collecte. Grafana est **partagé avec la direction et l'équipe technique** :
+outre l'administrateur (`GRAFANA_ADMIN_PASSWORD`), un compte « direction »
+en lecture seule et un compte « technique » en édition, créés à la mise en
+service (`deploy/README.md`) ; le tableau de bord de la plateforme est la
+page d'accueil de chacun. Les administrateurs de l'application y accèdent
+par l'entrée « Supervision » du menu de leur compte, qui ouvre `/grafana/`
+dans un nouvel onglet — Grafana a ses propres comptes, distincts de ceux de
+l'application.
 
 **Sauvegardes.** La pile sauvegarde chaque nuit la base (`pg_dump -Fc`) et
 met en miroir le bucket des justificatifs dans le volume `sauvegardes`. Les
@@ -467,9 +495,10 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `DJANGO_HSTS_PRELOAD` | `1` | inscription HSTS sur la liste de préchargement des navigateurs (hors debug) |
 | `DJANGO_NUM_PROXIES` | — | nombre de proxys de confiance devant Django (2 en production : Caddy puis nginx ; 1 en CI) pour lire la vraie adresse du client |
 | `TOKEN_MAX_AGE_DAYS` | `30` | durée de vie d'un jeton d'API |
+| `DJANGO_TOTP_REQUIRED` | `0` | `1` impose la double authentification à tous les comptes (plateforme fermée jusqu'à l'enrôlement) ; `0` la propose depuis le menu du compte. Exposée par `GET /api/me/` (`totp_required`) |
 | `ALLOWED_EMAIL_DOMAINS` | `innovpharma.net` | domaines de messagerie admis pour les comptes, séparés par des virgules ; ne peut pas être vide |
 | `METRICS_TOKEN` | — | jeton que Prometheus présente sur `/metrics` (`Authorization: Bearer`) ; vide, le point de collecte répond 404 |
-| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | `admin` / — | compte d'administration de Grafana (pile de production) ; le mot de passe est **obligatoire** |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | `admin` / — | compte d'administration de Grafana (pile de production) ; le mot de passe est **obligatoire**. Les comptes « direction » et « technique » se créent depuis lui (`deploy/README.md`) |
 | `DJANGO_TIME_ZONE` | `UTC` | fuseau de référence du serveur |
 | `DJANGO_CREATE_SUPERUSER` | `0` | `1` crée un compte d'amorçage au démarrage, profil `super_admin` et mot de passe provisoire |
 | `DJANGO_SUPERUSER_USERNAME` / `_EMAIL` / `_PASSWORD` | `admin` / — / — | identité de ce compte ; sans mot de passe, rien n'est créé |
@@ -530,9 +559,12 @@ brouillon → soumis → en contrôle → justifié / non justifié → clôtur�
     └──────────┴───────────┴──────────────┘  réouverture (administrateur, motif)
 ```
 
-Côté pays, déclarer une dépense tient en **une action** : remplir les lignes,
-joindre le justificatif, soumettre le dossier — ses lignes partent avec lui.
-Le reste est calculé par le système et relève du siège.
+Côté pays, déclarer une dépense tient en **une action** : le manager
+remplit les lignes, joint le justificatif, soumet le dossier — ses lignes
+partent avec lui. Le reste est calculé par le système et relève du siège :
+**le manager soumet, le DM met en contrôle, le DF tranche** — justifie,
+refuse ou clôture. L'étape de contrôle est facultative sauf si la politique
+du circuit l'impose (`require_review_step`).
 
 Un dossier ne se soumet pas vide : les lignes viennent d'abord. En revanche,
 l'absence de justificatif **n'empêche pas** la déclaration, elle l'accompagne
@@ -554,8 +586,8 @@ des comptes, pas pour corriger en silence : un administrateur (`admin`,
 constaté, avec un motif (`note`), conservé sur le dossier (`reopen_note`)
 et dans le journal d'audit (`reopened`, sur le dossier et sur chaque
 ligne) ; les lignes reviennent en brouillon et perdent leur imputation
-(`budget = null`), recalculée à la prochaine soumission ; les `dm` et
-`manager` du pays en sont notifiés (`dossier_reopened`) et le dossier devra
+(`budget = null`), recalculée à la prochaine soumission ; les comptes qui
+suivent le pays en sont notifiés (`dossier_reopened`) et le dossier devra
 être soumis à nouveau. Elle est refusée dès
 qu'une ligne du dossier est justifiée ou clôturée : le siège a constaté, et
 un constat ne se défait pas. Ni le pays qui a déclaré ni la direction

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
+import { useNavigate } from "react-router-dom"
 import { Check, Copy, Loader2, ShieldCheck } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -8,7 +9,7 @@ import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/context/use-auth"
-import { confirmTwoFactor, enrolTwoFactor } from "@/lib/accounts"
+import { confirmTwoFactor, enrolTwoFactor, totpEnrolmentRequired } from "@/lib/accounts"
 import { ApiError } from "@/lib/api"
 import type { TotpEnrolment } from "@/lib/types"
 
@@ -16,9 +17,11 @@ import type { TotpEnrolment } from "@/lib/types"
  * Enrôlement de la double authentification.
  *
  * Un mot de passe seul, réutilisé ou intercepté, suffirait à signer une
- * justification au nom d'un autre. Tant que l'application
- * d'authentification n'a pas été liée au compte, la plateforme reste fermée,
- * comme pour un mot de passe provisoire.
+ * justification au nom d'un autre. Deux cas mènent ici : le serveur impose
+ * la double authentification (`totp_required`) et la plateforme reste
+ * fermée tant que l'application d'authentification n'est pas liée, comme
+ * pour un mot de passe provisoire ; ou le titulaire vient l'activer de
+ * lui-même depuis le menu du compte, et peut remettre à plus tard.
  *
  * Le secret est généré par le serveur et montré une seule fois : en QR pour
  * qui peut scanner, en clair pour qui doit le saisir. Le premier code valide
@@ -26,6 +29,7 @@ import type { TotpEnrolment } from "@/lib/types"
  */
 export function TotpNotice() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { me, refreshProfile } = useAuth()
   const [enrolment, setEnrolment] = useState<TotpEnrolment | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -36,6 +40,7 @@ export function TotpNotice() {
   const [copied, setCopied] = useState(false)
 
   const aEnroler = me?.totp_confirmed === false
+  const imposee = totpEnrolmentRequired(me)
 
   useEffect(() => {
     if (!aEnroler) return
@@ -96,11 +101,19 @@ export function TotpNotice() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <Alert className="border-statut-attente/40 bg-statut-attente/10">
-        <ShieldCheck className="h-4 w-4" />
-        <AlertTitle>{t("auth.totp.a_enroler_titre")}</AlertTitle>
-        <AlertDescription>{t("auth.totp.a_enroler_texte")}</AlertDescription>
-      </Alert>
+      {imposee ? (
+        <Alert className="border-statut-attente/40 bg-statut-attente/10">
+          <ShieldCheck className="h-4 w-4" />
+          <AlertTitle>{t("auth.totp.a_enroler_titre")}</AlertTitle>
+          <AlertDescription>{t("auth.totp.a_enroler_texte")}</AlertDescription>
+        </Alert>
+      ) : (
+        <Alert>
+          <ShieldCheck className="h-4 w-4" />
+          <AlertTitle>{t("auth.totp.volontaire_titre")}</AlertTitle>
+          <AlertDescription>{t("auth.totp.volontaire_texte")}</AlertDescription>
+        </Alert>
+      )}
 
       <Card className="border-border/60 shadow-sm">
         <CardHeader>
@@ -174,7 +187,13 @@ export function TotpNotice() {
               )}
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              {/* Facultative : on peut repartir sans avoir rien lié. */}
+              {!imposee && (
+                <Button type="button" variant="outline" onClick={() => navigate("/")}>
+                  {t("auth.totp.plus_tard")}
+                </Button>
+              )}
               <Button type="submit" disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {t("commun.confirmer")}

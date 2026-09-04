@@ -261,7 +261,7 @@ jobs:
                 "email": "togo.ci@innovpharma.net",
                 "first_name": "Togo",
                 "last_name": "CI",
-                "role": "dm",
+                "role": "manager",
                 "countries": ["TG-01"],
                 "must_change_password": false,
                 "totp_secret": "$COUNTRY_TOTP_SECRET"

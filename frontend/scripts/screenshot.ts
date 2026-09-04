@@ -69,6 +69,28 @@ async function main() {
   expect(hqNav.some((t) => t.includes("Configuration")), "le siège voit « Configuration »")
   expect(hqNav.some((t) => t.includes("Audit")), "le siège voit « Audit »")
   expect((await hq.textContent("h1"))?.includes("Pilotage") ?? false, "le tableau de bord s'ouvre")
+  // Le menu du compte : la supervision (Grafana) aux administrateurs, dans
+  // un nouvel onglet ; la pastille 2FA pour un compte enrôlé (ceux de la CI
+  // le sont).
+  await hq.getByRole("button", { name: "Menu du compte" }).click()
+  // Le menu s'ouvre avec une transition : compter ses entrées ou le
+  // photographier avant la fin donnerait un menu vide ou translucide.
+  await hq.getByRole("menu").waitFor({ state: "visible" })
+  await hq.waitForTimeout(400)
+  const supervision = hq.getByRole("menuitem", { name: "Supervision" })
+  expect((await supervision.count()) === 1, "le siège voit « Supervision » dans le menu du compte")
+  expect(
+    (await supervision.getAttribute("href")) === "/grafana/" &&
+      (await supervision.getAttribute("target")) === "_blank" &&
+      (await supervision.getAttribute("rel")) === "noopener noreferrer",
+    "« Supervision » ouvre /grafana/ dans un nouvel onglet",
+  )
+  expect(
+    ((await hq.getByRole("menu").textContent()) ?? "").includes("2FA active"),
+    "le menu du compte montre la pastille « 2FA active » d'un compte enrôlé",
+  )
+  await shot(hq, "menu_compte")
+  await hq.keyboard.press("Escape")
   // Sans pays choisi, la consolidation ne propose pas de répartition : deux
   // équipes homonymes de pays différents fusionneraient. Le siège doit
   // d'abord choisir un pays.
@@ -199,12 +221,21 @@ async function main() {
   // --- Parcours pays : périmètre restreint --------------------------------
   const rep = await newPage(browser)
   const repUser = await login(rep, "COUNTRY")
-  console.log(`\n=== REPRÉSENTANT PAYS (${repUser}) ===`)
+  console.log(`\n=== MANAGER DE PAYS (${repUser}) ===`)
   const perimetre = (await rep.textContent("header p.text-xs")) ?? ""
   expect(!perimetre.includes("Siège"), `le périmètre affiché est celui d'un pays (${perimetre})`)
   const repNav = await rep.locator("nav[aria-label='Navigation principale'] a").allTextContents()
   expect(!repNav.some((t) => t.includes("Configuration")), "le pays ne voit pas « Configuration »")
   expect(!repNav.some((t) => t.includes("Audit")), "le pays ne voit pas « Audit »")
+  await rep.getByRole("button", { name: "Menu du compte" }).click()
+  await rep.getByRole("menu").waitFor({ state: "visible" })
+  await rep.waitForTimeout(400)
+  expect(
+    (await rep.getByRole("menuitem", { name: "Déconnexion" }).count()) === 1 &&
+      (await rep.getByRole("menuitem", { name: "Supervision" }).count()) === 0,
+    "le pays ne voit pas « Supervision »",
+  )
+  await rep.keyboard.press("Escape")
   await goto(rep, "/dossiers")
   const repDossiers = await rep.locator("tbody tr").count()
   expect(repDossiers <= hqDossiers, `le pays voit au plus autant de dossiers que le siège (${repDossiers})`)

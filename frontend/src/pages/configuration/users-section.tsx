@@ -386,7 +386,8 @@ function UserForm({
   const [firstName, setFirstName] = useState(editing?.first_name ?? "")
   const [lastName, setLastName] = useState(editing?.last_name ?? "")
   const [email, setEmail] = useState(editing?.email ?? "")
-  const [role, setRole] = useState<Role | "">(editing?.role ?? "dm")
+  // Le compte le plus courant est celui d'un manager de pays.
+  const [role, setRole] = useState<Role | "">(editing?.role ?? "manager")
   const [countryIds, setCountryIds] = useState<number[]>(editing?.countries ?? [])
   // Le périmètre n'est envoyé que s'il a été touché : un PATCH qui renvoie
   // la liste telle quelle réécrit une trace de changement pour rien.
@@ -399,7 +400,9 @@ function UserForm({
   // Le rattachement au siège vient du serveur. Tant que la matrice n'est pas
   // chargée, il reste inconnu : le formulaire propose alors les rôles sans
   // annoncer leur périmètre et laisse le serveur trancher, plutôt que de
-  // recopier ici une table de rôles qui divergerait.
+  // recopier ici une table de rôles qui divergerait. Un compte du siège
+  // sans pays voit tous les pays ; des pays cochés restreignent un DM ou
+  // un DF — le serveur refuse une restriction à un rôle toujours global.
   const roleInfo = roles.find((r) => r.value === role)
   const isHeadquarters = Boolean(roleInfo?.siege)
 
@@ -441,10 +444,11 @@ function UserForm({
         role,
         is_active: active,
       }
-      // Un rôle du siège n'a pas de périmètre : c'est ce qui lui donne accès
-      // à tous les pays.
-      if (!editing || countriesTouched || isHeadquarters !== Boolean(editing.countries.length === 0)) {
-        payload.countries = isHeadquarters ? [] : countryIds
+      // Vide, le périmètre d'un compte du siège vaut tous les pays. Un
+      // changement de rôle renvoie le périmètre tel qu'affiché, pour que
+      // le serveur le revalide contre le nouveau rôle.
+      if (!editing || countriesTouched || role !== editing.role) {
+        payload.countries = countryIds
       }
       if (password) payload.password = password
 
@@ -547,40 +551,42 @@ function UserForm({
                     </option>
                   ))}
             </NativeSelect>
+            <p className="text-xs text-muted-foreground">
+              {t("configuration.utilisateurs.form.role_aide")}
+            </p>
           </div>
 
           <fieldset className="grid gap-2">
             <legend className="text-sm font-medium">
               {t("configuration.utilisateurs.form.perimetre_legend")}
             </legend>
-            {isHeadquarters ? (
-              <p className="text-xs text-muted-foreground">
-                {t("configuration.utilisateurs.form.siege_aide")}
-              </p>
-            ) : (
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-2">
-                {countries.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {t("configuration.utilisateurs.form.aucun_pays")}
-                  </p>
-                )}
-                {countries.map((c) => (
-                  <label
-                    key={c.id}
-                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent"
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-primary"
-                      checked={countryIds.includes(c.id)}
-                      onChange={(e) => toggleCountry(c.id, e.target.checked)}
-                    />
-                    {c.country_ref ? `${c.country_ref} — ` : ""}
-                    {c.name}
-                  </label>
-                ))}
-              </div>
-            )}
+            <p className="text-xs text-muted-foreground">
+              {isHeadquarters
+                ? t("configuration.utilisateurs.form.perimetre_aide_siege")
+                : t("configuration.utilisateurs.form.perimetre_aide_pays")}
+            </p>
+            <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-2">
+              {countries.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {t("configuration.utilisateurs.form.aucun_pays")}
+                </p>
+              )}
+              {countries.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary"
+                    checked={countryIds.includes(c.id)}
+                    onChange={(e) => toggleCountry(c.id, e.target.checked)}
+                  />
+                  {c.country_ref ? `${c.country_ref} — ` : ""}
+                  {c.name}
+                </label>
+              ))}
+            </div>
           </fieldset>
 
           <div className="grid gap-2">

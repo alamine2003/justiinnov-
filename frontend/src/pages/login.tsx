@@ -38,10 +38,9 @@ export function LoginPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [code, setCode] = useState("")
-  // La double authentification est obligatoire pour tous : le champ du code
-  // est toujours là, pour se connecter en une seule fois. Il ne devient
-  // exigé que lorsque le serveur le réclame — un compte pas encore enrôlé
-  // n'a pas de code à donner.
+  // Le champ du code est toujours là, facultatif : un compte enrôlé se
+  // connecte en une seule fois, un compte sans double authentification le
+  // laisse vide. Il ne devient exigé que lorsque le serveur le réclame.
   const [totpRequired, setTotpRequired] = useState(false)
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)

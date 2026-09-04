@@ -60,7 +60,10 @@
     "deconnexion": "Déconnexion",
     "menu_utilisateur": "Menu du compte",
     "reservee_siege": "Page réservée au siège : vous avez été ramené au tableau de bord.",
-    "equipes": "Équipes"
+    "equipes": "Équipes",
+    "supervision": "Supervision",
+    "activer_2fa": "Activer la double authentification",
+    "totp_active": "2FA active"
   },
   "erreurs": {
     "injoignable": "Serveur injoignable. Vérifiez votre connexion.",
@@ -124,9 +127,9 @@
     "roles": {
       "super_admin": "Super administrateur (DG, DO, CEO, DEV)",
       "admin": "Administrateur (RH)",
-      "df": "DF — direction financière",
-      "dm": "DM — supérieur du manager",
-      "manager": "Manager"
+      "df": "DF — directeur financier (siège)",
+      "dm": "DM — directeur manager (siège)",
+      "manager": "Manager (pays)"
     },
     "workflow": {
       "draft": "Brouillon",
@@ -283,7 +286,10 @@
       "code_six_chiffres": "Le code comporte six chiffres.",
       "enrolement_impossible": "Enrôlement impossible",
       "confirmation_impossible": "Confirmation impossible",
-      "aide_connexion": "Saisissez le code à six chiffres de votre application d'authentification. Laissez vide si vous n'êtes pas encore enrôlé."
+      "aide_connexion": "Uniquement si vous avez activé la double authentification.",
+      "volontaire_titre": "Activer la double authentification",
+      "volontaire_texte": "Un code à usage unique s'ajoutera à votre mot de passe à chaque connexion. Elle est facultative tant que le siège ne l'impose pas, et recommandée à qui contrôle ou justifie des dépenses.",
+      "plus_tard": "Plus tard"
     }
   },
   "dossiers": {
@@ -405,7 +411,7 @@
     },
     "circuit": {
       "soumettre": "Soumettre",
-      "prendre_en_controle": "Prendre en contrôle",
+      "prendre_en_controle": "Mettre en contrôle",
       "marquer_justifie": "Marquer justifié",
       "marquer_non_justifie": "Marquer non justifié",
       "cloturer": "Clôturer"
@@ -870,13 +876,13 @@
     },
     "utilisateurs": {
       "titre": "Comptes",
-      "description": "Rôles et périmètres. Un compte du siège voit tous les pays ; un responsable pays ne voit que les siens.",
+      "description": "Rôles et périmètres. DM et DF sont des comptes du siège, restrictibles à des pays ; le manager est un compte de pays et ne voit que le sien.",
       "creer": "Créer un compte",
       "chargement_impossible": "Impossible de charger les comptes",
       "statut_impossible": "Changement de statut impossible",
       "perimetre": "Périmètre",
       "vide_titre": "Aucun compte",
-      "vide_aide": "Créez les comptes des représentants pays.",
+      "vide_aide": "Créez les comptes du siège et ceux des managers de pays.",
       "mdp_provisoire": "mot de passe provisoire",
       "soi_meme": "Un autre administrateur doit s'en charger.",
       "modifier_aria": "Modifier {{nom}}",
@@ -891,17 +897,19 @@
         "role_siege": "{{role}} — siège",
         "role_pays": "{{role}} — pays",
         "perimetre_legend": "Pays du périmètre",
-        "siege_aide": "Rôle du siège : accès à tous les pays, sans rattachement.",
         "aucun_pays": "Aucun pays actif.",
         "mot_de_passe": "Mot de passe",
         "mot_de_passe_optionnel": "Mot de passe (laisser vide pour ne pas changer)",
         "compte_actif": "Compte actif",
         "role_requis": "Choisissez un rôle.",
-        "pays_requis": "Un rôle pays doit être rattaché à au moins un pays.",
+        "pays_requis": "Un compte de pays doit être rattaché à au moins un pays.",
         "mdp_requis": "Un mot de passe provisoire est nécessaire à la création.",
         "email_requis": "Une adresse e-mail est nécessaire.",
         "email_aide": "Adresse @innovpharma.net : elle nomme le compte dans l'application d'authentification.",
-        "email_exemple": "prenom.nom@innovpharma.net"
+        "email_exemple": "prenom.nom@innovpharma.net",
+        "role_aide": "DM et DF sont des comptes du siège, restrictibles à des pays ; le manager est un compte de pays. L'administrateur (RH) et le super administrateur voient tout.",
+        "perimetre_aide_siege": "Facultatif pour un compte du siège : sans pays coché, il voit tous les pays. Cochez des pays pour restreindre un DM ou un DF.",
+        "perimetre_aide_pays": "Un manager est rattaché à au moins un pays."
       },
       "totp_active": "2FA active",
       "totp_a_enroler": "2FA à enrôler",

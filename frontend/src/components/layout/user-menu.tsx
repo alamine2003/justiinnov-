@@ -1,27 +1,41 @@
-import { CircleUserRound, Download, LogOut, Users } from "lucide-react"
+import { Activity, CircleUserRound, Download, LogOut, ShieldCheck, Users } from "lucide-react"
+import { Link } from "react-router-dom"
 import { useTranslation } from "react-i18next"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/context/use-auth"
+import { TOTP_PATH } from "@/lib/accounts"
 import { useInstallPrompt } from "@/lib/install-prompt"
+import { STATUS_TONES } from "@/lib/status-styles"
 
 /**
- * Menu du compte : identité, installation de l'application, déconnexion.
+ * Supervision (Grafana), servie par Caddy sous le même domaine : le chemin
+ * est relatif à l'origine, quel que soit l'environnement.
+ */
+const SUPERVISION_PATH = "/grafana/"
+
+/**
+ * Menu du compte : identité, double authentification, supervision,
+ * installation de l'application, déconnexion.
  *
  * L'entrée « Installer l'application » n'apparaît que lorsque le navigateur
  * a signalé que la page est installable (Chrome, Edge) : ailleurs, elle ne
- * mènerait à rien.
+ * mènerait à rien. « Activer la double authentification » n'apparaît qu'à
+ * un compte qui ne l'a pas encore enrôlée, et « Supervision » aux
+ * administrateurs, seuls à avoir un compte Grafana.
  */
 export function UserMenu({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation()
-  const { me } = useAuth()
+  const { me, can } = useAuth()
   const { available, install } = useInstallPrompt()
 
   return (
@@ -35,15 +49,23 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
         }
       />
       <DropdownMenuContent align="end" className="min-w-56">
+        {/* Un libellé de menu vit dans un groupe : base-ui l'exige. */}
         {me && (
-          <DropdownMenuLabel className="truncate">
-            {me.username} · {me.role_display}
-          </DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="flex items-center gap-2">
+              <span className="truncate">
+                {me.username} · {me.role_display}
+              </span>
+              {me.totp_confirmed === true && (
+                <Badge className={STATUS_TONES.SUCCES}>{t("nav.totp_active")}</Badge>
+              )}
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
         )}
         {/* Un manager rattaché à des équipes ne saisit que pour elles :
             les nommer ici lève toute ambiguïté sur son périmètre. */}
         {me?.teams && me.teams.length > 0 && (
-          <>
+          <DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="flex items-center gap-1.5">
               <Users className="h-3.5 w-3.5" aria-hidden />
@@ -56,7 +78,29 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
                 </li>
               ))}
             </ul>
-          </>
+          </DropdownMenuGroup>
+        )}
+        {/* Absent sur un serveur qui ignore la 2FA : rien à proposer. */}
+        {me?.totp_confirmed === false && (
+          <DropdownMenuItem
+            render={
+              <Link to={TOTP_PATH}>
+                <ShieldCheck aria-hidden />
+                {t("nav.activer_2fa")}
+              </Link>
+            }
+          />
+        )}
+        {/* Nouvel onglet : Grafana a sa propre session, l'application garde la sienne. */}
+        {can("manage_users") && (
+          <DropdownMenuItem
+            render={
+              <a href={SUPERVISION_PATH} target="_blank" rel="noopener noreferrer">
+                <Activity aria-hidden />
+                {t("nav.supervision")}
+              </a>
+            }
+          />
         )}
         {available && (
           <DropdownMenuItem onClick={() => void install()}>
