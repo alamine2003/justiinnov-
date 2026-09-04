@@ -5,6 +5,7 @@ import json
 from django.conf import settings
 from django.db import OperationalError, connection, transaction
 from django.db.models import Q
+from django.utils.translation import gettext as _
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -14,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
 from rest_framework.views import APIView
 
+from accounts import totp
 from accounts.authentication import obtenir_jeton
 from accounts.models import HEADQUARTERS_ROLES
 from accounts.permissions import (
@@ -95,25 +97,59 @@ class ThrottledObtainAuthToken(ObtainAuthToken):
     de ``REST_FRAMEWORK`` ne s'y appliquent pas et il faut donc les réattacher
     explicitement. Chaque tentative, réussie ou non, est consignée avec le nom
     saisi et l'adresse : c'est la première trace d'une intrusion.
+
+    Second facteur : quand la double authentification du compte est
+    confirmée, la charge utile doit porter ``code``. Le mot de passe est
+    vérifié d'abord — un code n'est jamais demandé pour un mot de passe faux,
+    sinon la réponse dirait à l'attaquant qu'il a trouvé le bon. Un compte
+    pas encore enrôlé se connecte sans code ; c'est le middleware qui lui
+    ferme tout sauf l'enrôlement.
     """
 
     throttle_classes = [LoginRateThrottle, LoginUsernameThrottle]
+
+    def _journaliser_echec(self, request, username, user=None, motif=None):
+        journaliser(
+            user,
+            ChangeLog.Actions.LOGIN_FAILED,
+            ChangeLog.Models.USER,
+            label=username,
+            to_value="",
+            changed_fields=[motif] if motif else None,
+            performed_by=username,
+            request=request,
+        )
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         username = str(request.data.get("username", "") or "")[:150]
         if not serializer.is_valid():
-            journaliser(
-                None,
-                ChangeLog.Actions.LOGIN_FAILED,
-                ChangeLog.Models.USER,
-                label=username,
-                to_value="",
-                performed_by=username,
-                request=request,
-            )
+            self._journaliser_echec(request, username)
             serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
+        profile = getattr(user, "profile", None)
+        if profile is not None and profile.totp_confirmed:
+            code = request.data.get("code")
+            if code in (None, ""):
+                return Response(
+                    {
+                        "code": [_("Code de double authentification requis.")],
+                        "totp_required": True,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not totp.verifier_code(profile.totp_secret, code):
+                # Journalisé comme un mot de passe faux, avec le motif : un
+                # code se devine aussi en boucle, et la limite de débit
+                # compte cette tentative comme les autres.
+                self._journaliser_echec(request, username, user=user, motif="totp")
+                return Response(
+                    {
+                        "code": [_("Code de double authentification invalide.")],
+                        "totp_required": True,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         # Renouvelé s'il a dépassé ``TOKEN_MAX_AGE_DAYS`` : ``get_or_create``
         # rendrait indéfiniment le même jeton périmé.
         token = obtenir_jeton(user)
@@ -201,6 +237,9 @@ class TeamViewSet(ScopedViewSet):
     filterset_fields = ["country", "is_active"]
     search_fields = ["name"]
     write_roles = SUBENTITY_WRITE_ROLES
+    # Un manager rattaché à des équipes ne voit que les siennes : la liste
+    # qu'il consulte est celle dans laquelle il choisit pour ses dépenses.
+    team_lookup = "pk"
 
 
 class CostCenterViewSet(ScopedViewSet):
@@ -267,7 +306,7 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
 class BackOfficePermission(RolePermission):
     """Le back-office est réservé au siège."""
 
-    message = "Le back-office est réservé aux administrateurs du siège."
+    message = _("Le back-office est réservé aux administrateurs du siège.")
 
     def has_permission(self, request, view):
         access = get_access(request.user)
@@ -303,9 +342,9 @@ class ConfigurationView(APIView):
                     "taille_max_mo": settings.MAX_PROOF_SIZE // (1024 * 1024),
                     "formats_acceptes": settings.ALLOWED_PROOF_EXTENSIONS,
                     "stockage": (
-                        "Object storage (S3/MinIO)"
+                        _("Object storage (S3/MinIO)")
                         if settings.AWS_S3_ENDPOINT_URL
-                        else "Disque local"
+                        else _("Disque local")
                     ),
                 },
                 "budget": {

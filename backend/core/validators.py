@@ -3,6 +3,7 @@
 import zoneinfo
 
 from django.core.exceptions import ValidationError
+from django.utils.translation import gettext_lazy as _
 
 
 def validate_timezone(value):
@@ -14,8 +15,10 @@ def validate_timezone(value):
     """
     if value not in zoneinfo.available_timezones():
         raise ValidationError(
-            "Fuseau horaire inconnu : %(value)s (identifiant IANA attendu, "
-            "ex. Africa/Abidjan).",
+            _(
+                "Fuseau horaire inconnu : %(value)s (identifiant IANA attendu, "
+                "ex. Africa/Abidjan)."
+            ),
             code="fuseau_inconnu",
             params={"value": value},
         )

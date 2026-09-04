@@ -1,8 +1,10 @@
 """Cloisonnement par pays : un pays ne doit jamais voir les données d'un autre."""
 
+import pyotp
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.db.models import Max
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -11,19 +13,27 @@ from accounts.models import Role, UserProfile
 from core.models import ChangeLog, Country, Team
 
 
-def make_user(username, role, countries=(), must_change_password=False):
-    """Compte de test, mot de passe déjà personnalisé par défaut.
+def make_user(username, role, countries=(), must_change_password=False, *,
+              teams=(), totp_confirmed=True, email=None):
+    """Compte de test, mot de passe déjà personnalisé et 2FA déjà confirmée.
 
-    Le modèle exige un changement à la première connexion, et la plateforme
-    est fermée tant qu'il n'a pas eu lieu. Les tests portent sur l'usage
-    courant : leurs comptes sont donc des comptes en service, pas des comptes
-    fraîchement créés.
+    Le modèle exige un changement de mot de passe à la première connexion et
+    un enrôlement TOTP, et la plateforme est fermée tant qu'ils n'ont pas eu
+    lieu. Les tests portent sur l'usage courant : leurs comptes sont donc des
+    comptes en service, pas des comptes fraîchement créés. Les tests du
+    verrou lui-même passent ``totp_confirmed=False``.
     """
-    user = User.objects.create_user(username=username, password="Motdepasse-2026-test")
+    user = User.objects.create_user(
+        username=username, password="Motdepasse-2026-test",
+        email=email if email is not None else f"{username}@innovpharma.net",
+    )
     profile = UserProfile.objects.create(
-        user=user, role=role, must_change_password=must_change_password
+        user=user, role=role, must_change_password=must_change_password,
+        totp_secret=pyotp.random_base32() if totp_confirmed else "",
+        totp_confirmed_at=timezone.now() if totp_confirmed else None,
     )
     profile.countries.set(countries)
+    profile.teams.set(teams)
     return user
 
 
@@ -41,9 +51,9 @@ class ScopingTestCase(APITestCase):
         self.team_ivoire = Team.objects.create(country=self.ivoire, name="Équipe Abidjan")
         self.team_togo = Team.objects.create(country=self.togo, name="Équipe Lomé")
 
-        self.rep_togo = make_user("togo.innov", Role.COUNTRY_MANAGER, [self.togo])
+        self.rep_togo = make_user("togo.innov", Role.DM, [self.togo])
         self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
-        self.controleur = make_user("rh.innov", Role.CONTROLLER)
+        self.controleur = make_user("rh.innov", Role.DF)
 
     def login(self, user):
         token, _ = Token.objects.get_or_create(user=user)
@@ -95,6 +105,29 @@ class CountryScopeTests(ScopingTestCase):
         response = self.client.get("/api/countries/")
 
         self.assertEqual(response.data["count"], 2)
+
+    def test_la_direction_financiere_peut_etre_restreinte(self):
+        """Un DF rattaché à des pays n'en voit que ceux-là : c'est le seul
+        rôle du siège dont le périmètre se restreint."""
+        df_togo = make_user("df.togo", Role.DF, [self.togo])
+        self.login(df_togo)
+
+        liste = self.client.get("/api/countries/")
+        autre = self.client.get(f"/api/countries/{self.ivoire.pk}/")
+        profil = self.client.get("/api/me/")
+
+        self.assertEqual([c["country_ref"] for c in liste.data["results"]], ["TG-02"])
+        self.assertEqual(autre.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(profil.data["has_global_scope"])
+
+    def test_les_administrateurs_ne_se_restreignent_pas(self):
+        """Des pays rattachés par erreur à un administrateur ne lui ferment
+        rien : le siège administre l'ensemble."""
+        for role in (Role.SUPER_ADMIN, Role.ADMIN):
+            with self.subTest(role=role):
+                self.login(make_user(f"{role}.restreint", role, [self.togo]))
+
+                self.assertEqual(self.client.get("/api/countries/").data["count"], 2)
 
 
 class SubEntityScopeTests(ScopingTestCase):
@@ -150,9 +183,9 @@ class RolePermissionTests(ScopingTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_auditeur_est_en_lecture_seule(self):
-        auditeur = make_user("audit.innov", Role.AUDITOR)
-        self.login(auditeur)
+    def test_la_direction_financiere_ne_modifie_pas_le_referentiel(self):
+        df = make_user("df.innov", Role.DF)
+        self.login(df)
 
         lecture = self.client.get("/api/teams/")
         ecriture = self.client.post(
@@ -164,7 +197,7 @@ class RolePermissionTests(ScopingTestCase):
 
     def test_role_pays_sans_perimetre_ne_voit_rien(self):
         """L'absence de périmètre ne doit jamais valoir autorisation générale."""
-        orphelin = make_user("sans-pays.innov", Role.COUNTRY_MANAGER)
+        orphelin = make_user("sans-pays.innov", Role.DM)
         self.login(orphelin)
 
         response = self.client.get("/api/countries/")
@@ -202,7 +235,7 @@ class MeTests(ScopingTestCase):
 
         response = self.client.get("/api/me/")
 
-        self.assertEqual(response.data["role"], Role.COUNTRY_MANAGER)
+        self.assertEqual(response.data["role"], Role.DM)
         self.assertFalse(response.data["has_global_scope"])
         self.assertEqual(
             [c["country_ref"] for c in response.data["countries"]], ["TG-02"]
@@ -287,8 +320,8 @@ class BackOfficeTests(ScopingTestCase):
             c for c in matrice["capabilities"] if c["key"] == "validate_expenses"
         )
         # Le pays est exclu de la justification, la matrice doit le dire.
-        self.assertNotIn(Role.COUNTRY_MANAGER, justification["roles"])
-        self.assertIn(Role.CONTROLLER, justification["roles"])
+        self.assertNotIn(Role.DM, justification["roles"])
+        self.assertIn(Role.DF, justification["roles"])
 
         # Et elle doit concorder avec les droits annoncés à chaque titulaire —
         # pas seulement au super administrateur, qui a tout et ne prouve rien.
@@ -333,7 +366,7 @@ class SelfLockoutTests(ScopingTestCase):
         self.login(self.siege)
 
         response = self.client.patch(
-            f"/api/users/{self.siege.pk}/", {"role": Role.AUDITOR}
+            f"/api/users/{self.siege.pk}/", {"role": Role.DF}
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

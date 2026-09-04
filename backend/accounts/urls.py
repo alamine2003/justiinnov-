@@ -17,5 +17,9 @@ urlpatterns = [
         name="permissions",
     ),
     path("me/password/", views.ChangePasswordView.as_view(), name="change-password"),
+    # Les noms de ces deux routes sont exemptés du verrou de double
+    # authentification (accounts.middleware) : sans eux, pas d'enrôlement.
+    path("me/2fa/enrol/", views.TotpEnrolView.as_view(), name="totp-enrol"),
+    path("me/2fa/confirm/", views.TotpConfirmView.as_view(), name="totp-confirm"),
     path("", include(router.urls)),
 ]

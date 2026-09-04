@@ -12,7 +12,7 @@ class ChangeLogTestCase(TestCase):
 
     def setUp(self):
         self.ghana = Country.objects.create(
-            name="Ghana", code="GH", currency="GHS", timezone="Africa/Accra"
+            name="Guinée", code="GN", currency="GNF", timezone="Africa/Conakry"
         )
         self.senegal = Country.objects.create(
             name="Sénégal", code="SN", currency="XOF", timezone="Africa/Dakar"
@@ -93,7 +93,7 @@ class UpdateTests(ChangeLogTestCase):
         self.team.save()
 
         entry = self.entries(action=ChangeLog.Actions.REASSIGNED).get()
-        self.assertEqual(entry.from_value, "Ghana (GH)")
+        self.assertEqual(entry.from_value, "Guinée (GN)")
         self.assertEqual(entry.country, self.senegal)
 
     def test_rattachement_et_autre_champ_modifies_ensemble(self):

@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
@@ -39,7 +40,7 @@ class TeamSerializer(serializers.ModelSerializer):
             UniqueTogetherValidator(
                 queryset=Team.objects.all(),
                 fields=["country", "name"],
-                message="Cette équipe existe déjà pour ce pays.",
+                message=_("Cette équipe existe déjà pour ce pays."),
             )
         ]
 
@@ -70,7 +71,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             UniqueTogetherValidator(
                 queryset=Project.objects.all(),
                 fields=["country", "name"],
-                message="Ce projet existe déjà pour ce pays.",
+                message=_("Ce projet existe déjà pour ce pays."),
             )
         ]
 
@@ -238,13 +239,13 @@ class WorkflowConfigurationSerializer(serializers.ModelSerializer):
 
     def to_internal_value(self, data):
         if not hasattr(data, "keys"):
-            raise serializers.ValidationError("Un objet est attendu.")
+            raise serializers.ValidationError(_("Un objet est attendu."))
         inconnus = set(data) - {
             name for name, field in self.fields.items() if not field.read_only
         }
         if inconnus:
             raise serializers.ValidationError(
-                {name: "Paramètre inconnu." for name in sorted(inconnus)}
+                {name: _("Paramètre inconnu.") for name in sorted(inconnus)}
             )
         return super().to_internal_value(data)
 
@@ -252,6 +253,6 @@ class WorkflowConfigurationSerializer(serializers.ModelSerializer):
         # DRF refuse déjà ``NaN`` et l'infini ; reste le signe.
         if not value.is_finite() or value <= Decimal("0"):
             raise serializers.ValidationError(
-                "Un facteur strictement positif est attendu."
+                _("Un facteur strictement positif est attendu.")
             )
         return value

@@ -1,7 +1,9 @@
 """Un mot de passe posé par le siège doit être remplacé avant tout usage."""
 
+import pyotp
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -20,8 +22,11 @@ class MotDePasseProvisoireTests(APITestCase):
         self.user = User.objects.create_user(
             "togo.innov", password="Provisoire-2026-siege"
         )
+        # Déjà enrôlé : ce fichier teste le verrou du mot de passe, pas
+        # celui de la double authentification.
         profil = UserProfile.objects.create(
-            user=self.user, role=Role.COUNTRY_MANAGER, must_change_password=True
+            user=self.user, role=Role.DM, must_change_password=True,
+            totp_secret=pyotp.random_base32(), totp_confirmed_at=timezone.now(),
         )
         profil.countries.set([self.pays])
         token, _ = Token.objects.get_or_create(user=self.user)

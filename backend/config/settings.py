@@ -34,6 +34,11 @@ ALLOWED_HOSTS = [
 # en parfaite santé.
 if "127.0.0.1" not in ALLOWED_HOSTS and "*" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("127.0.0.1")
+# Prometheus interroge ``/metrics`` par le nom du service sur le réseau
+# interne de la pile : ce nom n'est pas un domaine public, il doit pourtant
+# être accepté.
+if "backend" not in ALLOWED_HOSTS and "*" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("backend")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -47,6 +52,8 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "django_filters",
     "corsheaders",
+    # Métriques HTTP et base pour Prometheus (tableau de bord Grafana).
+    "django_prometheus",
     # apps
     "core",
     "accounts",
@@ -57,9 +64,14 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Mesure chaque requête de bout en bout : premier et dernier de la pile.
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    # Choisit la langue des messages d'après ``Accept-Language`` (interface
+    # bilingue). Après la session, avant le reste.
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -71,6 +83,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Expose la requête courante à l'historisation (auteur, adresse IP).
     "core.middleware.CurrentRequestMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -221,6 +234,20 @@ REST_FRAMEWORK = {
     "NUM_PROXIES": int(os.environ.get("DJANGO_NUM_PROXIES", "0")),
 }
 
+# Double authentification (TOTP), obligatoire pour tous les comptes.
+# Nom affiché par l'application d'authentification à côté du compte.
+TOTP_ISSUER = "JUSTI INNOV"
+
+# Domaines de messagerie admis pour les comptes (cf. accounts.validators).
+# Plusieurs valeurs séparées par des virgules ; comparés en minuscules.
+ALLOWED_EMAIL_DOMAINS = [
+    d.strip().lower()
+    for d in os.environ.get("ALLOWED_EMAIL_DOMAINS", "innovpharma.net").split(",")
+    if d.strip()
+]
+if not ALLOWED_EMAIL_DOMAINS:
+    raise ImproperlyConfigured("ALLOWED_EMAIL_DOMAINS ne doit pas être vide.")
+
 # ---------------------------------------------------------------------------
 # CORS - frontend Vite
 # ---------------------------------------------------------------------------
@@ -239,7 +266,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # les horodatages d'audit et l'admin s'afficheraient dans un fuseau sans
 # rapport avec les pays gérés. Les dates sont stockées en UTC ; chaque pays
 # porte son propre fuseau dans `Country.timezone` pour l'affichage local.
-LANGUAGE_CODE = "fr-fr"
+LANGUAGE_CODE = "fr"
+# Plateforme bilingue : le français est la langue de référence des messages,
+# l'anglais vient des catalogues ``locale/`` de chaque application. La langue
+# d'une réponse suit l'en-tête ``Accept-Language`` envoyé par l'interface.
+LANGUAGES = [("fr", "Français"), ("en", "English")]
 TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "UTC")
 USE_I18N = True
 USE_TZ = True
@@ -357,7 +388,9 @@ X_FRAME_OPTIONS = "DENY"
 # https, il ne verrait jamais un 200, le conteneur resterait « unhealthy » et
 # le déploiement n'aboutirait jamais. Déclaré sans condition pour que le test
 # vérifie la liste réellement appliquée.
-SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
+# Le contrôle de santé et la collecte Prometheus arrivent en HTTP depuis le
+# réseau interne : les rediriger vers HTTPS les rendrait injoignables.
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$", r"^metrics$"]
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "1") == "1"
@@ -372,3 +405,10 @@ if not DEBUG:
     # activable par l'environnement, et actif par défaut : le back-office et
     # les justificatifs n'ont aucune raison de transiter en clair.
     SECURE_HSTS_PRELOAD = os.environ.get("DJANGO_HSTS_PRELOAD", "1") == "1"
+
+# ---------------------------------------------------------------------------
+# Supervision (§ tableau de bord Grafana)
+# ---------------------------------------------------------------------------
+# Jeton présenté par le collecteur Prometheus sur ``/metrics``. Vide : le
+# point de collecte n'est pas exposé.
+METRICS_TOKEN = os.environ.get("METRICS_TOKEN", "")

@@ -1,51 +1,76 @@
-"""Profils utilisateurs : rôle et périmètre pays.
+"""Profils utilisateurs : rôle, périmètre pays, équipes, double authentification.
 
 Le cahier des charges (§4) définit six acteurs. Le rôle décide de *ce que* l'on
-peut faire, le périmètre décide *sur quels pays*. Les deux sont portés par le
-profil, jamais déduits du nom d'utilisateur.
+peut faire, le périmètre décide *sur quels pays* — et, pour un manager, *sur
+quelles équipes*. Les deux sont portés par le profil, jamais déduits du nom
+d'utilisateur.
+
+Le profil porte aussi l'enrôlement TOTP : le secret, et la date à laquelle
+son titulaire a prouvé qu'il le détenait (``totp_confirmed_at``). Tant que
+cette date est vide, le compte n'est pas considéré comme protégé et la
+plateforme lui est fermée (cf. ``accounts.middleware``).
 """
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 from core.models import Country, Manager, Team, TimeStampedModel
 
 
 class Role(models.TextChoices):
-    SUPER_ADMIN = "super_admin", "Super administrateur"
-    ADMIN = "admin", "Administrateur plateforme"
-    DOO = "doo", "Direction des opérations"
-    COUNTRY_MANAGER = "country_manager", "Responsable pays"
-    OWNER = "owner", "Manager / Owner"
-    CONTROLLER = "controller", "Contrôleur / Finance"
-    AUDITOR = "auditor", "Auditeur"
+    """Les cinq rôles de la plateforme.
+
+    Côté pays, trois niveaux : le manager engage la dépense et la saisit, le
+    DM (son supérieur) déclare le dossier, le DF (supérieur du DM) contrôle
+    la finance. Côté siège, la RH administre les comptes et les audite ; la
+    direction (DG, DO, CEO) et l'équipe de développement sont super
+    administrateurs. Il n'y a ni « direction des opérations » ni « auditeur »
+    distincts : la DO est super administratrice, l'audit revient à la RH.
+    """
+
+    SUPER_ADMIN = "super_admin", _("Super administrateur (DG, DO, CEO, DEV)")
+    ADMIN = "admin", _("Administrateur (RH)")
+    DF = "df", _("DF — direction financière")
+    DM = "dm", _("DM — supérieur du manager")
+    MANAGER = "manager", _("Manager")
 
 
 #: Rôles exercés depuis le siège : ils portent sur l'ensemble des pays.
-HEADQUARTERS_ROLES = frozenset(
-    {Role.SUPER_ADMIN, Role.ADMIN, Role.DOO, Role.CONTROLLER, Role.AUDITOR}
-)
+#: Le DF constate pour le siège ; il peut être restreint à certains pays.
+HEADQUARTERS_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
 
 #: Rôles dont le périmètre ne peut jamais être restreint.
 ALWAYS_GLOBAL_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 
+#: Langue par défaut d'un profil : celle de référence des messages.
+DEFAULT_LANGUAGE = "fr"
+
 
 class UserProfile(TimeStampedModel):
-    """Rôle et périmètre d'un compte."""
+    """Rôle, périmètre, équipes, langue et double authentification d'un compte."""
 
     user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name="profile", verbose_name="Compte"
+        User, on_delete=models.CASCADE, related_name="profile", verbose_name=_("Compte")
     )
-    role = models.CharField("Rôle", max_length=32, choices=Role.choices)
+    role = models.CharField(_("Rôle"), max_length=32, choices=Role.choices)
     countries = models.ManyToManyField(
         Country,
         blank=True,
         related_name="profiles",
-        verbose_name="Pays du périmètre",
-        help_text="Vide pour un rôle du siège : accès à tous les pays.",
+        verbose_name=_("Pays du périmètre"),
+        help_text=_("Vide pour un rôle du siège : accès à tous les pays."),
     )
     teams = models.ManyToManyField(
-        Team, blank=True, related_name="profiles", verbose_name="Équipes"
+        Team,
+        blank=True,
+        related_name="profiles",
+        verbose_name=_("Équipes"),
+        help_text=_(
+            "Pour un manager : restreint sa vue à ces équipes. "
+            "Vide, il voit tout son pays."
+        ),
     )
     manager = models.ForeignKey(
         Manager,
@@ -53,18 +78,46 @@ class UserProfile(TimeStampedModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="profiles",
-        verbose_name="Manager associé",
-        help_text="Référentiel métier ; un manager peut exister sans compte.",
+        verbose_name=_("Manager associé"),
+        help_text=_("Référentiel métier ; un manager peut exister sans compte."),
     )
     must_change_password = models.BooleanField(
-        "Changement de mot de passe requis",
+        _("Changement de mot de passe requis"),
         default=True,
-        help_text="Force le changement à la prochaine connexion.",
+        help_text=_("Force le changement à la prochaine connexion."),
+    )
+    # Le secret TOTP n'est jamais exposé par l'API après l'enrôlement : il ne
+    # sort qu'une fois, dans le QR d'enrôlement, vers le titulaire.
+    totp_secret = models.CharField(
+        _("Secret TOTP"),
+        max_length=64,
+        blank=True,
+        help_text=_("Vide tant que le compte n'est pas enrôlé."),
+    )
+    totp_confirmed_at = models.DateTimeField(
+        _("Double authentification confirmée le"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Date à laquelle le titulaire a saisi un premier code valide. "
+            "Vide : la plateforme lui reste fermée."
+        ),
+    )
+    language = models.CharField(
+        _("Langue"),
+        max_length=8,
+        choices=settings.LANGUAGES,
+        default=DEFAULT_LANGUAGE,
+        help_text=_(
+            "Préférence d'affichage de l'interface. La langue d'une réponse "
+            "de l'API suit l'en-tête Accept-Language de la requête."
+        ),
     )
 
     class Meta:
         ordering = ["user__username"]
-        verbose_name = "Profil"
+        verbose_name = _("Profil")
+        verbose_name_plural = _("Profils")
 
     def __str__(self):
         return f"{self.user.username} ({self.get_role_display()})"
@@ -91,3 +144,23 @@ class UserProfile(TimeStampedModel):
     def can_access_country(self, country_id):
         allowed = self.country_ids()
         return allowed is None or country_id in allowed
+
+    def team_ids(self):
+        """Identifiants des équipes auxquelles la vue est restreinte, ou ``None``.
+
+        Seul le manager est cloisonné par équipe : ses supérieurs (DM, DF)
+        couvrent le pays entier. Un manager **sans équipe rattachée voit tout
+        son pays** : c'est le choix retenu, parce que l'équipe est une
+        subdivision facultative du référentiel — un pays qui n'en a pas
+        déclaré n'a pas à en inventer une pour que ses managers travaillent.
+        La restriction s'active dès que l'administrateur rattache une équipe.
+        """
+        if self.role != Role.MANAGER:
+            return None
+        ids = list(self.teams.values_list("id", flat=True))
+        return ids or None
+
+    @property
+    def totp_confirmed(self):
+        """La double authentification est-elle active sur ce compte ?"""
+        return self.totp_confirmed_at is not None

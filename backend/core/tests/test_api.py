@@ -1,8 +1,10 @@
 """Tests de l'API : authentification, limitation de débit, non-suppression."""
 
+import pyotp
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.db.models import Max
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -20,8 +22,12 @@ class ApiTestCase(APITestCase):
         cache.clear()
         self.user = User.objects.create_user(username="admin.test", password=PASSWORD)
         # Les vues exigent un profil : sans rôle, aucun droit.
+        # Compte en service : mot de passe personnel et 2FA confirmée. La
+        # connexion exige donc un code (cf. accounts.tests).
+        self.secret = pyotp.random_base32()
         UserProfile.objects.create(
-            user=self.user, role=Role.SUPER_ADMIN, must_change_password=False
+            user=self.user, role=Role.SUPER_ADMIN, must_change_password=False,
+            totp_secret=self.secret, totp_confirmed_at=timezone.now(),
         )
         self.token = Token.objects.create(user=self.user)
         self.country = Country.objects.create(
@@ -41,7 +47,7 @@ class AuthenticationTests(ApiTestCase):
     def test_login_retourne_un_jeton(self):
         response = self.client.post(
             "/api/token-auth/",
-            {"username": "admin.test", "password": PASSWORD},
+            {"username": "admin.test", "password": PASSWORD, "code": pyotp.TOTP(self.secret).now()},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -77,7 +83,7 @@ class AuthenticationTests(ApiTestCase):
     def test_la_connexion_est_journalisee(self):
         self.client.post(
             "/api/token-auth/",
-            {"username": "admin.test", "password": PASSWORD},
+            {"username": "admin.test", "password": PASSWORD, "code": pyotp.TOTP(self.secret).now()},
             REMOTE_ADDR="203.0.113.7",
         )
 
@@ -180,13 +186,14 @@ class HistoryScopeTests(ApiTestCase):
 
     def _compte(self, username, role, countries=()):
         user = User.objects.create_user(username=username, password=PASSWORD)
-        profile = UserProfile.objects.create(user=user, role=role, must_change_password=False)
+        profile = UserProfile.objects.create(user=user, role=role, must_change_password=False,
+            totp_confirmed_at=timezone.now())
         profile.countries.set(countries)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=user).key}")
         return user
 
     def test_un_owner_ne_lit_pas_l_historique(self):
-        self._compte("owner.test", Role.OWNER, [self.country])
+        self._compte("owner.test", Role.MANAGER, [self.country])
 
         response = self.client.get("/api/history/")
 
@@ -196,7 +203,7 @@ class HistoryScopeTests(ApiTestCase):
         """Taux de change, configuration, comptes : rattachés à aucun pays,
         ils étaient invisibles pour un rôle du siège limité à quelques pays."""
         autre = Country.objects.create(name="Bénin", code="BJ", currency="XOF")
-        self._compte("doo.test", Role.DOO, [self.country])
+        self._compte("df.test", Role.DF, [self.country])
         # Le journal est en ajout seul : on ne le vide pas, on retient un
         # repère et on ne juge que ce qui vient après.
         repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
@@ -218,7 +225,7 @@ class HistoryScopeTests(ApiTestCase):
         self.assertEqual(pays, {None, self.country.pk})
 
     def test_un_responsable_pays_ne_voit_pas_les_entrees_sans_pays(self):
-        self._compte("pays.test", Role.COUNTRY_MANAGER, [self.country])
+        self._compte("pays.test", Role.DM, [self.country])
         ChangeLog.objects.create(
             model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
             label="Configuration", action=ChangeLog.Actions.UPDATED,

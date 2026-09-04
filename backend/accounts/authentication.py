@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import AuthenticationFailed
@@ -61,9 +62,9 @@ class JetonAuthentication(TokenAuthentication):
             # et chaque vue y touche.
             token = Token.objects.select_related("user", "user__profile").get(key=key)
         except Token.DoesNotExist:
-            raise AuthenticationFailed("Jeton invalide.")
+            raise AuthenticationFailed(_("Jeton invalide."))
         if not token.user.is_active:
-            raise AuthenticationFailed("Compte désactivé.")
+            raise AuthenticationFailed(_("Compte désactivé."))
         if est_expire(token):
-            raise AuthenticationFailed("Jeton expiré : reconnectez-vous.")
+            raise AuthenticationFailed(_("Jeton expiré : reconnectez-vous."))
         return token.user, token

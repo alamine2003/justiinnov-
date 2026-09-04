@@ -11,8 +11,20 @@ La commande est faite pour être relancée : elle crée ce qui manque et met à
 jour le reste, sans jamais toucher au mot de passe d'un compte existant —
 sauf ``reset_password`` explicite — ni re-verrouiller un compte dont le
 titulaire a déjà remplacé son mot de passe provisoire.
+
+Chaque compte doit porter une adresse e-mail professionnelle (domaines de
+``ALLOWED_EMAIL_DOMAINS``) : la même règle que l'API, appliquée ici parce
+que la commande est un chemin d'écriture comme un autre.
+
+Une clé ``totp_secret`` (base32) enrôle et confirme d'emblée la double
+authentification avec ce secret. Elle n'existe que pour les environnements
+jetables — intégration continue, captures d'écran — où un script doit se
+connecter sans téléphone : un secret écrit dans un fichier n'est plus un
+second facteur. Il n'est jamais affiché.
 """
 
+import base64
+import binascii
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,8 +33,10 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
 from accounts.models import Role, UserProfile
+from accounts.validators import valider_email_professionnel
 from core.models import Country
 from core.signals import reset_current_request, set_current_request
 
@@ -138,17 +152,29 @@ class Command(BaseCommand):
                 f"Valeurs possibles : {', '.join(Role.values)}"
             )
         refs = payload.get("countries", [])
-        if role == Role.COUNTRY_MANAGER and not refs:
+        if role == Role.DM and not refs:
             # Un responsable pays sans pays verrait tout, comme le siège :
             # exactement l'inverse de ce que son rôle promet.
             raise CommandError(
                 f"Le responsable pays {username} doit avoir au moins un pays."
             )
 
+        # Vérifiée avant toute écriture : un compte créé sans adresse ne
+        # pourrait pas s'enrôler proprement (le QR est libellé par l'e-mail).
+        existant = User.objects.filter(username=username).first()
+        try:
+            email = valider_email_professionnel(
+                payload.get("email") or (existant.email if existant else "")
+            )
+        except ValidationError as exc:
+            raise CommandError(
+                f"Compte {username} refusé : " + " ".join(exc.messages)
+            ) from exc
+
         user, created = User.objects.get_or_create(username=username)
         user.first_name = payload.get("first_name", user.first_name)
         user.last_name = payload.get("last_name", user.last_name)
-        user.email = payload.get("email", user.email)
+        user.email = email
         # Le back-office Django est réservé au siège.
         user.is_staff = role in (Role.SUPER_ADMIN, Role.ADMIN)
         user.is_superuser = role == Role.SUPER_ADMIN
@@ -171,6 +197,8 @@ class Command(BaseCommand):
             # état : le re-verrouiller à chaque relance fermait la plateforme
             # à tout le monde le lendemain d'un simple ajout de compte.
             profile.must_change_password = payload.get("must_change_password", True)
+        if "totp_secret" in payload:
+            self._enroler(profile, username, payload["totp_secret"])
         profile.save()
 
         if refs:
@@ -187,7 +215,29 @@ class Command(BaseCommand):
         scope = ", ".join(refs) if refs else "siège (tous pays)"
         verb = "créé" if created else "mis à jour"
         detail = " (mot de passe posé)" if mot_de_passe_pose else ""
+        if "totp_secret" in payload:
+            detail += " (2FA enrôlée par le fichier)"
         self.stdout.write(f"Compte {username:<22} {role:<16} {scope:<22} {verb}{detail}")
+
+    def _enroler(self, profile, username, secret):
+        """Pose un secret TOTP venu du fichier et le tient pour confirmé.
+
+        Le secret est vérifié (base32 non vide) mais jamais écrit sur la
+        sortie : il vaut un mot de passe. Relancée avec le même secret, la
+        commande ne change rien ; avec un autre, elle le remplace — le
+        fichier fait foi dans un environnement jetable.
+        """
+        secret = str(secret or "").strip().replace(" ", "").upper()
+        try:
+            if not secret or not base64.b32decode(secret + "=" * (-len(secret) % 8)):
+                raise ValueError
+        except (binascii.Error, ValueError):
+            raise CommandError(
+                f"Compte {username} : totp_secret doit être un secret base32 non vide."
+            ) from None
+        if profile.totp_secret != secret or profile.totp_confirmed_at is None:
+            profile.totp_secret = secret
+            profile.totp_confirmed_at = timezone.now()
 
 
 class _Rollback(Exception):

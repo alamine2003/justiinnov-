@@ -3,6 +3,7 @@
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -14,7 +15,7 @@ from core.models import Country
 
 class ValidateurTests(APITestCase):
     def test_un_code_africain_passe(self):
-        for code in ("CI", "TG", "SN", "MA", "ZA"):
+        for code in ("CI", "TG", "SN", "MG", "CD"):
             validate_african_country(code)
 
     def test_un_code_hors_afrique_est_refuse(self):
@@ -39,7 +40,8 @@ class CreationParApiTests(APITestCase):
         cache.clear()
         user = User.objects.create_user(username="ceo.innov", password="Motdepasse-2026-test")
         UserProfile.objects.create(
-            user=user, role=Role.SUPER_ADMIN, must_change_password=False
+            user=user, role=Role.SUPER_ADMIN, must_change_password=False,
+            totp_confirmed_at=timezone.now()
         )
         token, _ = Token.objects.get_or_create(user=user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
@@ -117,7 +119,8 @@ class PaysDisponiblesTests(CreationParApiTests):
             username="togo.innov", password="Motdepasse-2026-test"
         )
         UserProfile.objects.create(
-            user=rep, role=Role.COUNTRY_MANAGER, must_change_password=False
+            user=rep, role=Role.DM, must_change_password=False,
+            totp_confirmed_at=timezone.now()
         )
         token, _ = Token.objects.get_or_create(user=rep)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")

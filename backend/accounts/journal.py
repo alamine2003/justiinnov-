@@ -13,6 +13,7 @@ from core.signals import journaliser, serialisable
 CHAMPS_SUIVIS = (
     "username", "first_name", "last_name", "email", "is_active",
     "is_staff", "is_superuser", "role", "must_change_password",
+    "totp_confirmed",
 )
 
 
@@ -32,13 +33,20 @@ def etat_compte(user):
     etat["must_change_password"] = (
         profile.must_change_password if profile is not None else None
     )
+    # L'état du second facteur, jamais le secret : il ne doit figurer nulle
+    # part ailleurs que sur le profil et le téléphone du titulaire.
+    etat["totp_confirmed"] = profile.totp_confirmed if profile is not None else None
     return etat
 
 
 def journaliser_compte(request, user, action, *, avant=None, apres=None,
-                       changed_fields=None):
-    """Écrit une entrée pour ``user``, signée par l'auteur de ``request``."""
-    diff = {}
+                       changed_fields=None, diff=None):
+    """Écrit une entrée pour ``user``, signée par l'auteur de ``request``.
+
+    ``diff`` se calcule d'``avant``/``apres`` quand ils sont fournis ; sinon
+    l'appelant peut le donner tel quel (un seul champ qui bascule).
+    """
+    diff = diff or {}
     if avant is not None and apres is not None:
         diff = {
             champ: [avant.get(champ), apres.get(champ)]

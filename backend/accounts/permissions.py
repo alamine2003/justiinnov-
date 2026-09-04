@@ -7,6 +7,7 @@ dispersée dans des tests conditionnels.
 
 from dataclasses import dataclass
 
+from django.utils.translation import gettext_lazy as _
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 from .models import Role
@@ -18,6 +19,9 @@ class Access:
 
     role: str
     country_ids: list | None  # ``None`` = tous les pays
+    #: Équipes auxquelles un manager est restreint ; ``None`` = pas de
+    #: restriction par équipe (autre rôle, ou manager sans équipe).
+    team_ids: list | None = None
 
     @property
     def has_global_scope(self):
@@ -51,7 +55,11 @@ def get_access(user):
     access = (
         None
         if profile is None
-        else Access(role=profile.role, country_ids=profile.country_ids())
+        else Access(
+            role=profile.role,
+            country_ids=profile.country_ids(),
+            team_ids=profile.team_ids(),
+        )
     )
     setattr(user, _ATTRIBUT_MEMO, access)
     return access
@@ -64,17 +72,28 @@ REFERENTIAL_WRITE_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 
 #: Équipes, centres de coûts, projets, intitulés, catégories : le responsable
 #: pays les gère pour son propre périmètre.
-SUBENTITY_WRITE_ROLES = REFERENTIAL_WRITE_ROLES | {Role.COUNTRY_MANAGER}
+SUBENTITY_WRITE_ROLES = REFERENTIAL_WRITE_ROLES | {Role.DM}
 
-#: Budgets et réallocations : attribution et arbitrage (§4).
-BUDGET_WRITE_ROLES = frozenset({Role.SUPER_ADMIN, Role.DOO})
+#: Budgets et réallocations : attribution et arbitrage (§4). La direction
+#: des opérations attribue en tant que super administratrice ; la direction
+#: financière arbitre avec elle, éventuellement sur un périmètre restreint.
+BUDGET_WRITE_ROLES = frozenset({Role.SUPER_ADMIN, Role.DF})
+
+#: Exports (Excel, CSV, Word, PDF) et import : réservés aux administrateurs.
+#: Le reste de l'organisation travaille dans l'application, sans fichier.
+EXPORT_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
+
+#: Réouverture d'un dossier déclaré : seule exception à l'irréversibilité,
+#: réservée aux administrateurs, motivée et tracée. Elle sert à demander des
+#: comptes, pas à corriger en silence.
+REOPEN_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 
 #: Comptes utilisateurs et rôles.
 USER_WRITE_ROLES = REFERENTIAL_WRITE_ROLES
 
 #: Saisie des dépenses, des dossiers et dépôt des justificatifs (§4).
 EXPENSE_WRITE_ROLES = frozenset(
-    {Role.SUPER_ADMIN, Role.ADMIN, Role.COUNTRY_MANAGER, Role.OWNER}
+    {Role.SUPER_ADMIN, Role.ADMIN, Role.DM, Role.MANAGER}
 )
 
 #: Contrôle documentaire, justification et constat de non-justification.
@@ -83,19 +102,15 @@ EXPENSE_WRITE_ROLES = frozenset(
 #: justifier ses propres dépenses viderait l'application de sa raison d'être :
 #: c'est le siège qui constate qu'une pièce couvre un décaissement, jamais
 #: celui qui l'a engagé.
-VALIDATION_ROLES = frozenset(
-    {Role.SUPER_ADMIN, Role.ADMIN, Role.DOO, Role.CONTROLLER}
-)
+VALIDATION_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
 
-#: Consultation du journal d'audit.
-AUDIT_READ_ROLES = frozenset(
-    {Role.SUPER_ADMIN, Role.ADMIN, Role.DOO, Role.CONTROLLER, Role.AUDITOR}
-)
+#: Consultation du journal d'audit : le siège, RH comprise, qui audite.
+AUDIT_READ_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
 
 #: Consultation de l'historique du référentiel (``/api/history/``) : le
 #: siège, et le responsable pays pour son périmètre. Un owner saisit des
 #: dépenses ; l'organisation du pays ne le regarde pas.
-HISTORY_READ_ROLES = AUDIT_READ_ROLES | {Role.COUNTRY_MANAGER}
+HISTORY_READ_ROLES = AUDIT_READ_ROLES | {Role.DM}
 
 
 #: Matrice des capacités, source unique.
@@ -106,38 +121,38 @@ HISTORY_READ_ROLES = AUDIT_READ_ROLES | {Role.COUNTRY_MANAGER}
 CAPABILITIES = [
     {
         "key": "manage_users",
-        "label": "Comptes et rôles",
-        "description": "Créer, modifier, activer ou désactiver un compte.",
+        "label": _("Comptes et rôles"),
+        "description": _("Créer, modifier, activer ou désactiver un compte."),
         "roles": USER_WRITE_ROLES,
     },
     {
         "key": "manage_countries",
-        "label": "Pays et managers",
-        "description": "Créer et modifier les pays, leurs devises et leurs managers.",
+        "label": _("Pays et managers"),
+        "description": _("Créer et modifier les pays, leurs devises et leurs managers."),
         "roles": REFERENTIAL_WRITE_ROLES,
     },
     {
         "key": "manage_subentities",
-        "label": "Équipes, projets, intitulés",
-        "description": "Gérer les sous-entités d'un pays.",
+        "label": _("Équipes, projets, intitulés"),
+        "description": _("Gérer les sous-entités d'un pays."),
         "roles": SUBENTITY_WRITE_ROLES,
     },
     {
         "key": "manage_budgets",
-        "label": "Enveloppes et réallocations",
-        "description": "Attribuer les budgets et arbitrer les transferts.",
+        "label": _("Enveloppes et réallocations"),
+        "description": _("Attribuer les budgets et arbitrer les transferts."),
         "roles": BUDGET_WRITE_ROLES,
     },
     {
         "key": "record_expenses",
-        "label": "Saisie et soumission",
-        "description": "Saisir des dépenses, déposer des pièces, soumettre un dossier.",
+        "label": _("Saisie et soumission"),
+        "description": _("Saisir des dépenses, déposer des pièces, soumettre un dossier."),
         "roles": EXPENSE_WRITE_ROLES,
     },
     {
         "key": "validate_expenses",
-        "label": "Justification",
-        "description": (
+        "label": _("Justification"),
+        "description": _(
             "Constater qu'une pièce couvre une dépense, ou l'absence de preuve. "
             "Le pays en est exclu : il déclare, le siège constate."
         ),
@@ -145,9 +160,27 @@ CAPABILITIES = [
     },
     {
         "key": "view_audit",
-        "label": "Journal d'audit",
-        "description": "Consulter la trace des actions sensibles.",
+        "label": _("Journal d'audit"),
+        "description": _("Consulter la trace des actions sensibles."),
         "roles": AUDIT_READ_ROLES,
+    },
+    {
+        "key": "export_data",
+        "label": _("Imports et exports"),
+        "description": _(
+            "Importer un classeur, exporter en Excel, CSV, Word ou PDF. "
+            "Le reste de l'organisation travaille dans l'application."
+        ),
+        "roles": EXPORT_ROLES,
+    },
+    {
+        "key": "reopen_dossiers",
+        "label": _("Réouverture d'un dossier"),
+        "description": _(
+            "Rouvrir un dossier déclaré pour demander des comptes. "
+            "Seule exception à l'irréversibilité, motivée et tracée."
+        ),
+        "roles": REOPEN_ROLES,
     },
 ]
 
@@ -172,7 +205,7 @@ class RolePermission(BasePermission):
       lecture peut n'intéresser que ceux qui peuvent agir dessus.
     """
 
-    message = "Votre rôle ne permet pas cette action."
+    message = _("Votre rôle ne permet pas cette action.")
 
     def has_permission(self, request, view):
         access = get_access(request.user)

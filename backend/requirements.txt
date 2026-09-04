@@ -13,3 +13,11 @@ reportlab==4.4.10
 apscheduler==3.11.3
 # Analyse XML durcie (openpyxl et reportlab s'en servent si elle est présente).
 defusedxml==0.7.1
+
+# Double authentification (TOTP) et QR d'enrôlement
+pyotp==2.9.0
+qrcode[pil]==8.0
+# Export Word
+python-docx==1.1.2
+# Métriques pour Prometheus / Grafana
+django-prometheus==2.3.1

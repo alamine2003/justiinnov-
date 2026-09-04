@@ -3,6 +3,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+import pyotp
 from django.contrib.auth.models import User
 from django.db.models import Max
 from django.test import override_settings
@@ -45,8 +46,8 @@ class TraceDesComptesTests(ScopingTestCase):
         response = self.client.post(
             "/api/users/",
             {
-                "username": "kofi.innov", "email": "kofi@example.org",
-                "password": "Provisoire-2026-Ghana", "role": Role.OWNER,
+                "username": "kofi.innov", "email": "kofi@innovpharma.net",
+                "password": "Provisoire-2026-Ghana", "role": Role.MANAGER,
                 "countries": [self.togo.pk],
             },
             format="json",
@@ -66,7 +67,7 @@ class TraceDesComptesTests(ScopingTestCase):
     def test_la_modification_porte_avant_et_apres(self):
         response = self.client.patch(
             f"/api/users/{self.rep_togo.pk}/",
-            {"role": Role.OWNER, "email": "togo@example.org"},
+            {"role": Role.MANAGER, "email": "togo@innovpharma.net"},
             format="json",
             REMOTE_ADDR="203.0.113.7",
         )
@@ -75,7 +76,10 @@ class TraceDesComptesTests(ScopingTestCase):
         entry = entrees(self.rep_togo, action=ChangeLog.Actions.UPDATED).get()
         self.assertEqual(
             entry.diff,
-            {"role": [Role.COUNTRY_MANAGER, Role.OWNER], "email": ["", "togo@example.org"]},
+            {
+                "role": [Role.DM, Role.MANAGER],
+                "email": ["togo.innov@innovpharma.net", "togo@innovpharma.net"],
+            },
         )
         self.assertEqual(entry.ip_address, "203.0.113.7")
 
@@ -94,7 +98,7 @@ class TraceDesComptesTests(ScopingTestCase):
 
     def test_une_modification_sans_changement_ne_trace_rien(self):
         self.client.patch(
-            f"/api/users/{self.rep_togo.pk}/", {"role": Role.COUNTRY_MANAGER}, format="json"
+            f"/api/users/{self.rep_togo.pk}/", {"role": Role.DM}, format="json"
         )
 
         self.assertFalse(entrees(self.rep_togo).exists())
@@ -147,8 +151,8 @@ class TraceDesComptesTests(ScopingTestCase):
         creation = self.client.post(
             "/api/users/",
             {
-                "username": "kofi.innov", "password": "Provisoire-2026-Ghana",
-                "role": Role.OWNER, "must_change_password": False,
+                "username": "kofi.innov", "email": "kofi@innovpharma.net", "password": "Provisoire-2026-Ghana",
+                "role": Role.MANAGER, "must_change_password": False,
             },
             format="json",
         )
@@ -165,14 +169,14 @@ class TraceDesComptesTests(ScopingTestCase):
         """Un super administrateur rétrogradé ne doit pas garder l'admin."""
         self.client.post(
             "/api/users/",
-            {"username": "dg.innov", "password": "Provisoire-2026-DG", "role": Role.SUPER_ADMIN},
+            {"username": "dg.innov", "email": "dg@innovpharma.net", "password": "Provisoire-2026-DG", "role": Role.SUPER_ADMIN},
             format="json",
         )
         dg = User.objects.get(username="dg.innov")
         self.assertTrue(dg.is_superuser)
         self.assertTrue(dg.is_staff)
 
-        self.client.patch(f"/api/users/{dg.pk}/", {"role": Role.AUDITOR}, format="json")
+        self.client.patch(f"/api/users/{dg.pk}/", {"role": Role.DF}, format="json")
 
         dg.refresh_from_db()
         self.assertFalse(dg.is_superuser)
@@ -190,7 +194,7 @@ class HierarchieDesRolesTests(ScopingTestCase):
     def test_un_admin_ne_cree_pas_de_super_admin(self):
         response = self.client.post(
             "/api/users/",
-            {"username": "dg.innov", "password": "Provisoire-2026-DG", "role": Role.SUPER_ADMIN},
+            {"username": "dg.innov", "email": "dg@innovpharma.net", "password": "Provisoire-2026-DG", "role": Role.SUPER_ADMIN},
             format="json",
         )
 
@@ -205,7 +209,7 @@ class HierarchieDesRolesTests(ScopingTestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_un_admin_ne_modifie_pas_un_super_admin(self):
-        for charge in ({"email": "x@example.org"}, {"password": "Pirate-2026-mdp"},
+        for charge in ({"email": "x@innovpharma.net"}, {"password": "Pirate-2026-mdp"},
                        {"is_active": False}):
             with self.subTest(charge=charge):
                 response = self.client.patch(
@@ -229,11 +233,11 @@ class HierarchieDesRolesTests(ScopingTestCase):
 
         creation = self.client.post(
             "/api/users/",
-            {"username": "dg.innov", "password": "Provisoire-2026-DG", "role": Role.SUPER_ADMIN},
+            {"username": "dg.innov", "email": "dg@innovpharma.net", "password": "Provisoire-2026-DG", "role": Role.SUPER_ADMIN},
             format="json",
         )
         modification = self.client.patch(
-            f"/api/users/{creation.data['id']}/", {"email": "dg@example.org"}, format="json"
+            f"/api/users/{creation.data['id']}/", {"email": "dg@innovpharma.net"}, format="json"
         )
 
         self.assertEqual(creation.status_code, status.HTTP_201_CREATED)
@@ -304,7 +308,11 @@ class JetonsTests(ScopingTestCase):
         self._vieillir(self.rep_togo, 31)
 
         response = self.client.post(
-            "/api/token-auth/", {"username": "togo.innov", "password": MOT_DE_PASSE}
+            "/api/token-auth/",
+            {
+                "username": "togo.innov", "password": MOT_DE_PASSE,
+                "code": pyotp.TOTP(self.rep_togo.profile.totp_secret).now(),
+            },
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -364,7 +372,8 @@ class CompteSansProfilTests(ScopingTestCase):
 
     def test_le_profil_reprend_ses_droits(self):
         UserProfile.objects.create(
-            user=self.technique, role=Role.SUPER_ADMIN, must_change_password=False
+            user=self.technique, role=Role.SUPER_ADMIN, must_change_password=False,
+            totp_secret=pyotp.random_base32(), totp_confirmed_at=timezone.now(),
         )
 
         self.assertEqual(self.client.get("/api/countries/").status_code, status.HTTP_200_OK)
