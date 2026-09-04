@@ -1,22 +1,20 @@
-"""Vues des comptes : profil courant, mot de passe, gestion des utilisateurs."""
+"""Vues des comptes : profil courant, mot de passe, session, utilisateurs."""
 
-from django.conf import settings
 from django.contrib.auth.models import User
+from django.db import transaction
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from budget.models import CONSOLIDATION_CURRENCY
 from core.mixins import NoDestroyModelViewSet
+from core.models import ChangeLog
+from core.views import BackOfficePermission
 
+from .authentication import obtenir_jeton, revoquer_jeton
+from .journal import etat_compte, journaliser_compte, journaliser_modification
 from .models import HEADQUARTERS_ROLES, Role
-from .permissions import (
-    CAPABILITIES,
-    USER_WRITE_ROLES,
-    RolePermission,
-    get_access,
-)
+from .permissions import CAPABILITIES, USER_WRITE_ROLES, RolePermission, get_access
 from .serializers import ChangePasswordSerializer, MeSerializer, UserSerializer
 
 
@@ -28,8 +26,14 @@ class MeView(APIView):
 
 
 class ChangePasswordView(APIView):
-    """Changement de mot de passe par l'utilisateur lui-même."""
+    """Changement de mot de passe par l'utilisateur lui-même.
 
+    Le jeton en cours est remplacé : un jeton obtenu avec l'ancien mot de
+    passe — sur un poste oublié, ou par qui l'a intercepté — ne doit pas
+    survivre au nouveau. Le client reçoit le jeton de remplacement.
+    """
+
+    @transaction.atomic
     def post(self, request):
         serializer = ChangePasswordSerializer(
             data=request.data, context={"request": request}
@@ -45,6 +49,22 @@ class ChangePasswordView(APIView):
             profile.must_change_password = False
             profile.save(update_fields=["must_change_password"])
 
+        revoquer_jeton(user)
+        token = obtenir_jeton(user)
+        journaliser_compte(request, user, ChangeLog.Actions.PASSWORD_CHANGED)
+        return Response({"token": token.key})
+
+
+class LogoutView(APIView):
+    """Déconnexion : le jeton est supprimé côté serveur.
+
+    Oublier le jeton dans le navigateur ne suffit pas : tant qu'il existe en
+    base, quiconque l'a copié agit au nom du compte.
+    """
+
+    def post(self, request):
+        journaliser_compte(request, request.user, ChangeLog.Actions.LOGOUT)
+        revoquer_jeton(request.user)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -65,6 +85,38 @@ class UserViewSet(NoDestroyModelViewSet):
     search_fields = ["username", "first_name", "last_name", "email"]
     ordering_fields = ["username", "date_joined"]
 
+    def _verifier_hierarchie(self, serializer):
+        """Le rôle de super administrateur ne se touche qu'entre pairs.
+
+        Un administrateur qui pourrait créer, modifier ou réinitialiser le
+        mot de passe d'un super administrateur — ou s'attribuer le rôle —
+        aurait de fait tous les droits. Seul un super administrateur agit sur
+        un compte de ce niveau ou le confère.
+        """
+        access = get_access(self.request.user)
+        if access is not None and access.role == Role.SUPER_ADMIN:
+            return
+        cible = serializer.instance
+        profile = getattr(cible, "profile", None) if cible is not None else None
+        role_vise = serializer.validated_data.get("profile", {}).get("role")
+        if role_vise == Role.SUPER_ADMIN or (
+            profile is not None and profile.role == Role.SUPER_ADMIN
+        ):
+            raise PermissionDenied(
+                "Seul un super administrateur peut gérer un compte de super "
+                "administrateur ou attribuer ce rôle."
+            )
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        self._verifier_hierarchie(serializer)
+        user = serializer.save()
+        journaliser_compte(
+            self.request, user, ChangeLog.Actions.CREATED,
+            apres=etat_compte(user),
+        )
+
+    @transaction.atomic
     def perform_update(self, serializer):
         """Interdit de se désactiver ou de se déclasser soi-même.
 
@@ -82,58 +134,23 @@ class UserViewSet(NoDestroyModelViewSet):
                 raise ValidationError(
                     {"role": "Vous ne pouvez pas retirer vos propres droits d'administration."}
                 )
-        serializer.save()
+        self._verifier_hierarchie(serializer)
 
+        avant = etat_compte(serializer.instance)
+        user = serializer.save()
+        apres = etat_compte(user)
+        journaliser_modification(self.request, user, avant, apres)
 
-class BackOfficePermission(RolePermission):
-    """Le back-office est réservé au siège."""
-
-    message = "Le back-office est réservé aux administrateurs du siège."
-
-    def has_permission(self, request, view):
-        access = get_access(request.user)
-        return access is not None and access.role in USER_WRITE_ROLES
-
-
-class ConfigurationView(APIView):
-    """Paramètres système du back-office.
-
-    Ils sont fixés par l'environnement au démarrage : les exposer en lecture
-    permet de vérifier ce qui tourne réellement, sans se fier au fichier de
-    configuration qu'on croit déployé.
-    """
-
-    permission_classes = [BackOfficePermission]
-
-    def get(self, request):
-        return Response(
-            {
-                "alertes": {
-                    "seuils": settings.ALERT_THRESHOLDS,
-                    "facteur_depense_inhabituelle": settings.UNUSUAL_EXPENSE_FACTOR,
-                },
-                "justificatifs": {
-                    "taille_max_mo": settings.MAX_PROOF_SIZE // (1024 * 1024),
-                    "formats_acceptes": settings.ALLOWED_PROOF_EXTENSIONS,
-                    "stockage": (
-                        "Object storage (S3/MinIO)"
-                        if settings.AWS_S3_ENDPOINT_URL
-                        else "Disque local"
-                    ),
-                },
-                "budget": {
-                    "devise_de_consolidation": CONSOLIDATION_CURRENCY,
-                },
-                "notifications": {
-                    "email_configure": bool(settings.EMAIL_HOST),
-                    "expediteur": settings.DEFAULT_FROM_EMAIL,
-                },
-                "systeme": {
-                    "fuseau": settings.TIME_ZONE,
-                    "mode_debug": settings.DEBUG,
-                },
-            }
-        )
+        if serializer.validated_data.get("password"):
+            # Le mot de passe posé par le siège rend l'ancien jeton caduc :
+            # qui le détenait n'est plus forcément le titulaire.
+            revoquer_jeton(user)
+            journaliser_compte(
+                self.request, user, ChangeLog.Actions.PASSWORD_RESET,
+                changed_fields=["password"],
+            )
+        if avant["is_active"] and not apres["is_active"]:
+            revoquer_jeton(user)
 
 
 class PermissionMatrixView(APIView):

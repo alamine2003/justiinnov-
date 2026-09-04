@@ -46,17 +46,66 @@ class AuthenticationTests(ApiTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["token"], self.token.key)
 
-    def test_login_limite_le_bourrage_d_identifiants(self):
+    def test_login_limite_le_bourrage_d_identifiants_par_adresse(self):
         """``ObtainAuthToken`` neutralise les limites globales de DRF : la
         limitation doit être explicitement rattachée à la vue."""
-        payload = {"username": "admin.test", "password": "mauvais"}
-
-        for _ in range(10):
-            response = self.client.post("/api/token-auth/", payload)
+        for index in range(10):
+            response = self.client.post(
+                "/api/token-auth/", {"username": f"compte{index}", "password": "mauvais"}
+            )
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-        response = self.client.post("/api/token-auth/", payload)
+        response = self.client.post(
+            "/api/token-auth/", {"username": "compte11", "password": "mauvais"}
+        )
         self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_login_limite_le_bourrage_d_identifiants_par_compte(self):
+        """Un compte visé depuis plusieurs adresses est protégé aussi."""
+        payload = {"username": "admin.test", "password": "mauvais"}
+
+        for index in range(5):
+            response = self.client.post(
+                "/api/token-auth/", payload, REMOTE_ADDR=f"203.0.113.{index + 1}"
+            )
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response = self.client.post("/api/token-auth/", payload, REMOTE_ADDR="203.0.113.99")
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_la_connexion_est_journalisee(self):
+        self.client.post(
+            "/api/token-auth/",
+            {"username": "admin.test", "password": PASSWORD},
+            REMOTE_ADDR="203.0.113.7",
+        )
+
+        entry = ChangeLog.objects.get(action=ChangeLog.Actions.LOGIN)
+        self.assertEqual(entry.model_name, ChangeLog.Models.USER)
+        self.assertEqual(entry.object_id, self.user.pk)
+        self.assertEqual(entry.performed_by, "admin.test")
+        self.assertEqual(entry.ip_address, "203.0.113.7")
+
+    def test_l_echec_de_connexion_est_journalise(self):
+        """C'est la première trace d'une intrusion : nom essayé et adresse."""
+        self.client.post(
+            "/api/token-auth/",
+            {"username": "inconnu", "password": "mauvais"},
+            REMOTE_ADDR="203.0.113.8",
+        )
+
+        entry = ChangeLog.objects.get(action=ChangeLog.Actions.LOGIN_FAILED)
+        self.assertEqual(entry.label, "inconnu")
+        self.assertEqual(entry.performed_by, "inconnu")
+        self.assertIsNone(entry.object_id)
+        self.assertEqual(entry.ip_address, "203.0.113.8")
+
+    def test_le_point_de_sante_ne_declenche_pas_de_limite_anonyme(self):
+        """Interrogé toutes les trente secondes par Docker, il ne doit jamais
+        répondre 429."""
+        for _ in range(70):
+            response = self.client.get("/api/health/")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 class NoDestroyTests(ApiTestCase):
@@ -123,6 +172,58 @@ class HistoryTests(ApiTestCase):
 
         entry = ChangeLog.objects.filter(action=ChangeLog.Actions.UPDATED).first()
         self.assertEqual(entry.performed_by, "admin.test")
+
+
+class HistoryScopeTests(ApiTestCase):
+    """Qui lit l'historique, et lequel."""
+
+    def _compte(self, username, role, countries=()):
+        user = User.objects.create_user(username=username, password=PASSWORD)
+        profile = UserProfile.objects.create(user=user, role=role, must_change_password=False)
+        profile.countries.set(countries)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=user).key}")
+        return user
+
+    def test_un_owner_ne_lit_pas_l_historique(self):
+        self._compte("owner.test", Role.OWNER, [self.country])
+
+        response = self.client.get("/api/history/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_un_siege_restreint_voit_aussi_les_entrees_sans_pays(self):
+        """Taux de change, configuration, comptes : rattachés à aucun pays,
+        ils étaient invisibles pour un rôle du siège limité à quelques pays."""
+        autre = Country.objects.create(name="Bénin", code="BJ", currency="XOF")
+        self._compte("doo.test", Role.DOO, [self.country])
+        ChangeLog.objects.all().delete()
+        ChangeLog.objects.create(
+            model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
+            label="Configuration", action=ChangeLog.Actions.UPDATED,
+        )
+        self.country.timezone = "Africa/Accra"
+        self.country.save()
+        autre.timezone = "Africa/Accra"
+        autre.save()
+
+        response = self.client.get("/api/history/")
+
+        labels = {e["model_name"] for e in response.data["results"]}
+        self.assertEqual(labels, {"workflow_configuration", "country"})
+        pays = {e["country"] for e in response.data["results"]}
+        self.assertEqual(pays, {None, self.country.pk})
+
+    def test_un_responsable_pays_ne_voit_pas_les_entrees_sans_pays(self):
+        self._compte("pays.test", Role.COUNTRY_MANAGER, [self.country])
+        ChangeLog.objects.all().delete()
+        ChangeLog.objects.create(
+            model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
+            label="Configuration", action=ChangeLog.Actions.UPDATED,
+        )
+
+        response = self.client.get("/api/history/")
+
+        self.assertEqual(response.data["count"], 0)
 
 
 class PaginationTests(ApiTestCase):

@@ -62,20 +62,29 @@ class MotDePasseProvisoireTests(APITestCase):
             },
         )
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_le_changement_rouvre_la_plateforme(self):
-        self.client.post(
+        change = self.client.post(
             "/api/me/password/",
             {
                 "current_password": "Provisoire-2026-siege",
                 "new_password": "Personnel-2026-Togo",
             },
         )
+        # L'ancien jeton est révoqué avec l'ancien mot de passe.
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {change.data['token']}")
 
         response = self.client.get("/api/countries/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_la_deconnexion_reste_possible(self):
+        """Sans elle, un compte verrouillé garderait un jeton vivant."""
+        response = self.client.post("/api/logout/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Token.objects.filter(user=self.user).exists())
 
     def test_un_compte_deja_personnel_n_est_pas_gene(self):
         self.user.profile.must_change_password = False

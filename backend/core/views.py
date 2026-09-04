@@ -1,19 +1,28 @@
-"""Vues de l'API de gestion des pays et organisations."""
+"""Vues de l'API de gestion des pays et organisations, et du back-office."""
 
-from django.db import OperationalError, connection
+import json
+
+from django.conf import settings
+from django.db import OperationalError, connection, transaction
+from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
 from rest_framework.views import APIView
 
+from accounts.authentication import obtenir_jeton
+from accounts.models import HEADQUARTERS_ROLES
 from accounts.permissions import (
+    HISTORY_READ_ROLES,
     REFERENTIAL_WRITE_ROLES,
     SUBENTITY_WRITE_ROLES,
+    USER_WRITE_ROLES,
     RolePermission,
+    get_access,
 )
 from accounts.scoping import CountryScopedMixin
 
@@ -28,7 +37,9 @@ from .models import (
     MarketingCategory,
     Project,
     Team,
+    WorkflowConfiguration,
 )
+from .requetes import client_ip
 from .serializers import (
     ChangeLogSerializer,
     CostCenterSerializer,
@@ -40,7 +51,9 @@ from .serializers import (
     MarketingCategorySerializer,
     ProjectSerializer,
     TeamSerializer,
+    WorkflowConfigurationSerializer,
 )
+from .signals import journaliser
 
 
 class LoginRateThrottle(AnonRateThrottle):
@@ -48,16 +61,72 @@ class LoginRateThrottle(AnonRateThrottle):
 
     scope = "login"
 
+    def get_ident(self, request):
+        # Même lecture de l'adresse que le journal : derrière nginx, la
+        # version DRF compterait toutes les tentatives sur l'adresse du
+        # mandataire — ou sur ce que le client a écrit dans X-Forwarded-For.
+        return client_ip(request) or super().get_ident(request)
+
+
+class LoginUsernameThrottle(SimpleRateThrottle):
+    """Limite les tentatives d'authentification par nom de compte.
+
+    La limite par adresse ne protège pas un compte visé depuis plusieurs
+    adresses ; celle-ci compte les essais sur le nom, quelle qu'en soit
+    l'origine.
+    """
+
+    scope = "login_user"
+
+    def get_cache_key(self, request, view):
+        username = request.data.get("username") if hasattr(request.data, "get") else None
+        if not username:
+            return None
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": str(username).strip().lower()[:150],
+        }
+
 
 class ThrottledObtainAuthToken(ObtainAuthToken):
     """Obtention du jeton, protégée contre le bourrage d'identifiants.
 
     ``ObtainAuthToken`` force ``throttle_classes = ()`` : les limites globales
     de ``REST_FRAMEWORK`` ne s'y appliquent pas et il faut donc les réattacher
-    explicitement.
+    explicitement. Chaque tentative, réussie ou non, est consignée avec le nom
+    saisi et l'adresse : c'est la première trace d'une intrusion.
     """
 
-    throttle_classes = [LoginRateThrottle]
+    throttle_classes = [LoginRateThrottle, LoginUsernameThrottle]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        username = str(request.data.get("username", "") or "")[:150]
+        if not serializer.is_valid():
+            journaliser(
+                None,
+                ChangeLog.Actions.LOGIN_FAILED,
+                ChangeLog.Models.USER,
+                label=username,
+                to_value="",
+                performed_by=username,
+                request=request,
+            )
+            serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+        # Renouvelé s'il a dépassé ``TOKEN_MAX_AGE_DAYS`` : ``get_or_create``
+        # rendrait indéfiniment le même jeton périmé.
+        token = obtenir_jeton(user)
+        journaliser(
+            user,
+            ChangeLog.Actions.LOGIN,
+            ChangeLog.Models.USER,
+            label=user.username,
+            to_value=user.username,
+            performed_by=user.username,
+            request=request,
+        )
+        return Response({"token": token.key})
 
 
 class ScopedViewSet(CountryScopedMixin, NoDestroyModelViewSet):
@@ -175,9 +244,133 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     queryset = ChangeLog.objects.select_related("country").all()
     serializer_class = ChangeLogSerializer
     permission_classes = [RolePermission]
+    read_roles = HISTORY_READ_ROLES
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["country", "model_name", "action"]
     ordering_fields = ["created_at"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        access = get_access(self.request.user)
+        if access is None or access.has_global_scope:
+            return queryset
+        if access.role in HEADQUARTERS_ROLES:
+            # Un rôle du siège restreint à quelques pays garde la vue sur ce
+            # qui n'appartient à aucun : taux de change, configuration,
+            # comptes. Le filtre du mixin les lui cachait avec le reste.
+            return ChangeLog.objects.select_related("country").filter(
+                Q(country__in=access.country_ids) | Q(country__isnull=True)
+            )
+        return queryset
+
+
+class BackOfficePermission(RolePermission):
+    """Le back-office est réservé au siège."""
+
+    message = "Le back-office est réservé aux administrateurs du siège."
+
+    def has_permission(self, request, view):
+        access = get_access(request.user)
+        return access is not None and access.role in USER_WRITE_ROLES
+
+
+class ConfigurationView(APIView):
+    """Paramètres du back-office.
+
+    Deux origines : l'environnement, figé au démarrage (stockage, courriel,
+    fuseau), et la politique du workflow, modifiable en base. Les exposer
+    ensemble permet de vérifier ce qui tourne réellement, sans se fier au
+    fichier de configuration qu'on croit déployé.
+    """
+
+    permission_classes = [BackOfficePermission]
+
+    def get(self, request):
+        # ``budget`` dépend de ``core``, pas l'inverse : l'import reste local
+        # pour ne pas inverser la dépendance au chargement du module.
+        from budget.models import CONSOLIDATION_CURRENCY
+
+        configuration = WorkflowConfiguration.charger()
+        return Response(
+            {
+                "alertes": {
+                    "seuils": configuration.alert_thresholds,
+                    "facteur_depense_inhabituelle": float(
+                        configuration.unusual_expense_factor
+                    ),
+                },
+                "justificatifs": {
+                    "taille_max_mo": settings.MAX_PROOF_SIZE // (1024 * 1024),
+                    "formats_acceptes": settings.ALLOWED_PROOF_EXTENSIONS,
+                    "stockage": (
+                        "Object storage (S3/MinIO)"
+                        if settings.AWS_S3_ENDPOINT_URL
+                        else "Disque local"
+                    ),
+                },
+                "budget": {
+                    "devise_de_consolidation": CONSOLIDATION_CURRENCY,
+                },
+                "notifications": {
+                    "email_configure": bool(settings.EMAIL_HOST),
+                    "expediteur": settings.DEFAULT_FROM_EMAIL,
+                },
+                "systeme": {
+                    "fuseau": settings.TIME_ZONE,
+                    "mode_debug": settings.DEBUG,
+                },
+                "workflow": WorkflowConfigurationSerializer(configuration).data,
+            }
+        )
+
+
+class WorkflowConfigurationView(APIView):
+    """Lecture et modification de la politique du workflow."""
+
+    permission_classes = [BackOfficePermission]
+
+    def get(self, request):
+        return Response(
+            WorkflowConfigurationSerializer(WorkflowConfiguration.charger()).data
+        )
+
+    @transaction.atomic
+    def patch(self, request):
+        # Lue en base et verrouillée, pas depuis le cache : deux
+        # modifications simultanées se succèdent au lieu de s'écraser, et le
+        # journal décrit exactement l'état que chacune a trouvé.
+        configuration, _ = (
+            WorkflowConfiguration.objects.select_for_update().get_or_create(pk=1)
+        )
+        serializer = WorkflowConfigurationSerializer(
+            configuration, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        modifiables = [
+            name for name, field in serializer.fields.items() if not field.read_only
+        ]
+        avant = {
+            name: value
+            for name, value in WorkflowConfigurationSerializer(configuration).data.items()
+            if name in modifiables
+        }
+        serializer.save()
+        apres = {name: value for name, value in serializer.data.items() if name in modifiables}
+
+        changes = [name for name in modifiables if avant[name] != apres[name]]
+        if changes:
+            journaliser(
+                configuration,
+                ChangeLog.Actions.UPDATED,
+                ChangeLog.Models.WORKFLOW_CONFIGURATION,
+                label="Configuration du workflow",
+                from_value=json.dumps(avant, ensure_ascii=False),
+                to_value=json.dumps(apres, ensure_ascii=False),
+                changed_fields=changes,
+                diff={name: [avant[name], apres[name]] for name in changes},
+                request=request,
+            )
+        return Response(serializer.data)
 
 
 class HealthView(APIView):

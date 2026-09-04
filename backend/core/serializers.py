@@ -1,5 +1,7 @@
 """Sérialiseurs de l'API de gestion des pays et organisations."""
 
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from .models import (
@@ -11,6 +13,7 @@ from .models import (
     MarketingCategory,
     Project,
     Team,
+    WorkflowConfiguration,
 )
 
 
@@ -153,6 +156,85 @@ class ChangeLogSerializer(serializers.ModelSerializer):
         fields = [
             "id", "model_name", "model_name_display", "object_id", "label",
             "action", "action_display", "country", "country_name",
-            "from_value", "to_value", "changed_fields",
-            "performed_by", "created_at",
+            "from_value", "to_value", "changed_fields", "diff",
+            "performed_by", "ip_address", "created_at",
         ]
+
+
+class StrictBooleanField(serializers.BooleanField):
+    """N'accepte que ``true``/``false`` JSON.
+
+    Le champ standard de DRF prend aussi ``"yes"``, ``1`` ou ``"faux"`` ;
+    pour une politique de contrôle, un réglage doit être ce qu'il paraît.
+    """
+
+    def to_internal_value(self, data):
+        if not isinstance(data, bool):
+            self.fail("invalid", input=data)
+        return data
+
+
+class SeuilField(serializers.IntegerField):
+    """Entier positif ou nul, jamais un booléen.
+
+    ``True`` est un entier pour Python : sans ce garde-fou, ``[true, 90]``
+    passerait pour ``[1, 90]``.
+    """
+
+    def to_internal_value(self, data):
+        if isinstance(data, bool):
+            self.fail("invalid")
+        return super().to_internal_value(data)
+
+
+class WorkflowConfigurationSerializer(serializers.ModelSerializer):
+    """Modification partielle de la politique du circuit.
+
+    Un paramètre inconnu est refusé plutôt qu'ignoré : un nom mal orthographié
+    donnerait sinon l'impression qu'un réglage a été appliqué.
+    """
+
+    require_review_step = StrictBooleanField()
+    warn_without_proof_submission = StrictBooleanField()
+    unjustified_alert_days = SeuilField(min_value=0)
+    alert_thresholds = serializers.ListField(child=SeuilField(min_value=0))
+    unusual_expense_factor = serializers.DecimalField(
+        max_digits=8, decimal_places=2, coerce_to_string=True
+    )
+    default_overrun_policy_display = serializers.CharField(
+        source="get_default_overrun_policy_display", read_only=True
+    )
+
+    class Meta:
+        model = WorkflowConfiguration
+        fields = [
+            "require_review_step",
+            "unjustified_alert_days",
+            "alert_thresholds",
+            "unusual_expense_factor",
+            "default_overrun_policy",
+            "default_overrun_policy_display",
+            "warn_without_proof_submission",
+            "updated_at",
+        ]
+        read_only_fields = ["updated_at"]
+
+    def to_internal_value(self, data):
+        if not hasattr(data, "keys"):
+            raise serializers.ValidationError("Un objet est attendu.")
+        inconnus = set(data) - {
+            name for name, field in self.fields.items() if not field.read_only
+        }
+        if inconnus:
+            raise serializers.ValidationError(
+                {name: "Paramètre inconnu." for name in sorted(inconnus)}
+            )
+        return super().to_internal_value(data)
+
+    def validate_unusual_expense_factor(self, value):
+        # DRF refuse déjà ``NaN`` et l'infini ; reste le signe.
+        if not value.is_finite() or value <= Decimal("0"):
+            raise serializers.ValidationError(
+                "Un facteur strictement positif est attendu."
+            )
+        return value

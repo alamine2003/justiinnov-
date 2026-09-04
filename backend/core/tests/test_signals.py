@@ -145,3 +145,119 @@ class DeletionTests(ChangeLogTestCase):
         )
         # Aucune entrée ne pointe vers le pays supprimé.
         self.assertFalse(deleted.filter(country__isnull=False).exists())
+
+
+class DiffEtAdresseTests(ChangeLogTestCase):
+    """Chaque entrée dit ce qui a changé, et depuis où."""
+
+    def test_le_diff_porte_les_anciennes_et_nouvelles_valeurs(self):
+        self.team.name = "Équipe Nord-Est"
+        self.team.description = "Kumasi"
+        self.team.save()
+
+        entry = self.entries(action=ChangeLog.Actions.UPDATED).get()
+        self.assertEqual(
+            entry.diff,
+            {"name": ["Équipe Nord", "Équipe Nord-Est"], "description": ["", "Kumasi"]},
+        )
+
+    def test_le_rattachement_porte_les_identifiants(self):
+        self.team.country = self.senegal
+        self.team.save()
+
+        entry = self.entries(action=ChangeLog.Actions.REASSIGNED).get()
+        self.assertEqual(entry.diff, {"country": [self.ghana.pk, self.senegal.pk]})
+
+    def test_hors_requete_ni_auteur_ni_adresse(self):
+        self.team.name = "Équipe Nord-Est"
+        self.team.save()
+
+        entry = self.entries(action=ChangeLog.Actions.UPDATED).get()
+        self.assertEqual(entry.performed_by, "")
+        self.assertIsNone(entry.ip_address)
+
+    def test_la_requete_courante_signe_l_entree(self):
+        from types import SimpleNamespace
+
+        from core.signals import get_current_request, reset_current_request, set_current_request
+
+        requete = SimpleNamespace(
+            user=SimpleNamespace(username="awa", is_authenticated=True),
+            META={"REMOTE_ADDR": "198.51.100.4"},
+        )
+        jeton = set_current_request(requete)
+        try:
+            self.team.name = "Équipe Nord-Est"
+            self.team.save()
+        finally:
+            reset_current_request(jeton)
+
+        entry = self.entries(action=ChangeLog.Actions.UPDATED).get()
+        self.assertEqual(entry.performed_by, "awa")
+        self.assertEqual(entry.ip_address, "198.51.100.4")
+        # Le contexte est rendu : rien ne fuit vers l'écriture suivante.
+        self.assertIsNone(get_current_request())
+
+    def test_les_valeurs_non_json_sont_converties(self):
+        from decimal import Decimal
+
+        from core.signals import serialisable
+
+        self.assertEqual(serialisable(Decimal("12.50")), "12.50")
+        self.assertEqual(serialisable(self.team.created_at), self.team.created_at.isoformat())
+        self.assertEqual(serialisable([1, Decimal("2")]), [1, "2"])
+        self.assertIsNone(serialisable(None))
+
+
+class ManagersDuPaysTests(ChangeLogTestCase):
+    """Changer le responsable d'un pays est un rattachement : il se journalise."""
+
+    def setUp(self):
+        super().setUp()
+        self.awa = Manager.objects.create(name="Awa Diop")
+        self.kofi = Manager.objects.create(name="Kofi Mensah")
+        ChangeLog.objects.all().delete()
+
+    def test_ajout_d_un_manager(self):
+        self.ghana.managers.add(self.awa)
+
+        entry = self.entries(model_name=ChangeLog.Models.COUNTRY).get()
+        self.assertEqual(entry.action, ChangeLog.Actions.UPDATED)
+        self.assertEqual(entry.country, self.ghana)
+        self.assertEqual(entry.changed_fields, ["managers"])
+        self.assertEqual(entry.diff, {"managers": [[], ["Awa Diop"]]})
+
+    def test_remplacement_des_managers(self):
+        self.ghana.managers.add(self.awa)
+        ChangeLog.objects.all().delete()
+
+        self.ghana.managers.set([self.kofi])
+
+        diffs = [e.diff["managers"] for e in self.entries()]
+        self.assertEqual(diffs[0][0], ["Awa Diop"])
+        self.assertEqual(diffs[-1][1], ["Kofi Mensah"])
+
+    def test_vidage_des_managers(self):
+        self.ghana.managers.set([self.awa, self.kofi])
+        ChangeLog.objects.all().delete()
+
+        self.ghana.managers.clear()
+
+        entry = self.entries().get()
+        self.assertEqual(entry.diff, {"managers": [["Awa Diop", "Kofi Mensah"], []]})
+
+    def test_depuis_le_manager(self):
+        """``manager.countries.add(pays)`` se lit dans l'historique du pays."""
+        self.awa.countries.add(self.ghana)
+
+        entry = self.entries(model_name=ChangeLog.Models.COUNTRY).get()
+        self.assertEqual(entry.country, self.ghana)
+        self.assertEqual(entry.diff, {"managers": [[], ["Awa Diop"]]})
+
+    def test_sans_changement_rien(self):
+        self.ghana.managers.add(self.awa)
+        ChangeLog.objects.all().delete()
+
+        self.ghana.managers.add(self.awa)
+
+        self.assertFalse(self.entries().exists())

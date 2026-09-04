@@ -23,5 +23,12 @@ urlpatterns = [
         views.ThrottledObtainAuthToken.as_view(),
         name="token-auth",
     ),
+    # Back-office : réservé au siège (cf. BackOfficePermission).
+    path("configuration/", views.ConfigurationView.as_view(), name="configuration"),
+    path(
+        "workflow-configuration/",
+        views.WorkflowConfigurationView.as_view(),
+        name="workflow-configuration",
+    ),
     path("", include(router.urls)),
 ]

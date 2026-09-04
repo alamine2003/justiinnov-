@@ -24,19 +24,37 @@ class Access:
         return self.country_ids is None
 
 
+#: Attribut posé sur l'instance utilisateur pour mémoriser ses droits.
+_ATTRIBUT_MEMO = "_acces_memorise"
+_ABSENT = object()
+
+
 def get_access(user):
-    """Droits de l'utilisateur, ou ``None`` s'il n'en a aucun."""
+    """Droits de l'utilisateur, ou ``None`` s'il n'en a aucun.
+
+    Un compte sans profil — le superutilisateur d'amorçage, un compte hérité —
+    n'a **aucun** accès à l'API, fût-il superutilisateur Django : le rôle et
+    le périmètre viennent du profil, jamais des drapeaux du compte.
+
+    Le résultat est mémorisé sur l'instance utilisateur, donc pour la durée de
+    la requête : permission, filtrage du queryset et revalidation de l'écriture
+    y font chacun appel, et chaque appel coûtait deux requêtes SQL.
+    """
     if user is None or not user.is_authenticated:
         return None
+    memo = getattr(user, _ATTRIBUT_MEMO, _ABSENT)
+    if memo is not _ABSENT:
+        return memo
     # L'accesseur inverse d'un OneToOne lève une exception dérivant
     # d'AttributeError : ``getattr`` avec défaut est donc sûr.
     profile = getattr(user, "profile", None)
-    if profile is None:
-        # Superutilisateur Django sans profil : compte technique d'amorçage.
-        if user.is_superuser:
-            return Access(role=Role.SUPER_ADMIN, country_ids=None)
-        return None
-    return Access(role=profile.role, country_ids=profile.country_ids())
+    access = (
+        None
+        if profile is None
+        else Access(role=profile.role, country_ids=profile.country_ids())
+    )
+    setattr(user, _ATTRIBUT_MEMO, access)
+    return access
 
 
 # --- Matrice des droits d'écriture -----------------------------------------
@@ -73,6 +91,11 @@ VALIDATION_ROLES = frozenset(
 AUDIT_READ_ROLES = frozenset(
     {Role.SUPER_ADMIN, Role.ADMIN, Role.DOO, Role.CONTROLLER, Role.AUDITOR}
 )
+
+#: Consultation de l'historique du référentiel (``/api/history/``) : le
+#: siège, et le responsable pays pour son périmètre. Un owner saisit des
+#: dépenses ; l'organisation du pays ne le regarde pas.
+HISTORY_READ_ROLES = AUDIT_READ_ROLES | {Role.COUNTRY_MANAGER}
 
 
 #: Matrice des capacités, source unique.

@@ -68,7 +68,8 @@ MIDDLEWARE = [
     # changer.
     "accounts.middleware.ProvisionalPasswordMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "core.middleware.CurrentUserMiddleware",
+    # Expose la requête courante à l'historisation (auteur, adresse IP).
+    "core.middleware.CurrentRequestMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -100,28 +101,53 @@ CACHES = {
     }
 }
 
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "")
+if not POSTGRES_PASSWORD:
+    if not DEBUG:
+        # Même exigence que pour la clé secrète : un mot de passe de
+        # développement ne doit pas pouvoir servir en production par oubli.
+        raise ImproperlyConfigured("POSTGRES_PASSWORD est obligatoire hors mode debug.")
+    POSTGRES_PASSWORD = "justi"
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DB", "justi_innov"),
         "USER": os.environ.get("POSTGRES_USER", "justi"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "justi"),
+        "PASSWORD": POSTGRES_PASSWORD,
         "HOST": os.environ.get("POSTGRES_HOST", "db"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        # Connexions réutilisées entre requêtes, et vérifiées avant usage :
+        # sans contrôle, une connexion coupée par Postgres ou le réseau ne se
+        # découvre qu'à la première requête qui échoue.
+        "CONN_MAX_AGE": 60,
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 
 # ---------------------------------------------------------------------------
 # Authentification REST
 # ---------------------------------------------------------------------------
+# Durée de vie d'un jeton, en jours (0 : illimitée). Un jeton DRF n'expire
+# jamais de lui-même ; celui d'un poste oublié resterait valable des années.
+TOKEN_MAX_AGE_DAYS = int(os.environ.get("TOKEN_MAX_AGE_DAYS", "30"))
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        # Jeton à durée de vie bornée, profil chargé d'emblée, résultat du
+        # middleware réutilisé (cf. accounts.authentication).
+        "accounts.authentication.JetonAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # L'API navigable n'a sa place qu'en développement : en production, elle
+    # rend des formulaires HTML et révèle la forme des ressources à qui tombe
+    # sur une URL.
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ] + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
@@ -130,16 +156,23 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
     "PAGE_SIZE": 25,
     "SEARCH_PARAM": "search",
+    # Pas de limite anonyme globale : hors obtention du jeton, tout répond 401
+    # aux anonymes, et la limite ne ferait que compter des refus. Le point de
+    # santé, interrogé toutes les trente secondes, la déclenchait.
     "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
-    # ``login`` protège l'obtention du jeton (cf. core.views.LoginRateThrottle).
+    # ``login`` (par adresse) et ``login_user`` (par nom de compte) protègent
+    # l'obtention du jeton (cf. core.views).
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "60/min",
         "user": "2000/hour",
         "login": "10/min",
+        "login_user": "5/min",
     },
+    # Nombre de mandataires de confiance devant Django (nginx, Caddy…) : sert
+    # à lire l'adresse réelle du client dans X-Forwarded-For, pour le journal
+    # et la limitation de débit. Zéro : seule REMOTE_ADDR fait foi.
+    "NUM_PROXIES": int(os.environ.get("DJANGO_NUM_PROXIES", "0")),
 }
 
 # ---------------------------------------------------------------------------
@@ -190,6 +223,9 @@ if AWS_S3_ENDPOINT_URL:
             "querystring_auth": True,
             "signature_version": "s3v4",
             "file_overwrite": False,
+            # Au-delà de cette taille, un fichier lu depuis le stockage passe
+            # par le disque plutôt que par la mémoire du worker.
+            "max_memory_size": 2 * 1024 * 1024,
         },
     }
 else:
@@ -226,7 +262,17 @@ ALERT_THRESHOLDS = [
 # moyenne des dépenses validées de son pays.
 UNUSUAL_EXPENSE_FACTOR = float(os.environ.get("UNUSUAL_EXPENSE_FACTOR", "5"))
 
+# Valeurs reprises par la configuration métier (WorkflowConfiguration) lors
+# de son amorçage par migration ; ensuite, la base fait foi.
+UNJUSTIFIED_ALERT_DAYS = int(os.environ.get("UNJUSTIFIED_ALERT_DAYS", "0"))
+WARN_WITHOUT_PROOF_SUBMISSION = os.environ.get(
+    "WARN_WITHOUT_PROOF_SUBMISSION", "1"
+) == "1"
+
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+# Un serveur SMTP injoignable ne doit pas bloquer une requête ou une tâche
+# planifiée indéfiniment.
+EMAIL_TIMEOUT = 10
 if EMAIL_HOST:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
@@ -260,6 +306,12 @@ AUTH_PASSWORD_VALIDATORS = [
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
+# Le contrôle de santé de Docker interroge le conteneur en clair, sur sa
+# boucle locale, sans passer par le mandataire TLS : redirigé en 301 vers
+# https, il ne verrait jamais un 200, le conteneur resterait « unhealthy » et
+# le déploiement n'aboutirait jamais. Déclaré sans condition pour que le test
+# vérifie la liste réellement appliquée.
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "1") == "1"

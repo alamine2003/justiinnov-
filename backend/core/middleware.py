@@ -1,24 +1,22 @@
-"""Middleware qui expose l'utilisateur courant pour l'historisation.
+"""Middleware qui expose la requête courante à l'historisation.
 
-L'utilisateur authentifié est résolu de manière différée (callable) afin que,
-au moment où un signal ``pre_save``/``post_save`` écrit l'historique, le
-``request.user`` (forcé par Django REST Framework via le TokenAuthentication)
-soit disponible.
+Les signaux d'historisation (``core.signals``) n'ont pas accès à la requête :
+ce middleware la pose dans une variable de contexte, d'où ``journaliser``
+lit l'auteur et son adresse. L'utilisateur n'est pas résolu ici mais au
+moment de l'écriture : pour une requête par jeton, ``request.user`` n'est
+forcé par DRF qu'à l'entrée de la vue, bien après ce middleware.
 """
 
-from .signals import set_current_user
+from .signals import reset_current_request, set_current_request
 
 
-class CurrentUserMiddleware:
+class CurrentRequestMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        set_current_user(
-            lambda: getattr(request, "user", None),
-        )
+        jeton = set_current_request(request)
         try:
-            response = self.get_response(request)
+            return self.get_response(request)
         finally:
-            set_current_user(None)
-        return response
+            reset_current_request(jeton)

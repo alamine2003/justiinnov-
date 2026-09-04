@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.db import OperationalError
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -48,3 +49,13 @@ class HealthTests(APITestCase):
         response = self.client.get("/api/health/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    @override_settings(SECURE_SSL_REDIRECT=True)
+    def test_n_est_pas_redirige_vers_https(self):
+        """Docker interroge le conteneur en clair, sur sa boucle locale : une
+        redirection 301 le laisserait « unhealthy » et rien ne démarrerait."""
+        sante = self.client.get("/api/health/", secure=False)
+        autre = self.client.get("/api/countries/", secure=False)
+
+        self.assertEqual(sante.status_code, status.HTTP_200_OK)
+        self.assertEqual(autre.status_code, status.HTTP_301_MOVED_PERMANENTLY)

@@ -239,10 +239,12 @@ class MeTests(ScopingTestCase):
             },
         )
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.rep_togo.refresh_from_db()
         self.assertTrue(self.rep_togo.check_password("Nouveau-Motdepasse-2026"))
         self.assertFalse(self.rep_togo.profile.must_change_password)
+        # Le client repart avec un jeton neuf.
+        self.assertEqual(response.data["token"], Token.objects.get(user=self.rep_togo).key)
 
 
 class BackOfficeTests(ScopingTestCase):
@@ -276,9 +278,7 @@ class BackOfficeTests(ScopingTestCase):
         """Régression : la matrice affichée doit être celle qui est appliquée,
         sinon le back-office documenterait une fiction."""
         self.login(self.siege)
-
         matrice = self.client.get("/api/permissions/").data
-        profil = self.client.get("/api/me/").data
 
         justification = next(
             c for c in matrice["capabilities"] if c["key"] == "validate_expenses"
@@ -286,13 +286,21 @@ class BackOfficeTests(ScopingTestCase):
         # Le pays est exclu de la justification, la matrice doit le dire.
         self.assertNotIn(Role.COUNTRY_MANAGER, justification["roles"])
         self.assertIn(Role.CONTROLLER, justification["roles"])
-        # Et elle doit concorder avec les droits annoncés au titulaire.
-        for capability in matrice["capabilities"]:
-            self.assertEqual(
-                profil["permissions"][capability["key"]],
-                profil["role"] in capability["roles"],
-                f"désaccord sur {capability['key']}",
-            )
+
+        # Et elle doit concorder avec les droits annoncés à chaque titulaire —
+        # pas seulement au super administrateur, qui a tout et ne prouve rien.
+        for role in Role:
+            with self.subTest(role=role):
+                self.login(make_user(f"{role}.matrice", role, [self.togo]))
+                profil = self.client.get("/api/me/").data
+
+                self.assertEqual(profil["role"], role)
+                for capability in matrice["capabilities"]:
+                    self.assertEqual(
+                        profil["permissions"][capability["key"]],
+                        role in capability["roles"],
+                        f"désaccord sur {capability['key']} pour {role}",
+                    )
 
     def test_la_matrice_n_est_pas_modifiable(self):
         self.login(self.siege)

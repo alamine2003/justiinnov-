@@ -4,10 +4,12 @@ La détection des modifications s'effectue en ``pre_save``, au moment où
 l'instance en mémoire diffère encore de l'état en base de données.
 """
 
-import threading
+import datetime
+import decimal
+from contextvars import ContextVar
 from functools import partial
 
-from django.db.models.signals import post_delete, post_save, pre_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from .models import (
@@ -20,11 +22,17 @@ from .models import (
     Project,
     Team,
 )
+from .requetes import client_ip
 
 ALL_MODELS = (Country, Manager, Team, CostCenter, Project, ExpenseTitle, MarketingCategory)
 
-# État du serveur : enregistre l'utilisateur courant (rempli par CurrentUserMiddleware)
-_thread_local = threading.local()
+#: Requête HTTP en cours de traitement, posée par ``CurrentRequestMiddleware``.
+#:
+#: Une variable de contexte plutôt qu'un ``threading.local`` : elle suit la
+#: tâche, pas le fil d'exécution. Avec des workers gunicorn en threads, ou
+#: du code asynchrone, un ``threading.local`` mal remis à zéro ferait signer
+#: les écritures d'une requête par l'utilisateur d'une autre.
+_requete_courante = ContextVar("requete_courante", default=None)
 
 _MODEL_NAME = {
     "Country": ChangeLog.Models.COUNTRY,
@@ -37,12 +45,83 @@ _MODEL_NAME = {
 }
 
 
+def get_current_request():
+    """Requête en cours, ou ``None`` hors requête (commande, tâche, test)."""
+    return _requete_courante.get()
+
+
+def set_current_request(request):
+    """Pose la requête courante et rend le jeton qui permet de la retirer."""
+    return _requete_courante.set(request)
+
+
+def reset_current_request(token):
+    _requete_courante.reset(token)
+
+
 def get_current_user():
-    return getattr(_thread_local, "user", None)
+    """Utilisateur authentifié de la requête courante, ou ``None``.
+
+    Lu au moment de l'écriture et non à l'entrée du middleware : pour une
+    requête par jeton, ``request.user`` n'est forcé par DRF qu'à l'entrée de
+    la vue, bien après le middleware.
+    """
+    request = get_current_request()
+    if request is None:
+        return None
+    user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
+        return None
+    return user
 
 
-def set_current_user(user):
-    _thread_local.user = user
+def serialisable(value):
+    """Valeur d'un champ sous une forme acceptée par ``JSONField``.
+
+    Les nombres décimaux et les dates n'ont pas d'équivalent JSON : ils
+    partent en texte, sans arrondi ni fuseau implicite.
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, decimal.Decimal):
+        return str(value)
+    if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+        return value.isoformat()
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [serialisable(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): serialisable(v) for k, v in value.items()}
+    return str(value)
+
+
+def journaliser(instance, action, model_name, *, label=None, country=None,
+                from_value="", to_value=None, changed_fields=None, diff=None,
+                performed_by=None, request=None):
+    """Écrit une entrée d'historique signée par la requête courante.
+
+    Point d'entrée unique : les signaux ci-dessous, la configuration du
+    workflow et les comptes passent tous par ici, pour que « qui, depuis
+    quelle adresse » soit rempli de la même façon partout.
+    """
+    request = request or get_current_request()
+    if performed_by is None:
+        user = get_current_user() if request is None else getattr(request, "user", None)
+        performed_by = (
+            user.username if user is not None and user.is_authenticated else ""
+        )
+    return ChangeLog.objects.create(
+        model_name=model_name,
+        object_id=getattr(instance, "pk", None),
+        label=(label if label is not None else str(instance))[:250],
+        action=action,
+        country=country,
+        from_value=from_value,
+        to_value=str(instance) if to_value is None else to_value,
+        changed_fields=changed_fields or [],
+        diff=diff or {},
+        performed_by=performed_by,
+        ip_address=client_ip(request) if request is not None else None,
+    )
 
 
 def _resolve_country(instance, *, verify_exists=False):
@@ -68,27 +147,22 @@ def _resolve_country(instance, *, verify_exists=False):
 
 
 def _log(instance, action, model_name, from_value="", changed_fields=None,
-         country_resolver=None):
+         country_resolver=None, diff=None):
     """Crée une entrée d'historique pour une instance."""
-    user = get_current_user()
-    if callable(user):
-        user = user()
-    performed_by = user.username if user and user.is_authenticated else ""
     deleted = action == ChangeLog.Actions.DELETED
     if country_resolver is not None:
         country = country_resolver(instance)
     else:
         country = _resolve_country(instance, verify_exists=deleted)
-    ChangeLog.objects.create(
-        model_name=model_name,
-        object_id=instance.pk,
-        label=str(instance),
-        action=action,
+    journaliser(
+        instance,
+        action,
+        model_name,
         country=country,
         from_value=from_value,
         to_value="" if deleted else str(instance),
-        changed_fields=changed_fields or [],
-        performed_by=performed_by,
+        changed_fields=changed_fields,
+        diff=diff,
     )
 
 
@@ -100,13 +174,19 @@ def _previous(instance):
 
 
 def _plain_changes(instance, previous):
-    """Champs simples modifiés (exclut updated_at et les relations M2M)."""
-    changes = []
+    """Champs simples modifiés (exclut updated_at et les relations M2M).
+
+    Retourne ``{champ: [ancienne valeur, nouvelle valeur]}`` ; pour une clé
+    étrangère, la valeur est l'identifiant visé.
+    """
+    changes = {}
     for field in instance._meta.concrete_fields:
         if field.attname == "updated_at":
             continue
-        if getattr(previous, field.attname) != getattr(instance, field.attname):
-            changes.append(field.name)
+        before = getattr(previous, field.attname)
+        after = getattr(instance, field.attname)
+        if before != after:
+            changes[field.name] = [serialisable(before), serialisable(after)]
     return changes
 
 
@@ -143,9 +223,9 @@ def _track_creation_update(sender, instance, model_name=None,
             model_name,
             from_value=f"{previous.country.name} ({previous.country.code})",
             changed_fields=["country"],
+            diff={"country": changes.pop("country")},
             country_resolver=country_resolver,
         )
-        changes.remove("country")
 
     # 2. Activation / désactivation d'un pays.
     if is_country and "is_active" in changes:
@@ -156,9 +236,10 @@ def _track_creation_update(sender, instance, model_name=None,
         )
         _log(
             instance, action, model_name,
-            changed_fields=["is_active"], country_resolver=country_resolver,
+            changed_fields=["is_active"],
+            diff={"is_active": changes.pop("is_active")},
+            country_resolver=country_resolver,
         )
-        changes.remove("is_active")
 
     # 3. Mise à jour générique des champs restants.
     if changes:
@@ -167,7 +248,8 @@ def _track_creation_update(sender, instance, model_name=None,
             ChangeLog.Actions.UPDATED,
             model_name,
             from_value=str(previous),
-            changed_fields=changes,
+            changed_fields=list(changes),
+            diff=changes,
             country_resolver=country_resolver,
         )
 
@@ -227,6 +309,75 @@ def register(model, model_name, country_resolver=None):
         (post_delete, _log_deletion),
     ):
         receiver(signal, sender=model, weak=False)(partial(handler, **options))
+
+
+def journaliser_relation(instance, action, pk_set, model_name, *, champ,
+                         accessor, libelle=str, country=None, porteur=None):
+    """Journalise un ajout/retrait dans une relation multiple.
+
+    Le signal ``m2m_changed`` arrive en ``post_*`` : la relation contient
+    déjà le nouvel état. L'ancien est reconstitué à partir de ``pk_set``, les
+    identifiants ajoutés ou retirés par l'appel. ``porteur`` est l'objet sur
+    lequel ``memoriser_avant_clear`` a gardé l'état (par défaut ``instance``).
+    """
+    if action not in ("post_add", "post_remove", "post_clear"):
+        return
+    apres = {obj.pk: libelle(obj) for obj in accessor.all()}
+    if action == "post_add":
+        avant = {pk: nom for pk, nom in apres.items() if pk not in pk_set}
+    elif action == "post_remove":
+        avant = dict(apres)
+        retires = accessor.model.objects.filter(pk__in=pk_set)
+        avant.update({obj.pk: libelle(obj) for obj in retires})
+    else:
+        # ``post_clear`` ne transmet pas les identifiants retirés : le signal
+        # ``pre_clear`` les a mis de côté sur l'instance.
+        porteur = instance if porteur is None else porteur
+        avant = getattr(porteur, "_relation_avant_clear", {}).get(champ, {})
+    if avant == apres:
+        return
+    avant, apres = sorted(avant.values()), sorted(apres.values())
+    journaliser(
+        instance,
+        ChangeLog.Actions.UPDATED,
+        model_name,
+        country=country,
+        from_value=", ".join(avant),
+        changed_fields=[champ],
+        diff={champ: [avant, apres]},
+    )
+
+
+def memoriser_avant_clear(instance, action, champ, accessor, libelle=str):
+    """En ``pre_clear``, garde l'état d'une relation avant son vidage."""
+    if action == "pre_clear":
+        memo = getattr(instance, "_relation_avant_clear", None)
+        if memo is None:
+            memo = instance._relation_avant_clear = {}
+        memo[champ] = {obj.pk: libelle(obj) for obj in accessor.all()}
+
+
+@receiver(m2m_changed, sender=Country.managers.through)
+def _track_country_managers(sender, instance, action, pk_set, reverse, **kwargs):
+    """Les managers d'un pays sont un rattachement : il se journalise.
+
+    ``Country.save()`` ne voit pas une relation multiple, modifiée après
+    coup par ``managers.set()`` : sans ce receveur, changer le responsable
+    d'un pays ne laissait aucune trace.
+    """
+    if reverse:
+        # ``manager.countries.set(...)`` : on journalise côté pays, pour que
+        # l'entrée apparaisse dans l'historique du pays concerné.
+        for country in Country.objects.filter(pk__in=pk_set or []):
+            _track_country_managers(
+                sender, country, action, {instance.pk}, False, **kwargs
+            )
+        return
+    memoriser_avant_clear(instance, action, "managers", instance.managers)
+    journaliser_relation(
+        instance, action, pk_set or set(), ChangeLog.Models.COUNTRY,
+        champ="managers", accessor=instance.managers, country=instance,
+    )
 
 
 # Le décorateur ``@receiver`` ne dissocie pas un *sender* qui est un tuple :

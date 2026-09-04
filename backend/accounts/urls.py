@@ -10,11 +10,7 @@ router.register("users", views.UserViewSet, basename="user")
 
 urlpatterns = [
     path("me/", views.MeView.as_view(), name="me"),
-    path(
-        "configuration/",
-        views.ConfigurationView.as_view(),
-        name="configuration",
-    ),
+    path("logout/", views.LogoutView.as_view(), name="logout"),
     path(
         "permissions/",
         views.PermissionMatrixView.as_view(),

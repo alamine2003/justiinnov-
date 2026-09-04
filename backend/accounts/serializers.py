@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
 
-from core.models import Country
+from core.models import Country, WorkflowConfiguration
 
 from .models import Role, UserProfile
 from .permissions import capabilities_for
@@ -45,20 +45,21 @@ class MeSerializer(serializers.ModelSerializer):
     has_global_scope = serializers.SerializerMethodField()
     must_change_password = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
+    workflow = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "username", "first_name", "last_name", "email",
             "role", "role_display", "countries", "has_global_scope",
-            "must_change_password", "permissions",
+            "must_change_password", "permissions", "workflow",
         ]
 
     def _role(self, user):
+        # Sans profil, pas de rôle : les drapeaux Django du compte ne donnent
+        # aucun droit sur l'API (cf. ``get_access``).
         profile = getattr(user, "profile", None)
-        if profile is not None:
-            return profile.role
-        return Role.SUPER_ADMIN if user.is_superuser else None
+        return profile.role if profile is not None else None
 
     def get_role(self, user):
         return self._role(user)
@@ -79,9 +80,7 @@ class MeSerializer(serializers.ModelSerializer):
 
     def get_has_global_scope(self, user):
         profile = getattr(user, "profile", None)
-        if profile is None:
-            return bool(user.is_superuser)
-        return profile.has_global_scope
+        return profile is not None and profile.has_global_scope
 
     def get_permissions(self, user):
         """Droits dérivés du rôle.
@@ -90,6 +89,15 @@ class MeSerializer(serializers.ModelSerializer):
         les ferait diverger de la réalité au premier changement.
         """
         return capabilities_for(self._role(user))
+
+    def get_workflow(self, user):
+        """Réglages du circuit qui décident de ce que l'interface propose.
+
+        Sans eux, le frontend afficherait « mettre en contrôle » alors que
+        le serveur refuserait l'étape, ou l'inverse.
+        """
+        configuration = WorkflowConfiguration.charger()
+        return {"require_review_step": configuration.require_review_step}
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -105,8 +113,25 @@ class ChangePasswordSerializer(serializers.Serializer):
         return _validate_password(value, user=self.context["request"].user)
 
 
+def aligner_drapeaux(user, role):
+    """Aligne l'accès à l'admin Django sur le rôle du profil.
+
+    Le back-office Django est réservé au siège. Sans cet alignement, un super
+    administrateur rétrogradé garderait ``is_superuser`` — et donc tous les
+    droits sur l'admin — alors que l'API ne lui reconnaît plus rien.
+    """
+    user.is_staff = role in (Role.SUPER_ADMIN, Role.ADMIN)
+    user.is_superuser = role == Role.SUPER_ADMIN
+
+
 class UserSerializer(serializers.ModelSerializer):
-    """Création et mise à jour d'un compte par le siège."""
+    """Création et mise à jour d'un compte par le siège.
+
+    ``must_change_password`` n'est pas modifiable : il est vrai dès qu'un
+    mot de passe a été posé par un tiers, et seul son titulaire l'efface, en
+    le remplaçant. Le siège ne peut pas déclarer personnel un mot de passe
+    qu'il connaît.
+    """
 
     role = serializers.ChoiceField(choices=Role.choices, source="profile.role")
     countries = serializers.PrimaryKeyRelatedField(
@@ -117,7 +142,7 @@ class UserSerializer(serializers.ModelSerializer):
         source="profile.countries", many=True, read_only=True
     )
     must_change_password = serializers.BooleanField(
-        source="profile.must_change_password", required=False
+        source="profile.must_change_password", read_only=True
     )
     password = _password_field(required=False)
 
@@ -166,9 +191,13 @@ class UserSerializer(serializers.ModelSerializer):
 
         user = User(**validated_data)
         user.set_password(password)
+        aligner_drapeaux(user, profile_data["role"])
         user.save()
 
-        profile = UserProfile.objects.create(user=user, **profile_data)
+        # Le mot de passe vient du siège : il est provisoire par construction.
+        profile = UserProfile.objects.create(
+            user=user, must_change_password=True, **profile_data
+        )
         profile.countries.set(countries)
         return user
 
@@ -180,17 +209,20 @@ class UserSerializer(serializers.ModelSerializer):
 
         for field, value in validated_data.items():
             setattr(instance, field, value)
+        # Le profil déjà chargé sur le compte, pas une seconde copie : la
+        # réponse et le journal lisent ``instance.profile`` et doivent voir
+        # les valeurs enregistrées, pas celles d'avant.
+        profile = getattr(instance, "profile", None)
+        if profile is None:
+            profile = UserProfile(user=instance, role=Role.OWNER)
+        for field, value in profile_data.items():
+            setattr(profile, field, value)
         if password:
             instance.set_password(password)
             # Un mot de passe fixé par un administrateur est provisoire.
-            profile_data.setdefault("must_change_password", True)
+            profile.must_change_password = True
+        aligner_drapeaux(instance, profile.role)
         instance.save()
-
-        profile, _ = UserProfile.objects.get_or_create(
-            user=instance, defaults={"role": Role.OWNER}
-        )
-        for field, value in profile_data.items():
-            setattr(profile, field, value)
         profile.save()
         if countries is not None:
             profile.countries.set(countries)
