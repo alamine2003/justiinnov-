@@ -102,8 +102,11 @@ class ThrottledObtainAuthToken(ObtainAuthToken):
     confirmée, la charge utile doit porter ``code``. Le mot de passe est
     vérifié d'abord — un code n'est jamais demandé pour un mot de passe faux,
     sinon la réponse dirait à l'attaquant qu'il a trouvé le bon. Un compte
-    pas encore enrôlé se connecte sans code ; c'est le middleware qui lui
-    ferme tout sauf l'enrôlement.
+    pas encore enrôlé se connecte sans code ; si la politique exige la
+    double authentification (``settings.TOTP_REQUIRED``), c'est le
+    middleware qui lui ferme tout sauf l'enrôlement. Un compte enrôlé, lui,
+    fournit son code que la politique l'exige ou non : un second facteur
+    qu'on a choisi d'activer ne se contourne pas.
     """
 
     throttle_classes = [LoginRateThrottle, LoginUsernameThrottle]

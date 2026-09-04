@@ -69,9 +69,10 @@ class ReouvertureTests(ReouvertureTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_le_pays_ne_rouvre_pas_son_propre_dossier(self):
+    def test_ni_le_pays_ni_le_dm_ne_rouvrent(self):
         """Le pays se corrigerait lui-même : c'est précisément ce que la
-        réouverture ne doit pas permettre."""
+        réouverture ne doit pas permettre. Le DM met en contrôle ; il ne
+        défait pas non plus une déclaration."""
         for compte in (self.owner, self.dm_togo):
             response = self.reopen(user=compte)
 
@@ -225,24 +226,22 @@ class TraceDeReouvertureTests(ReouvertureTestCase):
         self.assertEqual(self.dossier.reopen_note, "Second motif")
 
     def test_le_pays_est_prevenu_avec_le_motif(self):
-        """Le DM et les managers du pays apprennent que le dossier leur
-        revient, et pourquoi. L'administrateur qui rouvre n'est pas averti,
-        et le siège non plus : ce n'est pas à lui d'agir."""
+        """Les managers du pays apprennent que le dossier leur revient, et
+        pourquoi. L'administrateur qui rouvre n'est pas averti, et le siège
+        — DF, DM — non plus : ce n'est pas à lui d'agir."""
         self.reopen()
 
         # La soumission a déjà prévenu le siège : seules les notifications
         # de réouverture comptent ici.
         rouvertures = Notification.objects.filter(title__startswith="Dossier rouvert")
-        for compte in (self.owner, self.dm_togo):
-            recues = rouvertures.filter(recipient=compte)
-            self.assertEqual(recues.count(), 1, compte)
-            notification = recues.get()
-            self.assertIn("N-0001", notification.title)
-            self.assertIn(MOTIF, notification.body)
-            self.assertEqual(notification.link, f"/dossiers/{self.dossier.pk}")
-        self.assertFalse(rouvertures.filter(recipient=self.admin).exists())
-        self.assertFalse(rouvertures.filter(recipient=self.controller).exists())
-        self.assertFalse(rouvertures.filter(recipient=self.rep_ivoire).exists())
+        recues = rouvertures.filter(recipient=self.owner)
+        self.assertEqual(recues.count(), 1)
+        notification = recues.get()
+        self.assertIn("N-0001", notification.title)
+        self.assertIn(MOTIF, notification.body)
+        self.assertEqual(notification.link, f"/dossiers/{self.dossier.pk}")
+        for compte in (self.admin, self.controller, self.dm_togo, self.rep_ivoire):
+            self.assertFalse(rouvertures.filter(recipient=compte).exists(), compte)
 
     def test_une_ligne_ne_se_rouvre_pas_seule(self):
         """Comme la soumission, la réouverture porte sur le dossier."""

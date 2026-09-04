@@ -1,13 +1,14 @@
 """Verrous transverses, appliqués avant que la moindre vue ne s'exécute.
 
 Trois verrous, dans cet ordre : un compte sans profil n'a rien à faire sur
-l'API ; un mot de passe provisoire doit être remplacé ; puis la double
-authentification doit être enrôlée et confirmée. L'ordre compte : le mot de
-passe distribué par le siège est le maillon le plus faible, il tombe en
-premier ; et le QR d'enrôlement ne doit pas s'afficher à qui n'a que ce
-mot de passe.
+l'API ; un mot de passe provisoire doit être remplacé ; puis, si la politique
+l'exige (``settings.TOTP_REQUIRED``), la double authentification doit être
+enrôlée et confirmée. L'ordre compte : le mot de passe distribué par le siège
+est le maillon le plus faible, il tombe en premier ; et le QR d'enrôlement
+ne doit pas s'afficher à qui n'a que ce mot de passe.
 """
 
+from django.conf import settings
 from django.http import JsonResponse
 from django.utils.translation import gettext as _
 from rest_framework.exceptions import AuthenticationFailed
@@ -41,7 +42,10 @@ class ProvisionalPasswordMiddleware:
     pas réellement personnel : ce qu'il signe ne prouve rien, et l'imputabilité
     de chaque action, qui est la raison d'être de cette application, tombe.
     Même raisonnement pour la double authentification : sans second facteur,
-    un mot de passe réutilisé ailleurs suffit à agir au nom d'un autre.
+    un mot de passe réutilisé ailleurs suffit à agir au nom d'un autre. Son
+    obligation est une politique (``settings.TOTP_REQUIRED``) : désactivée,
+    le verrou ne s'applique pas, mais un compte enrôlé de son plein gré
+    fournit toujours son code à la connexion (cf. ``core.views``).
 
     Un compte sans profil n'a ni rôle ni périmètre : le superutilisateur
     d'amorçage n'est pas un acteur du cahier des charges, et un compte hérité
@@ -97,7 +101,11 @@ class ProvisionalPasswordMiddleware:
                 },
                 status=403,
             )
-        if not profile.totp_confirmed and match.url_name not in TOTP_EXEMPT_URL_NAMES:
+        if (
+            settings.TOTP_REQUIRED
+            and not profile.totp_confirmed
+            and match.url_name not in TOTP_EXEMPT_URL_NAMES
+        ):
             return JsonResponse(
                 {
                     "detail": _(

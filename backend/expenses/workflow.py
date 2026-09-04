@@ -14,8 +14,9 @@ Trois principes gouvernent ce circuit :
 - **Une dépense non justifiée pèse malgré tout sur l'enveloppe.** L'absence de
   preuve ne fait pas revenir l'argent : elle se lit dans l'écart entre le
   montant dépensé et le montant justifié.
-- **Personne ne justifie sa propre dépense.** Le pays (manager, DM) déclare,
-  le siège (DF) constate. Et même au siège, celui qui a saisi une dépense ne
+- **Personne ne justifie sa propre dépense.** Le pays (manager) déclare,
+  le siège constate — le DM met en contrôle, le DF tranche. Et même au
+  siège, celui qui a saisi une dépense ne
   peut pas la justifier lui-même : sans cette séparation, une seule personne
   pourrait décaisser puis se donner quitus.
 

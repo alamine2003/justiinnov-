@@ -23,11 +23,15 @@ from .services import notify, recipients_for
 
 logger = logging.getLogger(__name__)
 
-#: Qui contrôle les dépenses — le siège, jamais le pays qui les a engagées.
-CONTROLLERS = [Role.DF, Role.ADMIN, Role.SUPER_ADMIN]
+#: Qui contrôle les dépenses — le siège, jamais le pays qui les a engagées :
+#: le DM, qui met en contrôle, le DF, qui tranche, et les administrateurs,
+#: qui peuvent l'un et l'autre. ``recipients_for`` cloisonne : un DM ou un
+#: DF restreint à des pays n'est prévenu que pour ceux-là.
+CONTROLLERS = [Role.DM, Role.DF, Role.ADMIN, Role.SUPER_ADMIN]
 
-#: Qui peut fournir une pièce manquante : ceux qui ont saisi la dépense.
-PROVIDERS = [Role.DM, Role.MANAGER]
+#: Qui peut fournir une pièce manquante ou corriger un dossier : le manager,
+#: seul rôle du pays.
+PROVIDERS = [Role.MANAGER]
 
 #: Qui arbitre le budget : la direction, super administratrice.
 BUDGET_OWNERS = [Role.SUPER_ADMIN]
@@ -97,8 +101,8 @@ def dossier_reopened(dossier, actor, motive):
 
     Seule exception à l'irréversibilité (``expenses.workflow``) : un
     administrateur a renvoyé le dossier au brouillon pour demander des
-    comptes. Ceux qui l'ont déclaré — le DM et les managers du pays — doivent
-    le savoir sans attendre d'ouvrir la liste : il faut le corriger et le
+    comptes. Ceux qui l'ont déclaré — les managers du pays — doivent le
+    savoir sans attendre d'ouvrir la liste : il faut le corriger et le
     resoumettre. Le motif figure dans le message, pas seulement sur la fiche.
 
     La clé d'unicité porte le dossier et le jour : deux réouvertures le même
@@ -134,12 +138,14 @@ ALERT_KINDS = {
     "proof_incomplete": Notification.Kind.PROOF_INCOMPLETE,
 }
 
-#: Qui doit être averti, selon la nature de l'alerte.
+#: Qui doit être averti, selon la nature de l'alerte : le siège entier
+#: (super administrateurs, RH, DF, DM), et le manager pour les alertes de
+#: son pays.
 ALERT_AUDIENCE = {
-    # Le pays reste averti de l'état de son enveloppe, même s'il ne la
-    # justifie pas lui-même.
-    "budget_overrun": BUDGET_OWNERS + [Role.DM],
-    "budget_threshold": BUDGET_OWNERS + [Role.DM],
+    # L'enveloppe : la direction l'arbitre, le contrôle la surveille, et le
+    # pays reste averti de son état même s'il ne la justifie pas lui-même.
+    "budget_overrun": CONTROLLERS + PROVIDERS,
+    "budget_threshold": CONTROLLERS + PROVIDERS,
     # Un justificatif manquant concerne d'abord ceux qui peuvent le fournir —
     # le pays — autant que ceux qui devront le contrôler.
     "proof_missing": CONTROLLERS + PROVIDERS,

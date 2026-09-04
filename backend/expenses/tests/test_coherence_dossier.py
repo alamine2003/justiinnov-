@@ -38,7 +38,7 @@ class DossierCoherenceTests(APITestCase):
         # Des comptes en service : ``make_user`` porte les verrous d'accès
         # (mot de passe remplacé, double authentification confirmée), qui ne
         # sont pas l'objet de ces tests.
-        self.rep = make_user("togo.innov", Role.DM, [self.pays])
+        self.rep = make_user("togo.innov", Role.MANAGER, [self.pays])
         self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
         self.login(self.rep)
 

@@ -62,9 +62,9 @@ class CloisonnementParEquipeTests(ScopingTestCase):
         )
 
     def test_le_dm_n_est_pas_cloisonne_par_equipe(self):
-        """Seul le manager l'est : ses supérieurs couvrent le pays entier,
-        même si une équipe leur est rattachée."""
-        dm = make_user("dm.innov", Role.DM, [self.togo], teams=[self.team_togo])
+        """Seul le manager l'est : le siège couvre le pays entier, même si
+        une équipe lui est rattachée."""
+        dm = make_user("dm.togo", Role.DM, [self.togo], teams=[self.team_togo])
         self.login(dm)
 
         response = self.client.get("/api/teams/")

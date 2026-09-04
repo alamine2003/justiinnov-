@@ -1,10 +1,16 @@
-"""Double authentification obligatoire : enrôlement, connexion, réinitialisation."""
+"""Double authentification : enrôlement, connexion, réinitialisation, politique.
+
+Le mécanisme est toujours là ; son obligation est une politique
+(``TOTP_REQUIRED``). Les tests du verrou la posent explicitement ; ceux de
+la fin vérifient ce qui reste vrai quand elle n'est pas exigée.
+"""
 
 import base64
 from datetime import timedelta
 
 import pyotp
 from django.db.models import Max
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -29,14 +35,16 @@ def code_perime(secret):
     return pyotp.TOTP(secret).at(timezone.now() - timedelta(minutes=5))
 
 
+@override_settings(TOTP_REQUIRED=True)
 class VerrouDeDoubleAuthentificationTests(ScopingTestCase):
-    """Un compte non enrôlé ne fait rien d'autre que s'enrôler."""
+    """Quand la politique l'exige, un compte non enrôlé ne fait rien d'autre
+    que s'enrôler."""
 
     def setUp(self):
         super().setUp()
         self.repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
         self.nouveau = make_user(
-            "nouveau.innov", Role.DM, [self.togo], totp_confirmed=False,
+            "nouveau.innov", Role.MANAGER, [self.togo], totp_confirmed=False,
         )
         self.login(self.nouveau)
 
@@ -125,7 +133,7 @@ class VerrouDeDoubleAuthentificationTests(ScopingTestCase):
         """Le QR d'enrôlement ne s'affiche pas à qui n'a que le mot de passe
         distribué par le siège."""
         provisoire = make_user(
-            "frais.innov", Role.DM, [self.togo],
+            "frais.innov", Role.MANAGER, [self.togo],
             must_change_password=True, totp_confirmed=False,
         )
         self.login(provisoire)
@@ -214,9 +222,10 @@ class ConnexionAvecCodeTests(ScopingTestCase):
         self.assertEqual(self.connexion(code=trop_vieux).status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_un_compte_non_enrole_se_connecte_sans_code(self):
-        """C'est le middleware qui le cantonne à l'enrôlement, pas la
-        connexion : sans jeton, il ne pourrait pas s'enrôler."""
-        make_user("nouveau.innov", Role.DM, [self.togo], totp_confirmed=False)
+        """C'est le middleware qui le cantonne à l'enrôlement quand la
+        politique l'exige, pas la connexion : sans jeton, il ne pourrait pas
+        s'enrôler."""
+        make_user("nouveau.innov", Role.MANAGER, [self.togo], totp_confirmed=False)
 
         response = self.client.post(
             "/api/token-auth/", {"username": "nouveau.innov", "password": MOT_DE_PASSE}
@@ -225,6 +234,7 @@ class ConnexionAvecCodeTests(ScopingTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
+@override_settings(TOTP_REQUIRED=True)
 class ReinitialisationTests(ScopingTestCase):
     def setUp(self):
         super().setUp()
@@ -287,10 +297,98 @@ class ReinitialisationTests(ScopingTestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_la_liste_des_comptes_dit_qui_est_enrole(self):
-        make_user("nouveau.innov", Role.DM, [self.togo], totp_confirmed=False)
+        make_user("nouveau.innov", Role.MANAGER, [self.togo], totp_confirmed=False)
 
         response = self.client.get("/api/users/")
 
         etats = {u["username"]: u["totp_confirmed"] for u in response.data["results"]}
         self.assertTrue(etats["togo.innov"])
         self.assertFalse(etats["nouveau.innov"])
+
+
+@override_settings(TOTP_REQUIRED=False)
+class PolitiqueNonExigeeTests(ScopingTestCase):
+    """Sans obligation, l'enrôlement reste proposé — et un compte enrôlé de
+    son plein gré fournit toujours son code : un second facteur qu'on a
+    choisi d'activer ne se contourne pas."""
+
+    def setUp(self):
+        super().setUp()
+        self.nouveau = make_user(
+            "nouveau.innov", Role.MANAGER, [self.togo], totp_confirmed=False,
+        )
+
+    def test_un_compte_non_enrole_se_connecte_sans_code(self):
+        response = self.client.post(
+            "/api/token-auth/", {"username": "nouveau.innov", "password": MOT_DE_PASSE}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["token"], Token.objects.get(user=self.nouveau).key)
+
+    def test_la_plateforme_est_ouverte_sans_enrolement(self):
+        self.login(self.nouveau)
+
+        for url in ("/api/countries/", "/api/teams/", "/api/dossiers/"):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_le_profil_dit_que_la_politique_n_est_pas_exigee(self):
+        """L'interface lit la politique et l'état du compte séparément : elle
+        propose l'enrôlement sans y conduire de force."""
+        self.login(self.nouveau)
+
+        profil = self.client.get("/api/me/").data
+
+        self.assertFalse(profil["totp_required"])
+        self.assertFalse(profil["totp_confirmed"])
+
+    @override_settings(TOTP_REQUIRED=True)
+    def test_le_profil_dit_quand_la_politique_est_exigee(self):
+        self.login(self.nouveau)
+
+        profil = self.client.get("/api/me/").data
+
+        self.assertTrue(profil["totp_required"])
+        self.assertFalse(profil["totp_confirmed"])
+
+    def test_un_compte_enrole_fournit_toujours_son_code(self):
+        secret = self.rep_togo.profile.totp_secret
+
+        sans = self.client.post(
+            "/api/token-auth/", {"username": "togo.innov", "password": MOT_DE_PASSE}
+        )
+        faux = self.client.post(
+            "/api/token-auth/",
+            {"username": "togo.innov", "password": MOT_DE_PASSE, "code": code_perime(secret)},
+        )
+        bon = self.client.post(
+            "/api/token-auth/",
+            {"username": "togo.innov", "password": MOT_DE_PASSE, "code": code_courant(secret)},
+        )
+
+        self.assertEqual(sans.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(sans.data["totp_required"])
+        self.assertEqual(faux.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(bon.status_code, status.HTTP_200_OK)
+
+    def test_l_enrolement_volontaire_reste_possible(self):
+        """Un titulaire qui veut protéger son compte le peut, et son code
+        est exigé dès la connexion suivante."""
+        self.login(self.nouveau)
+        secret = self.client.post("/api/me/2fa/enrol/").data["secret"]
+        confirmation = self.client.post(
+            "/api/me/2fa/confirm/", {"code": code_courant(secret)}
+        )
+        self.assertEqual(confirmation.status_code, status.HTTP_200_OK)
+        self.assertTrue(self.client.get("/api/me/").data["totp_confirmed"])
+
+        self.client.credentials()
+        response = self.client.post(
+            "/api/token-auth/", {"username": "nouveau.innov", "password": MOT_DE_PASSE}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(response.data["totp_required"])

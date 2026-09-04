@@ -64,6 +64,7 @@ class MeSerializer(serializers.ModelSerializer):
     teams = serializers.SerializerMethodField()
     has_global_scope = serializers.SerializerMethodField()
     must_change_password = serializers.SerializerMethodField()
+    totp_required = serializers.SerializerMethodField()
     totp_confirmed = serializers.SerializerMethodField()
     language = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
@@ -74,7 +75,7 @@ class MeSerializer(serializers.ModelSerializer):
         fields = [
             "id", "username", "first_name", "last_name", "email",
             "role", "role_display", "countries", "teams", "has_global_scope",
-            "must_change_password", "totp_confirmed", "language",
+            "must_change_password", "totp_required", "totp_confirmed", "language",
             "permissions", "workflow",
         ]
 
@@ -113,6 +114,15 @@ class MeSerializer(serializers.ModelSerializer):
     def get_must_change_password(self, user):
         profile = getattr(user, "profile", None)
         return bool(profile and profile.must_change_password)
+
+    def get_totp_required(self, user):
+        """La politique de la plateforme, pas l'état du compte.
+
+        Vrai : un compte non enrôlé est cantonné à l'enrôlement, et
+        l'interface doit l'y conduire. Faux : l'enrôlement reste proposé,
+        jamais imposé — et ``totp_confirmed`` dit si ce compte-ci l'a fait.
+        """
+        return bool(settings.TOTP_REQUIRED)
 
     def get_totp_confirmed(self, user):
         profile = getattr(user, "profile", None)

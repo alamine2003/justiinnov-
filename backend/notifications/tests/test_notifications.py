@@ -197,24 +197,41 @@ class DeclencheursTests(NotificationTestCase):
 
     def test_une_reouverture_previent_ceux_qui_ont_declare(self):
         """Seule exception à l'irréversibilité : le dossier revient au pays,
-        avec le motif, sous un type qui lui est propre. Le DM et les managers
-        du pays sont prévenus ; le voisin, non ; l'administrateur qui rouvre,
-        pas davantage."""
+        avec le motif, sous un type qui lui est propre. Les managers du pays
+        sont prévenus ; le DM, au siège, non ; le voisin, non ;
+        l'administrateur qui rouvre, pas davantage."""
         dm_togo = make_user("dm.togo", Role.DM, [self.togo])
         self.dossier.status = Status.SUBMITTED
         self.dossier.save()
 
         triggers.dossier_reopened(self.dossier, self.doo, "Facture illisible")
 
-        for destinataire in (self.owner, dm_togo):
-            notification = Notification.objects.get(recipient=destinataire)
-            self.assertEqual(notification.kind, Notification.Kind.DOSSIER_REOPENED)
-            self.assertEqual(notification.level, Notification.Level.WARNING)
-            self.assertIn("N-0001", notification.title)
-            self.assertIn("Facture illisible", notification.body)
-            self.assertEqual(notification.link, f"/dossiers/{self.dossier.pk}")
-        self.assertFalse(Notification.objects.filter(recipient=self.rep_ivoire).exists())
-        self.assertFalse(Notification.objects.filter(recipient=self.doo).exists())
+        notification = Notification.objects.get(recipient=self.owner)
+        self.assertEqual(notification.kind, Notification.Kind.DOSSIER_REOPENED)
+        self.assertEqual(notification.level, Notification.Level.WARNING)
+        self.assertIn("N-0001", notification.title)
+        self.assertIn("Facture illisible", notification.body)
+        self.assertEqual(notification.link, f"/dossiers/{self.dossier.pk}")
+        for absent in (dm_togo, self.rep_ivoire, self.doo):
+            self.assertFalse(Notification.objects.filter(recipient=absent).exists(), absent)
+
+    def test_une_soumission_previent_le_dm_et_le_df_du_pays(self):
+        """Le contrôle est au siège, en deux temps : le DM qui mettra en
+        contrôle et le DF qui tranchera sont prévenus — chacun sur son
+        périmètre, et jamais le manager qui a soumis."""
+        dm_togo = make_user("dm.togo", Role.DM, [self.togo])
+        dm_ivoire = make_user("dm.ivoire", Role.DM, [self.ivoire])
+        self.make_expense(amount="1000.00")
+
+        self.submit_dossier()
+
+        soumissions = Notification.objects.filter(kind=Notification.Kind.EXPENSE_SUBMITTED)
+        self.assertEqual(
+            set(soumissions.values_list("recipient__username", flat=True)),
+            {dm_togo.username, self.controller.username, self.doo.username},
+        )
+        self.assertFalse(soumissions.filter(recipient=dm_ivoire).exists())
+        self.assertFalse(soumissions.filter(recipient=self.owner).exists())
 
     def test_le_type_dossier_rouvert_se_traduit(self):
         from django.utils import translation
@@ -351,9 +368,11 @@ class DeclencheursBilinguesTests(NotificationTestCase):
         super().setUp()
         self.controller.profile.language = "en"
         self.controller.profile.save()
-        self.dm_togo = make_user("dm.togo", Role.DM, [self.togo])
-        self.dm_togo.profile.language = "en"
-        self.dm_togo.profile.save()
+        # Un second manager du Togo, anglophone : la réouverture revient au
+        # pays, et chacun de ses managers la lit dans sa langue.
+        self.manager_en = make_user("kojo.togo", Role.MANAGER, [self.togo])
+        self.manager_en.profile.language = "en"
+        self.manager_en.profile.save()
         self.make_expense(amount="1000.00")
 
     def test_la_soumission_arrive_en_anglais(self):
@@ -371,7 +390,7 @@ class DeclencheursBilinguesTests(NotificationTestCase):
 
         triggers.dossier_reopened(self.dossier, self.doo, "Facture illisible")
 
-        anglais = Notification.objects.get(recipient=self.dm_togo)
+        anglais = Notification.objects.get(recipient=self.manager_en)
         francais = Notification.objects.get(recipient=self.owner)
         self.assertEqual(anglais.title, "Dossier reopened — N-0001")
         self.assertIn("Reason: Facture illisible", anglais.body)

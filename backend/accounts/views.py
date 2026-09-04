@@ -18,7 +18,7 @@ from core.views import BackOfficePermission
 from . import totp
 from .authentication import obtenir_jeton, revoquer_jeton
 from .journal import etat_compte, journaliser_compte, journaliser_modification
-from .models import HEADQUARTERS_ROLES, Role, UserProfile
+from .models import ALWAYS_GLOBAL_ROLES, HEADQUARTERS_ROLES, Role, UserProfile
 from .permissions import CAPABILITIES, USER_WRITE_ROLES, RolePermission, get_access
 from .serializers import (
     ChangePasswordSerializer,
@@ -316,6 +316,10 @@ class PermissionMatrixView(APIView):
                         "value": role.value,
                         "label": str(role.label),
                         "siege": role in HEADQUARTERS_ROLES,
+                        # Un rôle du siège peut être restreint à des pays
+                        # (DM, DF) ; la RH et les super administrateurs,
+                        # jamais : ils administrent l'ensemble.
+                        "always_global": role in ALWAYS_GLOBAL_ROLES,
                     }
                     for role in Role
                 ],

@@ -1,5 +1,6 @@
 """Plateforme bilingue : messages en anglais sur demande, français sinon."""
 
+from django.test import override_settings
 from rest_framework import status
 
 from accounts.models import Role
@@ -46,6 +47,7 @@ class LangueDesReponsesTests(ScopingTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("company domain", response.data["email"][0])
 
+    @override_settings(TOTP_REQUIRED=True)
     def test_le_verrou_du_middleware_se_lit_en_anglais(self):
         self.rep_togo.profile.totp_confirmed_at = None
         self.rep_togo.profile.save()
@@ -62,8 +64,8 @@ class LangueDesReponsesTests(ScopingTestCase):
         en = self.client.get("/api/me/", HTTP_ACCEPT_LANGUAGE="en").data
         fr = self.client.get("/api/me/").data
 
-        self.assertEqual(en["role_display"], "DM — manager's line manager")
-        self.assertEqual(fr["role_display"], "DM — supérieur du manager")
+        self.assertEqual(en["role_display"], "Manager (country)")
+        self.assertEqual(fr["role_display"], "Manager (pays)")
 
 
 class PreferenceDeLangueTests(ScopingTestCase):
@@ -110,4 +112,4 @@ class PreferenceDeLangueTests(ScopingTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.rep_togo.profile.refresh_from_db()
-        self.assertEqual(self.rep_togo.profile.role, Role.DM)
+        self.assertEqual(self.rep_togo.profile.role, Role.MANAGER)

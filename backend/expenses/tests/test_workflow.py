@@ -1049,11 +1049,13 @@ class LocalTimeTests(ExpenseTestCase):
 
 
 class SeparationOfDutiesTests(ExpenseTestCase):
-    """Le pays déclare, le siège constate. Personne ne se donne quitus."""
+    """Le pays déclare, le siège constate — le DM met en contrôle, le DF
+    tranche. Personne ne se donne quitus."""
 
     def setUp(self):
         super().setUp()
-        self.rep_togo = make_user("togo.innov", Role.DM, [self.togo])
+        self.rep_togo = make_user("togo.innov", Role.MANAGER, [self.togo])
+        self.dm = make_user("dm.innov", Role.DM)
         self.expense = self.make_expense(created_by="owner.togo")
         self.submit_dossier()
 
@@ -1100,6 +1102,48 @@ class SeparationOfDutiesTests(ExpenseTestCase):
         self.login(self.rep_togo)
 
         response = self.client.post(f"/api/expenses/{self.expense.pk}/close/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_le_dm_met_en_controle(self):
+        """Premier temps du contrôle, au siège : la ligne et le dossier."""
+        self.login(self.dm)
+
+        ligne = self.client.post(f"/api/expenses/{self.expense.pk}/review/")
+        dossier = self.client.post(f"/api/dossiers/{self.dossier.pk}/review/")
+
+        self.assertEqual(ligne.status_code, status.HTTP_200_OK, ligne.data)
+        self.assertEqual(ligne.data["status"], Status.IN_REVIEW)
+        self.assertEqual(dossier.status_code, status.HTTP_200_OK, dossier.data)
+        self.assertEqual(dossier.data["status"], Status.IN_REVIEW)
+
+    def test_le_dm_ne_tranche_pas(self):
+        """Mettre en contrôle n'est pas conclure : justifier, rejeter et
+        clore reviennent au DF, son supérieur."""
+        self.login(self.dm)
+        self.client.post(f"/api/expenses/{self.expense.pk}/review/")
+
+        justify = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+        reject = self.client.post(
+            f"/api/expenses/{self.expense.pk}/reject/", {"note": "Sans preuve"}
+        )
+        dossier = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+
+        for response in (justify, reject, dossier):
+            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.expense.refresh_from_db()
+        self.assertEqual(self.expense.status, Status.IN_REVIEW)
+
+    def test_le_dm_ne_declare_pas(self):
+        """Le DM est au siège : il ne saisit ni ne soumet — celui qui met en
+        contrôle ne peut pas être celui qui a déclaré."""
+        self.login(self.dm)
+
+        response = self.client.post(
+            "/api/dossiers/",
+            {"label": "Mission DM", "country": self.togo.pk,
+             "date": date(self.year, 4, 1).isoformat()},
+        )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 

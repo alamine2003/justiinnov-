@@ -70,9 +70,10 @@ def get_access(user):
 #: Pays, managers : structure de l'organisation, réservée au siège.
 REFERENTIAL_WRITE_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 
-#: Équipes, centres de coûts, projets, intitulés, catégories : le responsable
-#: pays les gère pour son propre périmètre.
-SUBENTITY_WRITE_ROLES = REFERENTIAL_WRITE_ROLES | {Role.DM}
+#: Équipes, centres de coûts, projets, intitulés, catégories, bénéficiaires :
+#: la RH gère le référentiel de tous les pays. Le manager ne le modifie pas —
+#: il déclare dans un cadre que le siège a posé, il ne le redessine pas.
+SUBENTITY_WRITE_ROLES = REFERENTIAL_WRITE_ROLES
 
 #: Budgets et réallocations : attribution et arbitrage (§4). La direction
 #: des opérations attribue en tant que super administratrice ; la direction
@@ -91,25 +92,32 @@ REOPEN_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 #: Comptes utilisateurs et rôles.
 USER_WRITE_ROLES = REFERENTIAL_WRITE_ROLES
 
-#: Saisie des dépenses, des dossiers et dépôt des justificatifs (§4).
-EXPENSE_WRITE_ROLES = frozenset(
-    {Role.SUPER_ADMIN, Role.ADMIN, Role.DM, Role.MANAGER}
-)
+#: Saisie des dépenses, des dossiers et dépôt des justificatifs (§4) : le
+#: manager, seul rôle du pays. Le DM est au siège et ne déclare plus : celui
+#: qui met en contrôle ne peut pas être celui qui a soumis.
+EXPENSE_WRITE_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER})
 
-#: Contrôle documentaire, justification et constat de non-justification.
+#: Mise en contrôle d'un dossier ou d'une ligne : premier temps du contrôle,
+#: par le DM. Le DF, son supérieur, et les administrateurs peuvent aussi
+#: le faire, pour ne pas bloquer un dossier quand le DM est absent.
+REVIEW_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
+
+#: Justification, constat de non-justification, clôture : le DF tranche,
+#: pas le DM — qui prépare le contrôle mais ne le conclut pas.
 #:
-#: **Le pays en est exclu, délibérément.** Un responsable pays qui pourrait
-#: justifier ses propres dépenses viderait l'application de sa raison d'être :
-#: c'est le siège qui constate qu'une pièce couvre un décaissement, jamais
-#: celui qui l'a engagé.
+#: **Le pays en est exclu, délibérément.** Un manager qui pourrait justifier
+#: ses propres dépenses viderait l'application de sa raison d'être : c'est
+#: le siège qui constate qu'une pièce couvre un décaissement, jamais celui
+#: qui l'a engagé.
 VALIDATION_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
 
-#: Consultation du journal d'audit : le siège, RH comprise, qui audite.
-AUDIT_READ_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
+#: Consultation du journal d'audit : le siège, RH comprise, qui audite, et
+#: le DM, qui prépare le contrôle et doit pouvoir relire qui a fait quoi.
+AUDIT_READ_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
 
 #: Consultation de l'historique du référentiel (``/api/history/``) : le
-#: siège, et le responsable pays pour son périmètre. Un owner saisit des
-#: dépenses ; l'organisation du pays ne le regarde pas.
+#: siège, chacun sur son périmètre. Un manager saisit des dépenses ;
+#: l'organisation du pays ne le regarde pas.
 HISTORY_READ_ROLES = AUDIT_READ_ROLES | {Role.DM}
 
 
@@ -134,7 +142,10 @@ CAPABILITIES = [
     {
         "key": "manage_subentities",
         "label": _("Équipes, projets, intitulés"),
-        "description": _("Gérer les sous-entités d'un pays."),
+        "description": _(
+            "Gérer le référentiel des pays : équipes, projets, intitulés, "
+            "catégories, bénéficiaires. Le manager y déclare, la RH le tient."
+        ),
         "roles": SUBENTITY_WRITE_ROLES,
     },
     {
@@ -146,15 +157,27 @@ CAPABILITIES = [
     {
         "key": "record_expenses",
         "label": _("Saisie et soumission"),
-        "description": _("Saisir des dépenses, déposer des pièces, soumettre un dossier."),
+        "description": _(
+            "Saisir des dépenses, déposer des pièces, soumettre un dossier : "
+            "le manager, pour son pays."
+        ),
         "roles": EXPENSE_WRITE_ROLES,
+    },
+    {
+        "key": "review_expenses",
+        "label": _("Mise en contrôle"),
+        "description": _(
+            "Prendre un dossier soumis en contrôle : le DM prépare, le DF "
+            "tranche. Le pays en est exclu."
+        ),
+        "roles": REVIEW_ROLES,
     },
     {
         "key": "validate_expenses",
         "label": _("Justification"),
         "description": _(
             "Constater qu'une pièce couvre une dépense, ou l'absence de preuve. "
-            "Le pays en est exclu : il déclare, le siège constate."
+            "Le DF tranche ; le pays en est exclu : il déclare, le siège constate."
         ),
         "roles": VALIDATION_ROLES,
     },

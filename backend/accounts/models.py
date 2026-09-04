@@ -7,8 +7,10 @@ d'utilisateur.
 
 Le profil porte aussi l'enrôlement TOTP : le secret, et la date à laquelle
 son titulaire a prouvé qu'il le détenait (``totp_confirmed_at``). Tant que
-cette date est vide, le compte n'est pas considéré comme protégé et la
-plateforme lui est fermée (cf. ``accounts.middleware``).
+cette date est vide, le compte n'est pas considéré comme protégé ; quand la
+politique l'exige (``settings.TOTP_REQUIRED``), la plateforme lui est fermée
+(cf. ``accounts.middleware``). Un compte enrôlé, obligation ou non, fournit
+toujours son code à la connexion.
 """
 
 from django.conf import settings
@@ -22,24 +24,29 @@ from core.models import Country, Manager, Team, TimeStampedModel
 class Role(models.TextChoices):
     """Les cinq rôles de la plateforme.
 
-    Côté pays, trois niveaux : le manager engage la dépense et la saisit, le
-    DM (son supérieur) déclare le dossier, le DF (supérieur du DM) contrôle
-    la finance. Côté siège, la RH administre les comptes et les audite ; la
-    direction (DG, DO, CEO) et l'équipe de développement sont super
-    administrateurs. Il n'y a ni « direction des opérations » ni « auditeur »
-    distincts : la DO est super administratrice, l'audit revient à la RH.
+    Côté pays, un seul rôle : le manager engage la dépense, la saisit et
+    soumet le dossier de son pays (de ses équipes, s'il en a). Le contrôle
+    est au siège, en deux temps : le DM (directeur manager) met le dossier
+    en contrôle, le DF (directeur financier, supérieur du DM) justifie ou
+    rejette. La RH administre les comptes, le référentiel de tous les pays,
+    et audite ; la direction (DG, DO, CEO) et l'équipe de développement sont
+    super administrateurs. RH et super administrateurs peuvent tout ce que
+    font le DM et le DF. Il n'y a ni « direction des opérations » ni
+    « auditeur » distincts : la DO est super administratrice, l'audit
+    revient à la RH.
     """
 
     SUPER_ADMIN = "super_admin", _("Super administrateur (DG, DO, CEO, DEV)")
     ADMIN = "admin", _("Administrateur (RH)")
-    DF = "df", _("DF — direction financière")
-    DM = "dm", _("DM — supérieur du manager")
-    MANAGER = "manager", _("Manager")
+    DF = "df", _("DF — directeur financier (siège)")
+    DM = "dm", _("DM — directeur manager (siège)")
+    MANAGER = "manager", _("Manager (pays)")
 
 
 #: Rôles exercés depuis le siège : ils portent sur l'ensemble des pays.
-#: Le DF constate pour le siège ; il peut être restreint à certains pays.
-HEADQUARTERS_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
+#: Le DM et le DF contrôlent pour le siège ; chacun peut être restreint à
+#: certains pays. Les administrateurs, eux, ne se restreignent jamais.
+HEADQUARTERS_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
 
 #: Rôles dont le périmètre ne peut jamais être restreint.
 ALWAYS_GLOBAL_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
@@ -100,7 +107,8 @@ class UserProfile(TimeStampedModel):
         blank=True,
         help_text=_(
             "Date à laquelle le titulaire a saisi un premier code valide. "
-            "Vide : la plateforme lui reste fermée."
+            "Vide : le compte n'est pas enrôlé, et la plateforme lui est "
+            "fermée si la politique l'exige."
         ),
     )
     language = models.CharField(
@@ -148,8 +156,8 @@ class UserProfile(TimeStampedModel):
     def team_ids(self):
         """Identifiants des équipes auxquelles la vue est restreinte, ou ``None``.
 
-        Seul le manager est cloisonné par équipe : ses supérieurs (DM, DF)
-        couvrent le pays entier. Un manager **sans équipe rattachée voit tout
+        Seul le manager est cloisonné par équipe : le siège (DM, DF)
+        couvre le pays entier. Un manager **sans équipe rattachée voit tout
         son pays** : c'est le choix retenu, parce que l'équipe est une
         subdivision facultative du référentiel — un pays qui n'en a pas
         déclaré n'a pas à en inventer une pour que ses managers travaillent.

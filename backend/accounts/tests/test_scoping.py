@@ -17,11 +17,12 @@ def make_user(username, role, countries=(), must_change_password=False, *,
               teams=(), totp_confirmed=True, email=None):
     """Compte de test, mot de passe déjà personnalisé et 2FA déjà confirmée.
 
-    Le modèle exige un changement de mot de passe à la première connexion et
-    un enrôlement TOTP, et la plateforme est fermée tant qu'ils n'ont pas eu
-    lieu. Les tests portent sur l'usage courant : leurs comptes sont donc des
-    comptes en service, pas des comptes fraîchement créés. Les tests du
-    verrou lui-même passent ``totp_confirmed=False``.
+    Le modèle exige un changement de mot de passe à la première connexion,
+    et la plateforme est fermée tant qu'il n'a pas eu lieu — de même pour
+    l'enrôlement TOTP quand la politique l'exige (``TOTP_REQUIRED``). Les
+    tests portent sur l'usage courant : leurs comptes sont donc des comptes
+    en service, pas des comptes fraîchement créés. Les tests du verrou
+    lui-même passent ``totp_confirmed=False``.
     """
     user = User.objects.create_user(
         username=username, password="Motdepasse-2026-test",
@@ -51,9 +52,12 @@ class ScopingTestCase(APITestCase):
         self.team_ivoire = Team.objects.create(country=self.ivoire, name="Équipe Abidjan")
         self.team_togo = Team.objects.create(country=self.togo, name="Équipe Lomé")
 
-        self.rep_togo = make_user("togo.innov", Role.DM, [self.togo])
+        # Le pays : un manager, seul rôle côté pays. Le siège : la direction,
+        # le DF qui tranche, le DM qui met en contrôle.
+        self.rep_togo = make_user("togo.innov", Role.MANAGER, [self.togo])
         self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
         self.controleur = make_user("rh.innov", Role.DF)
+        self.dm = make_user("dm.innov", Role.DM)
 
     def login(self, user):
         token, _ = Token.objects.get_or_create(user=user)
@@ -106,19 +110,29 @@ class CountryScopeTests(ScopingTestCase):
 
         self.assertEqual(response.data["count"], 2)
 
-    def test_la_direction_financiere_peut_etre_restreinte(self):
-        """Un DF rattaché à des pays n'en voit que ceux-là : c'est le seul
-        rôle du siège dont le périmètre se restreint."""
-        df_togo = make_user("df.togo", Role.DF, [self.togo])
-        self.login(df_togo)
+    def test_le_dm_et_le_df_peuvent_etre_restreints(self):
+        """Un DM ou un DF rattaché à des pays n'en voit que ceux-là : ce sont
+        les deux rôles du siège dont le périmètre se restreint."""
+        for role in (Role.DF, Role.DM):
+            with self.subTest(role=role):
+                self.login(make_user(f"{role}.togo", role, [self.togo]))
 
-        liste = self.client.get("/api/countries/")
-        autre = self.client.get(f"/api/countries/{self.ivoire.pk}/")
-        profil = self.client.get("/api/me/")
+                liste = self.client.get("/api/countries/")
+                autre = self.client.get(f"/api/countries/{self.ivoire.pk}/")
+                profil = self.client.get("/api/me/")
 
-        self.assertEqual([c["country_ref"] for c in liste.data["results"]], ["TG-02"])
-        self.assertEqual(autre.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertFalse(profil.data["has_global_scope"])
+                self.assertEqual(
+                    [c["country_ref"] for c in liste.data["results"]], ["TG-02"]
+                )
+                self.assertEqual(autre.status_code, status.HTTP_404_NOT_FOUND)
+                self.assertFalse(profil.data["has_global_scope"])
+
+    def test_le_dm_est_au_siege(self):
+        """Sans pays rattaché, le DM voit tout : il n'est pas un rôle pays."""
+        self.login(self.dm)
+
+        self.assertEqual(self.client.get("/api/countries/").data["count"], 2)
+        self.assertTrue(self.client.get("/api/me/").data["has_global_scope"])
 
     def test_les_administrateurs_ne_se_restreignent_pas(self):
         """Des pays rattachés par erreur à un administrateur ne lui ferment
@@ -139,18 +153,41 @@ class SubEntityScopeTests(ScopingTestCase):
         noms = [t["name"] for t in response.data["results"]]
         self.assertEqual(noms, ["Équipe Lomé"])
 
-    def test_creation_dans_son_pays_autorisee(self):
-        self.login(self.rep_togo)
+    def test_la_rh_gere_le_referentiel_de_tous_les_pays(self):
+        rh = make_user("rh.admin", Role.ADMIN)
+        self.login(rh)
 
-        response = self.client.post(
+        togo = self.client.post(
             "/api/teams/", {"country": self.togo.pk, "name": "Équipe Kara"}
         )
+        ivoire = self.client.post(
+            "/api/teams/", {"country": self.ivoire.pk, "name": "Équipe Bouaké"}
+        )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(togo.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(ivoire.status_code, status.HTTP_201_CREATED)
+
+    def test_le_manager_ne_modifie_pas_le_referentiel(self):
+        """Le manager déclare dans un cadre que le siège a posé ; il ne le
+        redessine pas, même pour son propre pays."""
+        self.login(self.rep_togo)
+
+        creation = self.client.post(
+            "/api/teams/", {"country": self.togo.pk, "name": "Équipe Kara"}
+        )
+        modification = self.client.patch(
+            f"/api/teams/{self.team_togo.pk}/", {"name": "Équipe renommée"}
+        )
+
+        self.assertEqual(creation.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(modification.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Team.objects.filter(name="Équipe Kara").exists())
 
     def test_creation_dans_un_autre_pays_refusee(self):
-        """Sans cette validation, la charge utile permettrait de créer une
-        entité chez le voisin."""
+        """Doublement bloqué : le rôle n'écrit pas le référentiel, et le pays
+        serait de toute façon hors périmètre. Sans la revalidation de la
+        charge utile, un rôle qui écrit chez lui pourrait créer une entité
+        chez le voisin."""
         self.login(self.rep_togo)
 
         response = self.client.post(
@@ -183,21 +220,24 @@ class RolePermissionTests(ScopingTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_la_direction_financiere_ne_modifie_pas_le_referentiel(self):
-        df = make_user("df.innov", Role.DF)
-        self.login(df)
+    def test_le_controle_ne_modifie_pas_le_referentiel(self):
+        """Le DF tranche et le DM met en contrôle : ni l'un ni l'autre ne
+        redessine l'organisation des pays, qui revient à la RH."""
+        for compte in (self.controleur, self.dm):
+            with self.subTest(role=compte.profile.role):
+                self.login(compte)
 
-        lecture = self.client.get("/api/teams/")
-        ecriture = self.client.post(
-            "/api/teams/", {"country": self.togo.pk, "name": "Équipe X"}
-        )
+                lecture = self.client.get("/api/teams/")
+                ecriture = self.client.post(
+                    "/api/teams/", {"country": self.togo.pk, "name": "Équipe X"}
+                )
 
-        self.assertEqual(lecture.status_code, status.HTTP_200_OK)
-        self.assertEqual(ecriture.status_code, status.HTTP_403_FORBIDDEN)
+                self.assertEqual(lecture.status_code, status.HTTP_200_OK)
+                self.assertEqual(ecriture.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_role_pays_sans_perimetre_ne_voit_rien(self):
         """L'absence de périmètre ne doit jamais valoir autorisation générale."""
-        orphelin = make_user("sans-pays.innov", Role.DM)
+        orphelin = make_user("sans-pays.innov", Role.MANAGER)
         self.login(orphelin)
 
         response = self.client.get("/api/countries/")
@@ -214,6 +254,7 @@ class RolePermissionTests(ScopingTestCase):
 
 class HistoryScopeTests(ScopingTestCase):
     def test_historique_filtre_par_perimetre(self):
+        """Un DM restreint au Togo ne lit que l'historique du Togo."""
         # Le journal ne s'efface pas : on ne regarde que ce que le test écrit.
         repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
         self.ivoire.timezone = "Africa/Bouake"
@@ -221,12 +262,26 @@ class HistoryScopeTests(ScopingTestCase):
         self.togo.timezone = "Africa/Kara"
         self.togo.save()
 
-        self.login(self.rep_togo)
+        self.login(make_user("dm.togo", Role.DM, [self.togo]))
         response = self.client.get("/api/history/")
 
-        recentes = [e for e in response.data["results"] if e["id"] > repere]
+        # Un rôle du siège restreint garde les entrées sans pays (comptes,
+        # configuration) ; ce sont celles d'un pays qui doivent se limiter.
+        recentes = [
+            e for e in response.data["results"]
+            if e["id"] > repere and e["country"] is not None
+        ]
         self.assertTrue(recentes)
         self.assertEqual({e["country_name"] for e in recentes}, {"Togo"})
+
+    def test_le_manager_ne_lit_pas_l_historique(self):
+        """Le manager saisit des dépenses ; l'organisation du pays ne le
+        regarde pas."""
+        self.login(self.rep_togo)
+
+        response = self.client.get("/api/history/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class MeTests(ScopingTestCase):
@@ -235,13 +290,29 @@ class MeTests(ScopingTestCase):
 
         response = self.client.get("/api/me/")
 
-        self.assertEqual(response.data["role"], Role.DM)
+        self.assertEqual(response.data["role"], Role.MANAGER)
+        self.assertEqual(response.data["role_display"], "Manager (pays)")
         self.assertFalse(response.data["has_global_scope"])
         self.assertEqual(
             [c["country_ref"] for c in response.data["countries"]], ["TG-02"]
         )
         self.assertFalse(response.data["permissions"]["manage_countries"])
-        self.assertTrue(response.data["permissions"]["manage_subentities"])
+        self.assertFalse(response.data["permissions"]["manage_subentities"])
+        self.assertTrue(response.data["permissions"]["record_expenses"])
+        self.assertFalse(response.data["permissions"]["review_expenses"])
+        self.assertFalse(response.data["permissions"]["validate_expenses"])
+
+    def test_profil_du_dm(self):
+        """Le DM met en contrôle sans trancher ni déclarer."""
+        self.login(self.dm)
+
+        permissions = self.client.get("/api/me/").data["permissions"]
+
+        self.assertTrue(permissions["review_expenses"])
+        self.assertTrue(permissions["view_audit"])
+        self.assertFalse(permissions["validate_expenses"])
+        self.assertFalse(permissions["record_expenses"])
+        self.assertFalse(permissions["manage_subentities"])
 
     def test_compte_sans_profil_garde_une_reponse_complete(self):
         """Un compte technique hérité n'a pas de profil : la liste des comptes
@@ -316,12 +387,17 @@ class BackOfficeTests(ScopingTestCase):
         self.login(self.siege)
         matrice = self.client.get("/api/permissions/").data
 
-        justification = next(
-            c for c in matrice["capabilities"] if c["key"] == "validate_expenses"
-        )
-        # Le pays est exclu de la justification, la matrice doit le dire.
-        self.assertNotIn(Role.DM, justification["roles"])
-        self.assertIn(Role.DF, justification["roles"])
+        capacites = {c["key"]: c["roles"] for c in matrice["capabilities"]}
+        # Le pays est exclu de la justification, la matrice doit le dire ;
+        # le DM met en contrôle mais ne tranche pas.
+        self.assertNotIn(Role.MANAGER, capacites["validate_expenses"])
+        self.assertNotIn(Role.DM, capacites["validate_expenses"])
+        self.assertIn(Role.DF, capacites["validate_expenses"])
+        self.assertIn(Role.DM, capacites["review_expenses"])
+        self.assertNotIn(Role.MANAGER, capacites["review_expenses"])
+        # La RH tient le référentiel de tous les pays, pas le manager.
+        self.assertIn(Role.ADMIN, capacites["manage_subentities"])
+        self.assertNotIn(Role.MANAGER, capacites["manage_subentities"])
 
         # Et elle doit concorder avec les droits annoncés à chaque titulaire —
         # pas seulement au super administrateur, qui a tout et ne prouve rien.
@@ -337,6 +413,21 @@ class BackOfficeTests(ScopingTestCase):
                         role in capability["roles"],
                         f"désaccord sur {capability['key']} pour {role}",
                     )
+
+    def test_la_matrice_dit_qui_est_au_siege_et_qui_ne_se_restreint_pas(self):
+        """La RH est globale : des pays rattachés ne la restreignent pas, et
+        le back-office doit pouvoir le dire avant qu'on ne l'essaie."""
+        self.login(self.siege)
+
+        roles = {r["value"]: r for r in self.client.get("/api/permissions/").data["roles"]}
+
+        self.assertTrue(roles[Role.ADMIN]["always_global"])
+        self.assertTrue(roles[Role.SUPER_ADMIN]["always_global"])
+        for role in (Role.DM, Role.DF):
+            self.assertTrue(roles[role]["siege"], role)
+            self.assertFalse(roles[role]["always_global"], role)
+        self.assertFalse(roles[Role.MANAGER]["siege"])
+        self.assertFalse(roles[Role.MANAGER]["always_global"])
 
     def test_la_matrice_n_est_pas_modifiable(self):
         self.login(self.siege)

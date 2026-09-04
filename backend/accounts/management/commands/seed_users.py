@@ -17,7 +17,8 @@ Chaque compte doit porter une adresse e-mail professionnelle (domaines de
 que la commande est un chemin d'écriture comme un autre.
 
 Une clé ``totp_secret`` (base32) enrôle et confirme d'emblée la double
-authentification avec ce secret. Elle n'existe que pour les environnements
+authentification avec ce secret — que la politique l'exige ou non
+(``settings.TOTP_REQUIRED``). Elle n'existe que pour les environnements
 jetables — intégration continue, captures d'écran — où un script doit se
 connecter sans téléphone : un secret écrit dans un fichier n'est plus un
 second facteur. Il n'est jamais affiché.
@@ -152,11 +153,11 @@ class Command(BaseCommand):
                 f"Valeurs possibles : {', '.join(Role.values)}"
             )
         refs = payload.get("countries", [])
-        if role == Role.DM and not refs:
-            # Un responsable pays sans pays verrait tout, comme le siège :
-            # exactement l'inverse de ce que son rôle promet.
+        if role == Role.MANAGER and not refs:
+            # Un manager sans pays ne verrait rien (``has_global_scope``) :
+            # le compte serait créé inutilisable, sans que rien ne le dise.
             raise CommandError(
-                f"Le responsable pays {username} doit avoir au moins un pays."
+                f"Le manager {username} doit avoir au moins un pays."
             )
 
         # Vérifiée avant toute écriture : un compte créé sans adresse ne

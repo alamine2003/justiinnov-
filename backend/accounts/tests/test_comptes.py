@@ -67,7 +67,7 @@ class TraceDesComptesTests(ScopingTestCase):
     def test_la_modification_porte_avant_et_apres(self):
         response = self.client.patch(
             f"/api/users/{self.rep_togo.pk}/",
-            {"role": Role.MANAGER, "email": "togo@innovpharma.net"},
+            {"role": Role.DM, "email": "togo@innovpharma.net"},
             format="json",
             REMOTE_ADDR="203.0.113.7",
         )
@@ -77,7 +77,7 @@ class TraceDesComptesTests(ScopingTestCase):
         self.assertEqual(
             entry.diff,
             {
-                "role": [Role.DM, Role.MANAGER],
+                "role": [Role.MANAGER, Role.DM],
                 "email": ["togo.innov@innovpharma.net", "togo@innovpharma.net"],
             },
         )
@@ -98,7 +98,7 @@ class TraceDesComptesTests(ScopingTestCase):
 
     def test_une_modification_sans_changement_ne_trace_rien(self):
         self.client.patch(
-            f"/api/users/{self.rep_togo.pk}/", {"role": Role.DM}, format="json"
+            f"/api/users/{self.rep_togo.pk}/", {"role": Role.MANAGER}, format="json"
         )
 
         self.assertFalse(entrees(self.rep_togo).exists())

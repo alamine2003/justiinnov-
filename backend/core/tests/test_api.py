@@ -201,41 +201,33 @@ class HistoryScopeTests(ApiTestCase):
 
     def test_un_siege_restreint_voit_aussi_les_entrees_sans_pays(self):
         """Taux de change, configuration, comptes : rattachés à aucun pays,
-        ils étaient invisibles pour un rôle du siège limité à quelques pays."""
+        ils étaient invisibles pour un rôle du siège limité à quelques pays —
+        le DF comme le DM."""
         autre = Country.objects.create(name="Bénin", code="BJ", currency="XOF")
-        self._compte("df.test", Role.DF, [self.country])
-        # Le journal est en ajout seul : on ne le vide pas, on retient un
-        # repère et on ne juge que ce qui vient après.
-        repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
-        ChangeLog.objects.create(
-            model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
-            label="Configuration", action=ChangeLog.Actions.UPDATED,
-        )
-        self.country.timezone = "Africa/Accra"
-        self.country.save()
-        autre.timezone = "Africa/Accra"
-        autre.save()
+        # Un fuseau différent à chaque tour : sans changement, rien ne
+        # s'écrit dans le journal.
+        for role, fuseau in ((Role.DF, "Africa/Accra"), (Role.DM, "Africa/Lagos")):
+            with self.subTest(role=role):
+                self._compte(f"{role}.test", role, [self.country])
+                # Le journal est en ajout seul : on ne le vide pas, on retient
+                # un repère et on ne juge que ce qui vient après.
+                repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
+                ChangeLog.objects.create(
+                    model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
+                    label="Configuration", action=ChangeLog.Actions.UPDATED,
+                )
+                self.country.timezone = fuseau
+                self.country.save()
+                autre.timezone = fuseau
+                autre.save()
 
-        response = self.client.get("/api/history/")
+                response = self.client.get("/api/history/")
 
-        nouvelles = [e for e in response.data["results"] if e["id"] > repere]
-        labels = {e["model_name"] for e in nouvelles}
-        self.assertEqual(labels, {"workflow_configuration", "country"})
-        pays = {e["country"] for e in nouvelles}
-        self.assertEqual(pays, {None, self.country.pk})
-
-    def test_un_responsable_pays_ne_voit_pas_les_entrees_sans_pays(self):
-        self._compte("pays.test", Role.DM, [self.country])
-        ChangeLog.objects.create(
-            model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
-            label="Configuration", action=ChangeLog.Actions.UPDATED,
-        )
-
-        response = self.client.get("/api/history/")
-
-        self.assertEqual(
-            [e for e in response.data["results"] if e["country"] is None], []
-        )
+                nouvelles = [e for e in response.data["results"] if e["id"] > repere]
+                labels = {e["model_name"] for e in nouvelles}
+                self.assertEqual(labels, {"workflow_configuration", "country"})
+                pays = {e["country"] for e in nouvelles}
+                self.assertEqual(pays, {None, self.country.pk})
 
 
 class PaginationTests(ApiTestCase):

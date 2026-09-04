@@ -15,6 +15,8 @@ from accounts.permissions import (
     AUDIT_READ_ROLES,
     EXPENSE_WRITE_ROLES,
     REOPEN_ROLES,
+    REVIEW_ROLES,
+    SUBENTITY_WRITE_ROLES,
     VALIDATION_ROLES,
     RolePermission,
     get_access,
@@ -56,13 +58,14 @@ from .workflow import (
     next_status,
 )
 
-#: Rôle habilité pour chaque action du workflow. Le pays (manager, DM)
-#: soumet ; le siège (DF, administrateurs) constate ; les administrateurs
-#: seuls rouvrent — ni le pays, qui se corrigerait lui-même, ni la direction
-#: financière, dont le constat ne se défait pas.
+#: Rôle habilité pour chaque action du workflow. Le pays (manager) soumet ;
+#: au siège, le DM met en contrôle et le DF tranche (justifie, rejette,
+#: clôt), les administrateurs pouvant faire l'un et l'autre ; les
+#: administrateurs seuls rouvrent — ni le pays, qui se corrigerait lui-même,
+#: ni la direction financière, dont le constat ne se défait pas.
 ACTION_ROLES = {
     "submit": EXPENSE_WRITE_ROLES,
-    "review": VALIDATION_ROLES,
+    "review": REVIEW_ROLES,
     "justify": VALIDATION_ROLES,
     "reject": VALIDATION_ROLES,
     "close": VALIDATION_ROLES,
@@ -257,13 +260,14 @@ class BeneficiaryViewSet(CountryScopedMixin, NoDestroyModelViewSet):
 
     Le référentiel était commun : un pays lisait les fournisseurs et les
     prospects du voisin, de quoi reconstituer qui il démarche et qui il paie.
-    Il est cloisonné comme le reste.
+    Il est cloisonné comme le reste — et tenu par la RH, comme le reste du
+    référentiel : le manager choisit un bénéficiaire, il n'en invente pas.
     """
 
     queryset = Beneficiary.objects.select_related("country").all()
     serializer_class = BeneficiarySerializer
     permission_classes = [RolePermission]
-    write_roles = EXPENSE_WRITE_ROLES
+    write_roles = SUBENTITY_WRITE_ROLES
     filterset_fields = ["kind", "is_active", "country"]
     search_fields = ["name", "contact"]
     ordering_fields = ["name", "created_at"]

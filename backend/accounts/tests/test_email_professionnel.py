@@ -102,7 +102,7 @@ class SeedUsersEmailTests(ScopingTestCase):
         self.assertEqual(User.objects.get(username="kofi.innov").email, "kofi@innovpharma.net")
 
     def test_un_compte_existant_garde_son_adresse_si_le_fichier_n_en_donne_pas(self):
-        self.seed([{"username": "togo.innov", "role": "dm", "countries": ["TG-02"]}])
+        self.seed([{"username": "togo.innov", "role": "manager", "countries": ["TG-02"]}])
 
         self.rep_togo.refresh_from_db()
         self.assertEqual(self.rep_togo.email, "togo.innov@innovpharma.net")

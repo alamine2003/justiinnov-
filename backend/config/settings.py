@@ -234,7 +234,12 @@ REST_FRAMEWORK = {
     "NUM_PROXIES": int(os.environ.get("DJANGO_NUM_PROXIES", "0")),
 }
 
-# Double authentification (TOTP), obligatoire pour tous les comptes.
+# Double authentification (TOTP). Le mécanisme est toujours disponible :
+# tout titulaire peut enrôler son application, et un compte enrôlé fournit
+# son code à chaque connexion. L'obligation, elle, est une politique :
+# DJANGO_TOTP_REQUIRED=1 ferme la plateforme aux comptes non enrôlés
+# (cf. accounts.middleware). Par défaut, elle n'est pas exigée.
+TOTP_REQUIRED = os.environ.get("DJANGO_TOTP_REQUIRED", "0") == "1"
 # Nom affiché par l'application d'authentification à côté du compte.
 TOTP_ISSUER = "JUSTI INNOV"
 

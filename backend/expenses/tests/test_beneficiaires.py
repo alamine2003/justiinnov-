@@ -57,9 +57,22 @@ class BeneficiaireScopeTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertFalse(Beneficiary.objects.filter(name="Fournisseur pirate").exists())
 
+    def test_le_manager_ne_cree_pas_de_beneficiaire(self):
+        """Le référentiel des pays, bénéficiaires compris, est tenu par la RH :
+        le manager choisit parmi ceux qui existent."""
+        self.login(self.owner)
+
+        response = self.client.post(
+            "/api/beneficiaries/",
+            {"country": self.togo.pk, "name": "Pharmacie du Port"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Beneficiary.objects.filter(name="Pharmacie du Port").exists())
+
     def test_deux_pays_peuvent_declarer_le_meme_fournisseur(self):
         """Le nom était unique globalement : le second pays était refusé."""
-        self.login(self.owner)
+        self.login(self.doo)
 
         response = self.client.post(
             "/api/beneficiaries/",
@@ -70,7 +83,7 @@ class BeneficiaireScopeTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_le_meme_nom_deux_fois_dans_un_pays_est_refuse(self):
-        self.login(self.owner)
+        self.login(self.doo)
 
         response = self.client.post(
             "/api/beneficiaries/",
@@ -81,8 +94,9 @@ class BeneficiaireScopeTests(ExpenseTestCase):
         self.assertIn("existe déjà", str(response.data))
 
     def test_suppression_impossible(self):
-        """Rien ne se supprime dans un référentiel : on désactive."""
-        self.login(self.owner)
+        """Rien ne se supprime dans un référentiel : on désactive. Testé avec
+        qui a le droit d'écrire, sinon c'est le rôle qui répondrait (403)."""
+        self.login(self.doo)
 
         response = self.client.delete(
             f"/api/beneficiaries/{self.fournisseur_togo.pk}/"

@@ -46,7 +46,7 @@ class BudgetTestCase(APITestCase):
         # Une direction des opérations restreinte à un pays : même rôle,
         # périmètre borné.
         self.doo_togo = make_user("df.togo", Role.DF, [self.togo])
-        self.rep_togo = make_user("togo.innov", Role.DM, [self.togo])
+        self.rep_togo = make_user("togo.innov", Role.MANAGER, [self.togo])
 
         self.budget_togo = Budget.objects.create(
             country=self.togo, year=2026, amount=Decimal("10000000.00")

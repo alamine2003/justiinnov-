@@ -25,7 +25,7 @@ class MotDePasseProvisoireTests(APITestCase):
         # Déjà enrôlé : ce fichier teste le verrou du mot de passe, pas
         # celui de la double authentification.
         profil = UserProfile.objects.create(
-            user=self.user, role=Role.DM, must_change_password=True,
+            user=self.user, role=Role.MANAGER, must_change_password=True,
             totp_secret=pyotp.random_base32(), totp_confirmed_at=timezone.now(),
         )
         profil.countries.set([self.pays])

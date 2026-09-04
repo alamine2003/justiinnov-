@@ -152,6 +152,25 @@ class RapportPeriodiqueTests(DashboardTestCase):
         self.assertNotIn("Côte d'Ivoire", togo.body)
         self.assertEqual(self._numeros(siege), {"N-0001", "CI-0001"})
 
+    def test_le_dm_recoit_le_rapport_de_son_perimetre(self):
+        """Le DM met en contrôle : il lit la même synthèse que le DF, sur son
+        périmètre, sans classeur."""
+        dm_togo = make_user("dm.togo", Role.DM, [self.togo], email="dm.togo@example.org")
+
+        call_command("send_periodic_report", year=self.year, verbosity=0)
+
+        # Même périmètre, même langue, pas de classeur : le DM du Togo lit
+        # le message du DF du Togo, en copie cachée avec lui.
+        message = next(m for m in mail.outbox if "dm.togo@example.org" in m.bcc)
+        self.assertIn("Togo", message.body)
+        self.assertNotIn("CI-0001", message.body)
+        self.assertEqual(message.attachments, [])
+        self.assertFalse(
+            any(m.bcc == [self.owner.email] for m in mail.outbox),
+            "le manager ne reçoit pas le rapport du siège",
+        )
+        self.assertEqual(dm_togo.profile.role, Role.DM)
+
     def test_la_piece_jointe_n_est_envoyee_qu_aux_administrateurs(self):
         """Seuls les administrateurs manipulent des fichiers : la direction
         financière lit la synthèse et retrouve le détail dans l'application."""
@@ -262,7 +281,7 @@ class SeedUsersTests(TestCase):
         return {
             "username": username, "password": "Secret-Provisoire-2026",
             "email": f"{username}@innovpharma.net",
-            "role": "dm", "countries": ["TG-02"], **extra,
+            "role": "manager", "countries": ["TG-02"], **extra,
         }
 
     def test_creation_puis_relance_sans_effet(self):
@@ -323,7 +342,7 @@ class SeedUsersTests(TestCase):
         self.assertIn("code", str(capture.exception))
         self.assertFalse(Country.objects.filter(code="FR").exists())
 
-    def test_un_responsable_pays_sans_pays_est_refuse(self):
+    def test_un_manager_sans_pays_est_refuse(self):
         self._ecrire([self._compte(countries=[])])
 
         with self.assertRaises(CommandError) as capture:

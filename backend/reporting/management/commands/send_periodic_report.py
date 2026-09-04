@@ -42,8 +42,9 @@ PERIODS = {"weekly": 7, "monthly": 30}
 #: Libellé de chaque fenêtre, dans la langue du destinataire.
 PERIOD_LABELS = {"weekly": gettext_lazy("hebdomadaire"), "monthly": gettext_lazy("mensuel")}
 
-#: Destinataires du rapport : ceux qui pilotent et ceux qui contrôlent.
-AUDIENCE = [Role.SUPER_ADMIN, Role.ADMIN, Role.DF]
+#: Destinataires du rapport : le siège — ceux qui pilotent (direction, RH)
+#: et ceux qui contrôlent (DF, DM), chacun sur son périmètre.
+AUDIENCE = [Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM]
 
 
 def _groupes_par_perimetre(users):

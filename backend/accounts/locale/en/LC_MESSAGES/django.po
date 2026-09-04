@@ -43,14 +43,14 @@ msgstr "Super administrator (MD, COO, CEO, DEV)"
 msgid "Administrateur (RH)"
 msgstr "Administrator (HR)"
 
-msgid "DF — direction financière"
-msgstr "DF — finance department"
+msgid "DF — directeur financier (siège)"
+msgstr "DF — finance director (headquarters)"
 
-msgid "DM — supérieur du manager"
-msgstr "DM — manager's line manager"
+msgid "DM — directeur manager (siège)"
+msgstr "DM — managing director (headquarters)"
 
-msgid "Manager"
-msgstr "Manager"
+msgid "Manager (pays)"
+msgstr "Manager (country)"
 
 msgid "Compte"
 msgstr "Account"
@@ -91,8 +91,8 @@ msgstr "Empty until the account is enrolled."
 msgid "Double authentification confirmée le"
 msgstr "Two-factor authentication confirmed on"
 
-msgid "Date à laquelle le titulaire a saisi un premier code valide. Vide : la plateforme lui reste fermée."
-msgstr "When the holder first entered a valid code. Empty: the platform stays closed to them."
+msgid "Date à laquelle le titulaire a saisi un premier code valide. Vide : le compte n'est pas enrôlé, et la plateforme lui est fermée si la politique l'exige."
+msgstr "When the holder first entered a valid code. Empty: the account is not enrolled, and the platform is closed to them if the policy requires it."
 
 msgid "Langue"
 msgstr "Language"
@@ -121,8 +121,8 @@ msgstr "Create and edit countries, their currencies and their managers."
 msgid "Équipes, projets, intitulés"
 msgstr "Teams, projects, expense titles"
 
-msgid "Gérer les sous-entités d'un pays."
-msgstr "Manage a country's sub-entities."
+msgid "Gérer le référentiel des pays : équipes, projets, intitulés, catégories, bénéficiaires. Le manager y déclare, la RH le tient."
+msgstr "Maintain the countries' reference data: teams, projects, expense titles, categories, beneficiaries. Managers declare within it, HR maintains it."
 
 msgid "Enveloppes et réallocations"
 msgstr "Budgets and reallocations"
@@ -133,14 +133,20 @@ msgstr "Allocate budgets and decide on transfers."
 msgid "Saisie et soumission"
 msgstr "Entry and submission"
 
-msgid "Saisir des dépenses, déposer des pièces, soumettre un dossier."
-msgstr "Enter expenses, upload supporting documents, submit a file."
+msgid "Saisir des dépenses, déposer des pièces, soumettre un dossier : le manager, pour son pays."
+msgstr "Enter expenses, upload supporting documents, submit a file: the manager, for their country."
+
+msgid "Mise en contrôle"
+msgstr "Review"
+
+msgid "Prendre un dossier soumis en contrôle : le DM prépare, le DF tranche. Le pays en est exclu."
+msgstr "Take a submitted file into review: the DM prepares, the DF decides. Countries are excluded."
 
 msgid "Justification"
 msgstr "Justification"
 
-msgid "Constater qu'une pièce couvre une dépense, ou l'absence de preuve. Le pays en est exclu : il déclare, le siège constate."
-msgstr "Establish that a document covers an expense, or that proof is missing. Countries are excluded: they declare, headquarters establishes."
+msgid "Constater qu'une pièce couvre une dépense, ou l'absence de preuve. Le DF tranche ; le pays en est exclu : il déclare, le siège constate."
+msgstr "Establish that a document covers an expense, or that proof is missing. The DF decides; countries are excluded: they declare, headquarters establishes."
 
 msgid "Journal d'audit"
 msgstr "Audit log"

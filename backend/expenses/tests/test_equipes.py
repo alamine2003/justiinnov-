@@ -141,9 +141,9 @@ class CloisonnementParEquipeTests(ExpenseTestCase):
         self.assertEqual(dossiers.data["count"], 2)
         self.assertEqual(lignes.data["count"], 2)
 
-    def test_le_dm_du_pays_n_est_pas_cloisonne_par_equipe(self):
-        """Le DM déclare pour tout son pays : les équipes de son profil, s'il
-        en a, ne le restreignent pas."""
+    def test_le_dm_n_est_pas_cloisonne_par_equipe(self):
+        """Le DM contrôle pour le siège, fût-il restreint au Togo : les
+        équipes de son profil, s'il en a, ne le restreignent pas."""
         dm = make_user("dm.togo", Role.DM, [self.togo])
         dm.profile.teams.set([self.equipe_a])
         self.login(dm)

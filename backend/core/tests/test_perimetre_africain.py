@@ -119,7 +119,7 @@ class PaysDisponiblesTests(CreationParApiTests):
             username="togo.innov", password="Motdepasse-2026-test"
         )
         UserProfile.objects.create(
-            user=rep, role=Role.DM, must_change_password=False,
+            user=rep, role=Role.MANAGER, must_change_password=False,
             totp_confirmed_at=timezone.now()
         )
         token, _ = Token.objects.get_or_create(user=rep)
