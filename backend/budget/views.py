@@ -1,24 +1,22 @@
 """Vues des budgets, réallocations et taux de change."""
 
-from collections import defaultdict
-from decimal import Decimal
-
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import (
     BUDGET_WRITE_ROLES,
     REFERENTIAL_WRITE_ROLES,
     RolePermission,
+    get_access,
 )
 from accounts.scoping import CountryScopedMixin
 from core.mixins import NoDestroyModelViewSet
 from notifications import triggers
 
-from .aggregates import budget_figures, to_xof
+from .aggregates import consolidation_par_pays, consumption, current_rates
 from .models import Budget, BudgetReallocation, ExchangeRate
 from .serializers import (
     BudgetReallocationSerializer,
@@ -26,8 +24,6 @@ from .serializers import (
     ExchangeRateSerializer,
     ReallocationDecisionSerializer,
 )
-
-ZERO = Decimal("0.00")
 
 
 class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
@@ -48,67 +44,56 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     search_fields = ["country__name", "country__country_ref", "project__name"]
     ordering_fields = ["year", "amount", "created_at"]
 
+    def get_queryset(self):
+        # Pas le ``distinct()`` de ``CountryScopedMixin`` : le pays est porté
+        # par l'enveloppe, le filtre ne multiplie rien, et un DISTINCT sur
+        # les agrégats de ``with_consumption`` coûterait un tri pour rien.
+        return self.queryset.visible_par(self.request.user)
+
+    def get_serializer_context(self):
+        # Les taux de change sont lus une fois par requête, pas une fois par
+        # enveloppe affichée.
+        return {**super().get_serializer_context(), "rates": current_rates()}
+
     @action(detail=False, methods=["get"])
     def summary(self, request):
         """Consolidation par pays, avec total en FCFA (§5.6).
 
-        Seules les enveloppes de pays (sans projet) composent le total : les
-        sous-enveloppes en sont un découpage et seraient comptées deux fois.
+        Porte sur **une** année : celle de ``?year=``, sinon l'année en cours.
+        Sans ce garde-fou, l'absence de paramètre additionnait toutes les
+        années d'un même pays comme s'il s'agissait d'une seule enveloppe.
         """
         budgets = self.filter_queryset(self.get_queryset())
+        if "year" not in request.query_params:
+            budgets = budgets.filter(year=timezone.now().year)
 
-        per_country = defaultdict(
-            lambda: {"allocated": ZERO, "sub_allocated": ZERO, "engaged": ZERO,
-                     "consumed": ZERO, "justified": ZERO}
-        )
-        countries = {}
-        for budget in budgets:
-            entry = per_country[budget.country_id]
-            countries[budget.country_id] = budget.country
-            # Seule l'enveloppe du pays compose le total : projet,
-            # équipe et manager n'en sont que des découpages.
-            if budget.scope_kind == "country":
-                entry["allocated"] += budget.amount
-            else:
-                entry["sub_allocated"] += budget.amount
-            figures = budget_figures(budget)
-            entry["engaged"] += figures["engaged"]
-            entry["consumed"] += figures["consumed"]
-            entry["justified"] += figures["justified"]
-
-        rows = []
-        total_xof = ZERO
-        unconverted = set()
-        for country_id, entry in per_country.items():
-            country = countries[country_id]
-            remaining = entry["allocated"] - entry["consumed"] - entry["engaged"]
-            remaining_xof = to_xof(remaining, country.currency)
-            if remaining_xof is None:
-                unconverted.add(country.currency)
-            else:
-                total_xof += remaining_xof
-            rows.append({
-                "country": country_id,
-                "country_name": country.name,
-                "country_ref": country.country_ref,
-                "currency": country.currency,
-                "allocated": str(entry["allocated"]),
-                "sub_allocated": str(entry["sub_allocated"]),
-                "engaged": str(entry["engaged"]),
-                "consumed": str(entry["consumed"]),
-                "justified": str(entry["justified"]),
-                "remaining": str(remaining),
-                "remaining_xof": str(remaining_xof) if remaining_xof is not None else None,
-            })
-
-        rows.sort(key=lambda row: row["country_name"])
+        rows, consolidated = consolidation_par_pays(budgets, rates=current_rates())
         return Response({
-            "countries": rows,
-            "total_remaining_xof": str(total_xof),
+            "countries": [
+                {
+                    "country": row["country"],
+                    "country_name": row["country_name"],
+                    "country_ref": row["country_ref"],
+                    "currency": row["currency"],
+                    "allocated": str(row["allocated"]),
+                    "sub_allocated": str(row["sub_allocated"]),
+                    "engaged": str(row["engaged"]),
+                    "consumed": str(row["consumed"]),
+                    "justified": str(row["justified"]),
+                    "remaining": str(row["remaining"]),
+                    "remaining_xof": _as_str(row["remaining_xof"]),
+                }
+                for row in rows
+            ],
+            "total_remaining_xof": str(consolidated["remaining"]),
             # Devises sans taux connu : leur montant n'entre pas dans le total,
             # plutôt que d'y être absorbé silencieusement.
-            "unconverted_currencies": sorted(unconverted),
+            "unconverted_currencies": consolidated["unconverted_currencies"],
         })
+
+
+def _as_str(value):
+    return str(value) if value is not None else None
 
 
 class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
@@ -132,20 +117,28 @@ class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         """Approuve et exécute le transfert."""
-        reallocation = self.get_object()
-        self._check_pending(reallocation)
-
         serializer = ReallocationDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         with transaction.atomic():
-            # Verrou : deux approbations simultanées ne doivent pas vider la
-            # même enveloppe source deux fois.
-            source = Budget.objects.select_for_update().get(pk=reallocation.source_id)
-            target = Budget.objects.select_for_update().get(pk=reallocation.target_id)
-            if reallocation.amount > source.amount:
+            reallocation = self._verrouiller(request)
+            # Les deux enveloppes sont verrouillées dans l'ordre de leurs
+            # identifiants : deux réallocations croisées (A→B et B→A)
+            # approuvées en même temps prendraient sinon les verrous en sens
+            # inverse et s'interbloqueraient.
+            budgets = {
+                budget.pk: budget
+                for budget in Budget.objects.select_for_update()
+                .filter(pk__in=[reallocation.source_id, reallocation.target_id])
+                .order_by("pk")
+            }
+            source = budgets[reallocation.source_id]
+            target = budgets[reallocation.target_id]
+            if reallocation.amount > disponible(source):
+                # L'argent déjà sorti ou engagé n'est plus transférable : la
+                # source doit pouvoir couvrir ses dépenses après le transfert.
                 raise ValidationError(
-                    {"amount": "L'enveloppe source ne couvre plus ce montant."}
+                    {"amount": "Le disponible de l'enveloppe source ne couvre plus ce montant."}
                 )
             source.amount -= reallocation.amount
             target.amount += reallocation.amount
@@ -161,31 +154,63 @@ class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
         """Refuse le transfert. Le motif est obligatoire (§5.5)."""
-        reallocation = self.get_object()
-        self._check_pending(reallocation)
-
         serializer = ReallocationDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         note = serializer.validated_data.get("note", "").strip()
         if not note:
             raise ValidationError({"note": "Un refus doit être motivé."})
 
-        reallocation.status = BudgetReallocation.Status.REJECTED
-        reallocation.decision_note = note
-        self._stamp_decision(reallocation, request)
+        with transaction.atomic():
+            reallocation = self._verrouiller(request)
+            reallocation.status = BudgetReallocation.Status.REJECTED
+            reallocation.decision_note = note
+            self._stamp_decision(reallocation, request)
 
         return Response(self.get_serializer(reallocation).data)
 
-    def _check_pending(self, reallocation):
+    def _verrouiller(self, request):
+        """Relit la réallocation sous verrou et vérifie qu'elle se décide.
+
+        Le statut est contrôlé **après** la prise du verrou : lu avant, deux
+        approbations simultanées le verraient toutes deux « en attente » et
+        exécuteraient le transfert deux fois. ``get_object`` reste appelé en
+        premier pour le cloisonnement (404 hors périmètre).
+        """
+        visible = self.get_object()
+        reallocation = BudgetReallocation.objects.select_for_update().get(
+            pk=visible.pk
+        )
         if reallocation.status != BudgetReallocation.Status.PENDING:
             raise ValidationError(
                 {"status": "Cette réallocation a déjà été traitée."}
             )
+        if reallocation.requested_by == request.user.username:
+            # Demander et approuver sont deux regards : celui qui arbitre
+            # n'est pas celui qui sollicite.
+            raise PermissionDenied(
+                "Vous ne pouvez pas décider d'une réallocation que vous avez "
+                "demandée."
+            )
+        access = get_access(request.user)
+        if access is not None and not access.has_global_scope:
+            # Le queryset ne filtre que par le pays de la source ; la
+            # destination doit être dans le périmètre elle aussi, et une
+            # enveloppe hors périmètre n'existe pas pour le demandeur.
+            if reallocation.target.country_id not in access.country_ids:
+                raise NotFound()
+        return reallocation
 
     def _stamp_decision(self, reallocation, request):
         reallocation.decided_by = request.user.username
         reallocation.decided_at = timezone.now()
         reallocation.save()
+
+
+def disponible(budget):
+    """Ce qu'une enveloppe peut encore céder : l'alloué moins le consommé
+    et l'engagé. Recalculé sur l'instance verrouillée, hors annotations."""
+    totals = consumption(budget)
+    return budget.amount - totals["consumed"] - totals["engaged"]
 
 
 class ExchangeRateViewSet(NoDestroyModelViewSet):

@@ -35,9 +35,10 @@ class Status(models.TextChoices):
 #: Transitions autorisées : action → (états de départ, état d'arrivée).
 #:
 #: ``submit`` ne part que du brouillon : une dépense déjà déclarée ne se
-#: resoumet pas. ``justify`` accepte en revanche une dépense non justifiée —
-#: c'est le seul chemin de rattrapage, ouvert par le dépôt d'une preuve
-#: complémentaire.
+#: resoumet pas — et une ligne ne se soumet jamais seule : c'est le dossier
+#: qui emporte ses lignes. ``justify`` accepte en revanche une dépense non
+#: justifiée — c'est le seul chemin de rattrapage, ouvert par le dépôt d'une
+#: preuve complémentaire.
 TRANSITIONS = {
     "submit": ({Status.DRAFT}, Status.SUBMITTED),
     "review": ({Status.SUBMITTED}, Status.IN_REVIEW),
@@ -79,13 +80,54 @@ CONSUMING_STATUSES = frozenset(
 )
 
 
+#: Contrôle documentaire d'une pièce : état courant → états atteignables.
+#:
+#: Une pièce reçue ou à contrôler peut être validée, rejetée, signalée
+#: incomplète ou remise dans la file. Une pièce incomplète n'est pas
+#: « re-signalée » incomplète : on attend le complément, puis on tranche.
+#: Validée, rejetée ou archivée, elle ne bouge plus : seul un remplacement
+#: par une nouvelle version (qui l'archive) fait avancer le dossier. Sans ce
+#: tableau, un contrôleur pouvait dévalider une pièce déjà validée, voire
+#: ressusciter une pièce archivée.
+PROOF_TRANSITIONS = {
+    "received": frozenset({"validated", "rejected", "incomplete", "to_review"}),
+    "to_review": frozenset({"validated", "rejected", "incomplete", "to_review"}),
+    "incomplete": frozenset({"to_review", "validated", "rejected"}),
+    "validated": frozenset(),
+    "rejected": frozenset(),
+    "archived": frozenset(),
+}
+
+
 class TransitionError(Exception):
     """Transition demandée depuis un état qui ne l'autorise pas."""
 
 
-def next_status(action, current):
+def next_proof_status(current, target, labels):
+    """Vérifie une transition documentaire ; ``labels`` traduit les états."""
+    if target not in PROOF_TRANSITIONS.get(current, frozenset()):
+        atteignables = ", ".join(
+            labels[s] for s in sorted(PROOF_TRANSITIONS.get(current, ()))
+        ) or "aucun : la pièce est figée"
+        raise TransitionError(
+            f"Un justificatif « {labels[current]} » ne peut pas passer à "
+            f"« {labels[target]} » (états atteignables : {atteignables})."
+        )
+    return target
+
+
+def next_status(action, current, configuration=None):
     """État résultant d'une action, ou ``TransitionError``."""
     allowed_from, target = TRANSITIONS[action]
+    if (
+        action == "justify"
+        and current == Status.SUBMITTED
+        and configuration is not None
+        and configuration.require_review_step
+    ):
+        raise TransitionError(
+            "La dépense doit passer en contrôle avant d'être justifiée."
+        )
     if current not in allowed_from:
         labels = ", ".join(Status(s).label for s in sorted(allowed_from))
         raise TransitionError(

@@ -1,18 +1,30 @@
 """Tests des enveloppes, des réallocations et de la conversion en FCFA."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.cache import cache
+from django.db import IntegrityError, connection, transaction
+from django.db.models import ProtectedError
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
-from budget.aggregates import to_xof
-from budget.models import Budget, BudgetReallocation, ExchangeRate
-from core.models import Country, Project
+from budget.aggregates import (
+    CENTS,
+    consolidation_par_pays,
+    convert,
+    current_rates,
+    to_xof,
+)
+from budget.models import Budget, BudgetReallocation, ExchangeRate, OverrunPolicy
+from core.models import Country, Manager, Project, Team
+from expenses.models import Dossier, Expense
+from expenses.workflow import Status
 
 
 class BudgetTestCase(APITestCase):
@@ -26,7 +38,14 @@ class BudgetTestCase(APITestCase):
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
         )
-        self.doo = make_user("do.innov", Role.SUPER_ADMIN)
+        # Le siège arbitre ; la direction des opérations attribue et
+        # approuve (BUDGET_WRITE_ROLES). Les deux comptes sont distincts :
+        # celui qui demande une réallocation ne peut pas la décider.
+        self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
+        self.doo = make_user("do.innov", Role.DOO)
+        # Une direction des opérations restreinte à un pays : même rôle,
+        # périmètre borné.
+        self.doo_togo = make_user("doo.togo", Role.DOO, [self.togo])
         self.rep_togo = make_user("togo.innov", Role.COUNTRY_MANAGER, [self.togo])
 
         self.budget_togo = Budget.objects.create(
@@ -39,6 +58,19 @@ class BudgetTestCase(APITestCase):
     def login(self, user):
         token, _ = Token.objects.get_or_create(user=user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+    def imputer(self, budget, amount, statut=Status.SUBMITTED):
+        """Une dépense imputée à l'enveloppe, dans l'état demandé."""
+        dossier = Dossier.objects.create(
+            number=f"D-{Expense.objects.count() + 1:04d}", label="Mission",
+            country=budget.country, date=date(budget.year, 3, 1),
+            status=Status.SUBMITTED,
+        )
+        return Expense.objects.create(
+            dossier=dossier, country=budget.country, budget=budget,
+            date=timezone.now(), title="Carburant",
+            amount=Decimal(amount), status=statut,
+        )
 
 
 class BudgetAccessTests(BudgetTestCase):
@@ -96,6 +128,130 @@ class BudgetAccessTests(BudgetTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("project", response.data)
 
+    def test_direction_des_operations_attribue_une_enveloppe(self):
+        """Le rôle DOO, et pas seulement le super administrateur, attribue."""
+        self.login(self.doo)
+
+        response = self.client.post(
+            "/api/budgets/",
+            {"country": self.ivoire.pk, "year": 2027, "amount": "30000000.00"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_pays_hors_perimetre_simplement_invalide(self):
+        """Une DOO restreinte au Togo ne crée rien en Côte d'Ivoire — et la
+        réponse ne distingue pas « hors périmètre » d'« inexistant »."""
+        self.login(self.doo_togo)
+
+        response = self.client.post(
+            "/api/budgets/",
+            {"country": self.ivoire.pk, "year": 2027, "amount": "1.00"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("country", response.data)
+        self.assertNotIn("périmètre", str(response.data))
+
+    def test_manager_hors_perimetre_simplement_invalide(self):
+        manager = Manager.objects.create(name="Awa Diallo")
+        self.ivoire.managers.add(manager)
+        self.login(self.doo_togo)
+
+        response = self.client.post(
+            "/api/budgets/",
+            {
+                "country": self.togo.pk, "year": 2027,
+                "manager": manager.pk, "amount": "1.00",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("manager", response.data)
+
+    def test_manager_doit_etre_rattache_au_pays(self):
+        """Un manager n'a pas de pays propre : c'est ``Country.managers``
+        qui le rattache. Une sous-enveloppe pour un manager étranger au pays
+        ne recevrait jamais de dépense."""
+        manager = Manager.objects.create(name="Awa Diallo")
+        self.ivoire.managers.add(manager)
+        self.login(self.siege)
+
+        response = self.client.post(
+            "/api/budgets/",
+            {
+                "country": self.togo.pk, "year": 2027,
+                "manager": manager.pk, "amount": "1.00",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("manager", response.data)
+
+    def test_liste_cloisonnee_sans_distinct(self):
+        """Le pays est porté par l'enveloppe : le filtre de périmètre ne
+        multiplie aucune ligne, et un DISTINCT sur les agrégats de
+        consommation ne ferait que coûter un tri."""
+        self.login(self.rep_togo)
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get("/api/budgets/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        requetes_budget = [
+            q["sql"] for q in captured.captured_queries
+            if '"budget_budget"' in q["sql"] and "SELECT" in q["sql"]
+        ]
+        self.assertTrue(requetes_budget)
+        for sql in requetes_budget:
+            self.assertNotIn("DISTINCT", sql)
+
+
+class EnveloppeImputeeTests(BudgetTestCase):
+    """Une enveloppe qui porte des dépenses ne se déplace plus."""
+
+    def setUp(self):
+        super().setUp()
+        self.imputer(self.budget_togo, "50000.00")
+        self.login(self.siege)
+
+    def test_annee_et_pays_figes(self):
+        response = self.client.patch(
+            f"/api/budgets/{self.budget_togo.pk}/", {"year": 2027}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("year", response.data)
+        self.budget_togo.refresh_from_db()
+        self.assertEqual(self.budget_togo.year, 2026)
+
+    def test_decoupage_fige(self):
+        projet = Project.objects.create(country=self.togo, name="Projet TG")
+
+        response = self.client.patch(
+            f"/api/budgets/{self.budget_togo.pk}/", {"project": projet.pk}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("project", response.data)
+
+    def test_le_montant_reste_modifiable(self):
+        """Seul le rattachement est figé : réviser l'enveloppe reste
+        possible, et tracé."""
+        response = self.client.patch(
+            f"/api/budgets/{self.budget_togo.pk}/", {"amount": "12000000.00"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_renvoyer_la_meme_valeur_n_est_pas_un_deplacement(self):
+        response = self.client.patch(
+            f"/api/budgets/{self.budget_togo.pk}/",
+            {"country": self.togo.pk, "year": 2026, "amount": "12000000.00"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
 
 class BudgetFiguresTests(BudgetTestCase):
     def test_solde_disponible_calcule_cote_serveur(self):
@@ -144,6 +300,76 @@ class BudgetFiguresTests(BudgetTestCase):
         self.assertEqual(togo["sub_allocated"], "4000000.00")
 
 
+    def test_consolidation_porte_sur_l_annee_en_cours_par_defaut(self):
+        """Sans ``?year=``, la consolidation additionnait toutes les années
+        d'un pays comme une seule enveloppe."""
+        Budget.objects.create(
+            country=self.togo, year=2025, amount=Decimal("7000000.00")
+        )
+        self.login(self.doo)
+
+        sans_annee = self.client.get("/api/budgets/summary/")
+        annee_2025 = self.client.get("/api/budgets/summary/", {"year": 2025})
+
+        togo = next(r for r in sans_annee.data["countries"] if r["country_ref"] == "TG-02")
+        self.assertEqual(togo["allocated"], "10000000.00")
+        togo_2025 = next(
+            r for r in annee_2025.data["countries"] if r["country_ref"] == "TG-02"
+        )
+        self.assertEqual(togo_2025["allocated"], "7000000.00")
+
+    def test_meme_calcul_que_le_tableau_de_bord(self):
+        """Résumé et tableau de bord passent par ``consolidation_par_pays`` :
+        deux implémentations avaient fini par diverger."""
+        self.ivoire.currency = "MAD"
+        self.ivoire.save()
+        ExchangeRate.objects.create(
+            currency="MAD", rate_to_xof=Decimal("60.000000"), valid_from=date(2026, 1, 1)
+        )
+        self.imputer(self.budget_ivoire, "5000000.00", Status.JUSTIFIED)
+        self.login(self.doo)
+
+        resume = self.client.get("/api/budgets/summary/")
+        tableau = self.client.get("/api/dashboard/", {"year": 2026})
+
+        lignes_resume = {r["country_ref"]: r for r in resume.data["countries"]}
+        lignes_tableau = {r["country_ref"]: r for r in tableau.data["countries"]}
+        for ref, ligne in lignes_resume.items():
+            for cle in ("allocated", "engaged", "consumed", "remaining", "remaining_xof"):
+                self.assertEqual(ligne[cle], lignes_tableau[ref][cle], (ref, cle))
+        self.assertEqual(
+            resume.data["total_remaining_xof"],
+            tableau.data["consolidated_xof"]["remaining"],
+        )
+
+    def test_consolidation_n_additionne_qu_en_fcfa(self):
+        """Des dirhams et des francs ne s'additionnent pas : au niveau
+        global, seul le consolidé en FCFA a un sens, et une devise sans taux
+        en est exclue, nommément."""
+        self.ivoire.currency = "MAD"
+        self.ivoire.save()
+        ExchangeRate.objects.create(
+            currency="MAD", rate_to_xof=Decimal("60.000000"), valid_from=date(2026, 1, 1)
+        )
+        ghana = Country.objects.create(
+            name="Ghana", code="GH", country_ref="GH-03", currency="GHS",
+            timezone="Africa/Accra",
+        )
+        Budget.objects.create(country=ghana, year=2026, amount=Decimal("1000.00"))
+        budgets = Budget.objects.select_related("country").filter(year=2026)
+
+        rows, consolidated = consolidation_par_pays(budgets, rates=current_rates())
+
+        self.assertEqual(
+            [row["remaining_xof"] for row in rows],
+            [Decimal("1500000000.00"), None, Decimal("10000000.00")],
+        )
+        self.assertEqual(consolidated["remaining"], Decimal("1510000000.00"))
+        self.assertEqual(consolidated["allocated"], Decimal("1510000000.00"))
+        self.assertEqual(consolidated["unconverted_currencies"], ["GHS"])
+        self.assertNotIn("currency", consolidated)
+
+
 class ExchangeRateTests(BudgetTestCase):
     def test_conversion_au_taux_en_vigueur_a_la_date(self):
         ExchangeRate.objects.create(
@@ -174,6 +400,113 @@ class ExchangeRateTests(BudgetTestCase):
         self.assertEqual(response.data["unconverted_currencies"], ["GHS"])
         self.assertEqual(response.data["total_remaining_xof"], "10000000.00")
 
+    def test_un_taux_date_du_futur_ne_s_applique_pas_encore(self):
+        """Le taux « courant » est le dernier en vigueur *aujourd'hui*, pas le
+        plus récent saisi : un taux daté de demain attend son jour."""
+        demain = timezone.localdate() + timedelta(days=1)
+        ExchangeRate.objects.create(
+            currency="MAD", rate_to_xof=Decimal("60.000000"), valid_from=date(2026, 1, 1)
+        )
+        ExchangeRate.objects.create(
+            currency="MAD", rate_to_xof=Decimal("99.000000"), valid_from=demain
+        )
+
+        self.assertEqual(to_xof(Decimal("10"), "MAD"), Decimal("600.00"))
+        self.assertEqual(current_rates(), {"MAD": Decimal("60.000000")})
+        self.assertEqual(current_rates(on_date=demain), {"MAD": Decimal("99.000000")})
+
+    def test_taux_courants_en_une_requete(self):
+        for devise, taux in (("MAD", "60"), ("EUR", "655.957"), ("GHS", "45")):
+            for jour in (date(2025, 1, 1), date(2026, 1, 1)):
+                ExchangeRate.objects.create(
+                    currency=devise, rate_to_xof=Decimal(taux), valid_from=jour
+                )
+
+        with self.assertNumQueries(1):
+            rates = current_rates()
+
+        self.assertEqual(set(rates), {"MAD", "EUR", "GHS"})
+        self.assertEqual(rates["EUR"], Decimal("655.957000"))
+        # Le jeu de taux fourni fait foi : plus aucune requête.
+        with self.assertNumQueries(0):
+            self.assertEqual(to_xof(Decimal("2"), "MAD", rates=rates), Decimal("120.00"))
+            self.assertIsNone(to_xof(Decimal("2"), "USD", rates=rates))
+
+    def test_la_liste_ne_relit_pas_les_taux_par_enveloppe(self):
+        """Régression N+1 : chaque enveloppe hors FCFA interrogeait deux fois
+        la table des taux."""
+        ExchangeRate.objects.create(
+            currency="MAD", rate_to_xof=Decimal("60"), valid_from=date(2026, 1, 1)
+        )
+        self.ivoire.currency = "MAD"
+        self.ivoire.save()
+        self.login(self.doo)
+
+        def requetes():
+            with CaptureQueriesContext(connection) as captured:
+                response = self.client.get("/api/budgets/")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            return len(captured.captured_queries)
+
+        peu = requetes()
+        for year in (2023, 2024, 2025):
+            Budget.objects.create(country=self.ivoire, year=year, amount=Decimal("1.00"))
+        self.assertEqual(requetes(), peu)
+
+    def test_le_taux_fige_est_celui_reellement_applique(self):
+        """Rejouer « montant d'origine × taux figé » doit redonner le montant
+        enregistré : le taux est arrondi avant la multiplication."""
+        ExchangeRate.objects.create(
+            currency="EUR", rate_to_xof=Decimal("655.957"), valid_from=date(2026, 1, 1)
+        )
+        ExchangeRate.objects.create(
+            currency="MAD", rate_to_xof=Decimal("61.3"), valid_from=date(2026, 1, 1)
+        )
+
+        converti, taux = convert(Decimal("12345.67"), "EUR", "MAD")
+
+        self.assertEqual(taux, Decimal("10.700767"))
+        self.assertEqual(converti, (Decimal("12345.67") * taux).quantize(CENTS))
+
+    def test_taux_nul_ou_negatif_refuse(self):
+        self.login(self.doo)
+
+        for taux in ("0", "-1"):
+            response = self.client.post(
+                "/api/exchange-rates/",
+                {"currency": "MAD", "rate_to_xof": taux, "valid_from": "2026-01-01"},
+            )
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, taux)
+            self.assertIn("rate_to_xof", response.data)
+
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            ExchangeRate.objects.create(
+                currency="MAD", rate_to_xof=Decimal("0"), valid_from=date(2026, 1, 1)
+            )
+
+    def test_taux_date_du_futur_refuse(self):
+        self.login(self.doo)
+        demain = timezone.localdate() + timedelta(days=1)
+
+        response = self.client.post(
+            "/api/exchange-rates/",
+            {"currency": "MAD", "rate_to_xof": "60", "valid_from": demain.isoformat()},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("valid_from", response.data)
+
+    def test_devise_normalisee_en_majuscules(self):
+        self.login(self.doo)
+
+        response = self.client.post(
+            "/api/exchange-rates/",
+            {"currency": " mad ", "rate_to_xof": "60", "valid_from": "2026-01-01"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["currency"], "MAD")
+
 
 class ReallocationTests(BudgetTestCase):
     def setUp(self):
@@ -182,18 +515,25 @@ class ReallocationTests(BudgetTestCase):
         self.sous_enveloppe = Budget.objects.create(
             country=self.togo, year=2026, project=self.projet, amount=Decimal("0.00")
         )
+        # Le siège demande, la direction des opérations décide.
         self.login(self.doo)
 
-    def _demander(self, amount="1000000.00", reason="Renfort du projet"):
-        return self.client.post(
+    def _demander(
+        self, amount="1000000.00", reason="Renfort du projet",
+        source=None, target=None, par=None,
+    ):
+        self.login(par or self.siege)
+        response = self.client.post(
             "/api/reallocations/",
             {
-                "source": self.budget_togo.pk,
-                "target": self.sous_enveloppe.pk,
+                "source": (source or self.budget_togo).pk,
+                "target": (target or self.sous_enveloppe).pk,
                 "amount": amount,
                 "reason": reason,
             },
         )
+        self.login(self.doo)
+        return response
 
     def test_justification_obligatoire(self):
         response = self._demander(reason="   ")
@@ -249,16 +589,231 @@ class ReallocationTests(BudgetTestCase):
         self.budget_togo.refresh_from_db()
         self.assertEqual(self.budget_togo.amount, Decimal("9000000.00"))
 
+    def test_pas_d_auto_approbation(self):
+        """Demander et décider sont deux regards, même au siège."""
+        realloc_id = self._demander(par=self.doo).data["id"]
+
+        approbation = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
+        refus = self.client.post(
+            f"/api/reallocations/{realloc_id}/reject/", {"note": "Non"}
+        )
+
+        self.assertEqual(approbation.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(refus.status_code, status.HTTP_403_FORBIDDEN)
+        self.budget_togo.refresh_from_db()
+        self.assertEqual(self.budget_togo.amount, Decimal("10000000.00"))
+        self.assertEqual(
+            BudgetReallocation.objects.get(pk=realloc_id).status,
+            BudgetReallocation.Status.PENDING,
+        )
+
+    def test_reallocation_inter_devises_refusee(self):
+        """Les montants sont dans la devise du pays : transférer des francs
+        vers une enveloppe en dirhams créerait de l'argent."""
+        self.ivoire.currency = "MAD"
+        self.ivoire.save()
+
+        response = self._demander(target=self.budget_ivoire)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("target", response.data)
+        self.assertIn("devise", str(response.data["target"]))
+
+    def test_l_argent_deja_sorti_ne_se_transfere_pas(self):
+        """L'enveloppe source doit couvrir consommé et engagé après le
+        transfert : 100 000 alloués, 80 000 soumis, 50 000 ne partent pas."""
+        self.budget_togo.amount = Decimal("100000.00")
+        self.budget_togo.save()
+        self.imputer(self.budget_togo, "80000.00", Status.SUBMITTED)
+
+        response = self._demander(amount="50000.00")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("amount", response.data)
+
+    def test_l_approbation_reverifie_le_disponible(self):
+        """Une dépense peut sortir entre la demande et la décision."""
+        self.budget_togo.amount = Decimal("100000.00")
+        self.budget_togo.save()
+        realloc_id = self._demander(amount="50000.00").data["id"]
+        self.imputer(self.budget_togo, "80000.00", Status.SUBMITTED)
+
+        response = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("amount", response.data)
+        self.budget_togo.refresh_from_db()
+        self.assertEqual(self.budget_togo.amount, Decimal("100000.00"))
+        self.assertEqual(
+            BudgetReallocation.objects.get(pk=realloc_id).status,
+            BudgetReallocation.Status.PENDING,
+        )
+
+    def test_enveloppe_hors_perimetre_simplement_invalide(self):
+        """Une DOO restreinte au Togo ne touche pas une enveloppe ivoirienne,
+        ni en source ni en destination — sans apprendre qu'elle existe."""
+        vers_ivoire = self._demander(target=self.budget_ivoire, par=self.doo_togo)
+        depuis_ivoire = self._demander(
+            source=self.budget_ivoire, target=self.budget_togo, par=self.doo_togo
+        )
+
+        self.assertEqual(vers_ivoire.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("target", vers_ivoire.data)
+        self.assertEqual(depuis_ivoire.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("source", depuis_ivoire.data)
+        self.assertNotIn("périmètre", str(vers_ivoire.data) + str(depuis_ivoire.data))
+
+    def test_decision_hors_perimetre_repond_404(self):
+        """Le queryset filtre sur le pays de la source : la destination doit
+        être vérifiée aussi, sinon une DOO togolaise approuverait un transfert
+        vers la Côte d'Ivoire."""
+        realloc_id = self._demander(target=self.budget_ivoire).data["id"]
+        self.login(self.doo_togo)
+
+        response = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.budget_togo.refresh_from_db()
+        self.assertEqual(self.budget_togo.amount, Decimal("10000000.00"))
+
+    def test_direction_restreinte_decide_dans_son_perimetre(self):
+        realloc_id = self._demander().data["id"]
+        self.login(self.doo_togo)
+
+        response = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["decided_by"], "doo.togo")
+
+
+class ReallocationLockTests(BudgetTestCase):
+    """Le verrou est pris sur la réallocation **avant** la lecture du statut.
+
+    Couvre l'ordre des opérations dans une transaction, en lisant le SQL
+    émis : la réallocation est relue ``FOR UPDATE`` avant toute écriture, et
+    les deux enveloppes sont verrouillées en une requête triée par
+    identifiant (donc dans le même ordre pour A→B et B→A). La course réelle
+    entre deux connexions est jouée dans ``test_verrous``.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.projet = Project.objects.create(country=self.togo, name="Projet TG")
+        self.sous_enveloppe = Budget.objects.create(
+            country=self.togo, year=2026, project=self.projet, amount=Decimal("0.00")
+        )
+        self.login(self.siege)
+        self.realloc_id = self.client.post(
+            "/api/reallocations/",
+            {
+                "source": self.budget_togo.pk, "target": self.sous_enveloppe.pk,
+                "amount": "1000.00", "reason": "Renfort",
+            },
+        ).data["id"]
+        self.login(self.doo)
+
+    def _sql(self, action, data=None):
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.post(
+                f"/api/reallocations/{self.realloc_id}/{action}/", data or {}
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return [q["sql"] for q in captured.captured_queries]
+
+    def _verifier_verrou(self, sql):
+        verrou = next(
+            i for i, s in enumerate(sql)
+            if '"budget_budgetreallocation"' in s and "FOR UPDATE" in s
+        )
+        # Seules les écritures métier comptent : le cache de limitation de
+        # débit, lui, écrit avant même que la vue ne s'exécute.
+        ecritures = [
+            i for i, s in enumerate(sql)
+            if (s.startswith("UPDATE") or s.startswith("INSERT"))
+            and ('"budget_' in s or '"core_changelog"' in s)
+        ]
+        self.assertTrue(ecritures)
+        self.assertLess(verrou, min(ecritures))
+
+    def test_approbation_verrouille_la_reallocation_puis_les_enveloppes(self):
+        sql = self._sql("approve")
+
+        self._verifier_verrou(sql)
+        verrou_enveloppes = [
+            s for s in sql if '"budget_budget"' in s and "FOR UPDATE" in s
+        ]
+        self.assertEqual(len(verrou_enveloppes), 1)
+        self.assertIn('ORDER BY "budget_budget"."id" ASC', verrou_enveloppes[0])
+
+    def test_refus_verrouille_la_reallocation(self):
+        self._verifier_verrou(self._sql("reject", {"note": "Non"}))
+
+
+class ModelConstraintTests(BudgetTestCase):
+    """La base est le dernier rempart : elle refuse ce que l'API refuse."""
+
+    def _refuse(self, creer):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            creer()
+
+    def test_montant_d_enveloppe_negatif(self):
+        self._refuse(lambda: Budget.objects.create(
+            country=self.togo, year=2027, amount=Decimal("-1.00")
+        ))
+
+    def test_reallocation_nulle_ou_vers_elle_meme(self):
+        cible = Budget.objects.create(
+            country=self.togo, year=2027, amount=Decimal("0.00")
+        )
+        self._refuse(lambda: BudgetReallocation.objects.create(
+            source=self.budget_togo, target=cible, amount=Decimal("0.00"), reason="x"
+        ))
+        self._refuse(lambda: BudgetReallocation.objects.create(
+            source=self.budget_togo, target=self.budget_togo,
+            amount=Decimal("1.00"), reason="x",
+        ))
+
+    def test_decision_sans_date(self):
+        cible = Budget.objects.create(
+            country=self.togo, year=2027, amount=Decimal("0.00")
+        )
+        self._refuse(lambda: BudgetReallocation.objects.create(
+            source=self.budget_togo, target=cible, amount=Decimal("1.00"),
+            reason="x", status=BudgetReallocation.Status.APPROVED,
+        ))
+
+    def test_le_referentiel_d_une_enveloppe_est_protege(self):
+        """Supprimer un pays ou un projet emportait ses enveloppes en
+        cascade, montants compris."""
+        projet = Project.objects.create(country=self.togo, name="Projet TG")
+        Budget.objects.create(
+            country=self.togo, year=2026, project=projet, amount=Decimal("1.00")
+        )
+
+        with self.assertRaises(ProtectedError):
+            projet.delete()
+        with self.assertRaises(ProtectedError):
+            self.togo.delete()
+
+    def test_politique_par_defaut_litterale(self):
+        """Le champ porte « bloquer » ; la configuration du circuit n'est
+        consultée qu'à la création par l'API."""
+        self.assertEqual(
+            Budget._meta.get_field("overrun_policy").default, OverrunPolicy.BLOCK
+        )
+        self.assertEqual(Budget._meta.ordering[-1], "-pk")
+        self.assertEqual(BudgetReallocation._meta.ordering[-1], "-pk")
+
 
 class SubEnvelopeTests(BudgetTestCase):
     """§5.2 : une enveloppe se décline par projet, équipe ou manager."""
 
     def setUp(self):
         super().setUp()
-        from core.models import Manager, Team
-
         self.equipe = Team.objects.create(country=self.togo, name="Équipe Lomé")
         self.manager = Manager.objects.create(name="Kodjo Mensah")
+        # Un manager n'a pas de pays propre : c'est le pays qui le rattache.
+        self.togo.managers.add(self.manager)
         self.login(self.doo)
 
     def _creer(self, **dimension):
@@ -300,8 +855,6 @@ class SubEnvelopeTests(BudgetTestCase):
         self.assertIn("équipe", str(response.data))
 
     def test_equipe_d_un_autre_pays_refusee(self):
-        from core.models import Team
-
         autre = Team.objects.create(country=self.ivoire, name="Équipe Abidjan")
 
         response = self._creer(team=autre.pk)

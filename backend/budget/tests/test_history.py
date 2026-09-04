@@ -86,6 +86,8 @@ class BudgetHistoryTests(BudgetTestCase):
             },
         ).data["id"]
 
+        # Celui qui a demandé ne décide pas : le siège tranche.
+        self.login(self.siege)
         self.client.post(f"/api/reallocations/{realloc}/approve/")
 
         montants = self.entries(

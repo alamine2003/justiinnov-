@@ -1,4 +1,5 @@
-"""Le coût des listes ne doit pas croître avec le nombre de lignes."""
+"""Le coût des listes et des soumissions ne doit pas croître avec le nombre
+de lignes."""
 
 from datetime import date
 from decimal import Decimal
@@ -8,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 
 from budget.models import Budget
 from core.models import Project
-from expenses.models import Dossier, Expense
+from expenses.models import Beneficiary, Dossier, Expense
 
 from .base import ExpenseTestCase, in_memory_storage
 
@@ -68,24 +69,85 @@ class QueryCountTests(ExpenseTestCase):
 
         self.assertEqual(few, many)
 
+    def _ligne_complete(self, index, dossier=None, projet=None):
+        """Une ligne portant toutes ses relations : c'est là que le N+1
+        se cache."""
+        projet = projet or Project.objects.create(
+            country=self.togo, name=f"Projet {index}"
+        )
+        beneficiaire = Beneficiary.objects.create(
+            country=self.togo, name=f"Fournisseur {index}"
+        )
+        return Expense.objects.create(
+            dossier=dossier or self.dossier, country=self.togo, team=self.team,
+            owner=self.manager, project=projet, beneficiary=beneficiaire,
+            date=f"{self.year}-02-01T10:00:00Z",
+            title=f"Ligne {index}", amount=Decimal("100.00"),
+        )
+
     def test_le_detail_ne_depend_pas_du_nombre_de_lignes(self):
         for index in range(2):
-            Expense.objects.create(
-                dossier=self.dossier, country=self.togo, team=self.team,
-                owner=self.manager, date=f"{self.year}-02-01T10:00:00Z",
-                title=f"Ligne {index}", amount=Decimal("100.00"),
-            )
+            self._ligne_complete(index)
         few = self._count_queries(f"/api/dossiers/{self.dossier.pk}/")
 
         for index in range(2, 12):
-            Expense.objects.create(
-                dossier=self.dossier, country=self.togo, team=self.team,
-                owner=self.manager, date=f"{self.year}-02-01T10:00:00Z",
-                title=f"Ligne {index}", amount=Decimal("100.00"),
-            )
+            self._ligne_complete(index)
         many = self._count_queries(f"/api/dossiers/{self.dossier.pk}/")
 
         self.assertEqual(few, many)
+
+    def test_la_liste_et_le_registre_ne_dependent_pas_du_nombre_de_lignes(self):
+        for index in range(2):
+            self._ligne_complete(index)
+        liste_peu = self._count_queries("/api/expenses/")
+        registre_peu = self._count_queries("/api/expenses/register/")
+
+        for index in range(2, 12):
+            self._ligne_complete(index)
+        liste_beaucoup = self._count_queries("/api/expenses/")
+        registre_beaucoup = self._count_queries("/api/expenses/register/")
+
+        self.assertEqual(liste_peu, liste_beaucoup)
+        self.assertEqual(registre_peu, registre_beaucoup)
+
+    def test_la_soumission_ne_depend_pas_du_nombre_de_lignes(self):
+        """Soumettre un dossier résolvait, verrouillait et totalisait
+        l'enveloppe pour chaque ligne, puis écrivait ligne et trace une à
+        une : vingt lignes, cent requêtes."""
+        peu = Dossier.objects.create(
+            number="S-001", label="Peu", country=self.togo, date=date(self.year, 2, 1),
+        )
+        beaucoup = Dossier.objects.create(
+            number="S-002", label="Beaucoup", country=self.togo, date=date(self.year, 2, 1),
+        )
+        # Même projet pour toutes les lignes : une seule clé d'imputation.
+        # Des projets distincts se résolvent chacun, c'est le prix du
+        # découpage en sous-enveloppes, pas un N+1.
+        projet = Project.objects.create(country=self.togo, name="Campagne")
+        for index in range(2):
+            self._ligne_complete(index, dossier=peu, projet=projet)
+        for index in range(2, 14):
+            self._ligne_complete(index, dossier=beaucoup, projet=projet)
+        self.login(self.owner)
+        # Première requête à blanc : elle amorce les caches (configuration
+        # du circuit, destinataires) que les mesures ne doivent pas payer.
+        chauffe = Dossier.objects.create(
+            number="S-000", label="Chauffe", country=self.togo, date=date(self.year, 2, 1),
+        )
+        self._ligne_complete(99, dossier=chauffe, projet=projet)
+        self.assertEqual(self.client.post(f"/api/dossiers/{chauffe.pk}/submit/").status_code, 200)
+
+        with CaptureQueriesContext(connection) as avec_peu:
+            response = self.client.post(f"/api/dossiers/{peu.pk}/submit/")
+        self.assertEqual(response.status_code, 200)
+        with CaptureQueriesContext(connection) as avec_beaucoup:
+            response = self.client.post(f"/api/dossiers/{beaucoup.pk}/submit/")
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            len(avec_peu.captured_queries), len(avec_beaucoup.captured_queries)
+        )
+        self.assertEqual(beaucoup.expenses.filter(status="submitted").count(), 12)
 
     def test_les_totaux_restent_justes_avec_plusieurs_preuves(self):
         """Régression : agréger les montants en joignant aussi les preuves

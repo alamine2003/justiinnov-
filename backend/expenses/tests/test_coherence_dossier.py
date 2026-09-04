@@ -27,7 +27,9 @@ class DossierCoherenceTests(APITestCase):
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
         )
-        Budget.objects.create(country=self.pays, year=2026, amount="10000000")
+        self.budget = Budget.objects.create(
+            country=self.pays, year=2026, amount="10000000"
+        )
 
         self.rep = self._compte("togo.innov", Role.COUNTRY_MANAGER, [self.pays])
         self.siege = self._compte("ceo.innov", Role.SUPER_ADMIN)
@@ -48,7 +50,7 @@ class DossierCoherenceTests(APITestCase):
     def dossier(self, numero, statut=Status.DRAFT):
         return Dossier.objects.create(
             number=numero, label="Mission", country=self.pays,
-            date=date(2026, 1, 1), status=statut,
+            date=date(2026, 1, 1), status=statut, created_by=self.rep.username,
         )
 
     def ligne(self, dossier, statut=Status.DRAFT, titre="Carburant"):
@@ -56,6 +58,8 @@ class DossierCoherenceTests(APITestCase):
             dossier=dossier, country=self.pays, title=titre,
             amount="50000", date=timezone.make_aware(datetime(2026, 1, 2)), place="Lomé",
             status=statut, created_by=self.rep.username,
+            # Une ligne déclarée est imputée, la base l'exige.
+            budget=None if statut == Status.DRAFT else self.budget,
         )
 
     # --- ajout d'une ligne -------------------------------------------------
@@ -118,15 +122,16 @@ class DossierCoherenceTests(APITestCase):
         self.assertEqual(dossier.status, Status.CLOSED)
 
     # --- une ligne ne devance pas son dossier ------------------------------
-    def test_une_ligne_ne_se_soumet_pas_avant_son_dossier(self):
+    def test_une_ligne_ne_se_soumet_pas_seule(self):
         """Régression : la ligne partait seule, puis se faisait justifier,
-        pendant que le dossier restait un brouillon jamais déclaré."""
+        pendant que le dossier restait un brouillon jamais déclaré. L'action
+        n'existe plus sur une ligne."""
         dossier = self.dossier("N-4")
         ligne = self.ligne(dossier)
 
         response = self.client.post(f"/api/expenses/{ligne.pk}/submit/")
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         ligne.refresh_from_db()
         self.assertEqual(ligne.status, Status.DRAFT)
 
@@ -140,3 +145,4 @@ class DossierCoherenceTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ligne.refresh_from_db()
         self.assertEqual(ligne.status, Status.SUBMITTED)
+        self.assertEqual(ligne.budget, self.budget)

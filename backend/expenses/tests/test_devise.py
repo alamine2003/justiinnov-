@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 
+from budget.aggregates import budget_figures, convert
 from budget.models import ExchangeRate
 from rest_framework import status
 
@@ -70,20 +71,32 @@ class DeviseDuDecaissementTests(ExpenseTestCase):
 
     def test_le_taux_est_fige_a_la_saisie(self):
         """Un rapport tiré l'an prochain doit donner le même chiffre
-        qu'aujourd'hui, même si le taux a changé depuis."""
-        self.client.post(
+        qu'aujourd'hui, même si le taux a changé depuis : la conversion
+        d'une nouvelle dépense suit le nouveau taux, l'ancienne garde le
+        sien — à l'écran comme dans les agrégats."""
+        ancienne = self.client.post(
             "/api/expenses/",
             self.payload(original_currency="EUR", original_amount="100.00"),
-        )
-        avant = Expense.objects.get(title="Hôtel").amount
+        ).data
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+        engage_avant = budget_figures(self.budget)["engaged"]
 
+        # Le taux est corrigé rétroactivement : le nouveau vaut dès mars.
         ExchangeRate.objects.create(
             currency="EUR",
             rate_to_xof=Decimal("900.000000"),
-            valid_from=date(self.year, 6, 1),
+            valid_from=date(self.year, 3, 1),
+        )
+        nouvelle_conversion, nouveau_taux = convert(
+            Decimal("100.00"), "EUR", "XOF", date(self.year, 3, 15)
         )
 
-        self.assertEqual(Expense.objects.get(title="Hôtel").amount, avant)
+        self.assertEqual(nouveau_taux, Decimal("900.000000"))
+        self.assertEqual(nouvelle_conversion, Decimal("90000.00"))
+        relue = self.client.get(f"/api/expenses/{ancienne['id']}/").data
+        self.assertEqual(relue["amount"], "65595.70")
+        self.assertEqual(relue["original_rate"], "655.957000")
+        self.assertEqual(budget_figures(self.budget)["engaged"], engage_avant)
 
     def test_le_taux_est_celui_du_jour_de_la_depense(self):
         ExchangeRate.objects.create(
@@ -148,3 +161,50 @@ class DeviseDuDecaissementTests(ExpenseTestCase):
         response = self.client.get(f"/api/budgets/{self.budget.pk}/")
 
         self.assertEqual(response.data["figures"]["engaged"], "65595.70")
+
+    def test_un_patch_du_titre_conserve_la_devise_d_origine(self):
+        """Régression : une modification partielle qui ne parlait pas de la
+        devise la remettait à vide, comme si le décaissement avait eu lieu
+        en francs."""
+        creee = self.client.post(
+            "/api/expenses/",
+            self.payload(original_currency="EUR", original_amount="120.00"),
+        ).data
+
+        response = self.client.patch(
+            f"/api/expenses/{creee['id']}/", {"title": "Hôtel Sarakawa"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["title"], "Hôtel Sarakawa")
+        self.assertEqual(response.data["original_currency"], "EUR")
+        self.assertEqual(response.data["original_amount"], "120.00")
+        self.assertEqual(response.data["original_rate"], "655.957000")
+        self.assertEqual(response.data["amount"], "78714.84")
+
+    def test_un_patch_du_montant_decaisse_recalcule_la_conversion(self):
+        creee = self.client.post(
+            "/api/expenses/",
+            self.payload(original_currency="EUR", original_amount="120.00"),
+        ).data
+
+        response = self.client.patch(
+            f"/api/expenses/{creee['id']}/", {"original_amount": "100.00"}
+        )
+
+        self.assertEqual(response.data["amount"], "65595.70")
+
+    def test_le_montant_converti_ne_se_retouche_pas_a_la_main(self):
+        """Modifier ``amount`` seul rendrait la conversion fausse par rapport
+        au montant décaissé et au taux conservés."""
+        creee = self.client.post(
+            "/api/expenses/",
+            self.payload(original_currency="EUR", original_amount="120.00"),
+        ).data
+
+        response = self.client.patch(
+            f"/api/expenses/{creee['id']}/", {"amount": "1.00"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("amount", response.data)

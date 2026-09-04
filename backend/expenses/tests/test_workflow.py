@@ -1,7 +1,13 @@
-"""Circuit de justification, imputation budgétaire et verrouillage."""
+"""Circuit de justification, imputation budgétaire et verrouillage.
 
+Une ligne ne se soumet jamais seule : le pays soumet le dossier, qui emporte
+ses lignes. Les tests passent donc par ``submit_dossier``, le chemin réel.
+"""
+
+from datetime import date
 from decimal import Decimal
 
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 
@@ -9,23 +15,29 @@ from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.aggregates import budget_figures
 from budget.models import Budget, OverrunPolicy
-from core.models import Project
-from expenses.models import AuditLog, Expense
+from core.models import Project, WorkflowConfiguration
+from expenses.models import AuditLog, Beneficiary, Dossier, Expense, Proof
 from expenses.workflow import Status
 
 from .base import ExpenseTestCase
 
 
-class TransitionTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
+def configurer(**valeurs):
+    """Modifie le singleton de configuration sans le recréer."""
+    configuration = WorkflowConfiguration.charger()
+    for cle, valeur in valeurs.items():
+        setattr(configuration, cle, valeur)
+    configuration.save()
+    return configuration
 
+
+class TransitionTests(ExpenseTestCase):
     def setUp(self):
         super().setUp()
         self.expense = self.make_expense()
 
     def test_parcours_nominal(self):
-        self.login(self.owner)
-        submitted = self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        submitted = self.submit_dossier()
 
         self.login(self.controller)
         reviewed = self.client.post(f"/api/expenses/{self.expense.pk}/review/")
@@ -34,6 +46,17 @@ class TransitionTests(ExpenseTestCase):
         self.assertEqual(submitted.data["status"], Status.SUBMITTED)
         self.assertEqual(reviewed.data["status"], Status.IN_REVIEW)
         self.assertEqual(approved.data["status"], Status.JUSTIFIED)
+
+    def test_une_ligne_ne_se_soumet_pas_seule(self):
+        """Le dossier emporte ses lignes : l'action n'existe pas sur une
+        ligne, elle ne pouvait que répondre 400."""
+        self.login(self.owner)
+
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.expense.refresh_from_db()
+        self.assertEqual(self.expense.status, Status.DRAFT)
 
     def test_transition_impossible_depuis_l_etat_courant(self):
         """On ne valide pas une dépense encore en brouillon."""
@@ -56,8 +79,7 @@ class TransitionTests(ExpenseTestCase):
         self.assertEqual(self.expense.status, Status.DRAFT)
 
     def test_rejet_sans_motif_refuse(self):
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        self.submit_dossier()
         self.login(self.controller)
 
         response = self.client.post(f"/api/expenses/{self.expense.pk}/reject/", {"note": "  "})
@@ -69,8 +91,9 @@ class TransitionTests(ExpenseTestCase):
     def test_non_justifiee_reste_figee(self):
         """L'argent est sorti : la dépense ne se réécrit pas et ne repart pas
         au brouillon. Elle demeure au débit, marquée non justifiée."""
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        self.expense.note = "Plein fait à la station de Kara"
+        self.expense.save()
+        self.submit_dossier()
         self.login(self.controller)
         rejected = self.client.post(
             f"/api/expenses/{self.expense.pk}/reject/", {"note": "Reçu illisible"}
@@ -80,12 +103,12 @@ class TransitionTests(ExpenseTestCase):
         corrected = self.client.patch(
             f"/api/expenses/{self.expense.pk}/", {"amount": "90000.00"}
         )
-        resubmitted = self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
 
         self.assertEqual(rejected.data["status"], Status.UNJUSTIFIED)
-        self.assertEqual(rejected.data["note"], "Reçu illisible")
+        self.assertEqual(rejected.data["control_note"], "Reçu illisible")
+        # Le motif du contrôleur n'efface pas la remarque du déclarant.
+        self.assertEqual(rejected.data["note"], "Plein fait à la station de Kara")
         self.assertEqual(corrected.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(resubmitted.status_code, status.HTTP_400_BAD_REQUEST)
         self.expense.refresh_from_db()
         self.assertEqual(self.expense.amount, Decimal("100000.00"))
         self.assertEqual(self.expense.status, Status.UNJUSTIFIED)
@@ -93,8 +116,7 @@ class TransitionTests(ExpenseTestCase):
     def test_une_preuve_tardive_permet_de_justifier(self):
         """Seul chemin de rattrapage : le contrôleur constate qu'une preuve
         déposée après coup couvre la dépense."""
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        self.submit_dossier()
         self.login(self.controller)
         self.client.post(
             f"/api/expenses/{self.expense.pk}/reject/", {"note": "Preuve absente"}
@@ -106,31 +128,45 @@ class TransitionTests(ExpenseTestCase):
 
     def test_saisie_reservee_aux_roles_habilites(self):
         """Le contrôleur contrôle, il ne soumet pas à la place du manager."""
-        self.login(self.controller)
-
-        response = self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        response = self.submit_dossier(user=self.controller)
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_validation_reservee_aux_roles_habilites(self):
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        self.submit_dossier()
 
         response = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_justification_refusee_sans_controle_si_etape_obligatoire(self):
+        configurer(require_review_step=True)
+        self.submit_dossier()
+        self.login(self.controller)
+
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("contrôle", str(response.data).lower())
+
+    def test_justification_acceptee_sans_controle_si_etape_facultative(self):
+        configurer(require_review_step=False)
+        self.submit_dossier()
+        self.login(self.controller)
+
+        response = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Status.JUSTIFIED)
+
 
 class LockingTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
-
     """§6 : une dépense déclarée ne se modifie plus, ni ne s'efface."""
 
     def setUp(self):
         super().setUp()
         self.expense = self.make_expense()
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        self.submit_dossier()
         self.login(self.controller)
         self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
 
@@ -164,13 +200,10 @@ class LockingTests(ExpenseTestCase):
 
 
 class BudgetImputationTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
-
     def test_imputation_automatique_sur_l_enveloppe_du_pays(self):
         expense = self.make_expense()
-        self.login(self.owner)
 
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.submit_dossier()
 
         expense.refresh_from_db()
         self.assertEqual(expense.budget, self.budget)
@@ -182,9 +215,8 @@ class BudgetImputationTests(ExpenseTestCase):
             amount=Decimal("300000.00"),
         )
         expense = self.make_expense(project=projet)
-        self.login(self.owner)
 
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.submit_dossier()
 
         expense.refresh_from_db()
         self.assertEqual(expense.budget, sous_enveloppe)
@@ -194,19 +226,19 @@ class BudgetImputationTests(ExpenseTestCase):
         self.budget.is_active = False
         self.budget.save()
         expense = self.make_expense()
-        self.login(self.owner)
 
-        response = self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        response = self.submit_dossier()
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("budget", response.data)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, Status.DRAFT)
 
     def test_engage_puis_consomme(self):
         """Une dépense soumise engage l'enveloppe ; validée, elle la consomme.
         Dans les deux cas le disponible diminue."""
         expense = self.make_expense(amount="250000.00")
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.submit_dossier()
 
         engaged = budget_figures(self.budget)
         self.assertEqual(engaged["engaged"], Decimal("250000.00"))
@@ -232,8 +264,7 @@ class BudgetImputationTests(ExpenseTestCase):
         """L'absence de preuve ne fait pas revenir l'argent : elle se lit dans
         l'écart entre dépensé et justifié."""
         expense = self.make_expense(amount="400000.00")
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.submit_dossier()
         self.login(self.controller)
         self.client.post(f"/api/expenses/{expense.pk}/reject/", {"note": "Sans reçu"})
 
@@ -254,27 +285,144 @@ class BudgetImputationTests(ExpenseTestCase):
 
         self.assertIsNone(response.data["budget_label"])
 
+
+class MontantJustifieTests(ExpenseTestCase):
+    """Le montant justifié appartient au siège.
+
+    Le pays déclare ce qu'il a dépensé ; le contrôleur constate ce qui est
+    prouvé. Laisser le déclarant saisir le montant justifié revenait à le
+    laisser se donner quitus.
+    """
+
+    def payload(self, **extra):
+        data = {
+            "dossier": self.dossier.pk, "country": self.togo.pk,
+            "date": f"{self.year}-03-15T10:00:00Z", "title": "Carburant",
+            "amount": "100000.00",
+        }
+        data.update(extra)
+        return data
+
     def test_ecart_calcule_jamais_saisi(self):
-        expense = self.make_expense(amount="100000.00", justified_amount="60000.00")
+        """L'écart se lit, il ne s'écrit pas : la création ignore le montant
+        justifié, et seule la justification le fixe."""
+        self.login(self.owner)
+        created = self.client.post(
+            "/api/expenses/", self.payload(justified_amount="60000.00")
+        )
+        self.assertEqual(created.data["gap"], "100000.00")
+
+        self.submit_dossier()
+        self.login(self.controller)
+        justified = self.client.post(
+            f"/api/expenses/{created.data['id']}/justify/",
+            {"justified_amount": "60000.00"},
+        )
+
+        self.assertEqual(justified.data["justified_amount"], "60000.00")
+        self.assertEqual(justified.data["gap"], "40000.00")
+
+    def test_un_owner_ne_fixe_pas_le_montant_justifie(self):
         self.login(self.owner)
 
-        response = self.client.get(f"/api/expenses/{expense.pk}/")
+        created = self.client.post(
+            "/api/expenses/", self.payload(justified_amount="100000.00")
+        )
+        modified = self.client.patch(
+            f"/api/expenses/{created.data['id']}/", {"justified_amount": "50000.00"}
+        )
 
-        self.assertEqual(response.data["gap"], "40000.00")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data["justified_amount"], "0.00")
+        self.assertEqual(modified.status_code, status.HTTP_200_OK)
+        self.assertEqual(modified.data["justified_amount"], "0.00")
+        self.assertEqual(
+            Expense.objects.get(pk=created.data["id"]).justified_amount, Decimal("0.00")
+        )
+
+    def test_justify_le_fixe_et_le_borne(self):
+        expense = self.make_expense(amount="100000.00")
+        self.submit_dossier()
+        self.login(self.controller)
+
+        trop = self.client.post(
+            f"/api/expenses/{expense.pk}/justify/", {"justified_amount": "100000.01"}
+        )
+        negatif = self.client.post(
+            f"/api/expenses/{expense.pk}/justify/", {"justified_amount": "-1"}
+        )
+        partiel = self.client.post(
+            f"/api/expenses/{expense.pk}/justify/", {"justified_amount": "75000.00"}
+        )
+
+        self.assertEqual(trop.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("justified_amount", trop.data)
+        self.assertEqual(negatif.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(partiel.status_code, status.HTTP_200_OK)
+        self.assertEqual(partiel.data["justified_amount"], "75000.00")
+        self.assertEqual(partiel.data["gap"], "25000.00")
+
+    def test_justify_sans_montant_couvre_toute_la_depense(self):
+        expense = self.make_expense(amount="100000.00")
+        self.submit_dossier()
+        self.login(self.controller)
+
+        response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
+
+        self.assertEqual(response.data["justified_amount"], "100000.00")
+        self.assertEqual(response.data["gap"], "0.00")
+
+    def test_reject_le_remet_a_zero(self):
+        expense = self.make_expense(amount="100000.00", justified_amount="60000.00")
+        self.submit_dossier()
+        self.login(self.controller)
+
+        response = self.client.post(
+            f"/api/expenses/{expense.pk}/reject/", {"note": "Reçu illisible"}
+        )
+
+        self.assertEqual(response.data["justified_amount"], "0.00")
+        self.assertEqual(response.data["gap"], "100000.00")
+        trace = AuditLog.objects.get(action=AuditLog.Action.UNJUSTIFIED)
+        self.assertEqual(trace.detail["before"]["justified_amount"], "60000.00")
+        self.assertEqual(trace.detail["after"]["justified_amount"], "0.00")
+
+    def test_la_justification_est_journalisee_avec_avant_et_apres(self):
+        expense = self.make_expense(amount="100000.00")
+        self.submit_dossier()
+        self.login(self.controller)
+
+        self.client.post(
+            f"/api/expenses/{expense.pk}/justify/",
+            {"justified_amount": "80000.00", "note": "Facture partielle"},
+        )
+
+        trace = AuditLog.objects.get(action=AuditLog.Action.JUSTIFIED)
+        self.assertEqual(trace.detail["before"]["justified_amount"], "0.00")
+        self.assertEqual(trace.detail["after"]["justified_amount"], "80000.00")
+        self.assertEqual(trace.detail["after"]["control_note"], "Facture partielle")
 
 
 class OverrunPolicyTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
-
     def setUp(self):
         super().setUp()
         self.budget.amount = Decimal("100000.00")
         self.budget.save()
+        self.compteur = 0
+
+    def _nouveau_dossier(self):
+        """Chaque soumission part d'un dossier neuf : un dossier ne se soumet
+        qu'une fois."""
+        self.compteur += 1
+        return Dossier.objects.create(
+            number=f"D-{self.compteur:03d}", label="Mission", country=self.togo,
+            date=date(self.year, 3, 15), created_by=self.owner.username,
+        )
 
     def _submit(self, amount, user=None):
-        expense = self.make_expense(amount=amount)
-        self.login(user or self.owner)
-        return expense, self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        dossier = self._nouveau_dossier()
+        expense = self.make_expense(amount=amount, dossier=dossier)
+        return expense, self.submit_dossier(dossier, user=user)
 
     def test_politique_bloquante(self):
         self.budget.overrun_policy = OverrunPolicy.BLOCK
@@ -316,9 +464,7 @@ class OverrunPolicyTests(ExpenseTestCase):
     def test_politique_approbation_acceptee_pour_le_do(self):
         self.budget.overrun_policy = OverrunPolicy.APPROVAL
         self.budget.save()
-        expense = self.make_expense(amount="150000.00")
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        expense, _ = self._submit("150000.00")
 
         self.login(self.doo)
         response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
@@ -336,18 +482,187 @@ class OverrunPolicyTests(ExpenseTestCase):
         self.assertEqual(ok.status_code, status.HTTP_200_OK)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_le_cumul_vaut_aussi_dans_un_meme_dossier(self):
+        """Les lignes d'un dossier s'additionnent au fil de la soumission :
+        chacune prise à part passerait, ensemble elles dépassent."""
+        self.budget.overrun_policy = OverrunPolicy.BLOCK
+        self.budget.save()
+        self.make_expense(amount="60000.00")
+        self.make_expense(amount="60000.00")
+
+        response = self.submit_dossier()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            Expense.objects.filter(status=Status.SUBMITTED).exists()
+        )
+
+    def test_une_depense_engagee_reste_justifiable_si_l_enveloppe_est_reduite(self):
+        """L'argent est déjà sorti : refuser de le constater le laisserait à
+        jamais en suspens, sans faire revenir un franc."""
+        self.budget.overrun_policy = OverrunPolicy.BLOCK
+        self.budget.save()
+        expense, submitted = self._submit("80000.00")
+        self.assertEqual(submitted.status_code, status.HTTP_200_OK)
+        self.budget.amount = Decimal("50000.00")
+        self.budget.save()
+
+        self.login(self.controller)
+        response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Status.JUSTIFIED)
+        self.assertIn("Dépassement", response.data["warning"])
+
+    def test_un_seul_avertissement_par_enveloppe(self):
+        """Vingt lignes en dépassement ne doivent pas produire vingt messages
+        concaténés : un par enveloppe, portant le dépassement cumulé."""
+        self.budget.overrun_policy = OverrunPolicy.WARN
+        self.budget.save()
+        for _ in range(3):
+            self.make_expense(amount="60000.00")
+
+        response = self.submit_dossier()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["warning"].count("Dépassement"), 1)
+        # 3 × 60 000 − 100 000
+        self.assertIn("80000.00", response.data["warning"])
+
 
 class DossierWorkflowTests(ExpenseTestCase):
+    def _piece(self, statut=Proof.ProofStatus.RECEIVED, empreinte="a"):
+        return Proof.objects.create(
+            dossier=self.dossier, file="justificatifs/f.pdf",
+            original_name="facture.pdf", sha256=empreinte * 64, status=statut,
+        )
+
+    def _justifier_les_lignes(self):
+        self.login(self.controller)
+        for ligne in self.dossier.expenses.all():
+            self.client.post(f"/api/expenses/{ligne.pk}/justify/")
+
     def test_dossier_sans_justificatif_ne_peut_etre_valide(self):
         self.make_expense()
-        self.login(self.owner)
-        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
-        self.login(self.controller)
+        self.submit_dossier()
+        self._justifier_les_lignes()
 
         response = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("proofs", response.data)
+
+    def test_un_dossier_dont_les_pieces_sont_toutes_archivees_n_est_pas_justifiable(self):
+        """Une pièce archivée a été remplacée ; une pièce rejetée ne prouve
+        rien. Ni l'une ni l'autre ne justifie un dossier."""
+        self.make_expense()
+        self._piece(Proof.ProofStatus.ARCHIVED, "a")
+        self._piece(Proof.ProofStatus.REJECTED, "b")
+        self.submit_dossier()
+        self._justifier_les_lignes()
+
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("proofs", response.data)
+
+    def test_un_dossier_ne_se_justifie_pas_sur_une_ligne_non_tranchee(self):
+        """Le dossier ne dit pas autre chose que ses lignes : « justifié »
+        avec une ligne encore soumise, le total justifié mentirait."""
+        self.make_expense(title="Tranchée")
+        en_suspens = self.make_expense(title="En suspens")
+        self._piece()
+        self.submit_dossier()
+        self.login(self.controller)
+        self.client.post(f"/api/expenses/{self.dossier.expenses.get(title='Tranchée').pk}/justify/")
+
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("En suspens", str(response.data["expenses"]))
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.SUBMITTED)
+        en_suspens.refresh_from_db()
+        self.assertEqual(en_suspens.status, Status.SUBMITTED)
+
+    def test_un_dossier_ne_se_justifie_pas_sur_une_ligne_non_justifiee(self):
+        ligne = self.make_expense()
+        self._piece()
+        self.submit_dossier()
+        self.login(self.controller)
+        self.client.post(f"/api/expenses/{ligne.pk}/reject/", {"note": "Sans reçu"})
+
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("expenses", response.data)
+
+    def test_un_dossier_justifie_quand_toutes_ses_lignes_le_sont(self):
+        self.make_expense()
+        self.make_expense(title="Hôtel")
+        self._piece()
+        self.submit_dossier()
+        self._justifier_les_lignes()
+
+        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Status.JUSTIFIED)
+
+    def test_le_constat_de_non_justification_exige_des_lignes_tranchees(self):
+        self.make_expense()
+        self.submit_dossier()
+        self.login(self.controller)
+
+        response = self.client.post(
+            f"/api/dossiers/{self.dossier.pk}/reject/", {"note": "Rien ne couvre"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("expenses", response.data)
+
+    def test_le_constat_de_non_justification_passe_sur_des_lignes_tranchees(self):
+        ligne = self.make_expense()
+        self.submit_dossier()
+        self.login(self.controller)
+        self.client.post(f"/api/expenses/{ligne.pk}/reject/", {"note": "Sans reçu"})
+
+        response = self.client.post(
+            f"/api/dossiers/{self.dossier.pk}/reject/", {"note": "Rien ne couvre"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Status.UNJUSTIFIED)
+        self.assertEqual(response.data["note"], "Rien ne couvre")
+
+    def test_celui_qui_a_ouvert_le_dossier_ne_le_tranche_pas(self):
+        """Quatre yeux sur le dossier aussi : un contrôleur qui ouvre un
+        dossier ne se donne pas quitus dessus."""
+        self.dossier.created_by = self.controller.username
+        self.dossier.save()
+        self.make_expense()
+        self._piece()
+        self.submit_dossier()
+        self._justifier_les_lignes()
+
+        refuse = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+        self.login(self.doo)
+        accepte = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+
+        self.assertEqual(refuse.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(accepte.status_code, status.HTTP_200_OK)
+
+    def test_le_dossier_porte_son_auteur(self):
+        self.login(self.owner)
+
+        response = self.client.post(
+            "/api/dossiers/",
+            {"number": "N-0100", "label": "Salon", "country": self.togo.pk,
+             "date": f"{self.year}-04-01"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["created_by"], "owner.togo")
 
     def test_totaux_du_dossier(self):
         self.make_expense(amount="100000.00", justified_amount="70000.00")
@@ -362,7 +677,16 @@ class DossierWorkflowTests(ExpenseTestCase):
 
 
 class ScopingTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
+    def _payload(self, **extra):
+        data = {
+            "dossier": self.dossier.pk,
+            "country": self.togo.pk,
+            "date": timezone.now().isoformat(),
+            "title": "Dépense",
+            "amount": "1000.00",
+        }
+        data.update(extra)
+        return data
 
     def test_un_pays_ne_voit_pas_les_dossiers_d_un_autre(self):
         self.login(self.rep_ivoire)
@@ -371,50 +695,104 @@ class ScopingTests(ExpenseTestCase):
 
         self.assertEqual(response.data["count"], 0)
 
-    def test_creation_d_une_depense_hors_perimetre_refusee(self):
-        """Le refus doit être un 403 de périmètre, pas un 400 qui laisserait
-        deviner que le dossier existe et dans quel état il est."""
+    def test_acces_direct_hors_perimetre_repond_404(self):
+        """Un objet hors périmètre n'existe pas pour le demandeur."""
+        expense = self.make_expense()
         self.login(self.rep_ivoire)
 
-        response = self.client.post(
-            "/api/expenses/",
-            {
-                "dossier": self.dossier.pk,
-                "country": self.togo.pk,
-                "date": timezone.now().isoformat(),
-                "title": "Dépense pirate",
-                "amount": "1000.00",
-            },
+        depense = self.client.get(f"/api/expenses/{expense.pk}/")
+        dossier = self.client.get(f"/api/dossiers/{self.dossier.pk}/")
+
+        self.assertEqual(depense.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(dossier.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_creation_d_une_depense_hors_perimetre_refusee(self):
+        """Le refus ne doit rien apprendre : un dossier hors périmètre est
+        refusé exactement comme un dossier qui n'existe pas."""
+        self.login(self.rep_ivoire)
+        inexistant = self.dossier.pk + 1000
+
+        existant = self.client.post("/api/expenses/", self._payload())
+        fantome = self.client.post(
+            "/api/expenses/", self._payload(dossier=inexistant)
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(existant.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(fantome.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            str(existant.data["dossier"]).replace(str(self.dossier.pk), "N"),
+            str(fantome.data["dossier"]).replace(str(inexistant), "N"),
+        )
+        self.assertEqual(self.dossier.expenses.count(), 0)
 
     def test_dossier_d_un_autre_pays_refuse(self):
-        """Le dossier et la dépense doivent relever du même pays."""
-        self.login(self.owner)
+        """Le dossier et la dépense doivent relever du même pays, même pour
+        le siège, qui voit les deux."""
+        siege = make_user("ceo.innov", Role.SUPER_ADMIN)
+        self.login(siege)
 
         response = self.client.post(
-            "/api/expenses/",
-            {
-                "dossier": self.dossier.pk,
-                "country": self.ivoire.pk,
-                "date": timezone.now().isoformat(),
-                "title": "Incohérente",
-                "amount": "1000.00",
-            },
+            "/api/expenses/", self._payload(country=self.ivoire.pk)
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("dossier", response.data)
 
+    def test_beneficiaire_d_un_autre_pays_refuse(self):
+        """Chaque entité du contexte est revalidée par pays : un bénéficiaire
+        ivoirien ne se rattache pas à une dépense togolaise."""
+        voisin = Beneficiary.objects.create(country=self.ivoire, name="Groupe Abidjan")
+        self.login(self.owner)
+
+        response = self.client.post(
+            "/api/expenses/", self._payload(beneficiary=voisin.pk)
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("beneficiary", response.data)
+
+    def test_un_manager_non_rattache_au_pays_refuse(self):
+        self.manager.countries.clear()
+        self.login(self.owner)
+
+        depense = self.client.post(
+            "/api/expenses/", self._payload(owner=self.manager.pk)
+        )
+        dossier = self.client.post(
+            "/api/dossiers/",
+            {"number": "N-0200", "label": "Salon", "country": self.togo.pk,
+             "date": f"{self.year}-04-01", "owner": self.manager.pk},
+        )
+
+        self.assertEqual(depense.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("owner", depense.data)
+        self.assertEqual(dossier.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("owner", dossier.data)
+
+    def test_un_brouillon_ne_se_deplace_pas_vers_un_dossier_declare(self):
+        """Créer une ligne dans un dossier déclaré est refusé ; l'y déplacer
+        par modification doit l'être tout autant."""
+        ligne = self.make_expense()
+        declare = Dossier.objects.create(
+            number="N-0300", label="Déjà parti", country=self.togo,
+            date=date(self.year, 3, 1), status=Status.SUBMITTED,
+        )
+        self.login(self.owner)
+
+        response = self.client.patch(
+            f"/api/expenses/{ligne.pk}/", {"dossier": declare.pk}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("dossier", response.data)
+        ligne.refresh_from_db()
+        self.assertEqual(ligne.dossier, self.dossier)
+
 
 class AuditTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
-
     def test_chaque_transition_laisse_une_trace(self):
         expense = self.make_expense()
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.submit_dossier()
         self.login(self.controller)
         self.client.post(f"/api/expenses/{expense.pk}/reject/", {"note": "À revoir"})
 
@@ -441,6 +819,22 @@ class AuditTests(ExpenseTestCase):
         entry = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).first()
         self.assertEqual(entry.detail["before"]["amount"], "100000.00")
         self.assertEqual(entry.detail["after"]["amount"], "120000.00")
+
+    @override_settings(REST_FRAMEWORK={"NUM_PROXIES": 1})
+    def test_l_adresse_du_client_est_lue_derriere_le_mandataire(self):
+        """Derrière nginx, ``REMOTE_ADDR`` est l'adresse du conteneur : le
+        journal doit lire celle du client dans ``X-Forwarded-For``, au rang
+        du nombre de mandataires de confiance — pas au premier, forgeable."""
+        expense = self.make_expense(amount="100000.00")
+        self.login(self.owner)
+
+        self.client.patch(
+            f"/api/expenses/{expense.pk}/", {"amount": "120000.00"},
+            HTTP_X_FORWARDED_FOR="203.0.113.9, 41.79.0.10",
+        )
+
+        entry = AuditLog.objects.get(action=AuditLog.Action.UPDATED)
+        self.assertEqual(entry.ip_address, "41.79.0.10")
 
     def test_journal_reserve_aux_roles_habilites(self):
         self.login(self.owner)
@@ -499,14 +893,12 @@ class DraftDeletionTests(ExpenseTestCase):
 
 
 class JustificationRegisterTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
-
     """« On t'a donné un budget, qu'as-tu dépensé, et où est la preuve ? »"""
+
+    dossier_status = Status.SUBMITTED
 
     def setUp(self):
         super().setUp()
-        from expenses.models import Proof
-
         self.depense = self.make_expense(
             amount="120000.00", justified_amount="80000.00",
             place="Lomé", title="Hébergement mission",
@@ -535,8 +927,6 @@ class JustificationRegisterTests(ExpenseTestCase):
         self.assertFalse(ligne["proofs"][0]["is_complete"])
 
     def test_une_depense_sans_preuve_est_signalee(self):
-        from expenses.models import Dossier
-
         vide = Dossier.objects.create(
             number="N-0009", label="Sans pièce", country=self.togo,
             date=self.dossier.date,
@@ -568,14 +958,10 @@ class JustificationRegisterTests(ExpenseTestCase):
 
 
 class SubEnvelopeImputationTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
-
     """La sous-enveloppe la plus précise l'emporte."""
 
     def setUp(self):
         super().setUp()
-        from budget.models import Budget
-
         self.enveloppe_equipe = Budget.objects.create(
             country=self.togo, year=self.year, team=self.team,
             amount=Decimal("500000.00"),
@@ -584,11 +970,10 @@ class SubEnvelopeImputationTests(ExpenseTestCase):
             country=self.togo, year=self.year, manager=self.manager,
             amount=Decimal("400000.00"),
         )
-        self.login(self.owner)
 
     def _imputer(self, **kwargs):
         expense = self.make_expense(**kwargs)
-        self.client.post(f"/api/expenses/{expense.pk}/submit/")
+        self.submit_dossier()
         expense.refresh_from_db()
         return expense.budget
 
@@ -605,9 +990,6 @@ class SubEnvelopeImputationTests(ExpenseTestCase):
         )
 
     def test_le_projet_prime_sur_tout(self):
-        from budget.models import Budget
-        from core.models import Project
-
         projet = Project.objects.create(country=self.togo, name="Campagne")
         enveloppe_projet = Budget.objects.create(
             country=self.togo, year=self.year, project=projet,
@@ -624,8 +1006,6 @@ class SubEnvelopeImputationTests(ExpenseTestCase):
 
 
 class LocalTimeTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
-
     """§6 : l'heure se lit dans le fuseau du pays, pas dans celui du lecteur."""
 
     def test_le_fuseau_du_pays_accompagne_la_depense(self):
@@ -655,16 +1035,23 @@ class LocalTimeTests(ExpenseTestCase):
 
 
 class SeparationOfDutiesTests(ExpenseTestCase):
-    dossier_status = Status.SUBMITTED
-
     """Le pays déclare, le siège constate. Personne ne se donne quitus."""
 
     def setUp(self):
         super().setUp()
         self.rep_togo = make_user("togo.innov", Role.COUNTRY_MANAGER, [self.togo])
         self.expense = self.make_expense(created_by="owner.togo")
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{self.expense.pk}/submit/")
+        self.submit_dossier()
+
+    def _declarer(self, created_by, numero="N-0002"):
+        """Une ligne d'un autre auteur, déclarée dans son propre dossier."""
+        dossier = Dossier.objects.create(
+            number=numero, label="Autre mission", country=self.togo,
+            date=date(self.year, 3, 16), created_by=self.owner.username,
+        )
+        ligne = self.make_expense(dossier=dossier, created_by=created_by)
+        self.submit_dossier(dossier)
+        return ligne
 
     def test_un_pays_ne_justifie_pas_ses_propres_depenses(self):
         """Faille trouvée en recette : un responsable pays pouvait justifier
@@ -712,9 +1099,7 @@ class SeparationOfDutiesTests(ExpenseTestCase):
     def test_nul_ne_justifie_la_depense_qu_il_a_saisie(self):
         """Même au siège : décaisser puis se donner quitus n'est pas un
         contrôle."""
-        propre = self.make_expense(created_by=self.controller.username)
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{propre.pk}/submit/")
+        propre = self._declarer(self.controller.username)
 
         self.login(self.controller)
         response = self.client.post(f"/api/expenses/{propre.pk}/justify/")
@@ -722,10 +1107,28 @@ class SeparationOfDutiesTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn("quelqu'un d'autre", str(response.data))
 
+    def test_nul_ne_prend_en_controle_la_depense_qu_il_a_saisie(self):
+        """La mise en contrôle est déjà un acte de contrôle."""
+        propre = self._declarer(self.controller.username)
+
+        self.login(self.controller)
+        response = self.client.post(f"/api/expenses/{propre.pk}/review/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_une_ligne_sans_auteur_connu_ne_se_controle_pas(self):
+        """Sans auteur, la règle des quatre yeux est invérifiable : on ne
+        tranche pas une ligne d'origine inconnue."""
+        anonyme = self._declarer("")
+
+        self.login(self.controller)
+        response = self.client.post(f"/api/expenses/{anonyme.pk}/justify/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("created_by", response.data)
+
     def test_un_autre_controleur_peut_justifier(self):
-        propre = self.make_expense(created_by=self.controller.username)
-        self.login(self.owner)
-        self.client.post(f"/api/expenses/{propre.pk}/submit/")
+        propre = self._declarer(self.controller.username)
 
         autre = make_user("audit.siege", Role.DOO)
         self.login(autre)
@@ -737,25 +1140,22 @@ class SeparationOfDutiesTests(ExpenseTestCase):
 class DossierSubmissionTests(ExpenseTestCase):
     """Côté pays, déclarer tient en une action : remplir, joindre, soumettre."""
 
-    def setUp(self):
-        super().setUp()
-        self.login(self.owner)
-
     def test_le_dossier_emporte_ses_lignes(self):
         premiere = self.make_expense(amount="1000.00")
         seconde = self.make_expense(amount="2000.00")
 
-        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+        response = self.submit_dossier()
 
         self.assertEqual(response.data["status"], Status.SUBMITTED)
         premiere.refresh_from_db()
         seconde.refresh_from_db()
         self.assertEqual(premiere.status, Status.SUBMITTED)
         self.assertEqual(seconde.status, Status.SUBMITTED)
+        self.assertEqual(premiere.budget, self.budget)
 
     def test_un_dossier_sans_ligne_ne_se_soumet_pas(self):
         """« Avant tout il doit remplir les lignes »."""
-        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+        response = self.submit_dossier()
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("expenses", response.data)
@@ -765,7 +1165,7 @@ class DossierSubmissionTests(ExpenseTestCase):
         déclarée : l'argent sortirait sans laisser de trace."""
         self.make_expense(amount="1000.00")
 
-        response = self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+        response = self.submit_dossier()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("sans preuve", response.data["warning"])
@@ -774,7 +1174,7 @@ class DossierSubmissionTests(ExpenseTestCase):
         self.make_expense(amount="120000.00")
         self.make_expense(amount="80000.00")
 
-        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+        self.submit_dossier()
 
         figures = budget_figures(self.budget)
         self.assertEqual(figures["engaged"], Decimal("200000.00"))
@@ -783,19 +1183,23 @@ class DossierSubmissionTests(ExpenseTestCase):
         self.make_expense(amount="1000.00")
         self.make_expense(amount="2000.00")
 
-        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+        self.submit_dossier()
 
         entrees = AuditLog.objects.filter(
             object_type="Expense", action=AuditLog.Action.SUBMITTED
         )
         self.assertEqual(entrees.count(), 2)
-        self.assertEqual(entrees.first().detail["note"], "soumise avec son dossier")
+        premiere = entrees.first()
+        self.assertEqual(premiere.detail["note"], "soumise avec son dossier")
+        self.assertEqual(premiere.user, "owner.togo")
+        self.assertEqual(premiere.country, self.togo)
+        self.assertIsNotNone(premiere.ip_address)
 
     def test_une_ligne_deja_soumise_n_est_pas_resoumise(self):
         deja = self.make_expense(amount="1000.00", status=Status.JUSTIFIED)
         self.make_expense(amount="2000.00")
 
-        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+        self.submit_dossier()
 
         deja.refresh_from_db()
         self.assertEqual(deja.status, Status.JUSTIFIED)
@@ -807,7 +1211,7 @@ class DossierSubmissionTests(ExpenseTestCase):
         for _ in range(3):
             self.make_expense(amount="1000.00")
 
-        self.client.post(f"/api/dossiers/{self.dossier.pk}/submit/")
+        self.submit_dossier()
 
         recues = Notification.objects.filter(
             recipient=self.controller, kind=Notification.Kind.EXPENSE_SUBMITTED

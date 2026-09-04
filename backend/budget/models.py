@@ -26,7 +26,41 @@ class OverrunPolicy(models.TextChoices):
     APPROVAL = "approval", "Soumettre à approbation"
 
 
+def default_overrun_policy():
+    """Politique utilisée par une nouvelle enveloppe sans choix explicite.
+
+    Conservée pour les appelants existants : la résolution depuis la
+    configuration du circuit se fait dans le sérialiseur, à la création par
+    l'API. Le champ, lui, porte un défaut **littéral** : un défaut calculé
+    serait figé dans les migrations et lirait la configuration à chaque
+    instanciation, y compris hors requête.
+    """
+    from core.models import WorkflowConfiguration
+
+    return WorkflowConfiguration.charger().default_overrun_policy
+
+
 class BudgetQuerySet(models.QuerySet):
+    def visible_par(self, user):
+        """Enveloppes du périmètre de l'utilisateur.
+
+        Le pays est porté par l'enveloppe elle-même : filtrer dessus ne
+        multiplie aucune ligne, contrairement au ``distinct()`` générique de
+        ``CountryScopedMixin`` qui, combiné aux agrégats de
+        :meth:`with_consumption`, produirait un DISTINCT sur un GROUP BY.
+        Sert aussi à borner les champs « enveloppe » des sérialiseurs : une
+        enveloppe hors périmètre y est simplement « invalide », sans révéler
+        qu'elle existe.
+        """
+        from accounts.permissions import get_access
+
+        access = get_access(user)
+        if access is None:
+            return self.none()
+        if access.has_global_scope:
+            return self
+        return self.filter(country_id__in=access.country_ids)
+
     def with_consumption(self):
         """Annote engagé, consommé et justifié en une seule requête.
 
@@ -72,8 +106,11 @@ class Budget(TimeStampedModel):
 
     objects = BudgetQuerySet.as_manager()
 
+    # ``PROTECT`` partout : une enveloppe porte de l'argent et des dépenses.
+    # La supprimer en cascade avec son pays ou son projet effacerait des
+    # montants sans trace ; le référentiel se désactive, il ne se supprime pas.
     country = models.ForeignKey(
-        Country, on_delete=models.CASCADE, related_name="budgets", verbose_name="Pays"
+        Country, on_delete=models.PROTECT, related_name="budgets", verbose_name="Pays"
     )
     year = models.PositiveIntegerField("Année")
     # Une sous-enveloppe découpe l'enveloppe du pays selon **une** dimension :
@@ -83,7 +120,7 @@ class Budget(TimeStampedModel):
         Project,
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="budgets",
         verbose_name="Projet",
     )
@@ -91,7 +128,7 @@ class Budget(TimeStampedModel):
         Team,
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="budgets",
         verbose_name="Équipe",
     )
@@ -99,7 +136,7 @@ class Budget(TimeStampedModel):
         Manager,
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="budgets",
         verbose_name="Manager",
     )
@@ -118,9 +155,22 @@ class Budget(TimeStampedModel):
     is_active = models.BooleanField("Actif", default=True)
 
     class Meta:
-        ordering = ["-year", "country__name"]
+        # ``-pk`` en dernier : deux enveloppes du même pays et de la même
+        # année (sous-enveloppes) auraient sinon un ordre indéterminé, et la
+        # pagination pourrait en montrer une deux fois ou en sauter une.
+        ordering = ["-year", "country__name", "-pk"]
         verbose_name = "Budget"
+        indexes = [
+            # Le tableau de bord et la liste filtrent toujours ainsi.
+            models.Index(
+                fields=["country", "year", "is_active"],
+                name="budget_pays_annee_actif",
+            ),
+        ]
         constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gte=0), name="budget_montant_positif_ou_nul"
+            ),
             models.UniqueConstraint(
                 fields=["country", "year"],
                 condition=Q(
@@ -215,9 +265,24 @@ class BudgetReallocation(TimeStampedModel):
     decision_note = models.TextField("Motif de la décision", blank=True)
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-created_at", "-pk"]
         verbose_name = "Réallocation budgétaire"
         verbose_name_plural = "Réallocations budgétaires"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0), name="reallocation_montant_positif"
+            ),
+            models.CheckConstraint(
+                condition=~Q(source=models.F("target")),
+                name="reallocation_source_differente_cible",
+            ),
+            # Une décision sans date n'est pas une décision : le journal doit
+            # pouvoir dire *quand* le transfert a été tranché.
+            models.CheckConstraint(
+                condition=Q(status="pending") | Q(decided_at__isnull=False),
+                name="reallocation_decision_datee",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.amount} : {self.source} → {self.target}"
@@ -242,13 +307,18 @@ class ExchangeRate(models.Model):
     created_at = models.DateTimeField("Créé le", auto_now_add=True)
 
     class Meta:
-        ordering = ["currency", "-valid_from"]
+        ordering = ["currency", "-valid_from", "-pk"]
         verbose_name = "Taux de change"
         verbose_name_plural = "Taux de change"
         constraints = [
             models.UniqueConstraint(
                 fields=["currency", "valid_from"], name="unique_taux_devise_date"
-            )
+            ),
+            # Un taux nul ferait disparaître un montant du consolidé, un taux
+            # négatif l'inverserait : la base le refuse, pas seulement l'API.
+            models.CheckConstraint(
+                condition=Q(rate_to_xof__gt=0), name="taux_strictement_positif"
+            ),
         ]
 
     def __str__(self):

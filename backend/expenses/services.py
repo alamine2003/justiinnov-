@@ -5,6 +5,7 @@ présenter leurs résultats.
 """
 
 from decimal import Decimal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db.models import Sum
 from rest_framework.exceptions import ValidationError
@@ -32,15 +33,40 @@ SUB_ENVELOPE_ORDER = [
 ]
 
 
+def exercice(expense):
+    """Année budgétaire d'une dépense, lue dans le fuseau de son pays.
+
+    La date est conservée en UTC. Une dépense faite à Nairobi le 1er janvier
+    à 01:00 est encore au 31 décembre en UTC : l'imputer sur l'exercice
+    précédent, c'est la faire peser sur une enveloppe déjà close.
+    """
+    try:
+        fuseau = ZoneInfo(expense.country.timezone or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        fuseau = ZoneInfo("UTC")
+    return expense.date.astimezone(fuseau).year
+
+
+def cle_d_imputation(expense):
+    """Ce qui détermine l'enveloppe d'une dépense.
+
+    Deux lignes de même clé s'imputent sur la même enveloppe : la soumission
+    d'un dossier ne la résout qu'une fois par clé.
+    """
+    return (
+        expense.country_id, exercice(expense),
+        expense.project_id, expense.team_id, expense.owner_id,
+    )
+
+
 def resolve_budget(expense):
     """Enveloppe imputable à une dépense.
 
     La sous-enveloppe la plus précise l'emporte ; à défaut, l'enveloppe du pays
     pour l'année de la dépense.
     """
-    year = expense.date.year
     base = Budget.objects.filter(
-        country_id=expense.country_id, year=year, is_active=True
+        country_id=expense.country_id, year=exercice(expense), is_active=True
     )
 
     for expense_field, budget_field in SUB_ENVELOPE_ORDER:
@@ -77,7 +103,7 @@ def attach_budget(expense):
             {
                 "budget": (
                     f"Aucune enveloppe active pour {expense.country.name} "
-                    f"en {expense.date.year}."
+                    f"en {exercice(expense)}."
                 )
             }
         )
@@ -88,7 +114,9 @@ def attach_budget(expense):
     return budget
 
 
-def check_budget_capacity(expense, budget, role, *, at_approval=False):
+def check_budget_capacity(
+    expense, budget, role, *, at_approval=False, committed=None
+):
     """Applique la politique de dépassement de l'enveloppe (§5.2, §6).
 
     Renvoie un avertissement à afficher, ou ``None`` si l'enveloppe couvre la
@@ -98,8 +126,19 @@ def check_budget_capacity(expense, budget, role, *, at_approval=False):
     à approbation », le manager doit pouvoir *demander* le dépassement — c'est
     la validation, et elle seule, qui est réservée à la direction. Bloquer dès
     la soumission rendrait la demande impossible.
+
+    À l'inverse, la politique « bloquer » ne joue qu'à la soumission. Une
+    dépense soumise a déjà engagé l'argent : si l'enveloppe est réduite
+    entre-temps, refuser de la justifier la laisserait à jamais en suspens —
+    sans faire revenir un franc.
+
+    ``committed`` permet à l'appelant qui traite plusieurs lignes d'une même
+    enveloppe de fournir le total déjà engagé, qu'il fait croître au fil des
+    lignes, au lieu de le recalculer pour chacune.
     """
-    projected = committed_total(budget, exclude_pk=expense.pk) + expense.amount
+    if committed is None:
+        committed = committed_total(budget, exclude_pk=expense.pk)
+    projected = committed + expense.amount
     if projected <= budget.amount:
         return None
 
@@ -110,6 +149,8 @@ def check_budget_capacity(expense, budget, role, *, at_approval=False):
     )
 
     if budget.overrun_policy == OverrunPolicy.BLOCK:
+        if at_approval:
+            return message
         raise ValidationError({"amount": f"{message} Opération bloquée."})
 
     if budget.overrun_policy == OverrunPolicy.APPROVAL:

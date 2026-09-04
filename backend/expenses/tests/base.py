@@ -14,6 +14,7 @@ from accounts.tests.test_scoping import make_user
 from budget.models import Budget
 from core.models import Country, Manager, Team
 from expenses.models import Dossier, Expense
+from expenses.services import resolve_budget
 from expenses.workflow import Status
 
 #: Les tests ne doivent jamais écrire dans MinIO ni sur le disque.
@@ -62,10 +63,12 @@ class ExpenseTestCase(APITestCase):
         self.doo = make_user("do.innov", Role.DOO)
         self.rep_ivoire = make_user("cote-ivoire.innov", Role.COUNTRY_MANAGER, [self.ivoire])
 
+        self.manager.countries.add(self.togo)
+
         self.dossier = Dossier.objects.create(
             number="N-0001", label="Mission Lomé", country=self.togo,
             team=self.team, owner=self.manager, date=date(self.year, 3, 15),
-            status=self.dossier_status,
+            status=self.dossier_status, created_by=self.owner.username,
         )
 
     def login(self, user):
@@ -73,6 +76,12 @@ class ExpenseTestCase(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
     def make_expense(self, amount="100000.00", **kwargs):
+        """Ligne créée directement en base, comme l'aurait fait le pays.
+
+        Elle porte un auteur : sans lui, la règle des quatre yeux ne peut pas
+        être vérifiée et la ligne ne se contrôle pas. Une ligne créée dans un
+        état déclaré est imputée sur son enveloppe, comme l'exige la base.
+        """
         defaults = {
             "dossier": self.dossier,
             "country": self.togo,
@@ -81,6 +90,18 @@ class ExpenseTestCase(APITestCase):
             "date": timezone.now(),
             "title": "Carburant",
             "amount": Decimal(amount),
+            "created_by": self.owner.username,
         }
         defaults.update(kwargs)
-        return Expense.objects.create(**defaults)
+        expense = Expense(**defaults)
+        if expense.status != Status.DRAFT and expense.budget_id is None:
+            expense.budget = resolve_budget(expense)
+        expense.save()
+        return expense
+
+    def submit_dossier(self, dossier=None, user=None):
+        """Le chemin réel du pays : le dossier emporte ses lignes."""
+        self.login(user or self.owner)
+        return self.client.post(
+            f"/api/dossiers/{(dossier or self.dossier).pk}/submit/"
+        )

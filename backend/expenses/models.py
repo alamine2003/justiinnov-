@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Count, OuterRef, Subquery, Sum, Value
+from django.db.models import Count, F, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 
 from budget.models import Budget
@@ -32,9 +32,15 @@ ZERO = Decimal("0.00")
 
 
 def proof_upload_path(instance, filename):
-    """Range les preuves par pays et par dossier."""
+    """Range les preuves par pays et par dossier.
+
+    Le dossier est désigné par sa clé et non par son numéro : le numéro est
+    saisi par un humain, il peut contenir un séparateur de chemin ou changer
+    tant que le dossier est en brouillon, ce qui égarerait les fichiers déjà
+    déposés.
+    """
     dossier = instance.dossier
-    return f"justificatifs/{dossier.country_id}/{dossier.number}/{filename}"
+    return f"justificatifs/{dossier.country_id}/{dossier.pk}/{filename}"
 
 
 class Beneficiary(TimeStampedModel):
@@ -134,12 +140,16 @@ class Dossier(TimeStampedModel):
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name="dossiers", verbose_name="Pays"
     )
+    # Rien ne se supprime dans le référentiel : une équipe ou un manager se
+    # désactive. ``PROTECT`` rend la règle inviolable même depuis l'admin ou
+    # un script — un ``SET_NULL`` aurait effacé silencieusement le contexte
+    # d'un dossier déclaré.
     team = models.ForeignKey(
-        Team, null=True, blank=True, on_delete=models.SET_NULL,
+        Team, null=True, blank=True, on_delete=models.PROTECT,
         related_name="dossiers", verbose_name="Équipe",
     )
     owner = models.ForeignKey(
-        Manager, null=True, blank=True, on_delete=models.SET_NULL,
+        Manager, null=True, blank=True, on_delete=models.PROTECT,
         related_name="dossiers", verbose_name="Propriétaire",
     )
     date = models.DateField("Date")
@@ -147,11 +157,20 @@ class Dossier(TimeStampedModel):
         "Statut", max_length=20, choices=Status.choices, default=Status.DRAFT
     )
     note = models.TextField("Remarque de contrôle", blank=True)
+    # Permet la règle des quatre yeux au niveau du dossier : celui qui l'a
+    # ouvert ne le tranche pas. Et seul son auteur peut retirer un brouillon.
+    created_by = models.CharField("Ouvert par", max_length=180, blank=True)
 
     class Meta:
-        ordering = ["-date", "-created_at"]
+        # ``-pk`` en dernier : deux dossiers créés dans la même seconde
+        # n'auraient sinon pas d'ordre stable entre deux pages.
+        ordering = ["-date", "-created_at", "-pk"]
         verbose_name = "Dossier de justification"
         verbose_name_plural = "Dossiers de justification"
+        indexes = [
+            models.Index(fields=["country", "status"], name="dossier_pays_statut"),
+            models.Index(fields=["date"], name="dossier_date"),
+        ]
 
     def __str__(self):
         return f"{self.number} — {self.label}"
@@ -195,8 +214,12 @@ class Expense(TimeStampedModel):
         CHECK = "check", "Chèque"
         OTHER = "other", "Autre"
 
+    # ``PROTECT`` partout : supprimer un dossier ne doit jamais emporter ses
+    # lignes en cascade — l'argent a été dépensé, la trace reste. Le retrait
+    # d'un brouillon passe par la vue, qui efface les lignes une à une en
+    # les journalisant.
     dossier = models.ForeignKey(
-        Dossier, on_delete=models.CASCADE, related_name="expenses",
+        Dossier, on_delete=models.PROTECT, related_name="expenses",
         verbose_name="Dossier",
     )
     # Contexte dupliqué sur chaque ligne (décision de modélisation n°1).
@@ -204,11 +227,11 @@ class Expense(TimeStampedModel):
         Country, on_delete=models.PROTECT, related_name="expenses", verbose_name="Pays"
     )
     team = models.ForeignKey(
-        Team, null=True, blank=True, on_delete=models.SET_NULL,
+        Team, null=True, blank=True, on_delete=models.PROTECT,
         related_name="expenses", verbose_name="Équipe",
     )
     owner = models.ForeignKey(
-        Manager, null=True, blank=True, on_delete=models.SET_NULL,
+        Manager, null=True, blank=True, on_delete=models.PROTECT,
         related_name="expenses", verbose_name="Propriétaire",
     )
     date = models.DateTimeField("Date et heure")
@@ -217,19 +240,19 @@ class Expense(TimeStampedModel):
     description = models.TextField("Description", blank=True)
 
     project = models.ForeignKey(
-        Project, null=True, blank=True, on_delete=models.SET_NULL,
+        Project, null=True, blank=True, on_delete=models.PROTECT,
         related_name="expenses", verbose_name="Projet",
     )
     expense_title = models.ForeignKey(
-        ExpenseTitle, null=True, blank=True, on_delete=models.SET_NULL,
+        ExpenseTitle, null=True, blank=True, on_delete=models.PROTECT,
         related_name="expenses", verbose_name="Intitulé de dépenses",
     )
     marketing_category = models.ForeignKey(
-        MarketingCategory, null=True, blank=True, on_delete=models.SET_NULL,
+        MarketingCategory, null=True, blank=True, on_delete=models.PROTECT,
         related_name="expenses", verbose_name="Catégorie marketing",
     )
     beneficiary = models.ForeignKey(
-        Beneficiary, null=True, blank=True, on_delete=models.SET_NULL,
+        Beneficiary, null=True, blank=True, on_delete=models.PROTECT,
         related_name="expenses", verbose_name="Prospect / bénéficiaire",
     )
     budget = models.ForeignKey(
@@ -284,11 +307,55 @@ class Expense(TimeStampedModel):
         "Statut", max_length=20, choices=Status.choices, default=Status.DRAFT
     )
     note = models.TextField("Remarque", blank=True)
+    # Le motif du contrôleur a son propre champ : il écrasait ``note``, la
+    # remarque du pays, si bien qu'un rejet effaçait ce que le déclarant
+    # avait pris soin d'expliquer.
+    control_note = models.TextField("Motif du contrôle", blank=True)
     created_by = models.CharField("Saisie par", max_length=180, blank=True)
 
     class Meta:
-        ordering = ["-date", "-created_at"]
+        ordering = ["-date", "-created_at", "-pk"]
         verbose_name = "Dépense"
+        # Les invariants métier sont aussi posés en base : un script ou
+        # l'admin ne passent pas par les sérialiseurs.
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gte=0), name="depense_montant_positif"
+            ),
+            # Ce qui est prouvé ne dépasse jamais ce qui est dépensé.
+            models.CheckConstraint(
+                condition=Q(justified_amount__gte=0)
+                & Q(justified_amount__lte=F("amount")),
+                name="depense_justifie_borne",
+            ),
+            # Devise d'origine : tout ou rien. Un montant sans devise, ou une
+            # conversion sans taux, ne se rapproche d'aucune pièce.
+            models.CheckConstraint(
+                condition=Q(
+                    original_currency="",
+                    original_amount__isnull=True,
+                    original_rate__isnull=True,
+                )
+                | (
+                    ~Q(original_currency="")
+                    & Q(original_amount__isnull=False)
+                    & Q(original_rate__isnull=False)
+                ),
+                name="depense_devise_origine_coherente",
+            ),
+            # Une dépense déclarée pèse sur une enveloppe, toujours.
+            models.CheckConstraint(
+                condition=Q(status=Status.DRAFT) | Q(budget__isnull=False),
+                name="depense_declaree_imputee",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["budget", "status"], name="depense_enveloppe_statut"),
+            models.Index(
+                fields=["country", "status", "date"], name="depense_pays_statut_date"
+            ),
+            models.Index(fields=["date"], name="depense_date"),
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.amount})"
@@ -322,7 +389,7 @@ class Proof(TimeStampedModel):
         ARCHIVED = "archived", "Archivé"
 
     dossier = models.ForeignKey(
-        Dossier, on_delete=models.CASCADE, related_name="proofs",
+        Dossier, on_delete=models.PROTECT, related_name="proofs",
         verbose_name="Dossier",
     )
     file = models.FileField("Fichier", upload_to=proof_upload_path)
@@ -345,17 +412,21 @@ class Proof(TimeStampedModel):
     size = models.PositiveBigIntegerField("Taille (octets)", default=0)
     content_type = models.CharField("Type MIME", max_length=120, blank=True)
     version = models.PositiveIntegerField("Version", default=1)
+    # La chaîne des versions est une preuve en soi : on ne la rompt pas.
     replaces = models.OneToOneField(
-        "self", null=True, blank=True, on_delete=models.SET_NULL,
+        "self", null=True, blank=True, on_delete=models.PROTECT,
         related_name="replaced_by", verbose_name="Remplace",
     )
     uploaded_by = models.CharField("Déposé par", max_length=180, blank=True)
     rejection_reason = models.TextField("Motif de rejet", blank=True)
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-created_at", "-pk"]
         verbose_name = "Pièce justificative"
         verbose_name_plural = "Pièces justificatives"
+        indexes = [
+            models.Index(fields=["dossier", "status"], name="piece_dossier_statut"),
+        ]
 
     def __str__(self):
         return f"{self.get_kind_display()} — {self.original_name or self.file.name}"
@@ -384,16 +455,23 @@ class AuditLog(models.Model):
         # est bien validée ou rejetée, à la différence de la dépense.
         APPROVED = "approved", "Validation d'un justificatif"
         REJECTED = "rejected", "Rejet d'un justificatif"
+        # Un justificatif signalé incomplet ou remis à contrôler n'est pas
+        # rejeté : le journal doit dire ce qui s'est réellement passé.
+        PROOF_INCOMPLETE = "proof_incomplete", "Justificatif signalé incomplet"
+        PROOF_TO_REVIEW = "proof_to_review", "Justificatif remis à contrôler"
         DELETED = "deleted", "Suppression d'un brouillon"
         CLOSED = "closed", "Clôture"
         PROOF_UPLOADED = "proof_uploaded", "Dépôt de justificatif"
         PROOF_REPLACED = "proof_replaced", "Remplacement de justificatif"
         DOWNLOADED = "downloaded", "Téléchargement"
+        IMPORTED = "imported", "Import Excel"
 
     user = models.CharField("Utilisateur", max_length=180, blank=True)
     action = models.CharField("Action", max_length=32, choices=Action.choices)
     object_type = models.CharField("Type d'objet", max_length=64)
-    object_id = models.PositiveIntegerField("Identifiant")
+    # Nul pour une action qui ne porte sur aucun objet précis (export,
+    # import). Les modules qui écrivent encore ``0`` restent acceptés.
+    object_id = models.PositiveBigIntegerField("Identifiant", null=True, blank=True)
     label = models.CharField("Libellé", max_length=250, blank=True)
     country = models.ForeignKey(
         Country, null=True, blank=True, on_delete=models.SET_NULL,
@@ -405,10 +483,15 @@ class AuditLog(models.Model):
     created_at = models.DateTimeField("Le", auto_now_add=True)
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-created_at", "-pk"]
         verbose_name = "Journal d'audit"
         verbose_name_plural = "Journal d'audit"
-        indexes = [models.Index(fields=["object_type", "object_id"])]
+        indexes = [
+            models.Index(fields=["object_type", "object_id"]),
+            models.Index(fields=["created_at"], name="audit_date"),
+            models.Index(fields=["country", "created_at"], name="audit_pays_date"),
+            models.Index(fields=["user"], name="audit_utilisateur"),
+        ]
 
     def __str__(self):
         return f"[{self.get_action_display()}] {self.object_type} #{self.object_id}"
