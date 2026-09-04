@@ -26,6 +26,7 @@ from decimal import Decimal, InvalidOperation
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from openpyxl import load_workbook
 
 from accounts.permissions import get_access
@@ -114,8 +115,8 @@ def _texte_borne(row, entete):
     valeur = _texte(row[entete])
     if len(valeur) > LONGUEURS[entete]:
         raise ValueError(
-            f"{entete} trop long ({len(valeur)} caractères, "
-            f"maximum {LONGUEURS[entete]})."
+            _("%(entete)s trop long (%(taille)s caractères, maximum %(max)s).")
+            % {"entete": entete, "taille": len(valeur), "max": LONGUEURS[entete]}
         )
     return valeur
 
@@ -135,11 +136,11 @@ def _numero_d_ordre(row):
     numero = _texte(valeur)
     if len(numero) > LONGUEURS["N°ORDRE"]:
         raise ValueError(
-            f"N°ORDRE trop long ({len(numero)} caractères, "
-            f"maximum {LONGUEURS['N°ORDRE']})."
+            _("%(entete)s trop long (%(taille)s caractères, maximum %(max)s).")
+            % {"entete": "N°ORDRE", "taille": len(numero), "max": LONGUEURS["N°ORDRE"]}
         )
     if not numero:
-        raise ValueError("N°ORDRE obligatoire.")
+        raise ValueError(_("N°ORDRE obligatoire."))
     return numero
 
 
@@ -155,14 +156,14 @@ def _montant(value, entete):
     try:
         montant = Decimal(str(value).strip().replace(",", "."))
     except (InvalidOperation, AttributeError, ValueError):
-        raise ValueError(f"{entete} illisible : « {value} »")
+        raise ValueError(_("%(entete)s illisible : « %(value)s »") % {"entete": entete, "value": value})
     if not montant.is_finite() or montant < 0:
-        raise ValueError(f"{entete} illisible : « {value} »")
+        raise ValueError(_("%(entete)s illisible : « %(value)s »") % {"entete": entete, "value": value})
     montant = montant.quantize(CENTS)
     if montant.adjusted() + 1 > CHIFFRES_ENTIERS_MAX:
         raise ValueError(
-            f"{entete} trop grand : « {value} » "
-            f"(maximum {CHIFFRES_ENTIERS_MAX} chiffres avant la virgule)."
+            _("%(entete)s trop grand : « %(value)s » (maximum %(max)s chiffres avant la virgule).")
+            % {"entete": entete, "value": value, "max": CHIFFRES_ENTIERS_MAX}
         )
     return montant
 
@@ -184,18 +185,18 @@ def _date(value):
             return timezone.make_aware(datetime.strptime(texte, format_))
         except ValueError:
             continue
-    raise ValueError(f"Date illisible : « {value} »")
+    raise ValueError(_("Date illisible : « %(value)s »") % {"value": value})
 
 
 def _ouvrir(uploaded):
     taille = getattr(uploaded, "size", None)
     if taille is not None and taille > settings.MAX_PROOF_SIZE:
         limite = settings.MAX_PROOF_SIZE // (1024 * 1024)
-        raise ValueError(f"Classeur trop volumineux (maximum {limite} Mo).")
+        raise ValueError(_("Classeur trop volumineux (maximum %(limite)s Mo).") % {"limite": limite})
     try:
         return load_workbook(uploaded, read_only=True, data_only=True)
     except Exception as exc:
-        raise ValueError(f"Classeur illisible : {exc}") from exc
+        raise ValueError(_("Classeur illisible : %(erreur)s") % {"erreur": exc}) from exc
 
 
 def _entete(value):
@@ -223,12 +224,15 @@ def _trouver_l_entete(rows):
             }
             manquantes = [c for c in COLONNES_OBLIGATOIRES if c not in positions]
             if manquantes:
-                raise ValueError(f"En-têtes manquants : {', '.join(manquantes)}")
+                raise ValueError(
+                    _("En-têtes manquants : %(colonnes)s") % {"colonnes": ", ".join(manquantes)}
+                )
             return numero, positions
     raise ValueError(
-        "Ligne d'en-tête introuvable : le classeur doit porter les colonnes "
-        + ", ".join(COLONNES_OBLIGATOIRES)
-        + f" dans ses {LIGNES_D_ENTETE_MAX} premières lignes."
+        _(
+            "Ligne d'en-tête introuvable : le classeur doit porter les colonnes "
+            "%(colonnes)s dans ses %(max)s premières lignes."
+        ) % {"colonnes": ", ".join(COLONNES_OBLIGATOIRES), "max": LIGNES_D_ENTETE_MAX}
     )
 
 
@@ -263,7 +267,7 @@ def _charger_lignes(uploaded):
             continue
         if len(lignes) >= LIGNES_MAX:
             raise ValueError(
-                f"Le classeur dépasse {LIGNES_MAX} lignes : scindez-le."
+                _("Le classeur dépasse %(max)s lignes : scindez-le.") % {"max": LIGNES_MAX}
             )
         lignes.append(
             (
@@ -308,19 +312,19 @@ def _devise_d_origine(row, country, date, amount):
     montant = _montant(row["MONTANT D'ORIGINE"], "MONTANT D'ORIGINE")
     if not devise and montant is None:
         if amount is None:
-            raise ValueError("Montant de dépense obligatoire.")
+            raise ValueError(_("Montant de dépense obligatoire."))
         return amount, "", None, None
     if not devise or montant is None:
         raise ValueError(
-            "Indiquez à la fois la devise et le montant d'origine, ou aucun des deux."
+            _("Indiquez à la fois la devise et le montant d'origine, ou aucun des deux.")
         )
     if devise == country.currency:
         return montant, "", None, None
     converti, taux = convert(montant, devise, country.currency, date.date())
     if converti is None:
         raise ValueError(
-            f"Aucun taux connu pour convertir {devise} en {country.currency} "
-            f"au {date.date().strftime('%d/%m/%Y')}."
+            _("Aucun taux connu pour convertir %(devise)s en %(cible)s au %(date)s.")
+            % {"devise": devise, "cible": country.currency, "date": date.date().strftime("%d/%m/%Y")}
         )
     return converti, devise, montant, taux
 
@@ -356,13 +360,13 @@ def _resoudre_le_pays(row, avec_colonne_pays, pays_par_nom, pays_impose, access)
     pays_nom = _texte(row["PAYS"]) if avec_colonne_pays else ""
     if not pays_nom:
         if pays_impose is None:
-            raise ValueError("Pays obligatoire : la colonne PAYS est vide.")
+            raise ValueError(_("Pays obligatoire : la colonne PAYS est vide."))
         return pays_impose
     country = pays_par_nom.get(pays_nom.casefold())
     if country is None:
-        raise ValueError(f"Pays « {pays_nom} » inconnu")
+        raise ValueError(_("Pays « %(pays)s » inconnu") % {"pays": pays_nom})
     if not access.has_global_scope and country.pk not in access.country_ids:
-        raise ValueError(f"Pays « {country.name} » hors périmètre")
+        raise ValueError(_("Pays « %(pays)s » hors périmètre") % {"pays": country.name})
     return country
 
 
@@ -383,8 +387,10 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
     if not avec_colonne_pays and country is None:
         return _resultat(
             0, 0,
-            [_erreur(1, "Le classeur n'a pas de colonne PAYS : indiquez le pays "
-                        "de l'import (paramètre « country »).")],
+            [_erreur(1, _(
+                "Le classeur n'a pas de colonne PAYS : indiquez le pays "
+                "de l'import (paramètre « country »)."
+            ))],
             dry_run,
         )
 
@@ -439,18 +445,20 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
                 ).first()
             dossier = dossiers_existants[cle_dossier]
             if dossier is not None and dossier.status != Status.DRAFT:
-                raise ValueError(f"Le dossier « {number} » est déjà déclaré")
+                raise ValueError(_("Le dossier « %(number)s » est déjà déclaré") % {"number": number})
 
             empreinte = _empreinte(cle_dossier, date_ligne, title, amount)
             deja = empreintes_vues.get(empreinte)
             if deja is not None:
-                raise ValueError(f"Ligne identique à la ligne {deja} du classeur")
+                raise ValueError(_("Ligne identique à la ligne %(ligne)s du classeur") % {"ligne": deja})
             if dossier is not None and _empreinte(
                 number, date_ligne, title, amount
             ) in _lignes_en_base(dossier, lignes_en_base):
                 raise ValueError(
-                    f"Ligne déjà présente dans le dossier « {number} » : "
-                    "même date, même libellé, même montant"
+                    _(
+                        "Ligne déjà présente dans le dossier « %(number)s » : "
+                        "même date, même libellé, même montant"
+                    ) % {"number": number}
                 )
             empreintes_vues[empreinte] = numero_ligne
 

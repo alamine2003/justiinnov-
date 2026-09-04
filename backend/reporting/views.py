@@ -8,6 +8,7 @@ from django.db.models import Count, Sum
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -21,12 +22,14 @@ from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 
 from . import alerts as alert_rules
 from .exports import (
+    FORMATS,
+    PDF,
     build_country_report_pdf,
-    build_expenses_workbook,
-    build_reconciliation_workbook,
+    lignes_depenses,
+    tableaux_rapprochement,
 )
-from .scope import scoped_querysets
-from accounts.permissions import EXPENSE_WRITE_ROLES, RolePermission, get_access
+from .scope import Periode, scoped_querysets
+from accounts.permissions import EXPORT_ROLES, RolePermission, get_access
 from .imports import audit_import, importer_depenses
 
 ZERO = Decimal("0.00")
@@ -41,7 +44,15 @@ def _as_int(value, field):
     try:
         return int(value)
     except (TypeError, ValueError):
-        raise ValidationError({field: "Valeur entière attendue."})
+        raise ValidationError({field: _("Valeur entière attendue.")})
+
+
+def _mois(value):
+    """Mois optionnel de la requête, entre 1 et 12."""
+    month = _as_int(value, "month")
+    if month is not None and not 1 <= month <= 12:
+        raise ValidationError({"month": _("Le mois doit être compris entre 1 et 12.")})
+    return month
 
 
 def _pays_unique(request):
@@ -95,7 +106,7 @@ class DashboardView(APIView):
                 #
                 # Seules les plus graves sont transmises : en renvoyer cent
                 # trente alourdirait la réponse sans que l'écran les montre.
-                "alerts": current_alerts[:MAX_ALERTS],
+                "alerts": [alert_rules.rendue(a) for a in current_alerts[:MAX_ALERTS]],
                 "alerts_total": len(current_alerts),
             }
         )
@@ -106,7 +117,7 @@ class DashboardView(APIView):
     def _totaux_consolides(self, rows):
         """Totaux globaux, en FCFA uniquement.
 
-        Additionner « allocated » du Togo (XOF) et du Ghana (GHS) donnait un
+        Additionner « allocated » du Togo (XOF) et du Guinée (GNF) donnait un
         chiffre sans unité, présenté comme un total. Chaque montant est
         converti au taux courant ; un pays dont la devise n'a pas de taux est
         écarté et nommé, jamais absorbé.
@@ -219,8 +230,8 @@ class BreakdownView(APIView):
             # sa répartition sans avoir à nommer ce pays.
             country_id = _pays_unique(request)
         if not country_id:
-            raise ValidationError({"country": "Le pays est obligatoire."})
-        _, _, expenses = scoped_querysets(request, year, country_id)
+            raise ValidationError({"country": _("Le pays est obligatoire.")})
+        expenses = scoped_querysets(request, year, country_id)[2]
 
         # Brouillons et refus ne représentent aucune consommation réelle.
         counted = expenses.filter(
@@ -287,31 +298,66 @@ class BreakdownView(APIView):
 
 
 class ExportView(APIView):
-    """Base des exports : périmètre appliqué, téléchargement tracé."""
+    """Base des exports : réservés aux administrateurs, périmètre appliqué,
+    période choisie, téléchargement tracé.
 
-    filename = "export"
+    Seuls les administrateurs manipulent des fichiers ; le reste de
+    l'organisation travaille dans l'application. La lecture est donc
+    refusée, pas seulement l'écriture : un export **est** une sortie de
+    données.
+
+    ``year`` et ``month`` (1–12, facultatif) bornent dossiers et dépenses ;
+    sans mois, l'exercice entier. Le format est choisi par la route
+    (``export_format``), le nom du fichier porte la période.
+    """
+
+    permission_classes = [RolePermission]
+    read_roles = EXPORT_ROLES
+
+    #: Radical du nom de fichier et libellé d'audit, par vue.
+    prefix = "export"
     audit_label = "Export"
+    #: « xlsx », « csv », « docx » ou « pdf », posé par la route.
+    export_format = "xlsx"
 
-    def build(self, budgets, dossiers, expenses, year):  # pragma: no cover
+    def build(self, budgets, dossiers, expenses, periode, country_id):  # pragma: no cover
         raise NotImplementedError
 
     def get(self, request):
         year = _as_int(request.query_params.get("year"), "year") or timezone.now().year
+        month = _mois(request.query_params.get("month"))
         country_id = _as_int(request.query_params.get("country"), "country")
+        periode = Periode(year, month)
         # Le pays est vérifié contre le périmètre par ``scoped_querysets`` :
         # un identifiant inconnu ou étranger répond 404 avant tout calcul.
-        budgets, dossiers, expenses = scoped_querysets(request, year, country_id)
+        budgets, dossiers, expenses = scoped_querysets(request, year, country_id, month)
 
-        # L'année validée sert aussi au nom du fichier : reprise brute de la
-        # requête, elle y injectait ce que le client voulait.
-        content, content_type, filename = self.build(budgets, dossiers, expenses, year)
-        self._audit(request, year, country_id, filename)
+        # La période validée sert aussi au nom du fichier : reprise brute de
+        # la requête, elle y injectait ce que le client voulait.
+        content, content_type = self.build(budgets, dossiers, expenses, periode, country_id)
+        filename = f"{self.prefix}-{periode.suffixe}.{self.export_format}"
+        self._audit(request, periode, country_id, filename)
 
         response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
 
-    def _audit(self, request, year, country_id, filename):
+    def _contexte(self, periode, country_id):
+        """En-tête du document Word : pays, exercice, période."""
+        pays = Country.objects.filter(pk=country_id).first() if country_id else None
+        return {
+            "titre": f"{self.audit_label} — {periode.libelle}",
+            "pays": pays.name if pays else _("Tous les pays du périmètre"),
+            "exercice": periode.year,
+            "periode": periode.libelle,
+        }
+
+    def _tabulaire(self, tableaux, periode, country_id):
+        """Écrit les tableaux dans le format de la route."""
+        ecrire, content_type = FORMATS[self.export_format]
+        return ecrire(tableaux, self._contexte(periode, country_id)), content_type
+
+    def _audit(self, request, periode, country_id, filename):
         """Un export sort des données du système : il laisse une trace."""
         AuditLog.objects.create(
             user=request.user.username,
@@ -320,49 +366,57 @@ class ExportView(APIView):
             object_id=0,
             label=f"{self.audit_label} — {filename}",
             country_id=country_id,
-            detail={"year": year, "country": country_id},
+            detail={
+                "year": periode.year,
+                "month": periode.month,
+                "country": country_id,
+                "format": self.export_format,
+            },
             ip_address=client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", "")[:250],
         )
 
 
-XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-
 class ExpensesExportView(ExportView):
-    """Export Excel au format du fichier historique."""
+    """Export des dépenses au format du fichier historique (xlsx, csv, docx)."""
 
+    prefix = "depenses"
     audit_label = "Export des dépenses"
 
-    def build(self, budgets, dossiers, expenses, year):
-        return build_expenses_workbook(dossiers), XLSX, f"depenses-{year}.xlsx"
+    def build(self, budgets, dossiers, expenses, periode, country_id):
+        return self._tabulaire([lignes_depenses(dossiers)], periode, country_id)
 
 
 class ReconciliationExportView(ExportView):
-    """Rapprochement dépenses / montants justifiés (§5.7)."""
+    """Rapprochement dépenses / montants justifiés (§5.7), xlsx, csv ou docx."""
 
+    prefix = "rapprochement"
     audit_label = "Rapport de rapprochement"
 
-    def build(self, budgets, dossiers, expenses, year):
-        workbook = build_reconciliation_workbook(budgets, dossiers)
-        return workbook, XLSX, f"rapprochement-{year}.xlsx"
+    def build(self, budgets, dossiers, expenses, periode, country_id):
+        return self._tabulaire(
+            tableaux_rapprochement(budgets, dossiers), periode, country_id
+        )
 
 
 class CountryReportView(ExportView):
     """Rapport PDF par pays et période."""
 
+    prefix = "rapport"
     audit_label = "Rapport PDF"
+    export_format = "pdf"
 
-    def build(self, budgets, dossiers, expenses, year):
-        pdf = build_country_report_pdf(budgets, dossiers, expenses, year)
-        return pdf, "application/pdf", f"rapport-{year}.pdf"
+    def build(self, budgets, dossiers, expenses, periode, country_id):
+        return build_country_report_pdf(budgets, dossiers, expenses, periode), PDF
 
 
 class ExpensesImportView(APIView):
     """Importe l'export des dépenses ou le classeur historique du client.
 
-    Réservé aux rôles de saisie : importer, c'est déclarer. Un contrôleur ou
-    la direction des opérations lisent et constatent, ils ne déclarent pas.
+    Réservé aux administrateurs, comme les exports : seuls eux manipulent
+    des fichiers. Le pays déclare dans l'application, ligne à ligne ; ce qui
+    entre par un classeur arrive en brouillon et suit ensuite le même
+    circuit.
 
     Le classeur historique est mono-pays et n'a pas de colonne PAYS : le
     pays vient alors du paramètre ``country`` (requête ou formulaire),
@@ -371,13 +425,13 @@ class ExpensesImportView(APIView):
 
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [RolePermission]
-    write_roles = EXPENSE_WRITE_ROLES
+    write_roles = EXPORT_ROLES
 
     def post(self, request):
         self.check_permissions(request)
         uploaded = request.FILES.get("file")
         if uploaded is None:
-            raise ValidationError({"file": "Le champ file est obligatoire."})
+            raise ValidationError({"file": _("Le champ file est obligatoire.")})
         dry_run = str(request.query_params.get("dry_run", "false")).lower() == "true"
         country = self._pays_de_l_import(request)
         with transaction.atomic():
@@ -403,5 +457,5 @@ class ExpensesImportView(APIView):
             candidats = candidats.filter(pk__in=access.country_ids)
         country = candidats.first()
         if country is None:
-            raise ValidationError({"country": "Pays inconnu."})
+            raise ValidationError({"country": _("Pays inconnu.")})
         return country

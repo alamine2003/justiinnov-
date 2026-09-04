@@ -4,6 +4,8 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.http import FileResponse
 from django.utils import timezone
+from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -12,6 +14,7 @@ from rest_framework.response import Response
 from accounts.permissions import (
     AUDIT_READ_ROLES,
     EXPENSE_WRITE_ROLES,
+    REOPEN_ROLES,
     VALIDATION_ROLES,
     RolePermission,
     get_access,
@@ -45,25 +48,40 @@ from .services import (
 )
 from .workflow import (
     LOCKED_STATUSES,
+    MOTIVATED_ACTIONS,
+    REOPEN_BLOCKING_STATUSES,
     Status,
     TransitionError,
     next_proof_status,
     next_status,
 )
 
-#: Rôle habilité pour chaque action du workflow.
+#: Rôle habilité pour chaque action du workflow. Le pays (manager, DM)
+#: soumet ; le siège (DF, administrateurs) constate ; les administrateurs
+#: seuls rouvrent — ni le pays, qui se corrigerait lui-même, ni la direction
+#: financière, dont le constat ne se défait pas.
 ACTION_ROLES = {
     "submit": EXPENSE_WRITE_ROLES,
     "review": VALIDATION_ROLES,
     "justify": VALIDATION_ROLES,
     "reject": VALIDATION_ROLES,
     "close": VALIDATION_ROLES,
+    "reopen": REOPEN_ROLES,
+}
+
+#: Message renvoyé quand une action qui exige un motif n'en reçoit pas.
+MOTIF_MANQUANT = {
+    "reject": gettext_lazy("Un rejet doit être motivé."),
+    "reopen": gettext_lazy(
+        "Une réouverture doit être motivée : le pays doit savoir ce qu'on "
+        "lui demande."
+    ),
 }
 
 #: Signalé au pays quand il soumet sans pièce. La soumission passe quand même :
 #: bloquer reviendrait à ce qu'une dépense sans reçu ne soit jamais déclarée,
 #: donc à ce que l'argent sorte sans laisser de trace — pire que l'écart.
-SANS_PREUVE = (
+SANS_PREUVE = gettext_lazy(
     "Aucun justificatif n'est joint : la dépense est déclarée sans preuve, "
     "elle creusera l'écart et sera signalée au siège."
 )
@@ -94,11 +112,13 @@ def _refuser_un_dossier_declare(dossier):
     if dossier is not None and dossier.status in LOCKED_STATUSES:
         raise ValidationError(
             {
-                "dossier": (
-                    f"Le dossier {dossier.number} est déjà déclaré "
-                    f"({dossier.get_status_display().lower()}) : il "
+                "dossier": _(
+                    "Le dossier {number} est déjà déclaré ({status}) : il "
                     "n'accepte plus de nouvelle ligne. Ouvrez un nouveau "
                     "dossier pour cette dépense."
+                ).format(
+                    number=dossier.number,
+                    status=dossier.get_status_display().lower(),
                 )
             }
         )
@@ -111,6 +131,7 @@ AUDIT_ACTIONS = {
     "justify": AuditLog.Action.JUSTIFIED,
     "reject": AuditLog.Action.UNJUSTIFIED,
     "close": AuditLog.Action.CLOSED,
+    "reopen": AuditLog.Action.REOPENED,
 }
 
 #: État visé d'une pièce → action d'audit.
@@ -140,7 +161,7 @@ class WorkflowMixin:
         """Relit l'objet sous verrou, dans la transaction en cours.
 
         ``get_object`` a déjà vérifié le périmètre ; mais l'instance qu'il
-        renvoie a été lue avant le verrou. Deux contrôleurs qui tranchent la
+        renvoie a été lue avant le verrou. Deux personnes du siège qui tranchent la
         même ligne au même instant liraient tous deux « soumise » et
         passeraient tous deux : le second écraserait le premier sans que le
         journal ne le dise.
@@ -158,8 +179,8 @@ class WorkflowMixin:
         serializer.is_valid(raise_exception=True)
         donnees = serializer.validated_data
         note = donnees.get("note", "").strip()
-        if name == "reject" and not note:
-            raise ValidationError({"note": "Un rejet doit être motivé."})
+        if name in MOTIVATED_ACTIONS and not note:
+            raise ValidationError({"note": str(MOTIF_MANQUANT[name])})
 
         try:
             target = next_status(
@@ -200,7 +221,7 @@ class WorkflowMixin:
         return None
 
     def apply_decision(self, instance, name, note, donnees):
-        """Reporte la décision du contrôleur sur l'instance, avant sauvegarde."""
+        """Reporte la décision du siège (DF) sur l'instance, avant sauvegarde."""
         if note:
             instance.note = note
 
@@ -261,6 +282,10 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     ]
     search_fields = ["number", "label"]
     ordering_fields = ["date", "number", "created_at"]
+    # Un manager rattaché à des équipes ne voit que leurs dossiers : le
+    # cloisonnement par pays ne suffit pas quand plusieurs équipes d'un même
+    # pays ne doivent pas lire les dépenses les unes des autres.
+    team_lookup = "team"
 
     # Seul celui qui a ouvert un dossier peut retirer son brouillon.
     author_field = "created_by"
@@ -293,6 +318,18 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         """Déclare le dossier : ses lignes partent avec lui."""
         return self.perform_transition(request, "submit")
 
+    @action(detail=True, methods=["post"])
+    def reopen(self, request, pk=None):
+        """Renvoie un dossier déclaré au brouillon, pour demander des comptes.
+
+        Seule exception à l'irréversibilité (voir ``workflow``) : réservée
+        aux administrateurs, motivée, refusée dès qu'une ligne a été
+        constatée, tracée sur le dossier et sur chaque ligne. Il n'existe
+        pas d'équivalent sur une ligne : le dossier emporte ses lignes, à la
+        réouverture comme à la soumission.
+        """
+        return self.perform_transition(request, "reopen")
+
     def perform_create(self, serializer):
         self._check_country_scope(serializer)
         serializer.save(created_by=self.request.user.username)
@@ -319,15 +356,20 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         ]
         if autrui:
             raise PermissionDenied(
-                "Ce dossier contient des lignes saisies par quelqu'un "
-                f"d'autre ({autrui[0].created_by}) : il ne peut pas être "
-                "supprimé."
+                _(
+                    "Ce dossier contient des lignes saisies par quelqu'un "
+                    "d'autre ({author}) : il ne peut pas être supprimé."
+                ).format(author=autrui[0].created_by)
             )
         declarees = [ligne for ligne in lignes if ligne.status != Status.DRAFT]
         if declarees:
             raise ValidationError(
-                {"expenses": "Ce dossier contient une ligne déclarée : il ne "
-                 "peut plus être supprimé."}
+                {
+                    "expenses": _(
+                        "Ce dossier contient une ligne déclarée : il ne peut "
+                        "plus être supprimé."
+                    )
+                }
             )
 
         for ligne in lignes:
@@ -369,11 +411,31 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         super().perform_destroy(dossier)
 
     def audit_snapshot(self, dossier):
-        return {"status": dossier.status, "note": dossier.note}
+        return {
+            "status": dossier.status,
+            "note": dossier.note,
+            "reopen_note": dossier.reopen_note,
+        }
+
+    def apply_decision(self, dossier, name, note, donnees):
+        """Le motif d'une réouverture a son propre champ.
+
+        ``note`` est la remarque de contrôle du siège ; une réouverture ne
+        doit pas l'effacer, et son motif doit rester lisible sur la fiche
+        même après que le pays a resoumis le dossier.
+        """
+        if name == "reopen":
+            dossier.reopen_note = note
+            return
+        super().apply_decision(dossier, name, note, donnees)
 
     def before_transition(self, dossier, name, access, donnees):
         if name == "submit":
             return self._soumettre_les_lignes(dossier, access)
+
+        if name == "reopen":
+            self._rouvrir_les_lignes(dossier, donnees.get("note", "").strip())
+            return None
 
         if name == "close":
             self._refuser_les_lignes_en_suspens(dossier)
@@ -387,20 +449,22 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
                 # l'ensemble documentaire que le N°ORDRE représente. Une
                 # pièce rejetée ou archivée n'en est pas une.
                 raise ValidationError(
-                    {"proofs": "Un dossier ne peut être justifié sans justificatif."}
+                    {"proofs": _("Un dossier ne peut être justifié sans justificatif.")}
                 )
             self._exiger_les_lignes(
                 dossier,
                 attendus=[Status.JUSTIFIED, Status.CLOSED],
-                consigne="Justifiez chaque ligne avant le dossier.",
+                consigne=_("Justifiez chaque ligne avant le dossier."),
             )
 
         if name == "reject":
             self._exiger_les_lignes(
                 dossier,
                 attendus=[Status.JUSTIFIED, Status.UNJUSTIFIED, Status.CLOSED],
-                consigne="Tranchez chaque ligne avant de constater la "
-                "non-justification du dossier.",
+                consigne=_(
+                    "Tranchez chaque ligne avant de constater la "
+                    "non-justification du dossier."
+                ),
             )
         return None
 
@@ -408,8 +472,10 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         """Celui qui a ouvert le dossier ne le tranche pas."""
         if dossier.created_by and dossier.created_by == self.request.user.username:
             raise PermissionDenied(
-                "Vous avez ouvert ce dossier : son contrôle revient à "
-                "quelqu'un d'autre."
+                _(
+                    "Vous avez ouvert ce dossier : son contrôle revient à "
+                    "quelqu'un d'autre."
+                )
             )
 
     def _exiger_les_lignes(self, dossier, *, attendus, consigne):
@@ -426,10 +492,10 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         )
         raise ValidationError(
             {
-                "expenses": (
-                    f"{en_suspens.count()} ligne(s) ne sont pas dans l'état "
-                    f"attendu : {detail}. {consigne}"
-                )
+                "expenses": _(
+                    "{count} ligne(s) ne sont pas dans l'état attendu : "
+                    "{detail}. {instruction}"
+                ).format(count=en_suspens.count(), detail=detail, instruction=consigne)
             }
         )
 
@@ -444,9 +510,61 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         self._exiger_les_lignes(
             dossier,
             attendus=[Status.JUSTIFIED, Status.UNJUSTIFIED, Status.CLOSED],
-            consigne="Justifiez-les ou marquez-les non justifiées avant de "
-            "clôturer.",
+            consigne=_(
+                "Justifiez-les ou marquez-les non justifiées avant de clôturer."
+            ),
         )
+
+    def _rouvrir_les_lignes(self, dossier, motif):
+        """Le dossier rouvert emporte ses lignes au brouillon.
+
+        Chaque ligne perd son imputation : elle n'est plus déclarée, elle ne
+        pèse plus sur l'enveloppe — l'engagé disparaît, ce que le pays et le
+        siège verront dans les chiffres. Les pièces déposées restent : elles
+        n'ont pas cessé d'être des preuves, c'est la déclaration qu'on
+        redemande. Une ligne déjà justifiée ou clôturée bloque tout : le
+        siège a constaté, et un constat ne se défait pas ligne à ligne.
+        """
+        lignes = list(
+            dossier.expenses.select_for_update(of=("self",)).select_related("country")
+        )
+        constatees = [e for e in lignes if e.status in REOPEN_BLOCKING_STATUSES]
+        if constatees:
+            detail = ", ".join(
+                f"{e.title} ({e.get_status_display().lower()})" for e in constatees[:5]
+            )
+            raise ValidationError(
+                {
+                    "expenses": _(
+                        "{count} ligne(s) ont déjà été constatées par le siège : "
+                        "{detail}. Un dossier ne se rouvre pas après constat."
+                    ).format(count=len(constatees), detail=detail)
+                }
+            )
+
+        maintenant = timezone.now()
+        traces = []
+        for ligne in lignes:
+            if ligne.status == Status.DRAFT:
+                continue
+            traces.append(
+                preparer(
+                    self.request,
+                    AuditLog.Action.REOPENED,
+                    ligne,
+                    from_status=ligne.status,
+                    to_status=Status.DRAFT,
+                    note=motif,
+                    dossier=dossier.number,
+                    before={"status": ligne.status, "budget": ligne.budget_id},
+                    after={"status": Status.DRAFT, "budget": None},
+                )
+            )
+            ligne.status = Status.DRAFT
+            ligne.budget = None
+            ligne.updated_at = maintenant
+        Expense.objects.bulk_update(lignes, ["budget", "status", "updated_at"])
+        enregistrer(traces)
 
     @staticmethod
     def _exiger_equipe_et_owner(lignes):
@@ -463,23 +581,23 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         for ligne in lignes:
             manques = []
             if ligne.team_id is None:
-                manques.append("sans équipe")
+                manques.append(_("sans équipe"))
             if ligne.owner_id is None:
-                manques.append("sans owner")
+                manques.append(_("sans manager"))
             if manques:
                 incompletes.append(f"« {ligne.title} » ({', '.join(manques)})")
         if not incompletes:
             return
         detail = ", ".join(incompletes[:5])
         if len(incompletes) > 5:
-            detail += f" et {len(incompletes) - 5} autre(s)"
+            detail += _(" et {count} autre(s)").format(count=len(incompletes) - 5)
         raise ValidationError(
             {
-                "expenses": (
-                    f"{len(incompletes)} ligne(s) incomplète(s) : {detail}. "
-                    "Renseignez l'équipe et le manager de chaque ligne avant "
-                    "de soumettre le dossier."
-                )
+                "expenses": _(
+                    "{count} ligne(s) incomplète(s) : {detail}. Renseignez "
+                    "l'équipe et le manager de chaque ligne avant de "
+                    "soumettre le dossier."
+                ).format(count=len(incompletes), detail=detail)
             }
         )
 
@@ -505,7 +623,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         if not lignes:
             raise ValidationError(
                 {
-                    "expenses": (
+                    "expenses": _(
                         "Un dossier se soumet avec ses lignes de dépenses : "
                         "ajoutez-en au moins une."
                     )
@@ -568,12 +686,14 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
 
         avertissements = list(depassements.values())
         if _sans_preuve(dossier) and WorkflowConfiguration.charger().warn_without_proof_submission:
-            avertissements.append(SANS_PREUVE)
+            avertissements.append(str(SANS_PREUVE))
         return " ".join(avertissements) or None
 
     def after_transition(self, request, dossier, name, note):
         if name == "submit":
             triggers.dossier_submitted(dossier, request.user)
+        elif name == "reopen":
+            triggers.dossier_reopened(dossier, request.user, note)
 
 
 class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
@@ -608,6 +728,9 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     }
     search_fields = ["title", "place", "description", "dossier__number"]
     ordering_fields = ["date", "amount", "created_at"]
+    # Même cloisonnement par équipe que le dossier : le registre et les
+    # filtres passent par ce queryset, ils en héritent.
+    team_lookup = "team"
 
     def lock_queryset(self):
         return Expense.objects.select_related(*EXPENSE_RELATIONS)
@@ -682,7 +805,7 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         }
 
     def apply_decision(self, expense, name, note, donnees):
-        """Le contrôleur fixe ce qui est prouvé, et pourquoi.
+        """Le siège (DF) fixe ce qui est prouvé, et pourquoi.
 
         Le motif va dans ``control_note`` : ``note`` est la remarque du
         déclarant, qu'un rejet ne doit pas effacer.
@@ -696,10 +819,10 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
             if justifie > expense.amount:
                 raise ValidationError(
                     {
-                        "justified_amount": (
+                        "justified_amount": _(
                             "Le montant justifié ne peut pas dépasser la "
-                            f"dépense ({expense.amount})."
-                        )
+                            "dépense ({amount})."
+                        ).format(amount=expense.amount)
                     }
                 )
             expense.justified_amount = justifie
@@ -717,7 +840,7 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
             if not expense.created_by:
                 raise ValidationError(
                     {
-                        "created_by": (
+                        "created_by": _(
                             "Cette dépense n'a pas d'auteur connu : elle ne "
                             "peut pas être contrôlée."
                         )
@@ -725,8 +848,10 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
                 )
             if expense.created_by == self.request.user.username:
                 raise PermissionDenied(
-                    "Vous avez saisi cette dépense : son contrôle revient à "
-                    "quelqu'un d'autre."
+                    _(
+                        "Vous avez saisi cette dépense : son contrôle revient "
+                        "à quelqu'un d'autre."
+                    )
                 )
 
         if name != "justify":
@@ -755,11 +880,13 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     filterset_fields = ["dossier", "kind", "status", "is_complete"]
     search_fields = ["original_name", "dossier__number"]
     ordering_fields = ["created_at", "version"]
-    # La preuve n'a pas de pays propre : elle suit celui de son dossier.
+    # La preuve n'a pas de pays propre : elle suit celui de son dossier —
+    # et son équipe de même.
     country_lookup = "dossier__country"
     country_field = None
     country_via = "dossier"
-    # Le contrôle documentaire relève du contrôleur, pas du déposant.
+    team_lookup = "dossier__team"
+    # Le contrôle documentaire relève du siège (DF), pas du déposant.
     action_write_roles = {"review": VALIDATION_ROLES}
 
     @transaction.atomic
@@ -883,7 +1010,8 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
 
 
 class AuditLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
-    """Journal d'audit — consultation par le siège et les auditeurs."""
+    """Journal d'audit — consultation par le siège : administrateurs (RH,
+    qui audite) et direction financière."""
 
     queryset = AuditLog.objects.select_related("country").all()
     serializer_class = AuditLogSerializer

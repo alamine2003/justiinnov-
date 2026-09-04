@@ -8,6 +8,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db.models import Sum
+from django.utils.translation import gettext as _
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import Role
@@ -18,8 +19,10 @@ from .workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
 ZERO = Decimal("0.00")
 
 #: Rôles habilités à valider une dépense qui dépasse son enveloppe lorsque la
-#: politique du budget l'exige.
-OVERRUN_APPROVERS = frozenset({Role.SUPER_ADMIN, Role.DOO})
+#: politique du budget l'exige : la direction (DG, DO, CEO), qui est super
+#: administratrice. Ni la RH ni la direction financière n'arbitrent un
+#: dépassement.
+OVERRUN_APPROVERS = frozenset({Role.SUPER_ADMIN})
 
 
 #: Ordre de priorité des sous-enveloppes, du plus précis au plus large.
@@ -36,7 +39,7 @@ SUB_ENVELOPE_ORDER = [
 def exercice(expense):
     """Année budgétaire d'une dépense, lue dans le fuseau de son pays.
 
-    La date est conservée en UTC. Une dépense faite à Nairobi le 1er janvier
+    La date est conservée en UTC. Une dépense faite à Djibouti le 1er janvier
     à 01:00 est encore au 31 décembre en UTC : l'imputer sur l'exercice
     précédent, c'est la faire peser sur une enveloppe déjà close.
     """
@@ -101,14 +104,13 @@ def attach_budget(expense):
     if budget is None:
         raise ValidationError(
             {
-                "budget": (
-                    f"Aucune enveloppe active pour {expense.country.name} "
-                    f"en {exercice(expense)}."
-                )
+                "budget": _(
+                    "Aucune enveloppe active pour {country} en {year}."
+                ).format(country=expense.country.name, year=exercice(expense))
             }
         )
     if not budget.is_active:
-        raise ValidationError({"budget": "L'enveloppe imputée est inactive."})
+        raise ValidationError({"budget": _("L'enveloppe imputée est inactive.")})
     if expense.budget_id != budget.pk:
         expense.budget = budget
     return budget
@@ -143,27 +145,33 @@ def check_budget_capacity(
         return None
 
     overrun = projected - budget.amount
-    message = (
-        f"Dépassement de {overrun} {budget.country.currency} "
-        f"sur l'enveloppe {budget}."
-    )
+    # « Dépassement » ouvre le message dans les deux langues (« Overrun ») :
+    # l'interface et les tests s'y repèrent.
+    message = _(
+        "Dépassement de {overrun} {currency} sur l'enveloppe {budget}."
+    ).format(overrun=overrun, currency=budget.country.currency, budget=budget)
 
     if budget.overrun_policy == OverrunPolicy.BLOCK:
         if at_approval:
             return message
-        raise ValidationError({"amount": f"{message} Opération bloquée."})
+        raise ValidationError(
+            {"amount": _("{message} Opération bloquée.").format(message=message)}
+        )
 
     if budget.overrun_policy == OverrunPolicy.APPROVAL:
         if at_approval and role not in OVERRUN_APPROVERS:
             raise ValidationError(
                 {
-                    "amount": (
-                        f"{message} La validation d'un dépassement relève "
-                        f"de la direction des opérations."
-                    )
+                    "amount": _(
+                        "{message} La validation d'un dépassement relève de "
+                        "la direction (super administrateur)."
+                    ).format(message=message)
                 }
             )
         if not at_approval:
-            return f"{message} Sa validation relèvera de la direction des opérations."
+            return _(
+                "{message} Sa validation relèvera de la direction "
+                "(super administrateur)."
+            ).format(message=message)
 
     return message

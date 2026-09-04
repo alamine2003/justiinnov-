@@ -36,7 +36,7 @@ class SoumissionCompleteTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Hôtel", str(response.data["expenses"]))
-        self.assertIn("sans owner", str(response.data["expenses"]))
+        self.assertIn("sans manager", str(response.data["expenses"]))
 
     def test_le_message_nomme_chaque_ligne_incomplete(self):
         self.make_expense(title="Complète")
@@ -47,8 +47,8 @@ class SoumissionCompleteTests(ExpenseTestCase):
 
         message = str(response.data["expenses"])
         self.assertIn("2 ligne(s) incomplète(s)", message)
-        self.assertIn("« Vide » (sans équipe, sans owner)", message)
-        self.assertIn("« Sans manager » (sans owner)", message)
+        self.assertIn("« Vide » (sans équipe, sans manager)", message)
+        self.assertIn("« Sans manager » (sans manager)", message)
         self.assertNotIn("Complète", message)
 
     def test_lieu_projet_et_intitule_restent_facultatifs(self):

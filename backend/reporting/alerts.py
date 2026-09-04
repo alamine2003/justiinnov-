@@ -3,6 +3,12 @@
 Les alertes sont **calculées**, jamais stockées : elles reflètent l'état
 courant. Ce sont les notifications (§8) qui, elles, sont persistées, pour
 n'avertir qu'une fois d'un même franchissement.
+
+Titres et détails sont des chaînes **paresseuses** (:func:`format_lazy`) :
+une même alerte est lue dans la langue du tableau de bord par qui le
+consulte, et dans la langue de chaque destinataire par les notifications.
+Une chaîne rendue ici le serait dans la langue du processus qui calcule —
+celle de l'ordonnanceur, pour tout le monde.
 """
 
 from datetime import timedelta
@@ -10,6 +16,8 @@ from decimal import Decimal
 
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
+from django.utils.text import format_lazy
+from django.utils.translation import gettext_lazy as _
 
 from budget.aggregates import budget_figures
 from expenses.models import Proof
@@ -59,16 +67,20 @@ def budget_alerts(budgets):
             # Le pourcentage n'a alors pas de sens et n'est pas affiché.
             overrun = used - budget.amount
             taux = (
-                f" ({_pourcentage(used, budget.amount)} % engagés)"
+                format_lazy(
+                    _(" ({taux} % engagés)"), taux=_pourcentage(used, budget.amount)
+                )
                 if budget.amount else ""
             )
             alerts.append(
                 _alert(
                     "budget_overrun",
                     Level.CRITICAL,
-                    f"Dépassement — {budget}",
-                    f"{overrun} {budget.country.currency} au-delà de l'enveloppe"
-                    f"{taux}.",
+                    format_lazy(_("Dépassement — {budget}"), budget=budget),
+                    format_lazy(
+                        _("{overrun} {currency} au-delà de l'enveloppe{taux}."),
+                        overrun=overrun, currency=budget.country.currency, taux=taux,
+                    ),
                     country=budget.country,
                     link="/budgets",
                     key=f"budget_overrun:{budget.pk}",
@@ -87,8 +99,14 @@ def budget_alerts(budgets):
                     _alert(
                         "budget_threshold",
                         Level.CRITICAL if threshold >= 100 else Level.WARNING,
-                        f"Seuil {threshold} % atteint — {budget}",
-                        f"{percentage} % de l'enveloppe sont engagés ou consommés.",
+                        format_lazy(
+                            _("Seuil {threshold} % atteint — {budget}"),
+                            threshold=threshold, budget=budget,
+                        ),
+                        format_lazy(
+                            _("{percentage} % de l'enveloppe sont engagés ou consommés."),
+                            percentage=percentage,
+                        ),
                         country=budget.country,
                         link="/budgets",
                         key=f"budget_threshold:{budget.pk}:{threshold}",
@@ -133,8 +151,13 @@ def proof_alerts(dossiers):
                 _alert(
                     "proof_missing",
                     Level.CRITICAL,
-                    f"Justificatif manquant — {dossier.number}",
-                    f"Le dossier « {dossier.label} » est engagé sans aucune preuve.",
+                    format_lazy(
+                        _("Justificatif manquant — {number}"), number=dossier.number
+                    ),
+                    format_lazy(
+                        _("Le dossier « {label} » est engagé sans aucune preuve."),
+                        label=dossier.label,
+                    ),
                     country=dossier.country,
                     link=f"/dossiers/{dossier.pk}",
                     key=f"proof_missing:{dossier.pk}",
@@ -145,8 +168,13 @@ def proof_alerts(dossiers):
                 _alert(
                     "proof_incomplete",
                     Level.WARNING,
-                    f"Justificatif incomplet — {dossier.number}",
-                    f"{dossier.incomplete_proofs} pièce(s) signalée(s) incomplète(s).",
+                    format_lazy(
+                        _("Justificatif incomplet — {number}"), number=dossier.number
+                    ),
+                    format_lazy(
+                        _("{count} pièce(s) signalée(s) incomplète(s)."),
+                        count=dossier.incomplete_proofs,
+                    ),
                     country=dossier.country,
                     link=f"/dossiers/{dossier.pk}",
                     key=f"proof_incomplete:{dossier.pk}",
@@ -214,9 +242,15 @@ def unusual_expense_alerts(expenses):
         _alert(
             "unusual_expense",
             Level.WARNING,
-            f"Dépense inhabituelle — {expense.title}",
-            f"{expense.amount} {expense.country.currency}, soit plus de "
-            f"{factor:g} fois la moyenne des autres dépenses du pays.",
+            format_lazy(_("Dépense inhabituelle — {title}"), title=expense.title),
+            format_lazy(
+                _(
+                    "{amount} {currency}, soit plus de {factor} fois la moyenne "
+                    "des autres dépenses du pays."
+                ),
+                amount=expense.amount, currency=expense.country.currency,
+                factor=f"{factor:g}",
+            ),
             country=expense.country,
             link=f"/dossiers/{expense.dossier_id}",
             key=f"unusual_expense:{expense.pk}",
@@ -233,5 +267,16 @@ def collect(budgets, dossiers, expenses):
         + unusual_expense_alerts(expenses)
     )
     severity = {Level.CRITICAL: 0, Level.WARNING: 1, Level.INFO: 2}
-    alerts.sort(key=lambda alert: (severity[alert["level"]], alert["title"]))
+    # Le titre est rendu pour le tri : deux chaînes paresseuses se comparent
+    # mal, et l'ordre doit être celui de la langue courante.
+    alerts.sort(key=lambda alert: (severity[alert["level"]], str(alert["title"])))
     return alerts
+
+
+def rendue(alert):
+    """L'alerte avec ses textes rendus dans la langue courante.
+
+    Le tableau de bord la sérialise en JSON : le rendu explicite évite de
+    dépendre de la façon dont l'encodeur traite une chaîne paresseuse.
+    """
+    return {**alert, "title": str(alert["title"]), "detail": str(alert["detail"])}

@@ -11,6 +11,8 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q, Sum, Value
 from django.db.models.functions import Coalesce
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import pgettext_lazy
 
 from core.models import Country, Manager, Project, Team, TimeStampedModel
 
@@ -21,9 +23,9 @@ CONSOLIDATION_CURRENCY = "XOF"
 class OverrunPolicy(models.TextChoices):
     """Conduite à tenir lorsqu'une dépense ferait dépasser l'enveloppe (§6)."""
 
-    BLOCK = "block", "Bloquer"
-    WARN = "warn", "Alerter"
-    APPROVAL = "approval", "Soumettre à approbation"
+    BLOCK = "block", _("Bloquer")
+    WARN = "warn", _("Alerter")
+    APPROVAL = "approval", _("Soumettre à approbation")
 
 
 def default_overrun_policy():
@@ -110,9 +112,9 @@ class Budget(TimeStampedModel):
     # La supprimer en cascade avec son pays ou son projet effacerait des
     # montants sans trace ; le référentiel se désactive, il ne se supprime pas.
     country = models.ForeignKey(
-        Country, on_delete=models.PROTECT, related_name="budgets", verbose_name="Pays"
+        Country, on_delete=models.PROTECT, related_name="budgets", verbose_name=_("Pays")
     )
-    year = models.PositiveIntegerField("Année")
+    year = models.PositiveIntegerField(_("Année"))
     # Une sous-enveloppe découpe l'enveloppe du pays selon **une** dimension :
     # un projet, une équipe ou un manager. En autoriser plusieurs à la fois
     # rendrait l'imputation d'une dépense ambiguë.
@@ -122,7 +124,7 @@ class Budget(TimeStampedModel):
         blank=True,
         on_delete=models.PROTECT,
         related_name="budgets",
-        verbose_name="Projet",
+        verbose_name=_("Projet"),
     )
     team = models.ForeignKey(
         Team,
@@ -130,7 +132,7 @@ class Budget(TimeStampedModel):
         blank=True,
         on_delete=models.PROTECT,
         related_name="budgets",
-        verbose_name="Équipe",
+        verbose_name=_("Équipe"),
     )
     manager = models.ForeignKey(
         Manager,
@@ -138,28 +140,28 @@ class Budget(TimeStampedModel):
         blank=True,
         on_delete=models.PROTECT,
         related_name="budgets",
-        verbose_name="Manager",
+        verbose_name=_("Manager"),
     )
     amount = models.DecimalField(
-        "Montant",
+        _("Montant"),
         max_digits=16,
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0"))],
     )
     overrun_policy = models.CharField(
-        "Politique de dépassement",
+        _("Politique de dépassement"),
         max_length=20,
         choices=OverrunPolicy.choices,
         default=OverrunPolicy.BLOCK,
     )
-    is_active = models.BooleanField("Actif", default=True)
+    is_active = models.BooleanField(_("Actif"), default=True)
 
     class Meta:
         # ``-pk`` en dernier : deux enveloppes du même pays et de la même
         # année (sous-enveloppes) auraient sinon un ordre indéterminé, et la
         # pagination pourrait en montrer une deux fois ou en sauter une.
         ordering = ["-year", "country__name", "-pk"]
-        verbose_name = "Budget"
+        verbose_name = _("Budget")
         indexes = [
             # Le tableau de bord et la liste filtrent toujours ainsi.
             models.Index(
@@ -213,9 +215,9 @@ class Budget(TimeStampedModel):
         if self.project_id:
             return self.project.name
         if self.team_id:
-            return f"Équipe {self.team.name}"
+            return _("Équipe {name}").format(name=self.team.name)
         if self.manager_id:
-            return f"Manager {self.manager.name}"
+            return _("Manager {name}").format(name=self.manager.name)
         return None
 
     @property
@@ -237,37 +239,37 @@ class BudgetReallocation(TimeStampedModel):
     """Transfert entre enveloppes, avec justification et approbation (§5.2)."""
 
     class Status(models.TextChoices):
-        PENDING = "pending", "En attente"
-        APPROVED = "approved", "Approuvée"
-        REJECTED = "rejected", "Refusée"
+        PENDING = "pending", _("En attente")
+        APPROVED = "approved", _("Approuvée")
+        REJECTED = "rejected", _("Refusée")
 
     source = models.ForeignKey(
         Budget, on_delete=models.PROTECT, related_name="reallocations_out",
-        verbose_name="Enveloppe source",
+        verbose_name=_("Enveloppe source"),
     )
     target = models.ForeignKey(
         Budget, on_delete=models.PROTECT, related_name="reallocations_in",
-        verbose_name="Enveloppe destinataire",
+        verbose_name=_("Enveloppe destinataire"),
     )
     amount = models.DecimalField(
-        "Montant",
+        _("Montant"),
         max_digits=16,
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.01"))],
     )
-    reason = models.TextField("Justification")
+    reason = models.TextField(_("Justification"))
     status = models.CharField(
-        "Statut", max_length=20, choices=Status.choices, default=Status.PENDING
+        _("Statut"), max_length=20, choices=Status.choices, default=Status.PENDING
     )
-    requested_by = models.CharField("Demandée par", max_length=180, blank=True)
-    decided_by = models.CharField("Décidée par", max_length=180, blank=True)
-    decided_at = models.DateTimeField("Décidée le", null=True, blank=True)
-    decision_note = models.TextField("Motif de la décision", blank=True)
+    requested_by = models.CharField(_("Demandée par"), max_length=180, blank=True)
+    decided_by = models.CharField(_("Décidée par"), max_length=180, blank=True)
+    decided_at = models.DateTimeField(_("Décidée le"), null=True, blank=True)
+    decision_note = models.TextField(_("Motif de la décision"), blank=True)
 
     class Meta:
         ordering = ["-created_at", "-pk"]
-        verbose_name = "Réallocation budgétaire"
-        verbose_name_plural = "Réallocations budgétaires"
+        verbose_name = _("Réallocation budgétaire")
+        verbose_name_plural = _("Réallocations budgétaires")
         constraints = [
             models.CheckConstraint(
                 condition=Q(amount__gt=0), name="reallocation_montant_positif"
@@ -295,21 +297,21 @@ class ExchangeRate(models.Model):
     que les rapports historiques restent stables.
     """
 
-    currency = models.CharField("Devise", max_length=3, help_text="ISO 4217")
+    currency = models.CharField(_("Devise"), max_length=3, help_text=_("ISO 4217"))
     rate_to_xof = models.DecimalField(
-        "Taux vers le FCFA",
+        _("Taux vers le FCFA"),
         max_digits=18,
         decimal_places=6,
         validators=[MinValueValidator(Decimal("0.000001"))],
-        help_text="Nombre de FCFA pour une unité de la devise.",
+        help_text=_("Nombre de FCFA pour une unité de la devise."),
     )
-    valid_from = models.DateField("En vigueur depuis")
-    created_at = models.DateTimeField("Créé le", auto_now_add=True)
+    valid_from = models.DateField(_("En vigueur depuis"))
+    created_at = models.DateTimeField(_("Créé le"), auto_now_add=True)
 
     class Meta:
         ordering = ["currency", "-valid_from", "-pk"]
-        verbose_name = "Taux de change"
-        verbose_name_plural = "Taux de change"
+        verbose_name = _("Taux de change")
+        verbose_name_plural = pgettext_lazy("pluriel", "Taux de change")
         constraints = [
             models.UniqueConstraint(
                 fields=["currency", "valid_from"], name="unique_taux_devise_date"

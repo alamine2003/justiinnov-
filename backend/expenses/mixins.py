@@ -1,5 +1,6 @@
 """Mixins propres aux dépenses."""
 
+from django.utils.translation import gettext as _
 from rest_framework import status as http
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -37,7 +38,7 @@ class DraftDeletableViewSet(NoDestroyModelViewSet):
         if instance.status not in DELETABLE_STATUSES:
             raise ValidationError(
                 {
-                    "status": (
+                    "status": _(
                         "Cet élément est déclaré : il ne peut plus être "
                         "supprimé. Seul un brouillon peut l'être."
                     )
@@ -48,7 +49,9 @@ class DraftDeletableViewSet(NoDestroyModelViewSet):
             getattr(instance, self.author_field, "") if self.author_field else ""
         )
         if author and author != request.user.username:
-            raise PermissionDenied("Seul l'auteur d'un brouillon peut le supprimer.")
+            raise PermissionDenied(
+                _("Seul l'auteur d'un brouillon peut le supprimer.")
+            )
 
         self.perform_destroy(instance)
         return Response(status=http.HTTP_204_NO_CONTENT)

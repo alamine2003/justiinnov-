@@ -36,8 +36,8 @@ class RepriseDesDonneesTests(TransactionTestCase):
             timezone="Africa/Lome",
         )
         kenya = Country.objects.create(
-            name="Kenya", code="KE", country_ref="KE-01", currency="KES",
-            timezone="Africa/Nairobi",
+            name="Djibouti", code="DJ", country_ref="DJ-01", currency="DJF",
+            timezone="Africa/Djibouti",
         )
         Budget.objects.create(country=togo, year=2026, amount=Decimal("1000.00"))
         dossier_togo = Dossier.objects.create(
@@ -82,7 +82,7 @@ class RepriseDesDonneesTests(TransactionTestCase):
             kenya = Expense.objects.get(pk=pk_kenya)
             self.assertIsNotNone(kenya.budget_id)
             self.assertEqual(kenya.budget.amount, Decimal("0.00"))
-            self.assertEqual(Budget.objects.filter(country__code="KE").count(), 1)
+            self.assertEqual(Budget.objects.filter(country__code="DJ").count(), 1)
 
             taux = Expense.objects.get(pk=pk_taux)
             self.assertEqual(taux.original_rate, Decimal("655.960000"))

@@ -1,4 +1,10 @@
-"""Émission des notifications : destinataires, in-app puis e-mail."""
+"""Émission des notifications : destinataires, in-app puis e-mail.
+
+Chaque destinataire lit sa notification et son e-mail dans **sa** langue :
+titre et corps sont rendus au moment de l'écriture, sous la langue du
+profil. Un titre rendu en amont l'aurait été dans la langue du processus
+émetteur — celle de l'ordonnanceur, pour tout le monde.
+"""
 
 import logging
 
@@ -6,13 +12,33 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.mail import EmailMessage, get_connection
 from django.db.models import Q
-from django.utils import timezone
+from django.utils import timezone, translation
+from django.utils.translation import gettext as _
 
 from accounts.models import ALWAYS_GLOBAL_ROLES, HEADQUARTERS_ROLES
 
 from .models import Notification
 
 logger = logging.getLogger(__name__)
+
+#: Langue des destinataires dont le profil n'en déclare pas.
+LANGUE_PAR_DEFAUT = "fr"
+
+
+def langue_de(user):
+    """Langue du profil, ou le français à défaut.
+
+    Le champ ``language`` du profil peut ne pas exister encore (il relève
+    du référentiel des comptes) : l'absence vaut « fr », jamais une erreur.
+    """
+    profile = getattr(user, "profile", None)
+    return getattr(profile, "language", None) or LANGUE_PAR_DEFAUT
+
+
+def rendre(texte, langue):
+    """Texte — chaîne ou chaîne paresseuse — rendu dans la langue donnée."""
+    with translation.override(langue):
+        return str(texte)
 
 
 def recipients_for(roles, country=None):
@@ -70,7 +96,8 @@ def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
     if not recipients:
         return []
 
-    manquants = [r for r in recipients if r.pk not in _deja_avertis(dedup_key, recipients)]
+    deja = _deja_avertis(dedup_key, recipients)
+    manquants = [r for r in recipients if r.pk not in deja]
     if not manquants:
         return []
 
@@ -81,8 +108,10 @@ def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
                 dedup_key=dedup_key,
                 kind=kind,
                 level=level,
-                title=title,
-                body=body,
+                # Rendus ici, destinataire par destinataire : la ligne en
+                # base est déjà dans la langue de celui qui la lira.
+                title=rendre(title, langue_de(recipient)),
+                body=rendre(body, langue_de(recipient)),
                 link=link,
                 country=country,
             )
@@ -95,22 +124,25 @@ def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
     created = list(
         Notification.objects.filter(
             dedup_key=dedup_key, recipient__in=manquants
-        ).select_related("recipient")
+        ).select_related("recipient", "recipient__profile")
     )
 
     if send_email and created:
-        _send_emails(created, title, body, link)
+        _send_emails(created, link)
     return created
 
 
 def _sujet(title):
     """Sujet sur une seule ligne : un retour à la ligne dans un libellé de
     dépense ferait lever ``BadHeaderError`` — ou, pire, injecter un en-tête."""
-    return "[Contrôle budgétaire] " + " ".join(title.split())
+    return _("[Contrôle budgétaire]") + " " + " ".join(title.split())
 
 
-def _send_emails(notifications, title, body, link):
+def _send_emails(notifications, link):
     """Envoie l'e-mail associé, sans jamais faire échouer l'action métier.
+
+    Le sujet et le corps reprennent la ligne enregistrée, déjà rendue dans
+    la langue du destinataire ; seul le préfixe du sujet reste à traduire.
 
     Les lignes à envoyer sont d'abord **réclamées** : ``emailed_at`` est posé
     en une seule mise à jour filtrée sur les lignes encore vierges. L'ordonnanceur
@@ -132,23 +164,26 @@ def _send_emails(notifications, title, body, link):
     reclamees = [
         n for n in Notification.objects.filter(
             pk__in=[n.pk for n in addressed], emailed_at=stamped
-        ).select_related("recipient")
+        ).select_related("recipient", "recipient__profile")
     ]
     if not reclamees:
         return
 
     url = f"{settings.APP_BASE_URL}{link}" if link else settings.APP_BASE_URL
-    message = f"{body}\n\n{url}" if body else url
     try:
         with get_connection() as connection:
             for notification in reclamees:
-                EmailMessage(
-                    subject=_sujet(title),
-                    body=message,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[notification.recipient.email],
-                    connection=connection,
-                ).send(fail_silently=False)
+                with translation.override(langue_de(notification.recipient)):
+                    message = (
+                        f"{notification.body}\n\n{url}" if notification.body else url
+                    )
+                    EmailMessage(
+                        subject=_sujet(notification.title),
+                        body=message,
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        to=[notification.recipient.email],
+                        connection=connection,
+                    ).send(fail_silently=False)
     except Exception:
         # Une notification in-app reste enregistrée : l'utilisateur la verra.
         # L'horodatage est retiré : rien n'est parti, il ne faut pas le

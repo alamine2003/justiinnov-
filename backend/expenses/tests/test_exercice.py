@@ -15,7 +15,7 @@ from expenses.services import exercice, resolve_budget
 class ExerciceTests(TestCase):
     def setUp(self):
         self.kenya = Country.objects.create(
-            name="Kenya", code="KE", currency="KES", timezone="Africa/Nairobi"
+            name="Djibouti", code="DJ", currency="DJF", timezone="Africa/Djibouti"
         )
         self.dossier = Dossier.objects.create(
             number="KE-1", label="Réveillon", country=self.kenya, date=date(2026, 1, 1)
@@ -34,17 +34,17 @@ class ExerciceTests(TestCase):
         )
 
     def test_le_premier_janvier_a_une_heure_a_nairobi_est_dans_l_annee_en_cours(self):
-        """Régression : la date est conservée en UTC ; à Nairobi (UTC+3), le
+        """Régression : la date est conservée en UTC ; à Djibouti (UTC+3), le
         1er janvier à 01:00 est encore le 31 décembre en UTC, et la dépense
         pesait sur l'exercice précédent, déjà clos."""
-        depense = self.ligne(datetime(2026, 1, 1, 1, 0, tzinfo=ZoneInfo("Africa/Nairobi")))
+        depense = self.ligne(datetime(2026, 1, 1, 1, 0, tzinfo=ZoneInfo("Africa/Djibouti")))
 
         self.assertEqual(depense.date.astimezone(ZoneInfo("UTC")).year, 2025)
         self.assertEqual(exercice(depense), 2026)
         self.assertEqual(resolve_budget(depense), self.enveloppe_2026)
 
     def test_la_veille_au_soir_reste_dans_l_exercice_precedent(self):
-        depense = self.ligne(datetime(2025, 12, 31, 23, 30, tzinfo=ZoneInfo("Africa/Nairobi")))
+        depense = self.ligne(datetime(2025, 12, 31, 23, 30, tzinfo=ZoneInfo("Africa/Djibouti")))
 
         self.assertEqual(resolve_budget(depense), self.enveloppe_2025)
 
@@ -53,6 +53,6 @@ class ExerciceTests(TestCase):
         empêcher de soumettre."""
         self.kenya.timezone = "Afrique/Nulle-Part"
         self.kenya.save()
-        depense = self.ligne(datetime(2026, 1, 1, 1, 0, tzinfo=ZoneInfo("Africa/Nairobi")))
+        depense = self.ligne(datetime(2026, 1, 1, 1, 0, tzinfo=ZoneInfo("Africa/Djibouti")))
 
         self.assertEqual(exercice(depense), 2025)

@@ -2,9 +2,19 @@
 
 Appelés depuis les vues, après que l'action a réussi : une notification ne doit
 jamais faire échouer l'opération qu'elle signale.
+
+Titres et corps sont des chaînes **paresseuses** (``format_lazy`` sur un
+``gettext_lazy``) : ``services.notify`` les rend destinataire par
+destinataire, dans la langue de chaque profil. Une f-string les aurait figés
+dans la langue du processus émetteur — celle de l'ordonnanceur, pour tout le
+monde.
 """
 
 import logging
+
+from django.utils import timezone
+from django.utils.text import format_lazy
+from django.utils.translation import gettext_lazy as _
 
 from accounts.models import Role
 
@@ -14,13 +24,13 @@ from .services import notify, recipients_for
 logger = logging.getLogger(__name__)
 
 #: Qui contrôle les dépenses — le siège, jamais le pays qui les a engagées.
-CONTROLLERS = [Role.CONTROLLER, Role.ADMIN, Role.DOO, Role.SUPER_ADMIN]
+CONTROLLERS = [Role.DF, Role.ADMIN, Role.SUPER_ADMIN]
 
 #: Qui peut fournir une pièce manquante : ceux qui ont saisi la dépense.
-PROVIDERS = [Role.COUNTRY_MANAGER, Role.OWNER]
+PROVIDERS = [Role.DM, Role.MANAGER]
 
-#: Qui arbitre le budget.
-BUDGET_OWNERS = [Role.DOO, Role.SUPER_ADMIN]
+#: Qui arbitre le budget : la direction, super administratrice.
+BUDGET_OWNERS = [Role.SUPER_ADMIN]
 
 
 def _safe(action):
@@ -44,10 +54,15 @@ def dossier_submitted(dossier, actor):
             recipients_for(CONTROLLERS, dossier.country).exclude(pk=actor.pk),
             kind=Notification.Kind.EXPENSE_SUBMITTED,
             level=Notification.Level.INFO,
-            title=f"Dossier à contrôler — {dossier.number}",
-            body=(
-                f"{dossier.label} · {totaux['amount']} "
-                f"{dossier.country.currency} sur {dossier.expenses.count()} ligne(s)."
+            title=format_lazy(
+                _("Dossier à contrôler — {number}"), number=dossier.number
+            ),
+            body=format_lazy(
+                _("{label} · {amount} {currency} sur {lines} ligne(s)."),
+                label=dossier.label,
+                amount=totaux["amount"],
+                currency=dossier.country.currency,
+                lines=dossier.expenses.count(),
             ),
             link=f"/dossiers/{dossier.pk}",
             country=dossier.country,
@@ -68,11 +83,45 @@ def expense_rejected(expense, actor, motive):
             author.exclude(pk=actor.pk),
             kind=Notification.Kind.EXPENSE_REJECTED,
             level=Notification.Level.WARNING,
-            title=f"Dépense refusée — {expense.title}",
-            body=f"Motif : {motive}",
+            title=format_lazy(_("Dépense refusée — {title}"), title=expense.title),
+            body=format_lazy(_("Motif : {motive}"), motive=motive),
             link=f"/dossiers/{expense.dossier_id}",
             country=expense.country,
             dedup_key=f"expense_rejected:{expense.pk}:{expense.updated_at.isoformat()}",
+        )
+    )
+
+
+def dossier_reopened(dossier, actor, motive):
+    """Prévient le pays qu'un dossier déclaré lui revient, et pourquoi.
+
+    Seule exception à l'irréversibilité (``expenses.workflow``) : un
+    administrateur a renvoyé le dossier au brouillon pour demander des
+    comptes. Ceux qui l'ont déclaré — le DM et les managers du pays — doivent
+    le savoir sans attendre d'ouvrir la liste : il faut le corriger et le
+    resoumettre. Le motif figure dans le message, pas seulement sur la fiche.
+
+    La clé d'unicité porte le dossier et le jour : deux réouvertures le même
+    jour ne notifient qu'une fois, une réouverture ultérieure notifie à
+    nouveau.
+    """
+    return _safe(
+        lambda: notify(
+            recipients_for(PROVIDERS, dossier.country).exclude(pk=actor.pk),
+            kind=Notification.Kind.DOSSIER_REOPENED,
+            level=Notification.Level.WARNING,
+            title=format_lazy(_("Dossier rouvert — {number}"), number=dossier.number),
+            body=format_lazy(
+                _(
+                    "{label} : le dossier est revenu au brouillon, à corriger "
+                    "puis à resoumettre. Motif : {motive}"
+                ),
+                label=dossier.label,
+                motive=motive,
+            ),
+            link=f"/dossiers/{dossier.pk}",
+            country=dossier.country,
+            dedup_key=f"dossier_reopened:{dossier.pk}:{timezone.localdate().isoformat()}",
         )
     )
 
@@ -89,8 +138,8 @@ ALERT_KINDS = {
 ALERT_AUDIENCE = {
     # Le pays reste averti de l'état de son enveloppe, même s'il ne la
     # justifie pas lui-même.
-    "budget_overrun": BUDGET_OWNERS + [Role.COUNTRY_MANAGER],
-    "budget_threshold": BUDGET_OWNERS + [Role.COUNTRY_MANAGER],
+    "budget_overrun": BUDGET_OWNERS + [Role.DM],
+    "budget_threshold": BUDGET_OWNERS + [Role.DM],
     # Un justificatif manquant concerne d'abord ceux qui peuvent le fournir —
     # le pays — autant que ceux qui devront le contrôler.
     "proof_missing": CONTROLLERS + PROVIDERS,
@@ -113,7 +162,8 @@ def alert_raised(alert, country, recipients=None):
     """Relaie une alerte calculée (§8).
 
     La clé de l'alerte sert de clé d'unicité : un même manquement n'est
-    signalé qu'une fois, quel que soit le nombre de passages.
+    signalé qu'une fois, quel que soit le nombre de passages. Titre et
+    détail viennent de ``reporting.alerts``, déjà paresseux.
     """
     kind = ALERT_KINDS.get(alert["kind"])
     if kind is None:
@@ -146,11 +196,14 @@ def reallocation_requested(reallocation, actor):
             recipients_for(BUDGET_OWNERS, country).exclude(pk=actor.pk),
             kind=Notification.Kind.REALLOCATION_REQUESTED,
             level=Notification.Level.INFO,
-            title="Demande de réallocation budgétaire",
-            body=(
-                f"{reallocation.amount} {country.currency} : "
-                f"{reallocation.source} → {reallocation.target}. "
-                f"Motif : {reallocation.reason}"
+            title=_("Demande de réallocation budgétaire"),
+            body=format_lazy(
+                _("{amount} {currency} : {source} → {target}. Motif : {reason}"),
+                amount=reallocation.amount,
+                currency=country.currency,
+                source=reallocation.source,
+                target=reallocation.target,
+                reason=reallocation.reason,
             ),
             link="/budgets",
             country=country,

@@ -6,6 +6,7 @@ from io import BytesIO
 
 from django.core import mail
 from django.core.management import call_command
+from django.utils import translation
 from openpyxl import load_workbook
 from rest_framework import status
 
@@ -74,15 +75,25 @@ class DashboardTests(DashboardTestCase):
         self.assertEqual(refs, ["CT-01"])
         self.assertEqual(response.data["totals"]["consumed"], "0.00")
 
+    def test_un_pays_hors_perimetre_repond_404(self):
+        """Le pays du voisin n'existe pas : ni chiffres, ni confirmation."""
+        self.login(self.rep_ivoire)
+
+        response = self.client.get(
+            "/api/dashboard/", {"year": self.year, "country": self.togo.pk}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_conversion_en_fcfa_signale_les_devises_inconnues(self):
-        self.ivoire.currency = "GHS"
+        self.ivoire.currency = "GNF"
         self.ivoire.save()
         self.login(self.doo)
 
         response = self.client.get("/api/dashboard/", {"year": self.year})
 
         self.assertEqual(
-            response.data["consolidated_xof"]["unconverted_currencies"], ["GHS"]
+            response.data["consolidated_xof"]["unconverted_currencies"], ["GNF"]
         )
         # Le Togo reste converti : le total n'absorbe pas la devise inconnue.
         self.assertEqual(response.data["consolidated_xof"]["remaining"], "500000.00")
@@ -91,8 +102,8 @@ class DashboardTests(DashboardTestCase):
         """Additionner des francs et des cedis donnait un chiffre sans unité,
         présenté comme un total."""
         ghana = Country.objects.create(
-            name="Ghana", code="GH", country_ref="GH-03", currency="GHS",
-            timezone="Africa/Accra",
+            name="Guinée", code="GN", country_ref="GN-03", currency="GNF",
+            timezone="Africa/Conakry",
         )
         Budget.objects.create(country=ghana, year=self.year, amount=Decimal("5000.00"))
         self.login(self.doo)
@@ -102,18 +113,18 @@ class DashboardTests(DashboardTestCase):
         totals = response.data["totals"]
         self.assertEqual(totals["currency"], "XOF")
         self.assertEqual(totals["allocated"], "1500000.00")
-        self.assertEqual(totals["unconverted_currencies"], ["GHS"])
-        ghana_row = next(r for r in response.data["countries"] if r["currency"] == "GHS")
+        self.assertEqual(totals["unconverted_currencies"], ["GNF"])
+        ghana_row = next(r for r in response.data["countries"] if r["currency"] == "GNF")
         self.assertEqual(ghana_row["allocated"], "5000.00")
 
     def test_une_devise_convertie_entre_dans_les_totaux(self):
         ghana = Country.objects.create(
-            name="Ghana", code="GH", country_ref="GH-03", currency="GHS",
-            timezone="Africa/Accra",
+            name="Guinée", code="GN", country_ref="GN-03", currency="GNF",
+            timezone="Africa/Conakry",
         )
         Budget.objects.create(country=ghana, year=self.year, amount=Decimal("5000.00"))
         ExchangeRate.objects.create(
-            currency="GHS", rate_to_xof=Decimal("40"), valid_from=date(2020, 1, 1)
+            currency="GNF", rate_to_xof=Decimal("40"), valid_from=date(2020, 1, 1)
         )
         self.login(self.doo)
 
@@ -210,6 +221,24 @@ class AlertTests(DashboardTestCase):
         alertes = [a for a in response.data["alerts"] if a["kind"] == "budget_threshold"]
         self.assertEqual(len(alertes), 1)
         self.assertIn("80 %", alertes[0]["title"])
+
+    def test_le_titre_suit_la_langue_demandee(self):
+        """L'alerte est calculée une fois, lue dans la langue de qui la
+        consulte : chaîne paresseuse, rendue à la requête."""
+        self.budget.amount = Decimal("600000.00")
+        self.budget.save()
+        self.login(self.doo)
+        # Le middleware active la langue de la requête et ne la remet pas :
+        # sans ce nettoyage, les tests suivants liraient l'anglais.
+        self.addCleanup(translation.deactivate)
+
+        response = self.client.get(
+            "/api/dashboard/", {"year": self.year}, HTTP_ACCEPT_LANGUAGE="en"
+        )
+
+        alerte = next(a for a in response.data["alerts"] if a["kind"] == "budget_threshold")
+        self.assertEqual(alerte["title"], f"80 % threshold reached — {self.budget}")
+        self.assertIn("committed or spent", alerte["detail"])
 
     def test_un_seul_seuil_signale_par_enveloppe(self):
         """Trois alertes pour la même enveloppe noieraient l'information."""
@@ -361,7 +390,7 @@ class NotificationTests(DashboardTestCase):
         self.notifier()
         deja = Notification.objects.filter(kind=Notification.Kind.PROOF_MISSING).count()
 
-        nouveau = make_user("nouveau.controle", Role.CONTROLLER)
+        nouveau = make_user("nouveau.controle", Role.DF)
         self.notifier()
 
         self.assertTrue(
@@ -412,9 +441,12 @@ class NotificationTests(DashboardTestCase):
 
         self.soumettre()
 
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Dossier à contrôler", mail.outbox[0].subject)
-        self.assertEqual(mail.outbox[0].to, ["dina@example.org"])
+        # Le socle de test peut donner une adresse à d'autres comptes du
+        # siège : ce qui compte est que la contrôleuse reçoive le sien, seule
+        # destinataire de son message.
+        message = next(m for m in mail.outbox if m.to == ["dina@example.org"])
+        self.assertIn("Dossier à contrôler", message.subject)
+        self.assertTrue(all(len(m.to) == 1 for m in mail.outbox))
 
     def test_chacun_ne_voit_que_ses_notifications(self):
         """Deux destinataires réellement notifiés, chacun ne lit que sa
@@ -518,14 +550,15 @@ class ExportTests(DashboardTestCase):
             "Facture (justif incomplet)", colonne("PIECES JUSTIFICATIVES")
         )
 
-    def test_export_limite_au_perimetre(self):
+    def test_un_responsable_pays_n_exporte_pas(self):
+        """Le pays travaille dans l'application, sans fichier : l'export lui
+        est refusé, et rien n'est tracé puisque rien n'est sorti."""
         self.login(self.rep_ivoire)
 
         response = self.client.get("/api/exports/expenses.xlsx", {"year": self.year})
 
-        sheet = load_workbook(BytesIO(response.content)).active
-        lignes = [row for row in sheet.iter_rows(min_row=2, values_only=True) if row[0]]
-        self.assertEqual(lignes, [])
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(AuditLog.objects.filter(object_type="Export").exists())
 
     def test_rapport_de_rapprochement(self):
         self.login(self.doo)

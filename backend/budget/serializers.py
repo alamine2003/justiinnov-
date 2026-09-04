@@ -1,6 +1,8 @@
 """Sérialiseurs des budgets."""
 
 from django.utils import timezone
+from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from rest_framework import serializers
 
 from accounts.permissions import get_access
@@ -125,15 +127,17 @@ class BudgetSerializer(PerimetreMixin, serializers.ModelSerializer):
         renseignees = [name for name, value in dimensions.items() if value is not None]
         if len(renseignees) > 1:
             raise serializers.ValidationError(
-                "Une sous-enveloppe ne découpe qu'une dimension à la fois "
-                f"(reçu : {', '.join(renseignees)})."
+                _(
+                    "Une sous-enveloppe ne découpe qu'une dimension à la fois "
+                    "(reçu : {received})."
+                ).format(received=", ".join(renseignees))
             )
 
         for name in ("project", "team"):
             value = dimensions[name]
             if value is not None and country is not None and value.country_id != country.pk:
                 raise serializers.ValidationError(
-                    {name: "Cette entité doit appartenir au pays de l'enveloppe."}
+                    {name: _("Cette entité doit appartenir au pays de l'enveloppe.")}
                 )
         manager = dimensions["manager"]
         if (
@@ -145,7 +149,7 @@ class BudgetSerializer(PerimetreMixin, serializers.ModelSerializer):
             # rattache. Une sous-enveloppe pour un manager étranger au pays
             # ne recevrait jamais aucune dépense.
             raise serializers.ValidationError(
-                {"manager": "Ce manager n'est pas rattaché au pays de l'enveloppe."}
+                {"manager": _("Ce manager n'est pas rattaché au pays de l'enveloppe.")}
             )
 
         if country is not None and year is not None:
@@ -163,7 +167,7 @@ class BudgetSerializer(PerimetreMixin, serializers.ModelSerializer):
         if modifies and self.instance.expenses.exists():
             raise serializers.ValidationError(
                 {
-                    name: (
+                    name: _(
                         "Des dépenses sont imputées à cette enveloppe : son "
                         "pays, son année et son découpage ne se modifient plus."
                     )
@@ -185,9 +189,9 @@ class BudgetSerializer(PerimetreMixin, serializers.ModelSerializer):
         return getattr(self.instance, field, None)
 
     LIBELLES = {
-        "project": "ce projet",
-        "team": "cette équipe",
-        "manager": "ce manager",
+        "project": gettext_lazy("ce projet"),
+        "team": gettext_lazy("cette équipe"),
+        "manager": gettext_lazy("ce manager"),
     }
 
     def _check_unique(self, country, dimensions, year):
@@ -201,12 +205,11 @@ class BudgetSerializer(PerimetreMixin, serializers.ModelSerializer):
             (name for name, value in dimensions.items() if value is not None), None
         )
         if portee is None:
-            message = "Une enveloppe existe déjà pour ce pays et cette année."
+            message = _("Une enveloppe existe déjà pour ce pays et cette année.")
         else:
-            message = (
-                f"Une sous-enveloppe existe déjà pour {self.LIBELLES[portee]} "
-                "et cette année."
-            )
+            message = _(
+                "Une sous-enveloppe existe déjà pour {scope} et cette année."
+            ).format(scope=self.LIBELLES[portee])
         raise serializers.ValidationError({"non_field_errors": [message]})
 
 
@@ -236,7 +239,7 @@ class BudgetReallocationSerializer(PerimetreMixin, serializers.ModelSerializer):
     def validate_reason(self, value):
         # §5.2 : une réallocation sans justification n'est pas recevable.
         if not value.strip():
-            raise serializers.ValidationError("La justification est obligatoire.")
+            raise serializers.ValidationError(_("La justification est obligatoire."))
         return value
 
     def validate(self, attrs):
@@ -244,7 +247,7 @@ class BudgetReallocationSerializer(PerimetreMixin, serializers.ModelSerializer):
         target = attrs.get("target")
         if source and target and source.pk == target.pk:
             raise serializers.ValidationError(
-                {"target": "La source et la destination doivent différer."}
+                {"target": _("La source et la destination doivent différer.")}
             )
         if source and target and source.country.currency != target.country.currency:
             # Les montants sont stockés dans la devise du pays : transférer
@@ -253,9 +256,12 @@ class BudgetReallocationSerializer(PerimetreMixin, serializers.ModelSerializer):
             # de devise.
             raise serializers.ValidationError(
                 {
-                    "target": (
+                    "target": _(
                         "Les deux enveloppes doivent être dans la même devise "
-                        f"({source.country.currency} → {target.country.currency})."
+                        "({source} → {target})."
+                    ).format(
+                        source=source.country.currency,
+                        target=target.country.currency,
                     )
                 }
             )
@@ -268,10 +274,10 @@ class BudgetReallocationSerializer(PerimetreMixin, serializers.ModelSerializer):
                 # décision revérifie, une dépense pouvant sortir entre-temps.
                 raise serializers.ValidationError(
                     {
-                        "amount": (
+                        "amount": _(
                             "Le montant dépasse le disponible de l'enveloppe "
-                            f"source ({disponible})."
-                        )
+                            "source ({available})."
+                        ).format(available=disponible)
                     }
                 )
         return attrs
@@ -296,7 +302,7 @@ class ExchangeRateSerializer(serializers.ModelSerializer):
     def validate_rate_to_xof(self, value):
         if value <= 0:
             raise serializers.ValidationError(
-                "Le taux doit être strictement positif."
+                _("Le taux doit être strictement positif.")
             )
         return value
 
@@ -306,6 +312,6 @@ class ExchangeRateSerializer(serializers.ModelSerializer):
         # avant d'être en vigueur. Publier à l'avance se fait le jour même.
         if value > timezone.localdate():
             raise serializers.ValidationError(
-                "Un taux ne se publie pas pour une date future."
+                _("Un taux ne se publie pas pour une date future.")
             )
         return value

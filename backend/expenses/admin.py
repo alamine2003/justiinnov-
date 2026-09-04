@@ -43,7 +43,9 @@ class DossierAdmin(SansSuppressionMixin, admin.ModelAdmin):
     list_display = ("number", "label", "country", "date", "status")
     list_filter = ("status", "country")
     search_fields = ("number", "label")
-    readonly_fields = ("status", "created_by")
+    # Le motif de réouverture vient de l'action ``reopen`` : le retoucher ici
+    # ferait mentir le journal, qui garde le motif réellement donné.
+    readonly_fields = ("status", "created_by", "reopen_note")
     inlines = [ExpenseInline, ProofInline]
 
 
@@ -53,7 +55,7 @@ class ExpenseAdmin(SansSuppressionMixin, admin.ModelAdmin):
     list_filter = ("status", "country", "payment_method")
     search_fields = ("title", "dossier__number")
     # Ce que le circuit fixe ne se corrige pas à la main : le statut vient
-    # des transitions, le montant justifié du contrôleur, l'enveloppe de
+    # des transitions, le montant justifié de la direction financière, l'enveloppe de
     # l'imputation, l'auteur de la saisie.
     readonly_fields = (
         "status", "amount", "justified_amount", "budget", "created_by",

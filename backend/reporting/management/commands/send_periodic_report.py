@@ -8,9 +8,15 @@ mensuel — cadences surchargeables par ``SCHEDULE_WEEKLY_REPORT`` et
 La commande est sans effet de bord destructeur : la relancer réenvoie le
 rapport, elle ne modifie aucune donnée.
 
-Chaque destinataire reçoit le rapport **de son périmètre**. Un contrôleur
-limité au Togo recevait le classeur entier, dossiers ivoiriens compris : le
-cloisonnement vérifié sur chaque requête était contourné par un e-mail.
+Chaque destinataire reçoit le rapport **de son périmètre**. Une direction
+financière limitée au Togo recevait le classeur entier, dossiers ivoiriens
+compris : le cloisonnement vérifié sur chaque requête était contourné par
+un e-mail.
+
+Le classeur joint n'est envoyé qu'aux administrateurs : seuls eux manipulent
+des fichiers. Les autres destinataires reçoivent la synthèse dans le corps
+du message et retrouvent le détail dans l'application. Chacun lit le
+message dans sa langue.
 """
 
 from datetime import timedelta
@@ -18,38 +24,44 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.mail import EmailMessage
 from django.core.management.base import BaseCommand
-from django.utils import timezone
+from django.utils import timezone, translation
+from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 
 from accounts.models import Role
-from accounts.permissions import get_access
+from accounts.permissions import EXPORT_ROLES, get_access
 from budget.aggregates import consolidation_par_pays, current_rates
 from expenses.models import Expense
-from notifications.services import recipients_for
+from notifications.services import langue_de, recipients_for
 from reporting import alerts as alert_rules
-from reporting.exports import build_reconciliation_workbook
+from reporting.exports import XLSX, build_reconciliation_workbook
 from reporting.scope import querysets_pour
 
 PERIODS = {"weekly": 7, "monthly": 30}
 
-#: Destinataires du rapport : ceux qui pilotent et ceux qui contrôlent.
-AUDIENCE = [Role.SUPER_ADMIN, Role.DOO, Role.CONTROLLER, Role.AUDITOR]
+#: Libellé de chaque fenêtre, dans la langue du destinataire.
+PERIOD_LABELS = {"weekly": gettext_lazy("hebdomadaire"), "monthly": gettext_lazy("mensuel")}
 
-XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+#: Destinataires du rapport : ceux qui pilotent et ceux qui contrôlent.
+AUDIENCE = [Role.SUPER_ADMIN, Role.ADMIN, Role.DF]
 
 
 def _groupes_par_perimetre(users):
-    """Regroupe les destinataires par périmètre : un rapport par périmètre.
+    """Regroupe les destinataires par (périmètre, pièce jointe, langue).
 
-    La clé est ``None`` pour le siège sans restriction, sinon les identifiants
-    de pays visibles. Deux contrôleurs limités aux mêmes pays reçoivent le
-    même classeur, construit une seule fois.
+    Le périmètre est ``None`` pour le siège sans restriction, sinon les
+    identifiants de pays visibles. Deux directions financières limitées aux
+    mêmes pays reçoivent la même synthèse, construite une seule fois ; la
+    pièce jointe et la langue séparent les groupes, car elles changent le
+    message lui-même.
     """
     groupes = {}
     for user in users:
         access = get_access(user)
         if access is None:
             continue
-        cle = None if access.has_global_scope else tuple(sorted(access.country_ids))
+        perimetre = None if access.has_global_scope else tuple(sorted(access.country_ids))
+        cle = (perimetre, access.role in EXPORT_ROLES, langue_de(user))
         groupes.setdefault(cle, (access, []))[1].append(user)
     return groupes
 
@@ -92,13 +104,19 @@ class Command(BaseCommand):
             return
 
         envoyes = 0
-        for cle, (access, users) in groupes.items():
-            budgets, dossiers, _ = querysets_pour(access, year)
-            summary = self._summary(budgets, dossiers, since, year, period)
-            perimetre = "siège (tous pays)" if cle is None else f"pays {list(cle)}"
+        for (perimetre, avec_piece, langue), (access, users) in groupes.items():
+            budgets, dossiers, _depenses = querysets_pour(access, year)
+            with translation.override(langue):
+                summary = self._summary(budgets, dossiers, since, year, period, avec_piece)
+                sujet = _("[Contrôle budgétaire] Rapport %(period)s — %(year)s") % {
+                    "period": PERIOD_LABELS[period], "year": year,
+                }
+            libelle = (
+                "siège (tous pays)" if perimetre is None else f"pays {list(perimetre)}"
+            )
 
             if options["dry_run"]:
-                self.stdout.write(f"--- Périmètre : {perimetre}")
+                self.stdout.write(f"--- Périmètre : {libelle} ({langue})")
                 self.stdout.write(summary)
                 self.stdout.write(
                     "Destinataires : " + ", ".join(u.email for u in users)
@@ -106,18 +124,19 @@ class Command(BaseCommand):
                 continue
 
             message = EmailMessage(
-                subject=f"[Contrôle budgétaire] Rapport {period} — {year}",
+                subject=sujet,
                 body=summary,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 # En copie cachée : les destinataires n'ont pas à connaître
                 # les adresses les uns des autres.
                 bcc=[user.email for user in users],
             )
-            message.attach(
-                f"rapprochement-{year}.xlsx",
-                build_reconciliation_workbook(budgets, dossiers),
-                XLSX,
-            )
+            if avec_piece:
+                message.attach(
+                    f"rapprochement-{year}.xlsx",
+                    build_reconciliation_workbook(budgets, dossiers),
+                    XLSX,
+                )
             message.send()
             envoyes += len(users)
 
@@ -130,7 +149,7 @@ class Command(BaseCommand):
             )
         )
 
-    def _summary(self, budgets, dossiers, since, year, period):
+    def _summary(self, budgets, dossiers, since, year, period, avec_piece):
         """Corps du message : l'essentiel se lit sans ouvrir la pièce jointe.
 
         Les montants ne s'additionnent que par pays, chacun dans sa devise ;
@@ -139,11 +158,16 @@ class Command(BaseCommand):
         """
         rows, consolide = consolidation_par_pays(budgets, rates=current_rates())
         lignes_pays = [
-            f"- {row['country_name']} ({row['currency']}) : attribué "
-            f"{row['allocated']}, consommé {row['consumed']}, justifié "
-            f"{row['justified']}, écart {row['gap']}"
+            _(
+                "- %(country)s (%(currency)s) : attribué %(allocated)s, "
+                "consommé %(consumed)s, justifié %(justified)s, écart %(gap)s"
+            ) % {
+                "country": row["country_name"], "currency": row["currency"],
+                "allocated": row["allocated"], "consumed": row["consumed"],
+                "justified": row["justified"], "gap": row["gap"],
+            }
             for row in rows
-        ] or ["- aucune enveloppe sur le périmètre"]
+        ] or [_("- aucune enveloppe sur le périmètre")]
 
         nouvelles = Expense.objects.filter(
             created_at__gte=since, country__in=dossiers.values("country")
@@ -157,20 +181,32 @@ class Command(BaseCommand):
         non_converties = consolide["unconverted_currencies"]
 
         return (
-            f"Rapport {period} — exercice {year}\n"
-            f"Période couverte : depuis le {since.date().isoformat()}\n\n"
-            "Par pays, dans la devise du pays :\n"
+            _("Rapport %(period)s — exercice %(year)s") % {
+                "period": PERIOD_LABELS[period], "year": year,
+            }
+            + "\n"
+            + _("Période couverte : depuis le %(since)s") % {"since": since.date().isoformat()}
+            + "\n\n"
+            + _("Par pays, dans la devise du pays :") + "\n"
             + "\n".join(lignes_pays)
-            + "\n\nConsolidé en FCFA :\n"
-            f"Enveloppes attribuées : {consolide['allocated']}\n"
-            f"Consommé : {consolide['consumed']}\n"
-            f"Justifié : {consolide['justified']}\n"
-            f"Écart (dépensé sans preuve) : {consolide['consumed'] - consolide['justified']}\n"
+            + "\n\n" + _("Consolidé en FCFA :") + "\n"
+            + _("Enveloppes attribuées : %(amount)s") % {"amount": consolide["allocated"]} + "\n"
+            + _("Consommé : %(amount)s") % {"amount": consolide["consumed"]} + "\n"
+            + _("Justifié : %(amount)s") % {"amount": consolide["justified"]} + "\n"
+            + _("Écart (dépensé sans preuve) : %(amount)s") % {
+                "amount": consolide["consumed"] - consolide["justified"]
+            } + "\n"
             + (
-                f"Hors consolidation, faute de taux : {', '.join(non_converties)}\n"
+                _("Hors consolidation, faute de taux : %(currencies)s") % {
+                    "currencies": ", ".join(non_converties)
+                } + "\n"
                 if non_converties else ""
             )
-            + f"\nDépenses saisies sur la période : {nouvelles}\n"
-            f"Dossiers sans aucun justificatif : {sans_preuve}\n\n"
-            "Le détail par enveloppe et par dossier figure en pièce jointe."
+            + "\n" + _("Dépenses saisies sur la période : %(count)s") % {"count": nouvelles} + "\n"
+            + _("Dossiers sans aucun justificatif : %(count)s") % {"count": sans_preuve} + "\n\n"
+            + (
+                _("Le détail par enveloppe et par dossier figure en pièce jointe.")
+                if avec_piece
+                else _("Le détail par enveloppe et par dossier se consulte dans l'application.")
+            )
         )

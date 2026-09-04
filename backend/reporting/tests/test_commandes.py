@@ -121,7 +121,7 @@ class RapportPeriodiqueTests(DashboardTestCase):
         super().setUp()
         self.doo.email = "doo@example.org"
         self.doo.save()
-        self.controle_togo = make_user("controle.togo", Role.CONTROLLER, [self.togo])
+        self.controle_togo = make_user("controle.togo", Role.DF, [self.togo])
         self.controle_togo.email = "togo@example.org"
         self.controle_togo.save()
         self.abidjan = Dossier.objects.create(
@@ -134,20 +134,51 @@ class RapportPeriodiqueTests(DashboardTestCase):
         return load_workbook(BytesIO(contenu))["Rapprochement dossiers"]
 
     def _numeros(self, message):
-        return {row[0] for row in self._classeur(message).iter_rows(min_row=2, values_only=True)}
+        # La ligne TOTAL n'a pas de numéro.
+        return {
+            row[0] for row in self._classeur(message).iter_rows(min_row=2, values_only=True)
+        } - {None}
 
-    def test_un_controleur_restreint_ne_recoit_que_son_perimetre(self):
-        """Régression : le classeur entier partait à tous, dossiers du voisin
-        compris — le cloisonnement contourné par un e-mail."""
+    def test_une_direction_financiere_restreinte_ne_recoit_que_son_perimetre(self):
+        """Régression : la synthèse entière partait à tous, dossiers du
+        voisin compris — le cloisonnement contourné par un e-mail."""
         call_command("send_periodic_report", year=self.year, verbosity=0)
 
         par_destinataire = {tuple(m.bcc): m for m in mail.outbox}
         togo = par_destinataire[("togo@example.org",)]
         siege = par_destinataire[("doo@example.org",)]
-        self.assertEqual(self._numeros(togo), {"N-0001"})
+        self.assertIn("Togo", togo.body)
         self.assertNotIn("CI-0001", togo.body)
         self.assertNotIn("Côte d'Ivoire", togo.body)
         self.assertEqual(self._numeros(siege), {"N-0001", "CI-0001"})
+
+    def test_la_piece_jointe_n_est_envoyee_qu_aux_administrateurs(self):
+        """Seuls les administrateurs manipulent des fichiers : la direction
+        financière lit la synthèse et retrouve le détail dans l'application."""
+        call_command("send_periodic_report", year=self.year, verbosity=0)
+
+        par_destinataire = {tuple(m.bcc): m for m in mail.outbox}
+        togo = par_destinataire[("togo@example.org",)]
+        siege = par_destinataire[("doo@example.org",)]
+        self.assertEqual(togo.attachments, [])
+        self.assertIn("dans l'application", togo.body)
+        self.assertEqual(len(siege.attachments), 1)
+        self.assertIn("en pièce jointe", siege.body)
+
+    def test_le_rapport_est_dans_la_langue_du_destinataire(self):
+        with mock.patch(
+            "reporting.management.commands.send_periodic_report.langue_de",
+            side_effect=lambda user: "en" if user == self.controle_togo else "fr",
+        ):
+            call_command("send_periodic_report", year=self.year, verbosity=0)
+
+        par_destinataire = {tuple(m.bcc): m for m in mail.outbox}
+        togo = par_destinataire[("togo@example.org",)]
+        siege = par_destinataire[("doo@example.org",)]
+        self.assertEqual(togo.subject, f"[Budget control] weekly report — {self.year}")
+        self.assertIn("Dossiers without any supporting document", togo.body)
+        self.assertEqual(siege.subject, f"[Contrôle budgétaire] Rapport hebdomadaire — {self.year}")
+        self.assertIn("Dossiers sans aucun justificatif", siege.body)
 
     def test_les_adresses_ne_sont_pas_exposees(self):
         for message in mail.outbox:
@@ -180,17 +211,17 @@ class RapportPeriodiqueTests(DashboardTestCase):
 
     def test_les_devises_ne_s_additionnent_qu_en_fcfa(self):
         ghana = Country.objects.create(
-            name="Ghana", code="GH", country_ref="GH-03", currency="GHS",
-            timezone="Africa/Accra",
+            name="Guinée", code="GN", country_ref="GN-03", currency="GNF",
+            timezone="Africa/Conakry",
         )
         Budget.objects.create(country=ghana, year=self.year, amount=Decimal("5000.00"))
 
         call_command("send_periodic_report", year=self.year, verbosity=0)
 
         siege = next(m for m in mail.outbox if m.bcc == ["doo@example.org"])
-        self.assertIn("Ghana (GHS) : attribué 5000.00", siege.body)
+        self.assertIn("Guinée (GNF) : attribué 5000.00", siege.body)
         self.assertIn("Enveloppes attribuées : 1500000.00", siege.body)
-        self.assertIn("faute de taux : GHS", siege.body)
+        self.assertIn("faute de taux : GNF", siege.body)
 
     def test_sans_destinataire_rien_ne_part(self):
         User.objects.update(email="")
@@ -225,9 +256,13 @@ class SeedUsersTests(TestCase):
         return sortie.getvalue()
 
     def _compte(self, **extra):
+        username = extra.pop("username", "pays.innov")
+        # Chaque compte porte une adresse professionnelle : c'est elle qui
+        # reçoit les notifications, et la commande la refuse absente.
         return {
-            "username": "pays.innov", "password": "Secret-Provisoire-2026",
-            "role": "country_manager", "countries": ["TG-02"], **extra,
+            "username": username, "password": "Secret-Provisoire-2026",
+            "email": f"{username}@innovpharma.net",
+            "role": "dm", "countries": ["TG-02"], **extra,
         }
 
     def test_creation_puis_relance_sans_effet(self):

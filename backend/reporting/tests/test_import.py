@@ -64,7 +64,7 @@ class ImportTests(ExpenseTestCase):
         return ligne
 
     def _importer(self, contenu, user=None, **query):
-        self.login(user or self.owner)
+        self.login(user or self.doo)
         url = "/api/imports/expenses.xlsx"
         if query:
             url += "?" + urlencode(query)
@@ -73,14 +73,15 @@ class ImportTests(ExpenseTestCase):
         )
 
     def test_un_classeur_exporte_se_reimporte(self):
-        """Le siège exporte ; le pays réimporte : ce sont deux rôles."""
+        """Export et import partagent le même contrat de fichier, entre les
+        mains des administrateurs — les seuls à manipuler des fichiers."""
         self.make_expense(amount="1200.00", justified_amount="800.00")
         self.login(self.doo)
         export = self.client.get("/api/exports/expenses.xlsx", {"year": self.year})
         Expense.objects.all().delete()
         Dossier.objects.all().delete()
 
-        response = self._importer(BytesIO(export.content), user=self.owner)
+        response = self._importer(BytesIO(export.content), user=self.doo)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["lignes_creees"], 1)
@@ -91,12 +92,21 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(str(expense.justified_amount), "0.00")
         self.assertEqual(expense.status, Status.DRAFT)
 
-    def test_un_role_de_lecture_ne_peut_pas_importer(self):
-        """Importer, c'est déclarer : la direction constate, elle ne déclare pas."""
-        response = self._importer(self._classeur([self._ligne()]), user=self.doo)
-
-        self.assertEqual(response.status_code, 403)
+    def test_seuls_les_administrateurs_importent(self):
+        """Importer est réservé aux administrateurs : la direction financière
+        constate, le pays déclare dans l'application — aucun d'eux ne
+        manipule de fichier."""
+        for user in (self.controller, self.rep_ivoire, self.owner):
+            with self.subTest(role=user.profile.role):
+                response = self._importer(self._classeur([self._ligne()]), user=user)
+                self.assertEqual(response.status_code, 403)
         self.assertEqual(Expense.objects.count(), 0)
+
+        rh = make_user("rh.admin", Role.ADMIN)
+        response = self._importer(self._classeur([self._ligne()]), user=rh)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(Expense.objects.count(), 1)
 
     def test_tout_arrive_en_brouillon(self):
         response = self._importer(self._classeur([self._ligne(STATUT="Justifié")]))
@@ -191,7 +201,7 @@ class ImportTests(ExpenseTestCase):
         self.assertTrue(
             ChangeLog.objects.filter(
                 model_name=ChangeLog.Models.MANAGER, action=ChangeLog.Actions.CREATED,
-                performed_by=self.owner.username,
+                performed_by=self.doo.username,
             ).exists()
         )
 
@@ -342,7 +352,7 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(Expense.objects.count(), 30)
 
     def test_l_import_laisse_une_trace_avec_l_adresse_du_client(self):
-        self.login(self.owner)
+        self.login(self.doo)
         self.client.post(
             "/api/imports/expenses.xlsx",
             {"file": ("depenses.xlsx", self._classeur([self._ligne()]), XLSX)},
@@ -359,9 +369,15 @@ class ImportTests(ExpenseTestCase):
     # -- Comportements conservés -------------------------------------------
 
     def test_un_pays_hors_perimetre_est_refuse(self):
-        response = self._importer(self._classeur([self._ligne(PAYS="Côte d'Ivoire")]))
+        """Les administrateurs voient tout : par l'API, ce cas ne se
+        présente plus. La fonction garde sa garde-fou — un appelant futur au
+        périmètre restreint ne doit pas verser chez le voisin."""
+        resultat = imports.importer_depenses(
+            self._classeur([self._ligne(PAYS="Côte d'Ivoire")]), self.owner, dry_run=True
+        )
 
-        self.assertEqual(response.data["erreurs"][0]["ligne"], 2)
+        self.assertEqual(resultat["erreurs"][0]["ligne"], 2)
+        self.assertIn("hors périmètre", resultat["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.count(), 0)
 
     def test_un_pays_inconnu_est_signale_sans_rien_creer(self):
@@ -454,7 +470,7 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         return contenu
 
     def _importer(self, contenu, user=None, **query):
-        self.login(user or self.owner)
+        self.login(user or self.doo)
         url = "/api/imports/expenses.xlsx"
         if query:
             url += "?" + urlencode(query)
@@ -524,15 +540,19 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertEqual(Expense.objects.count(), 0)
         self.assertEqual(Team.objects.filter(name="Équipe A").count(), 0)
 
-    def test_un_pays_hors_perimetre_est_refuse_comme_un_pays_inconnu(self):
-        """Le responsable togolais ne verse pas dans la Côte d'Ivoire ; et le
-        refus ne dit pas si ce pays existe."""
-        hors = self._importer(self._classeur(), country=self.ivoire.pk)
+    def test_un_pays_inconnu_est_refuse(self):
         inconnu = self._importer(self._classeur(), country=self.ivoire.pk + 1000)
 
-        self.assertEqual(hors.status_code, 400)
         self.assertEqual(inconnu.status_code, 400)
-        self.assertEqual(hors.data, inconnu.data)
+        self.assertIn("country", inconnu.data)
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_le_responsable_pays_ne_verse_pas_de_classeur_meme_chez_lui(self):
+        """Le pays déclare dans l'application ; le classeur historique est
+        repris par les administrateurs."""
+        response = self._importer(self._classeur(), user=self.owner, country=self.togo.pk)
+
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(Expense.objects.count(), 0)
 
     def test_le_siege_importe_dans_n_importe_quel_pays(self):
@@ -544,7 +564,7 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertEqual(Dossier.objects.filter(country=self.ivoire).count(), 2)
 
     def test_le_pays_peut_venir_du_formulaire(self):
-        self.login(self.owner)
+        self.login(self.doo)
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",

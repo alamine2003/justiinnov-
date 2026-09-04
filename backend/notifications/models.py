@@ -1,26 +1,40 @@
-"""Notifications in-app, doublées d'un e-mail (§8)."""
+"""Notifications in-app, doublées d'un e-mail (§8).
+
+**Conservation illimitée.** Une notification lue reste en base : elle
+atteste que quelqu'un a été prévenu d'un manquement, et à quelle date. Aucune
+commande, aucun signal, aucune tâche planifiée ne purge cette table — pas
+plus que les pièces, les dossiers, les dépenses ou le journal d'audit. La
+seule suppression tolérée par l'application reste celle d'un brouillon
+jamais soumis.
+"""
 
 from django.contrib.auth.models import User
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 from core.models import Country
 
 
 class Notification(models.Model):
+    # Les libellés sont traduits à l'affichage (``kind_display`` suit la
+    # langue de la requête) ; la valeur enregistrée, elle, ne change pas.
     class Kind(models.TextChoices):
-        BUDGET_THRESHOLD = "budget_threshold", "Seuil budgétaire atteint"
-        BUDGET_OVERRUN = "budget_overrun", "Dépassement budgétaire"
-        EXPENSE_SUBMITTED = "expense_submitted", "Dépense à contrôler"
-        EXPENSE_REJECTED = "expense_rejected", "Dépense rejetée"
-        PROOF_MISSING = "proof_missing", "Justificatif manquant"
-        PROOF_INCOMPLETE = "proof_incomplete", "Justificatif incomplet"
-        REALLOCATION_REQUESTED = "reallocation_requested", "Demande de réallocation"
-        STORAGE_ERROR = "storage_error", "Anomalie de stockage"
+        BUDGET_THRESHOLD = "budget_threshold", _("Seuil budgétaire atteint")
+        BUDGET_OVERRUN = "budget_overrun", _("Dépassement budgétaire")
+        EXPENSE_SUBMITTED = "expense_submitted", _("Dépense à contrôler")
+        EXPENSE_REJECTED = "expense_rejected", _("Dépense rejetée")
+        PROOF_MISSING = "proof_missing", _("Justificatif manquant")
+        PROOF_INCOMPLETE = "proof_incomplete", _("Justificatif incomplet")
+        REALLOCATION_REQUESTED = "reallocation_requested", _("Demande de réallocation")
+        STORAGE_ERROR = "storage_error", _("Anomalie de stockage")
+        #: Seule exception à l'irréversibilité : le siège rouvre un dossier
+        #: déclaré pour demander des comptes, et le pays doit le savoir.
+        DOSSIER_REOPENED = "dossier_reopened", _("Dossier rouvert")
 
     class Level(models.TextChoices):
-        INFO = "info", "Information"
-        WARNING = "warning", "Avertissement"
-        CRITICAL = "critical", "Critique"
+        INFO = "info", _("Information")
+        WARNING = "warning", _("Avertissement")
+        CRITICAL = "critical", _("Critique")
 
     recipient = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="notifications",

@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
+from django.utils.translation import gettext as _
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
@@ -34,11 +35,15 @@ class ChampCloisonne(serializers.PrimaryKeyRelatedField):
     périmètre est, pour le demandeur, une clé qui n'existe pas.
 
     ``chemin_pays`` mène du modèle visé au pays (``pk`` pour le pays
-    lui-même).
+    lui-même) ; ``chemin_equipe`` mène à l'équipe, pour les ressources qu'un
+    manager rattaché à des équipes ne voit qu'en partie — sans lui, il
+    pouvait rattacher une ligne au dossier d'une équipe voisine qu'il ne
+    peut pourtant pas lire.
     """
 
-    def __init__(self, *, chemin_pays, **kwargs):
+    def __init__(self, *, chemin_pays, chemin_equipe=None, **kwargs):
         self.chemin_pays = chemin_pays
+        self.chemin_equipe = chemin_equipe
         super().__init__(**kwargs)
 
     def get_queryset(self):
@@ -47,9 +52,15 @@ class ChampCloisonne(serializers.PrimaryKeyRelatedField):
         access = get_access(getattr(request, "user", None)) if request else None
         if access is None:
             return queryset.none()
-        if access.has_global_scope:
-            return queryset
-        return queryset.filter(**{f"{self.chemin_pays}__in": access.country_ids})
+        if not access.has_global_scope:
+            queryset = queryset.filter(
+                **{f"{self.chemin_pays}__in": access.country_ids}
+            )
+        if self.chemin_equipe is not None and access.team_ids is not None:
+            queryset = queryset.filter(
+                **{f"{self.chemin_equipe}__in": access.team_ids}
+            )
+        return queryset
 
 
 def _verifier_le_manager(owner, country):
@@ -58,7 +69,7 @@ def _verifier_le_manager(owner, country):
         return
     if not owner.countries.filter(pk=country.pk).exists():
         raise serializers.ValidationError(
-            {"owner": "Ce manager n'est pas rattaché à ce pays."}
+            {"owner": _("Ce manager n'est pas rattaché à ce pays.")}
         )
 
 
@@ -80,16 +91,18 @@ class BeneficiarySerializer(serializers.ModelSerializer):
             UniqueTogetherValidator(
                 queryset=Beneficiary.objects.all(),
                 fields=["country", "name"],
-                message="Ce bénéficiaire existe déjà pour ce pays.",
+                message=_("Ce bénéficiaire existe déjà pour ce pays."),
             )
         ]
 
 
 class ProofSerializer(serializers.ModelSerializer):
-    dossier = ChampCloisonne(queryset=Dossier.objects.all(), chemin_pays="country")
+    dossier = ChampCloisonne(
+        queryset=Dossier.objects.all(), chemin_pays="country", chemin_equipe="team"
+    )
     replaces = ChampCloisonne(
         queryset=Proof.objects.all(), chemin_pays="dossier__country",
-        required=False, allow_null=True,
+        chemin_equipe="dossier__team", required=False, allow_null=True,
     )
     kind_display = serializers.CharField(source="get_kind_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
@@ -109,7 +122,7 @@ class ProofSerializer(serializers.ModelSerializer):
             "rejection_reason", "download_url", "created_at", "updated_at",
         ]
         # ``is_complete`` ne se modifie que par ``review`` : c'est un constat
-        # du contrôleur, pas une case que le déposant coche.
+        # de la direction financière, pas une case que le déposant coche.
         read_only_fields = [
             "original_name", "sha256", "size", "content_type", "version",
             "uploaded_by", "status", "rejection_reason", "is_complete",
@@ -125,14 +138,18 @@ class ProofSerializer(serializers.ModelSerializer):
         if uploaded.size > settings.MAX_PROOF_SIZE:
             limit = settings.MAX_PROOF_SIZE // (1024 * 1024)
             raise serializers.ValidationError(
-                f"Fichier trop volumineux (maximum {limit} Mo)."
+                _("Fichier trop volumineux (maximum {limit} Mo).").format(limit=limit)
             )
         extension = Path(uploaded.name).suffix.lower()
         if extension not in settings.ALLOWED_PROOF_EXTENSIONS:
             accepted = ", ".join(settings.ALLOWED_PROOF_EXTENSIONS)
             raise serializers.ValidationError(
-                f"Format non accepté ({extension or 'sans extension'}). "
-                f"Formats autorisés : {accepted}."
+                _(
+                    "Format non accepté ({extension}). Formats autorisés : "
+                    "{accepted}."
+                ).format(
+                    extension=extension or _("sans extension"), accepted=accepted
+                )
             )
         return uploaded
 
@@ -143,8 +160,10 @@ class ProofSerializer(serializers.ModelSerializer):
         dossier = attrs.get("dossier") or getattr(self.instance, "dossier", None)
         if dossier is not None and dossier.status in PROOF_LOCKED_STATUSES:
             raise serializers.ValidationError(
-                "Le dossier est clôturé : plus aucun justificatif ne peut y "
-                "être ajouté."
+                _(
+                    "Le dossier est clôturé : plus aucun justificatif ne peut y "
+                    "être ajouté."
+                )
             )
 
         replaces = attrs.get("replaces")
@@ -164,16 +183,19 @@ class ProofSerializer(serializers.ModelSerializer):
         """Ce qui reste modifiable sur une pièce déposée : presque rien."""
         if self.instance.status in PROOF_FINAL_STATUSES:
             raise serializers.ValidationError(
-                f"Ce justificatif est {self.instance.get_status_display().lower()} : "
-                "il ne se modifie plus. Déposez une nouvelle version s'il "
-                "doit être corrigé."
+                _(
+                    "Ce justificatif est {status} : il ne se modifie plus. "
+                    "Déposez une nouvelle version s'il doit être corrigé."
+                ).format(status=self.instance.get_status_display().lower())
             )
         figes = [champ for champ in self.IMMUABLES if champ in self.initial_data]
         if figes:
             raise serializers.ValidationError(
                 {
-                    champ: "Ce champ est fixé au dépôt : déposez une nouvelle "
-                    "version plutôt que de modifier celle-ci."
+                    champ: _(
+                        "Ce champ est fixé au dépôt : déposez une nouvelle "
+                        "version plutôt que de modifier celle-ci."
+                    )
                     for champ in figes
                 }
             )
@@ -189,11 +211,11 @@ class ProofSerializer(serializers.ModelSerializer):
         """
         if replaces.dossier_id != dossier.pk:
             raise serializers.ValidationError(
-                {"replaces": "Pièce invalide pour ce dossier."}
+                {"replaces": _("Pièce invalide pour ce dossier.")}
             )
         if replaces.status == Proof.ProofStatus.ARCHIVED:
             raise serializers.ValidationError(
-                {"replaces": "Cette pièce a déjà été remplacée."}
+                {"replaces": _("Cette pièce a déjà été remplacée.")}
             )
 
     def _check_duplicate(self, dossier, digest, replaces):
@@ -209,17 +231,19 @@ class ProofSerializer(serializers.ModelSerializer):
             existing = existing.exclude(pk=self.instance.pk)
         if existing.exists():
             raise serializers.ValidationError(
-                {"file": "Ce fichier est déjà rattaché à ce dossier (doublon)."}
+                {"file": _("Ce fichier est déjà rattaché à ce dossier (doublon).")}
             )
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
-    dossier = ChampCloisonne(queryset=Dossier.objects.all(), chemin_pays="country")
+    dossier = ChampCloisonne(
+        queryset=Dossier.objects.all(), chemin_pays="country", chemin_equipe="team"
+    )
     country = ChampCloisonne(queryset=Country.objects.all(), chemin_pays="pk")
     country_name = serializers.CharField(source="country.name", read_only=True)
     currency = serializers.CharField(source="country.currency", read_only=True)
     # §6 : la date est conservée en UTC, mais doit se lire dans le fuseau du
-    # pays où la dépense a eu lieu. Un contrôleur au siège verrait sinon
+    # pays où la dépense a eu lieu. La direction financière verrait sinon
     # l'heure de son propre fuseau, ce qui fausse le « quand ».
     country_timezone = serializers.CharField(
         source="country.timezone", read_only=True
@@ -246,7 +270,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
     )
     gap = serializers.DecimalField(
         max_digits=16, decimal_places=2, read_only=True,
-        help_text="Toujours calculé : dépense − montant justifié.",
+        help_text=_("Toujours calculé : dépense − montant justifié."),
     )
 
     class Meta:
@@ -268,7 +292,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         # l'imputation budgétaire et le taux appliqué sont résolus par le
         # serveur — un taux fourni par le client serait un taux choisi.
         # Le montant justifié appartient au siège : le pays déclare ce qu'il
-        # a dépensé, le contrôleur constate ce qui est prouvé (``justify``).
+        # a dépensé, le siège (DF) constate ce qui est prouvé (``justify``).
         # Le laisser saisir revenait à laisser le déclarant se donner quitus.
         read_only_fields = [
             "status", "budget", "created_by", "original_rate",
@@ -285,15 +309,17 @@ class ExpenseSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance is not None and self.instance.status in LOCKED_STATUSES:
             raise serializers.ValidationError(
-                "Cette dépense est déclarée : elle ne peut plus être modifiée. "
-                "Seul un brouillon reste modifiable."
+                _(
+                    "Cette dépense est déclarée : elle ne peut plus être "
+                    "modifiée. Seul un brouillon reste modifiable."
+                )
             )
 
         dossier = attrs.get("dossier") or getattr(self.instance, "dossier", None)
         country = attrs.get("country") or getattr(self.instance, "country", None)
         if dossier is not None and country is not None and dossier.country_id != country.pk:
             raise serializers.ValidationError(
-                {"dossier": "Le dossier appartient à un autre pays."}
+                {"dossier": _("Le dossier appartient à un autre pays.")}
             )
         for field in (
             "team", "project", "expense_title", "marketing_category", "beneficiary",
@@ -301,7 +327,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             value = attrs.get(field)
             if value is not None and country is not None and value.country_id != country.pk:
                 raise serializers.ValidationError(
-                    {field: "Cette entité appartient à un autre pays."}
+                    {field: _("Cette entité appartient à un autre pays.")}
                 )
         _verifier_le_manager(attrs.get("owner"), country)
 
@@ -312,7 +338,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         """Convertit un décaissement fait dans une autre devise (§5.3).
 
         Une mission au Togo peut payer un hôtel en euros : la pièce porte
-        120 EUR. Le montant d'origine est conservé pour que le contrôleur
+        120 EUR. Le montant d'origine est conservé pour que le siège
         retrouve le chiffre du justificatif, et ``amount`` reçoit sa
         conversion dans la devise du pays — c'est elle qui pèse sur
         l'enveloppe, et c'est elle qui garde les agrégats monodevise.
@@ -330,12 +356,11 @@ class ExpenseSerializer(serializers.ModelSerializer):
             if getattr(self.instance, "original_currency", "") and "amount" in attrs:
                 raise serializers.ValidationError(
                     {
-                        "amount": (
-                            "Cette dépense a été décaissée en "
-                            f"{self.instance.original_currency} : son montant "
-                            "se calcule à partir du montant décaissé. "
+                        "amount": _(
+                            "Cette dépense a été décaissée en {currency} : son "
+                            "montant se calcule à partir du montant décaissé. "
                             "Modifiez celui-ci plutôt que la conversion."
-                        )
+                        ).format(currency=self.instance.original_currency)
                     }
                 )
             return
@@ -362,12 +387,12 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 attrs["original_rate"] = None
             if attrs.get("amount") is None and self.instance is None:
                 raise serializers.ValidationError(
-                    {"amount": "Le montant de la dépense est requis."}
+                    {"amount": _("Le montant de la dépense est requis.")}
                 )
             if devise or montant is not None:
                 raise serializers.ValidationError(
                     {
-                        "original_currency": (
+                        "original_currency": _(
                             "Indiquez à la fois la devise et le montant "
                             "décaissés, ou aucun des deux."
                         )
@@ -395,11 +420,11 @@ class ExpenseSerializer(serializers.ModelSerializer):
         if converti is None:
             raise serializers.ValidationError(
                 {
-                    "original_currency": (
-                        f"Aucun taux connu pour convertir {devise} en "
-                        f"{country.currency} à cette date. Publiez-le dans "
-                        "Configuration › Taux de change."
-                    )
+                    "original_currency": _(
+                        "Aucun taux connu pour convertir {source} en {target} "
+                        "à cette date. Publiez-le dans Configuration › Taux "
+                        "de change."
+                    ).format(source=devise, target=country.currency)
                 }
             )
         attrs["amount"] = converti
@@ -482,11 +507,12 @@ class DossierSerializer(serializers.ModelSerializer):
             "id", "number", "label", "country", "country_name", "country_ref",
             "currency", "country_timezone", "team", "team_name",
             "owner", "owner_name", "date",
-            "status", "status_display", "note", "totals",
+            "status", "status_display", "note", "reopen_note", "totals",
             "expense_count", "proof_count", "created_by",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["status", "created_by"]
+        # Le motif de réouverture est posé par l'action ``reopen`` seule.
+        read_only_fields = ["status", "created_by", "reopen_note"]
         # Le N°ORDRE est unique **par pays**. Le pays de la charge utile est
         # déjà limité au périmètre du demandeur (``ChampCloisonne``) : la
         # vérification ne porte donc que sur des dossiers qu'il a le droit
@@ -495,7 +521,7 @@ class DossierSerializer(serializers.ModelSerializer):
             UniqueTogetherValidator(
                 queryset=Dossier.objects.all(),
                 fields=["country", "number"],
-                message="Ce N°ORDRE existe déjà pour ce pays.",
+                message=_("Ce N°ORDRE existe déjà pour ce pays."),
             )
         ]
 
@@ -511,13 +537,13 @@ class DossierSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance is not None and self.instance.status in LOCKED_STATUSES:
             raise serializers.ValidationError(
-                "Ce dossier est déclaré : il ne peut plus être modifié."
+                _("Ce dossier est déclaré : il ne peut plus être modifié.")
             )
         country = attrs.get("country") or getattr(self.instance, "country", None)
         team = attrs.get("team")
         if team is not None and country is not None and team.country_id != country.pk:
             raise serializers.ValidationError(
-                {"team": "Cette équipe appartient à un autre pays."}
+                {"team": _("Cette équipe appartient à un autre pays.")}
             )
         _verifier_le_manager(attrs.get("owner"), country)
         return attrs
@@ -532,13 +558,14 @@ class DossierDetailSerializer(DossierSerializer):
 
 
 class TransitionSerializer(serializers.Serializer):
-    """Motif accompagnant une transition ; obligatoire pour un rejet (§5.5)."""
+    """Motif accompagnant une transition ; obligatoire pour un rejet (§5.5)
+    et pour une réouverture."""
 
     note = serializers.CharField(required=False, allow_blank=True)
 
 
 class ExpenseTransitionSerializer(TransitionSerializer):
-    """Transition d'une ligne : le contrôleur peut fixer ce qui est prouvé.
+    """Transition d'une ligne : le siège (DF) peut fixer ce qui est prouvé.
 
     Par défaut, justifier couvre toute la dépense ; une pièce partielle
     permet d'en constater une partie seulement. La borne haute (le montant
@@ -559,7 +586,7 @@ class ProofReviewSerializer(serializers.Serializer):
         rejected = attrs["status"] == Proof.ProofStatus.REJECTED
         if rejected and not attrs.get("reason", "").strip():
             raise serializers.ValidationError(
-                {"reason": "Un rejet doit être motivé."}
+                {"reason": _("Un rejet doit être motivé.")}
             )
         return attrs
 

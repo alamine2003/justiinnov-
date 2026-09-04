@@ -42,11 +42,11 @@ class BudgetTestCase(APITestCase):
         # approuve (BUDGET_WRITE_ROLES). Les deux comptes sont distincts :
         # celui qui demande une réallocation ne peut pas la décider.
         self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
-        self.doo = make_user("do.innov", Role.DOO)
+        self.doo = make_user("do.innov", Role.SUPER_ADMIN)
         # Une direction des opérations restreinte à un pays : même rôle,
         # périmètre borné.
-        self.doo_togo = make_user("doo.togo", Role.DOO, [self.togo])
-        self.rep_togo = make_user("togo.innov", Role.COUNTRY_MANAGER, [self.togo])
+        self.doo_togo = make_user("df.togo", Role.DF, [self.togo])
+        self.rep_togo = make_user("togo.innov", Role.DM, [self.togo])
 
         self.budget_togo = Budget.objects.create(
             country=self.togo, year=2026, amount=Decimal("10000000.00")
@@ -352,8 +352,8 @@ class BudgetFiguresTests(BudgetTestCase):
             currency="MAD", rate_to_xof=Decimal("60.000000"), valid_from=date(2026, 1, 1)
         )
         ghana = Country.objects.create(
-            name="Ghana", code="GH", country_ref="GH-03", currency="GHS",
-            timezone="Africa/Accra",
+            name="Guinée", code="GN", country_ref="GN-03", currency="GNF",
+            timezone="Africa/Conakry",
         )
         Budget.objects.create(country=ghana, year=2026, amount=Decimal("1000.00"))
         budgets = Budget.objects.select_related("country").filter(year=2026)
@@ -366,7 +366,7 @@ class BudgetFiguresTests(BudgetTestCase):
         )
         self.assertEqual(consolidated["remaining"], Decimal("1510000000.00"))
         self.assertEqual(consolidated["allocated"], Decimal("1510000000.00"))
-        self.assertEqual(consolidated["unconverted_currencies"], ["GHS"])
+        self.assertEqual(consolidated["unconverted_currencies"], ["GNF"])
         self.assertNotIn("currency", consolidated)
 
 
@@ -385,19 +385,19 @@ class ExchangeRateTests(BudgetTestCase):
     def test_devise_sans_taux_n_est_pas_convertie(self):
         """Renvoyer None plutôt que zéro : un total consolidé ne doit pas
         absorber silencieusement une devise inconnue."""
-        self.assertIsNone(to_xof(Decimal("10"), "GHS"))
+        self.assertIsNone(to_xof(Decimal("10"), "GNF"))
 
     def test_devise_de_consolidation(self):
         self.assertEqual(to_xof(Decimal("1500"), "XOF"), Decimal("1500.00"))
 
     def test_total_signale_les_devises_non_converties(self):
-        self.ivoire.currency = "GHS"
+        self.ivoire.currency = "GNF"
         self.ivoire.save()
         self.login(self.doo)
 
         response = self.client.get("/api/budgets/summary/")
 
-        self.assertEqual(response.data["unconverted_currencies"], ["GHS"])
+        self.assertEqual(response.data["unconverted_currencies"], ["GNF"])
         self.assertEqual(response.data["total_remaining_xof"], "10000000.00")
 
     def test_un_taux_date_du_futur_ne_s_applique_pas_encore(self):
@@ -416,7 +416,7 @@ class ExchangeRateTests(BudgetTestCase):
         self.assertEqual(current_rates(on_date=demain), {"MAD": Decimal("99.000000")})
 
     def test_taux_courants_en_une_requete(self):
-        for devise, taux in (("MAD", "60"), ("EUR", "655.957"), ("GHS", "45")):
+        for devise, taux in (("MAD", "60"), ("EUR", "655.957"), ("GNF", "45")):
             for jour in (date(2025, 1, 1), date(2026, 1, 1)):
                 ExchangeRate.objects.create(
                     currency=devise, rate_to_xof=Decimal(taux), valid_from=jour
@@ -425,7 +425,7 @@ class ExchangeRateTests(BudgetTestCase):
         with self.assertNumQueries(1):
             rates = current_rates()
 
-        self.assertEqual(set(rates), {"MAD", "EUR", "GHS"})
+        self.assertEqual(set(rates), {"MAD", "EUR", "GNF"})
         self.assertEqual(rates["EUR"], Decimal("655.957000"))
         # Le jeu de taux fourni fait foi : plus aucune requête.
         with self.assertNumQueries(0):
@@ -683,7 +683,7 @@ class ReallocationTests(BudgetTestCase):
         response = self.client.post(f"/api/reallocations/{realloc_id}/approve/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["decided_by"], "doo.togo")
+        self.assertEqual(response.data["decided_by"], "df.togo")
 
 
 class ReallocationLockTests(BudgetTestCase):

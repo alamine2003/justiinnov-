@@ -449,7 +449,7 @@ class OverrunPolicyTests(ExpenseTestCase):
 
     def test_politique_approbation_laisse_demander_mais_pas_valider(self):
         """Le manager doit pouvoir demander le dépassement ; seule sa
-        validation relève de la direction des opérations."""
+        validation relève de la direction, super administratrice."""
         self.budget.overrun_policy = OverrunPolicy.APPROVAL
         self.budget.save()
         expense, submitted = self._submit("150000.00")
@@ -458,7 +458,7 @@ class OverrunPolicyTests(ExpenseTestCase):
         response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
 
         self.assertEqual(submitted.status_code, status.HTTP_200_OK)
-        self.assertIn("direction des opérations", submitted.data["warning"])
+        self.assertIn("super administrateur", submitted.data["warning"])
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         expense.refresh_from_db()
         self.assertEqual(expense.status, Status.SUBMITTED)
@@ -1053,7 +1053,7 @@ class SeparationOfDutiesTests(ExpenseTestCase):
 
     def setUp(self):
         super().setUp()
-        self.rep_togo = make_user("togo.innov", Role.COUNTRY_MANAGER, [self.togo])
+        self.rep_togo = make_user("togo.innov", Role.DM, [self.togo])
         self.expense = self.make_expense(created_by="owner.togo")
         self.submit_dossier()
 
@@ -1144,7 +1144,7 @@ class SeparationOfDutiesTests(ExpenseTestCase):
     def test_un_autre_controleur_peut_justifier(self):
         propre = self._declarer(self.controller.username)
 
-        autre = make_user("audit.siege", Role.DOO)
+        autre = make_user("audit.siege", Role.SUPER_ADMIN)
         self.login(autre)
         response = self.client.post(f"/api/expenses/{propre.pk}/justify/")
 

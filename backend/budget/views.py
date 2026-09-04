@@ -2,6 +2,7 @@
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -138,7 +139,12 @@ class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
                 # L'argent déjà sorti ou engagé n'est plus transférable : la
                 # source doit pouvoir couvrir ses dépenses après le transfert.
                 raise ValidationError(
-                    {"amount": "Le disponible de l'enveloppe source ne couvre plus ce montant."}
+                    {
+                        "amount": _(
+                            "Le disponible de l'enveloppe source ne couvre "
+                            "plus ce montant."
+                        )
+                    }
                 )
             source.amount -= reallocation.amount
             target.amount += reallocation.amount
@@ -158,7 +164,7 @@ class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         serializer.is_valid(raise_exception=True)
         note = serializer.validated_data.get("note", "").strip()
         if not note:
-            raise ValidationError({"note": "Un refus doit être motivé."})
+            raise ValidationError({"note": _("Un refus doit être motivé.")})
 
         with transaction.atomic():
             reallocation = self._verrouiller(request)
@@ -182,14 +188,16 @@ class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         )
         if reallocation.status != BudgetReallocation.Status.PENDING:
             raise ValidationError(
-                {"status": "Cette réallocation a déjà été traitée."}
+                {"status": _("Cette réallocation a déjà été traitée.")}
             )
         if reallocation.requested_by == request.user.username:
             # Demander et approuver sont deux regards : celui qui arbitre
             # n'est pas celui qui sollicite.
             raise PermissionDenied(
-                "Vous ne pouvez pas décider d'une réallocation que vous avez "
-                "demandée."
+                _(
+                    "Vous ne pouvez pas décider d'une réallocation que vous "
+                    "avez demandée."
+                )
             )
         access = get_access(request.user)
         if access is not None and not access.has_global_scope:

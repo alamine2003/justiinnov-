@@ -45,8 +45,8 @@ class ApprobationConcurrenteTests(TransactionTestCase):
             amount=Decimal("1000000.00"), reason="Renfort",
             requested_by="ceo.innov",
         )
-        self.doo = make_user("do.innov", Role.DOO)
-        self.doo_bis = make_user("do2.innov", Role.DOO)
+        self.doo = make_user("do.innov", Role.SUPER_ADMIN)
+        self.doo_bis = make_user("do2.innov", Role.SUPER_ADMIN)
         self.url = f"/api/reallocations/{self.reallocation.pk}/approve/"
 
     def _client(self, user):

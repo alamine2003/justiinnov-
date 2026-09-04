@@ -6,14 +6,14 @@ après coup, ni rester en suspens quand il se clôture.
 
 from datetime import date, datetime
 
-from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
-from accounts.models import Role, UserProfile
+from accounts.models import Role
+from accounts.tests.test_scoping import make_user
 from budget.models import Budget
 from core.models import Country, Manager, Team
 from expenses.models import Dossier, Expense
@@ -35,17 +35,12 @@ class DossierCoherenceTests(APITestCase):
         self.manager = Manager.objects.create(name="Kodjo Mensah")
         self.pays.managers.add(self.manager)
 
-        self.rep = self._compte("togo.innov", Role.COUNTRY_MANAGER, [self.pays])
-        self.siege = self._compte("ceo.innov", Role.SUPER_ADMIN)
+        # Des comptes en service : ``make_user`` porte les verrous d'accès
+        # (mot de passe remplacé, double authentification confirmée), qui ne
+        # sont pas l'objet de ces tests.
+        self.rep = make_user("togo.innov", Role.DM, [self.pays])
+        self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
         self.login(self.rep)
-
-    def _compte(self, username, role, pays=()):
-        user = User.objects.create_user(username, password="Motdepasse-2026-test")
-        profil = UserProfile.objects.create(
-            user=user, role=role, must_change_password=False
-        )
-        profil.countries.set(pays)
-        return user
 
     def login(self, user):
         token, _ = Token.objects.get_or_create(user=user)

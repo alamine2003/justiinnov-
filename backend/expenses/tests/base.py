@@ -58,10 +58,10 @@ class ExpenseTestCase(APITestCase):
             country=self.ivoire, year=self.year, amount=Decimal("500000.00")
         )
 
-        self.owner = make_user("owner.togo", Role.OWNER, [self.togo])
-        self.controller = make_user("rh.innov", Role.CONTROLLER)
-        self.doo = make_user("do.innov", Role.DOO)
-        self.rep_ivoire = make_user("cote-ivoire.innov", Role.COUNTRY_MANAGER, [self.ivoire])
+        self.owner = make_user("owner.togo", Role.MANAGER, [self.togo])
+        self.controller = make_user("rh.innov", Role.DF)
+        self.doo = make_user("do.innov", Role.SUPER_ADMIN)
+        self.rep_ivoire = make_user("cote-ivoire.innov", Role.DM, [self.ivoire])
 
         self.manager.countries.add(self.togo)
 

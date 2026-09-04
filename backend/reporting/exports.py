@@ -1,14 +1,26 @@
-"""Génération des exports Excel et PDF (§5.7).
+"""Génération des exports Excel, CSV, Word et PDF (§5.7).
 
 L'export des dépenses reprend délibérément les colonnes du fichier Excel
 d'origine — N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES,
 MONTANT JUSTIFIER, ECART, PIECES JUSTIFICATIVES — pour que les rapprochements
 avec l'historique restent possibles.
+
+Un même jeu de lignes (:class:`Tableau`) alimente les trois formats
+tabulaires : le classeur Excel, le CSV et le document Word. Les en-têtes de
+colonnes sont le **contrat de fichier** et restent en français quel que soit
+le format ; seuls les intitulés de document (titres, en-tête de période) et
+le PDF suivent la langue de l'utilisateur.
 """
 
+import csv
+from dataclasses import dataclass, field
 from decimal import Decimal
-from io import BytesIO
+from io import BytesIO, StringIO
 
+from django.utils.translation import gettext as _
+from docx import Document
+from docx.enum.section import WD_ORIENT
+from docx.shared import Pt
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -35,6 +47,12 @@ MAX_DOSSIERS_PDF = 200
 HEADER_FILL = PatternFill("solid", fgColor="1F3864")
 HEADER_FONT = Font(color="FFFFFF", bold=True)
 
+#: Types MIME des formats produits.
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+CSV = "text/csv; charset=utf-8"
+PDF = "application/pdf"
+
 EXPENSE_COLUMNS = [
     ("N°ORDRE", 16),
     ("DATE", 18),
@@ -54,6 +72,41 @@ EXPENSE_COLUMNS = [
     ("PIECES JUSTIFICATIVES", 30),
 ]
 
+RECONCILIATION_COLUMNS = [
+    ("PAYS", 20),
+    ("ENVELOPPE", 30),
+    ("DEVISE", 10),
+    ("BUDGET", 16),
+    ("ENGAGE", 16),
+    ("CONSOMME", 16),
+    ("JUSTIFIE", 16),
+    ("ECART", 16),
+    ("DISPONIBLE", 16),
+    ("TAUX JUSTIFICATION", 20),
+]
+
+DOSSIER_COLUMNS = [
+    ("N°ORDRE", 16), ("LIBELLE", 34), ("PAYS", 18), ("DATE", 14),
+    ("STATUT", 14), ("DEPENSES", 16), ("JUSTIFIE", 16), ("ECART", 16),
+    ("PIECES", 12),
+]
+
+
+@dataclass
+class Tableau:
+    """Lignes d'un export, indépendantes du format qui les écrira.
+
+    ``titre`` nomme la feuille Excel, la section du CSV et le sous-titre
+    Word. ``total`` est une ligne de même largeur que les autres, ``None``
+    dans les colonnes sans total — ou ``None`` tout court quand un total
+    n'aurait pas de sens.
+    """
+
+    titre: str
+    colonnes: list
+    lignes: list = field(default_factory=list)
+    total: list | None = None
+
 
 #: Premiers caractères qu'un tableur interprète comme une formule.
 FORMULE = ("=", "+", "-", "@", "\t", "\r")
@@ -64,7 +117,7 @@ def cellule_sure(value):
 
     Un libellé saisi par un utilisateur peut commencer par ``=`` : Excel y
     verrait une formule, ``=HYPERLINK(...)`` ou un appel DDE, exécutée à
-    l'ouverture du classeur sur le poste d'un contrôleur. La valeur est
+    l'ouverture du classeur sur le poste de qui l'ouvre. La valeur est
     conservée telle quelle — le rapprochement doit retrouver le libellé — mais
     marquée comme texte à l'écriture (voir :func:`ecrire`).
     """
@@ -107,24 +160,33 @@ def _proof_summary(dossier):
     return " ; ".join(labels)
 
 
-def build_expenses_workbook(dossiers):
-    """Classeur des lignes de dépenses, groupées par dossier."""
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "BASE DE DONNEES ACTIONS"
-    _style_header(sheet, EXPENSE_COLUMNS)
+def _total_si_devise_unique(devises, ligne):
+    """La ligne de total, ou ``None`` quand les devises se mélangent.
 
+    Additionner des francs CFA et des francs guinéens donne un chiffre sans
+    unité, présenté comme un total : le tableau de bord s'y refuse, l'export
+    aussi. Un export vide n'a pas de total non plus.
+    """
+    return ligne if len(devises) == 1 else None
+
+
+# --- Lignes ------------------------------------------------------------------
+
+
+def lignes_depenses(dossiers):
+    """Lignes de dépenses, groupées par dossier, au format historique."""
+    tableau = Tableau("BASE DE DONNEES ACTIONS", EXPENSE_COLUMNS)
     source = dossiers.prefetch_related("expenses__team", "expenses__owner", "proofs")
-    row_index = 2
     totals = {"amount": ZERO, "justified": ZERO}
+    devises = set()
 
     for dossier in source:
         proofs = _proof_summary(dossier)
         for expense in dossier.expenses.all():
-            gap = expense.amount - expense.justified_amount
             totals["amount"] += expense.amount
             totals["justified"] += expense.justified_amount
-            values = [
+            devises.add(dossier.country.currency)
+            tableau.lignes.append([
                 dossier.number,
                 expense.date.strftime("%d/%m/%Y %H:%M"),
                 dossier.country.name,
@@ -137,51 +199,32 @@ def build_expenses_workbook(dossiers):
                 if expense.original_amount is not None
                 else "",
                 expense.justified_amount,
-                gap,
+                expense.amount - expense.justified_amount,
                 expense.get_status_display(),
                 proofs,
-            ]
-            for column, value in enumerate(values, start=1):
-                ecrire(sheet, row_index, column, value)
-            row_index += 1
+            ])
 
-    if row_index > 2:
-        ecrire(sheet, row_index, 6, "TOTAL").font = Font(bold=True)
-        ecrire(sheet, row_index, 7, totals["amount"]).font = Font(bold=True)
-        ecrire(sheet, row_index, 10, totals["justified"]).font = Font(bold=True)
-        ecrire(
-            sheet, row_index, 11, totals["amount"] - totals["justified"]
-        ).font = Font(bold=True)
-
-    return _to_bytes(workbook)
+    tableau.total = _total_si_devise_unique(devises, [
+        None, None, None, None, None, "TOTAL",
+        totals["amount"], None, None, totals["justified"],
+        totals["amount"] - totals["justified"], None, None,
+    ])
+    return tableau
 
 
-RECONCILIATION_COLUMNS = [
-    ("PAYS", 20),
-    ("ENVELOPPE", 30),
-    ("DEVISE", 10),
-    ("BUDGET", 16),
-    ("ENGAGE", 16),
-    ("CONSOMME", 16),
-    ("JUSTIFIE", 16),
-    ("ECART", 16),
-    ("DISPONIBLE", 16),
-    ("TAUX JUSTIFICATION", 20),
-]
-
-
-def build_reconciliation_workbook(budgets, dossiers):
+def tableaux_rapprochement(budgets, dossiers):
     """Rapprochement enveloppe par enveloppe, puis dossier par dossier."""
-    workbook = Workbook()
-
-    sheet = workbook.active
-    sheet.title = "Rapprochement budgets"
-    _style_header(sheet, RECONCILIATION_COLUMNS)
-
-    for index, budget in enumerate(budgets, start=2):
+    enveloppes = Tableau("Rapprochement budgets", RECONCILIATION_COLUMNS)
+    totaux = {k: ZERO for k in ("amount", "engaged", "consumed", "justified", "gap", "remaining")}
+    devises = set()
+    for budget in budgets:
         figures = budget_figures(budget)
         rate = figures["justification_rate"]
-        values = [
+        devises.add(budget.country.currency)
+        totaux["amount"] += budget.amount
+        for cle in ("engaged", "consumed", "justified", "gap", "remaining"):
+            totaux[cle] += figures[cle]
+        enveloppes.lignes.append([
             budget.country.name,
             # ``scope_label`` distingue projet, équipe et manager : une
             # sous-enveloppe d'équipe se lisait « Enveloppe du pays ».
@@ -194,22 +237,22 @@ def build_reconciliation_workbook(budgets, dossiers):
             figures["gap"],
             figures["remaining"],
             rate if rate is not None else "",
-        ]
-        for column, value in enumerate(values, start=1):
-            ecrire(sheet, index, column, value)
+        ])
+    enveloppes.total = _total_si_devise_unique(devises, [
+        "TOTAL", None, next(iter(devises), None),
+        totaux["amount"], totaux["engaged"], totaux["consumed"],
+        totaux["justified"], totaux["gap"], totaux["remaining"], None,
+    ])
 
-    detail = workbook.create_sheet("Rapprochement dossiers")
-    _style_header(
-        detail,
-        [
-            ("N°ORDRE", 16), ("LIBELLE", 34), ("PAYS", 18), ("DATE", 14),
-            ("STATUT", 14), ("DEPENSES", 16), ("JUSTIFIE", 16), ("ECART", 16),
-            ("PIECES", 12),
-        ],
-    )
-    for index, dossier in enumerate(dossiers.select_related("country"), start=2):
+    detail = Tableau("Rapprochement dossiers", DOSSIER_COLUMNS)
+    totaux = {"amount": ZERO, "justified": ZERO, "gap": ZERO}
+    devises = set()
+    for dossier in dossiers.select_related("country"):
         totals = dossier.totals()
-        values = [
+        devises.add(dossier.country.currency)
+        for cle in totaux:
+            totaux[cle] += totals[cle]
+        detail.lignes.append([
             dossier.number,
             dossier.label,
             dossier.country.name,
@@ -219,11 +262,145 @@ def build_reconciliation_workbook(budgets, dossiers):
             totals["justified"],
             totals["gap"],
             dossier.counts()["proofs"],
-        ]
-        for column, value in enumerate(values, start=1):
-            ecrire(detail, index, column, value)
+        ])
+    # Le total se lit dans LIBELLE, N°ORDRE restant vide : comme dans le
+    # classeur des dépenses, la colonne des numéros ne porte que des numéros.
+    detail.total = _total_si_devise_unique(devises, [
+        None, "TOTAL", None, None, None,
+        totaux["amount"], totaux["justified"], totaux["gap"], None,
+    ])
+    return [enveloppes, detail]
 
+
+# --- Écritures ---------------------------------------------------------------
+
+
+def classeur_xlsx(tableaux, contexte=None):
+    """Un classeur, une feuille par tableau, l'en-tête figé et stylé."""
+    workbook = Workbook()
+    for index, tableau in enumerate(tableaux):
+        sheet = workbook.active if index == 0 else workbook.create_sheet()
+        sheet.title = tableau.titre
+        _style_header(sheet, tableau.colonnes)
+        row_index = 2
+        for ligne in tableau.lignes:
+            for column, value in enumerate(ligne, start=1):
+                ecrire(sheet, row_index, column, value)
+            row_index += 1
+        if tableau.total:
+            for column, value in enumerate(tableau.total, start=1):
+                # Une cellule sans total reste vide, pas « None » ni « » :
+                # l'import relit ce classeur et reconnaît la ligne TOTAL à
+                # son N°ORDRE vide.
+                if value is not None:
+                    ecrire(sheet, row_index, column, value).font = Font(bold=True)
     return _to_bytes(workbook)
+
+
+def _cellule_csv(value):
+    """Valeur telle qu'Excel francophone la lira.
+
+    Les montants gardent la virgule décimale ; un texte en forme de formule
+    reçoit une apostrophe en tête — un CSV n'a pas de type de cellule, c'est
+    la seule façon de dire à un tableur « ceci est du texte ».
+    """
+    if value is None:
+        return ""
+    if isinstance(value, Decimal):
+        return str(value).replace(".", ",")
+    if cellule_sure(value):
+        return "'" + value
+    return str(value)
+
+
+def fichier_csv(tableaux, contexte=None):
+    """CSV pour Excel francophone : UTF-8 avec BOM, séparateur « ; ».
+
+    Sans la marque d'ordre, Excel lit le fichier en Latin-1 et les accents
+    se brisent ; sans le point-virgule, il ne sépare pas les colonnes. Un
+    CSV n'a pas de feuilles : les tableaux se suivent, chacun sous son titre.
+    """
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
+    for index, tableau in enumerate(tableaux):
+        if index:
+            writer.writerow([])
+            writer.writerow([tableau.titre])
+        writer.writerow([title for title, _largeur in tableau.colonnes])
+        for ligne in tableau.lignes:
+            writer.writerow([_cellule_csv(value) for value in ligne])
+        if tableau.total:
+            writer.writerow([_cellule_csv(value) for value in tableau.total])
+    return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+
+
+def _cellule_docx(value):
+    if value is None:
+        return ""
+    if isinstance(value, Decimal):
+        return _fmt(value)
+    return str(value)
+
+
+def document_docx(tableaux, contexte):
+    """Document Word : titre, en-tête de période, un tableau par section.
+
+    ``contexte`` porte ``titre``, ``pays`` et ``periode``, déjà dans la
+    langue de l'utilisateur.
+    """
+    document = Document()
+    section = document.sections[0]
+    # Paysage : treize colonnes ne tiennent pas dans la largeur d'un portrait.
+    section.orientation = WD_ORIENT.LANDSCAPE
+    section.page_width, section.page_height = section.page_height, section.page_width
+    document.styles["Normal"].font.size = Pt(9)
+
+    document.add_heading(contexte["titre"], level=1)
+    document.add_paragraph(
+        _("Pays : %(pays)s · Exercice : %(exercice)s · Période : %(periode)s")
+        % contexte
+    )
+    document.add_paragraph(_("Montants exprimés dans la devise de chaque pays."))
+
+    for tableau in tableaux:
+        document.add_heading(tableau.titre, level=2)
+        if not tableau.lignes:
+            document.add_paragraph(_("Aucune donnée sur la période."))
+            continue
+        table = document.add_table(rows=1, cols=len(tableau.colonnes))
+        table.style = "Table Grid"
+        for cell, (title, _largeur) in zip(table.rows[0].cells, tableau.colonnes):
+            cell.text = ""
+            cell.paragraphs[0].add_run(title).bold = True
+        for ligne in tableau.lignes:
+            for cell, value in zip(table.add_row().cells, ligne):
+                cell.text = _cellule_docx(value)
+        if tableau.total:
+            for cell, value in zip(table.add_row().cells, tableau.total):
+                cell.text = ""
+                cell.paragraphs[0].add_run(_cellule_docx(value)).bold = True
+
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+#: Écriture, type MIME et extension de chaque format tabulaire.
+FORMATS = {
+    "xlsx": (classeur_xlsx, XLSX),
+    "csv": (fichier_csv, CSV),
+    "docx": (document_docx, DOCX),
+}
+
+
+def build_expenses_workbook(dossiers):
+    """Classeur des lignes de dépenses, groupées par dossier."""
+    return classeur_xlsx([lignes_depenses(dossiers)])
+
+
+def build_reconciliation_workbook(budgets, dossiers):
+    """Classeur de rapprochement, enveloppes puis dossiers."""
+    return classeur_xlsx(tableaux_rapprochement(budgets, dossiers))
 
 
 def _to_bytes(workbook):
@@ -236,36 +413,39 @@ def _fmt(value):
     return f"{Decimal(value):,.2f}".replace(",", " ")
 
 
-def build_country_report_pdf(budgets, dossiers, expenses, year):
+# --- PDF ---------------------------------------------------------------------
+
+
+def build_country_report_pdf(budgets, dossiers, expenses, periode):
     """Rapport de synthèse par pays, avec ses enveloppes et ses dossiers."""
+    libelle = periode.libelle
     buffer = BytesIO()
     document = SimpleDocTemplate(
         buffer,
         pagesize=landscape(A4),
         leftMargin=15 * mm, rightMargin=15 * mm,
         topMargin=15 * mm, bottomMargin=15 * mm,
-        title=f"Rapport de contrôle budgétaire {year}",
+        title=_("Rapport de contrôle budgétaire — %(periode)s") % {"periode": libelle},
     )
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         "TitreRapport", parent=styles["Title"], fontSize=18, spaceAfter=4
     )
     story = [
-        Paragraph(f"Contrôle budgétaire — {year}", title_style),
-        Paragraph(
-            "Montants exprimés dans la devise de chaque pays.", styles["Normal"]
-        ),
+        Paragraph(_("Contrôle budgétaire — %(periode)s") % {"periode": libelle}, title_style),
+        Paragraph(_("Montants exprimés dans la devise de chaque pays."), styles["Normal"]),
         Spacer(1, 8 * mm),
     ]
 
     budget_rows = [[
-        "Pays", "Enveloppe", "Budget", "Engagé", "Consommé", "Justifié", "Disponible",
+        _("Pays"), _("Enveloppe"), _("Budget"), _("Engagé"), _("Consommé"),
+        _("Justifié"), _("Disponible"),
     ]]
     for budget in budgets:
         figures = budget_figures(budget)
         budget_rows.append([
             budget.country.name,
-            budget.scope_label or "Enveloppe du pays",
+            budget.scope_label or _("Enveloppe du pays"),
             _fmt(budget.amount),
             _fmt(figures["engaged"]),
             _fmt(figures["consumed"]),
@@ -273,12 +453,13 @@ def build_country_report_pdf(budgets, dossiers, expenses, year):
             _fmt(figures["remaining"]),
         ])
 
-    story.append(Paragraph("Enveloppes", styles["Heading2"]))
+    story.append(Paragraph(_("Enveloppes"), styles["Heading2"]))
     story.append(_table(budget_rows) if len(budget_rows) > 1 else _empty(styles))
     story.append(Spacer(1, 8 * mm))
 
     dossier_rows = [[
-        "N°ORDRE", "Libellé", "Pays", "Date", "Statut", "Dépenses", "Justifié", "Écart",
+        "N°ORDRE", _("Libellé"), _("Pays"), _("Date"), _("Statut"), _("Dépenses"),
+        _("Justifié"), _("Écart"),
     ]]
     # Le PDF est une synthèse : au-delà de MAX_DOSSIERS_PDF dossiers, le
     # lecteur est renvoyé au classeur Excel, et le document le dit — un
@@ -297,7 +478,7 @@ def build_country_report_pdf(budgets, dossiers, expenses, year):
             _fmt(totals["gap"]),
         ])
 
-    story.append(Paragraph("Dossiers de justification", styles["Heading2"]))
+    story.append(Paragraph(_("Dossiers de justification"), styles["Heading2"]))
     troncature = avertissement_troncature(nombre_dossiers)
     if troncature:
         story.append(Paragraph(troncature, styles["Italic"]))
@@ -311,15 +492,14 @@ def avertissement_troncature(nombre_dossiers):
     """Phrase qui signale les dossiers absents du PDF, ou ``None``."""
     if nombre_dossiers <= MAX_DOSSIERS_PDF:
         return None
-    return (
-        f"Seuls les {MAX_DOSSIERS_PDF} dossiers les plus récents sur "
-        f"{nombre_dossiers} figurent ici ; la liste complète est dans "
-        "l'export Excel des dépenses."
-    )
+    return _(
+        "Seuls les %(max)s dossiers les plus récents sur %(total)s figurent "
+        "ici ; la liste complète est dans l'export Excel des dépenses."
+    ) % {"max": MAX_DOSSIERS_PDF, "total": nombre_dossiers}
 
 
 def _empty(styles):
-    return Paragraph("Aucune donnée sur la période.", styles["Italic"])
+    return Paragraph(_("Aucune donnée sur la période."), styles["Italic"])
 
 
 def _table(rows):
