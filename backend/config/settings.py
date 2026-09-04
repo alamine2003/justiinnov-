@@ -6,6 +6,7 @@ l'application :mod:`core`.
 
 import os
 from pathlib import Path
+from urllib.parse import parse_qsl, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -101,29 +102,74 @@ CACHES = {
     }
 }
 
-POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "")
-if not POSTGRES_PASSWORD:
-    if not DEBUG:
-        # Même exigence que pour la clé secrète : un mot de passe de
-        # développement ne doit pas pouvoir servir en production par oubli.
-        raise ImproperlyConfigured("POSTGRES_PASSWORD est obligatoire hors mode debug.")
-    POSTGRES_PASSWORD = "justi"
 
-DATABASES = {
-    "default": {
+
+def parse_database_url(url):
+    """Traduit une URL ``postgresql://`` en configuration Django.
+
+    Fonction pure, sans dépendance (ni dj-database-url ni django-environ) :
+    on garde la main sur ce qui est transmis à psycopg. Les paramètres de la
+    chaîne de requête (``sslmode``, ``channel_binding``, ``options``…) vont
+    tels quels dans ``OPTIONS``, sans liste blanche : ce sont ceux de libpq.
+    Utilisateur et mot de passe sont décodés, un mot de passe pouvant
+    contenir ``@``, ``/`` ou ``%`` encodés.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("postgres", "postgresql"):
+        raise ImproperlyConfigured(
+            "DATABASE_URL doit commencer par postgresql:// "
+            f"(reçu : {parsed.scheme or 'aucun schéma'})."
+        )
+    name = unquote(parsed.path.lstrip("/"))
+    if not name:
+        raise ImproperlyConfigured("DATABASE_URL ne nomme aucune base (chemin vide).")
+    config = {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", "justi_innov"),
-        "USER": os.environ.get("POSTGRES_USER", "justi"),
-        "PASSWORD": POSTGRES_PASSWORD,
-        "HOST": os.environ.get("POSTGRES_HOST", "db"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-        # Connexions réutilisées entre requêtes, et vérifiées avant usage :
-        # sans contrôle, une connexion coupée par Postgres ou le réseau ne se
-        # découvre qu'à la première requête qui échoue.
-        "CONN_MAX_AGE": 60,
-        "CONN_HEALTH_CHECKS": True,
+        "NAME": name,
+        "USER": unquote(parsed.username or ""),
+        "PASSWORD": unquote(parsed.password or ""),
+        "HOST": parsed.hostname or "",
+        "PORT": str(parsed.port) if parsed.port else "",
     }
-}
+    options = dict(parse_qsl(parsed.query, keep_blank_values=False))
+    if options:
+        config["OPTIONS"] = options
+    return config
+
+
+# Connexions réutilisées entre requêtes, et vérifiées avant usage : sans
+# contrôle, une connexion coupée par Postgres ou le réseau ne se découvre
+# qu'à la première requête qui échoue.
+_DATABASE_COMMON = {"CONN_MAX_AGE": 60, "CONN_HEALTH_CHECKS": True}
+
+# `DATABASE_URL` (base hébergée, TLS imposé) prime sur les variables
+# POSTGRES_* ; sans elle, on lit ces dernières, qui sont celles de la pile
+# Docker. Voir deploy/.env.example.
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if DATABASE_URL:
+    DATABASES = {"default": {**parse_database_url(DATABASE_URL), **_DATABASE_COMMON}}
+else:
+    POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "")
+    if not POSTGRES_PASSWORD:
+        if not DEBUG:
+            # Même exigence que pour la clé secrète : un mot de passe de
+            # développement ne doit pas pouvoir servir en production par oubli.
+            raise ImproperlyConfigured(
+                "POSTGRES_PASSWORD (ou DATABASE_URL) est obligatoire hors mode debug."
+            )
+        POSTGRES_PASSWORD = "justi"
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", "justi_innov"),
+            "USER": os.environ.get("POSTGRES_USER", "justi"),
+            "PASSWORD": POSTGRES_PASSWORD,
+            "HOST": os.environ.get("POSTGRES_HOST", "db"),
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            **_DATABASE_COMMON,
+        }
+    }
 
 # ---------------------------------------------------------------------------
 # Authentification REST

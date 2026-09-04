@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 
 from .models import (
     ChangeLog,
@@ -32,6 +33,15 @@ class TeamSerializer(serializers.ModelSerializer):
             "id", "country", "country_name", "name", "description",
             "is_active", "created_at", "updated_at",
         ]
+        # Le message par défaut de la contrainte d'unicité est illisible ;
+        # celui-ci dit ce qu'il faut corriger.
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Team.objects.all(),
+                fields=["country", "name"],
+                message="Cette équipe existe déjà pour ce pays.",
+            )
+        ]
 
 
 class CostCenterSerializer(serializers.ModelSerializer):
@@ -55,6 +65,13 @@ class ProjectSerializer(serializers.ModelSerializer):
             "id", "country", "country_name", "name", "description",
             "status", "status_display", "budget",
             "is_active", "created_at", "updated_at",
+        ]
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Project.objects.all(),
+                fields=["country", "name"],
+                message="Ce projet existe déjà pour ce pays.",
+            )
         ]
 
 

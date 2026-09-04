@@ -268,6 +268,27 @@ jobs:
           npx tsx scripts/screenshot.ts
           npx tsx scripts/shot-theme.mts
 
+      - name: Limitation de débit de nginx
+        # `frontend/nginx.conf` limite `/api/` à 20 requêtes par seconde et
+        # par adresse, avec une réserve de 40. Cent requêtes lancées d'un
+        # coup (50 en parallèle) doivent donc en voir au moins une refusée
+        # en 429 — et cette réponse doit être le JSON de l'API, pas la page
+        # d'erreur de nginx. Cent plutôt que soixante : sur un exécuteur
+        # lent, soixante requêtes étalées sur deux secondes passeraient
+        # toutes. L'étape vient après les captures pour ne pas les priver
+        # de réserve.
+        run: |
+          codes=$(seq 100 | xargs -P 50 -I{} curl -s -o /dev/null \
+            -w '%{http_code} %{content_type}\n' http://localhost:8080/api/health/)
+          echo "Réponses obtenues :"
+          echo "$codes" | sort | uniq -c
+          refusees=$(echo "$codes" | grep -c '^429 application/json' || true)
+          if [ "$refusees" -eq 0 ]; then
+            echo "::error::Aucune réponse « 429 application/json » sur 100 requêtes rapides vers /api/health/ : la limitation de débit de frontend/nginx.conf ne s'applique pas."
+            exit 1
+          fi
+          echo "✔ ${refusees} requêtes refusées en 429 (JSON), la limitation de débit s'applique."
+
       - name: Publier les captures
         if: always()
         uses: actions/upload-artifact@v4

@@ -448,6 +448,41 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
             "clôturer.",
         )
 
+    @staticmethod
+    def _exiger_equipe_et_owner(lignes):
+        """Une dépense déclarée dit qui l'a engagée (cahier des charges §7).
+
+        L'équipe et le manager sont facultatifs en brouillon : l'import du
+        classeur historique et une saisie en plusieurs fois doivent pouvoir
+        laisser la ligne incomplète. Mais une dépense soumise sans eux ne
+        s'imputerait que sur l'enveloppe du pays et ne répondrait pas à la
+        question « au profit de qui ». Lieu, projet et intitulé restent
+        facultatifs : décision consignée dans ``docs/model-de-donnees.md``.
+        """
+        incompletes = []
+        for ligne in lignes:
+            manques = []
+            if ligne.team_id is None:
+                manques.append("sans équipe")
+            if ligne.owner_id is None:
+                manques.append("sans owner")
+            if manques:
+                incompletes.append(f"« {ligne.title} » ({', '.join(manques)})")
+        if not incompletes:
+            return
+        detail = ", ".join(incompletes[:5])
+        if len(incompletes) > 5:
+            detail += f" et {len(incompletes) - 5} autre(s)"
+        raise ValidationError(
+            {
+                "expenses": (
+                    f"{len(incompletes)} ligne(s) incomplète(s) : {detail}. "
+                    "Renseignez l'équipe et le manager de chaque ligne avant "
+                    "de soumettre le dossier."
+                )
+            }
+        )
+
     def _soumettre_les_lignes(self, dossier, access):
         """Le dossier et ses lignes partent ensemble.
 
@@ -477,6 +512,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
                 }
             )
         brouillons = [e for e in lignes if e.status == Status.DRAFT]
+        self._exiger_equipe_et_owner(brouillons)
 
         # Une résolution par clé d'imputation, pas par ligne.
         par_cle = {}

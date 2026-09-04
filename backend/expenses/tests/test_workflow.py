@@ -299,6 +299,8 @@ class MontantJustifieTests(ExpenseTestCase):
             "dossier": self.dossier.pk, "country": self.togo.pk,
             "date": f"{self.year}-03-15T10:00:00Z", "title": "Carburant",
             "amount": "100000.00",
+            # Une ligne ne se soumet qu'avec son équipe et son manager (§7).
+            "team": self.team.pk, "owner": self.manager.pk,
         }
         data.update(extra)
         return data
@@ -984,9 +986,14 @@ class SubEnvelopeImputationTests(ExpenseTestCase):
             self._imputer(team=self.team, owner=self.manager), self.enveloppe_equipe
         )
 
-    def test_le_manager_a_defaut_d_equipe(self):
+    def test_le_manager_a_defaut_d_enveloppe_d_equipe(self):
+        """Une ligne soumise porte toujours son équipe et son manager (§7) :
+        le repli se joue sur les enveloppes, pas sur les champs vides."""
+        self.enveloppe_equipe.is_active = False
+        self.enveloppe_equipe.save()
+
         self.assertEqual(
-            self._imputer(team=None, owner=self.manager), self.enveloppe_manager
+            self._imputer(team=self.team, owner=self.manager), self.enveloppe_manager
         )
 
     def test_le_projet_prime_sur_tout(self):
@@ -1002,7 +1009,14 @@ class SubEnvelopeImputationTests(ExpenseTestCase):
         )
 
     def test_repli_sur_l_enveloppe_du_pays(self):
-        self.assertEqual(self._imputer(team=None, owner=None), self.budget)
+        self.enveloppe_equipe.is_active = False
+        self.enveloppe_equipe.save()
+        self.enveloppe_manager.is_active = False
+        self.enveloppe_manager.save()
+
+        self.assertEqual(
+            self._imputer(team=self.team, owner=self.manager), self.budget
+        )
 
 
 class LocalTimeTests(ExpenseTestCase):

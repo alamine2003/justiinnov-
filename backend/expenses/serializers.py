@@ -487,6 +487,17 @@ class DossierSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
         read_only_fields = ["status", "created_by"]
+        # Le N°ORDRE est unique **par pays**. Le pays de la charge utile est
+        # déjà limité au périmètre du demandeur (``ChampCloisonne``) : la
+        # vérification ne porte donc que sur des dossiers qu'il a le droit
+        # de voir, et le message ne révèle rien du voisin.
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Dossier.objects.all(),
+                fields=["country", "number"],
+                message="Ce N°ORDRE existe déjà pour ce pays.",
+            )
+        ]
 
     def get_totals(self, dossier):
         return {key: str(value) for key, value in dossier.totals().items()}

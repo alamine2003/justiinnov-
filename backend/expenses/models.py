@@ -135,7 +135,11 @@ class Dossier(TimeStampedModel):
 
     objects = DossierQuerySet.as_manager()
 
-    number = models.CharField("N° d'ordre", max_length=50, unique=True)
+    # Le N°ORDRE est numéroté **par pays** : le classeur du client repart de
+    # 1 dans chaque pays. Une unicité globale refusait donc le « 12 » du
+    # Togo dès que la Côte d'Ivoire avait le sien — et trahissait au passage
+    # l'existence du dossier voisin. L'unicité vaut sur (pays, numéro).
+    number = models.CharField("N° d'ordre", max_length=50)
     label = models.CharField("Libellé", max_length=250)
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name="dossiers", verbose_name="Pays"
@@ -167,6 +171,11 @@ class Dossier(TimeStampedModel):
         ordering = ["-date", "-created_at", "-pk"]
         verbose_name = "Dossier de justification"
         verbose_name_plural = "Dossiers de justification"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["country", "number"], name="unique_dossier_par_pays"
+            )
+        ]
         indexes = [
             models.Index(fields=["country", "status"], name="dossier_pays_statut"),
             models.Index(fields=["date"], name="dossier_date"),
@@ -473,8 +482,10 @@ class AuditLog(models.Model):
     # import). Les modules qui écrivent encore ``0`` restent acceptés.
     object_id = models.PositiveBigIntegerField("Identifiant", null=True, blank=True)
     label = models.CharField("Libellé", max_length=250, blank=True)
+    # PROTECT : le journal est immuable en base, une mise à NULL serait
+    # refusée ; un pays tracé ne se supprime pas, il se désactive.
     country = models.ForeignKey(
-        Country, null=True, blank=True, on_delete=models.SET_NULL,
+        Country, null=True, blank=True, on_delete=models.PROTECT,
         related_name="audit_entries", verbose_name="Pays",
     )
     detail = models.JSONField("Détail", default=dict, blank=True)

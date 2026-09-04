@@ -4,6 +4,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.db.models import Max
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
@@ -19,8 +20,15 @@ from .test_scoping import ScopingTestCase, make_user
 MOT_DE_PASSE = "Motdepasse-2026-test"
 
 
+#: Le journal est en ajout seul, jusque dans la base : on ne l'efface pas
+#: entre deux tests, on ignore ce qui a été écrit avant le test.
+_repere = {"pk": 0}
+
+
 def entrees(user=None, **filtres):
-    queryset = ChangeLog.objects.filter(model_name=ChangeLog.Models.USER, **filtres)
+    queryset = ChangeLog.objects.filter(
+        pk__gt=_repere["pk"], model_name=ChangeLog.Models.USER, **filtres
+    )
     if user is not None:
         queryset = queryset.filter(object_id=user.pk)
     return queryset.order_by("id")
@@ -30,7 +38,7 @@ class TraceDesComptesTests(ScopingTestCase):
     def setUp(self):
         super().setUp()
         self.admin = make_user("admin.innov", Role.ADMIN)
-        ChangeLog.objects.all().delete()
+        _repere["pk"] = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
         self.login(self.siege)
 
     def test_la_creation_est_tracee(self):

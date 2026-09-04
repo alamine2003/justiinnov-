@@ -2,6 +2,7 @@
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.db.models import Max
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -180,7 +181,8 @@ class RolePermissionTests(ScopingTestCase):
 
 class HistoryScopeTests(ScopingTestCase):
     def test_historique_filtre_par_perimetre(self):
-        ChangeLog.objects.all().delete()
+        # Le journal ne s'efface pas : on ne regarde que ce que le test écrit.
+        repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
         self.ivoire.timezone = "Africa/Bouake"
         self.ivoire.save()
         self.togo.timezone = "Africa/Kara"
@@ -189,8 +191,9 @@ class HistoryScopeTests(ScopingTestCase):
         self.login(self.rep_togo)
         response = self.client.get("/api/history/")
 
-        pays = {e["country_name"] for e in response.data["results"]}
-        self.assertEqual(pays, {"Togo"})
+        recentes = [e for e in response.data["results"] if e["id"] > repere]
+        self.assertTrue(recentes)
+        self.assertEqual({e["country_name"] for e in recentes}, {"Togo"})
 
 
 class MeTests(ScopingTestCase):

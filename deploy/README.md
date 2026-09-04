@@ -11,10 +11,13 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 
 | Fichier | Rôle |
 |---|---|
-| `docker-compose.prod.yml` | la pile : Postgres, MinIO, backend, ordonnanceur, frontend, Caddy |
+| `docker-compose.prod.yml` | la pile : Postgres, MinIO, backend, ordonnanceur, frontend, Caddy, sauvegardes |
 | `Caddyfile` | entrée publique, TLS automatique |
 | `deploy.sh` | tire une étiquette d'images, relance la pile, attend qu'elle soit saine |
 | `.env.example` | modèle du `.env` du serveur, jamais versionné |
+| `creer_role_applicatif.sql` | rôle Postgres du service, sans droit de modifier le schéma |
+| `sauvegarder.sh` | sauvegarde nocturne de la base et des justificatifs, dans le volume `sauvegardes` |
+| `restaurer.sh` | restaure un dump dans la pile ou dans une base jetable, et remet les justificatifs |
 
 ## Préparer un serveur
 
@@ -122,14 +125,143 @@ dont la migration a supprimé une colonne. Le retour automatique a la même
 limite : un code N-1 lit un schéma N tant que la migration n'a fait
 qu'ajouter, ce qui est la règle dans ce projet (rien ne se supprime).
 
-## Sauvegardes
+## Rôle Postgres applicatif
 
-La pile ne les fait pas à votre place. Au minimum, chaque nuit :
+Par défaut, le service Django se connecte avec le rôle qui possède la base
+(`POSTGRES_USER`, `justi`) : il peut donc tout, y compris supprimer une
+table — le journal d'audit, par exemple. `creer_role_applicatif.sql` crée
+un second rôle, `justi_app`, qui lit et écrit des lignes mais ne touche pas
+au schéma : `CONNECT`, `USAGE` sur le schéma, `SELECT/INSERT/UPDATE/DELETE`
+sur les tables et les séquences, présentes et futures (`ALTER DEFAULT
+PRIVILEGES`). Ni `CREATE`, ni `DROP`, ni `TRUNCATE`.
+
+Les migrations et `createcachetable`, qui créent des tables, gardent le rôle
+propriétaire : `backend/entrypoint.sh` les lance avec
+`POSTGRES_MIGRATION_USER` / `POSTGRES_MIGRATION_PASSWORD` quand ces
+variables sont définies, puis démarre gunicorn avec `POSTGRES_USER`. Le
+conteneur Postgres et les sauvegardes utilisent aussi le propriétaire.
+
+Mise en place, sur une pile déjà en ligne :
 
 ```bash
+cd ~/justi-innov
+MDP_APP="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 docker compose -f docker-compose.prod.yml exec -T db \
-    pg_dump -U justi justi_innov | gzip > "sauvegarde-$(date +%F).sql.gz"
+    psql -U justi -d justi_innov -v ON_ERROR_STOP=1 \
+    -v role_applicatif=justi_app -v mot_de_passe="$MDP_APP" \
+    -f - < creer_role_applicatif.sql
 ```
 
-et une copie du volume `miniodata`, qui contient les justificatifs — la
-preuve, c'est-à-dire la raison d'être de la plateforme.
+Puis dans `.env`, l'ancien couple devient celui des migrations et le
+nouveau celui du service :
+
+```
+POSTGRES_MIGRATION_USER=justi
+POSTGRES_MIGRATION_PASSWORD=<l'ancien POSTGRES_PASSWORD>
+POSTGRES_USER=justi_app
+POSTGRES_PASSWORD=<MDP_APP>
+```
+
+et `docker compose -f docker-compose.prod.yml up -d --wait` relance la
+pile. Le script est idempotent : le rejouer renouvelle le mot de passe et
+les droits, ce que `restaurer.sh` fait de lui-même après une restauration.
+Avec une base désignée par `DATABASE_URL`, `DATABASE_MIGRATION_URL` tient le
+rôle de `POSTGRES_MIGRATION_USER`.
+
+## Sauvegardes et restauration
+
+Deux services de la pile s'en chargent chaque nuit, dans le volume
+`sauvegardes` :
+
+| Service | Quand (UTC) | Quoi |
+|---|---|---|
+| `sauvegarde` | `SAUVEGARDE_HEURE`, 02:00 | `pg_dump -Fc` de la base dans `base/<base>-<horodatage>.dump` ; les dumps de plus de `SAUVEGARDE_RETENTION_JOURS` (14) jours sont supprimés |
+| `sauvegarde-pieces` | `SAUVEGARDE_PIECES_HEURE`, 02:15 | miroir du bucket des justificatifs dans `pieces/` (`mc mirror --overwrite`, sans suppression : un objet effacé du bucket reste dans la copie) |
+
+Les deux tournent avec `sauvegarder.sh`, qui journalise chaque passage
+(`docker compose -f docker-compose.prod.yml logs sauvegarde
+sauvegarde-pieces`). Une sauvegarde immédiate, avant une opération risquée :
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm sauvegarde --une-fois
+docker compose -f docker-compose.prod.yml run --rm sauvegarde-pieces --une-fois
+./restaurer.sh --lister
+```
+
+**Le volume est sur la même machine que la base.** Une sauvegarde qui brûle
+avec le serveur n'en est pas une : copiez-le ailleurs chaque nuit, depuis une
+autre machine, par exemple avec `rsync` sur le point de montage du volume
+(`docker volume inspect justi-innov_sauvegardes --format '{{.Mountpoint}}'`,
+lisible par root), ou en tirant un dump précis :
+
+```bash
+docker compose -f docker-compose.prod.yml cp \
+    sauvegarde:/sauvegardes/base/justi_innov-2026-09-04T020000Z.dump .
+```
+
+### Restaurer
+
+`restaurer.sh` prend le nom d'un dump du volume et le restaure avec
+`pg_restore --clean --if-exists`, après avoir arrêté le backend et
+l'ordonnanceur ; il demande de taper le nom de la base, parce que tout ce
+qui a été saisi depuis le dump est perdu. Il affiche ensuite le nombre de
+tables, de dépenses et de justificatifs restaurés et la date de la dernière
+entrée du journal d'audit, rejoue les droits du rôle applicatif s'il est
+en service, et relance la pile :
+
+```bash
+./restaurer.sh justi_innov-2026-09-04T020000Z.dump
+```
+
+Les justificatifs se remettent depuis le miroir, dans le bucket, le cas
+échéant recréé :
+
+```bash
+./restaurer.sh --pieces
+```
+
+Restaurez la base **et** les pièces d'une même nuit : une dépense dont la
+pièce manque en stockage apparaîtrait justifiée sans preuve.
+
+Avec une base hébergée hors de la pile (`DATABASE_URL`), `sauvegarder.sh`
+la sauvegarde bien — `pg_dump` accepte l'URL — mais `restaurer.sh` ne
+connaît que le Postgres de la pile : restaurez alors avec `pg_restore` et
+la même URL, depuis le conteneur `sauvegarde`.
+
+### Test de restauration trimestriel
+
+Une sauvegarde qu'on n'a jamais restaurée n'est qu'un espoir. Chaque
+trimestre, sur le serveur, dans une base jetable — la pile reste en ligne,
+rien n'est arrêté :
+
+1. Vérifier que les sauvegardes récentes existent et ont une taille
+   plausible (un dump qui pèse quelques kilo-octets est vide) :
+   ```bash
+   ./restaurer.sh --lister
+   docker compose -f docker-compose.prod.yml logs --since 72h sauvegarde sauvegarde-pieces
+   ```
+2. Restaurer le dernier dump dans une base jetable :
+   ```bash
+   ./restaurer.sh justi_innov-<horodatage>.dump --base test_restauration
+   ```
+   Le script crée la base, restaure et affiche les comptages. Comparez-les
+   à ceux de la base en service :
+   ```bash
+   docker compose -f docker-compose.prod.yml exec db psql -U justi -d justi_innov \
+       -c 'SELECT count(*) FROM expenses_expense' -c 'SELECT count(*) FROM expenses_proof'
+   ```
+   Le nombre de dépenses restaurées doit être celui de la veille au soir.
+3. Vérifier que les pièces du miroir correspondent aux justificatifs de la
+   base restaurée : le miroir doit contenir au moins autant d'objets que la
+   base compte de justificatifs.
+   ```bash
+   docker compose -f docker-compose.prod.yml run --rm --entrypoint sh sauvegarde \
+       -c 'find /sauvegardes/pieces -type f | wc -l'
+   ```
+4. Supprimer la base jetable :
+   ```bash
+   docker compose -f docker-compose.prod.yml exec db dropdb -U justi test_restauration
+   ```
+5. Noter la date, le dump testé et les comptages obtenus dans le journal
+   d'exploitation. Un écart inexpliqué est un incident, pas une note de bas
+   de page.

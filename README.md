@@ -5,6 +5,10 @@ comptes et périmètres, enveloppes annuelles, dossiers de justification,
 dépenses, pièces justificatives, workflow de validation, tableaux de bord
 temps réel, alertes et exports.
 
+Les documents de cadrage d'origine (cahier des charges, architecture, plan
+de développement) sont dans [`docs/reference/`](docs/reference/) ; les
+décisions prises depuis sont dans [`docs/model-de-donnees.md`](docs/model-de-donnees.md).
+
 ## Architecture
 
 | Service   | Techno                                        | Port (127.0.0.1) |
@@ -165,7 +169,7 @@ GET    /api/dashboard/breakdown/         # répartition équipe/manager/projet/m
 GET    /api/exports/expenses.xlsx        # export au format du fichier historique
 GET    /api/exports/reconciliation.xlsx  # rapprochement dépenses / justifiés
 GET    /api/exports/report.pdf           # rapport de synthèse
-POST   /api/imports/expenses.xlsx        # import au format de l'export (rôles de saisie)
+POST   /api/imports/expenses.xlsx        # import : export de la plateforme ou classeur historique (rôles de saisie)
 GET    /api/notifications/               # centre de notifications
 GET    /api/notifications/unread_count/
 POST   /api/notifications/{id}/read/ · /api/notifications/read-all/
@@ -287,7 +291,7 @@ au sein de la livraison continue, en cinq travaux indépendants :
 | Backend | migrations à jour, `check --deploy`, suite Django hors mode debug |
 | Frontend | types, lint, tests unitaires, build |
 | Images Docker | les deux images se construisent |
-| Parcours complet | la pile livrable (backend en production, frontend nginx) démarre, des comptes jetables s'y connectent, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console ; les captures sont publiées en artefact |
+| Parcours complet | la pile livrable (backend en production, frontend nginx) démarre, des comptes jetables s'y connectent, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
 | Dépendances | `pip-audit --strict` et `npm audit --audit-level=high`, **bloquants** |
 
 La livraison continue (`.github/workflows/cd.yml`) appelle la CI, puis :
@@ -303,11 +307,28 @@ cette étiquette que le serveur reçoit, si bien que revenir en arrière consist
 nouvelle pile ne devient pas saine. Le déploiement n'est déclaré réussi que
 lorsque tous les conteneurs passent leur contrôle de santé et que
 `/api/health/` répond depuis l'extérieur. La préparation du serveur, les
-secrets attendus, la coupure pendant les migrations et le retour arrière
-sont décrits dans [`deploy/README.md`](deploy/README.md).
+secrets attendus, la coupure pendant les migrations, le retour arrière, le
+rôle Postgres à moindre privilège et les sauvegardes sont décrits dans
+[`deploy/README.md`](deploy/README.md).
 
 Les mises à jour de dépendances arrivent en PR via Dependabot
 (`.github/dependabot.yml`), donc passent par la CI.
+
+## Déploiement et sauvegardes
+
+En production, nginx limite `/api/` à 20 requêtes par seconde et par
+adresse (réserve de 40) et répond `429` avec un `detail` en français ;
+Django garde sa propre limite, plus stricte, sur l'obtention du jeton. Le
+service Django peut tourner avec un rôle Postgres sans droit sur le schéma
+(`deploy/creer_role_applicatif.sql`), les migrations gardant le rôle
+propriétaire.
+
+La pile de production sauvegarde chaque nuit la base (`pg_dump -Fc`, gardé
+14 jours) et met en miroir le bucket des justificatifs dans le volume
+`sauvegardes` ; `deploy/restaurer.sh` restaure un dump, dans la pile ou dans
+une base jetable pour le test trimestriel. Le volume reste sur la machine :
+sa copie ailleurs est à organiser. Tout est décrit dans
+[`deploy/README.md`](deploy/README.md).
 
 ## Variables d'environnement
 
@@ -326,7 +347,11 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `DJANGO_TIME_ZONE` | `UTC` | fuseau de référence du serveur |
 | `DJANGO_CREATE_SUPERUSER` | `0` | `1` crée un compte d'amorçage au démarrage, profil `super_admin` et mot de passe provisoire |
 | `DJANGO_SUPERUSER_USERNAME` / `_EMAIL` / `_PASSWORD` | `admin` / — / — | identité de ce compte ; sans mot de passe, rien n'est créé |
-| `POSTGRES_HOST` / `_PORT` / `_DB` / `_USER` / `_PASSWORD` | `db` / `5432` / `justi_innov` / `justi` / `justi` | connexion à la base |
+| `POSTGRES_HOST` / `_PORT` / `_DB` / `_USER` / `_PASSWORD` | `db` / `5432` / `justi_innov` / `justi` / `justi` | connexion à la base (le mot de passe est **obligatoire** hors mode debug) |
+| `DATABASE_URL` | — | `postgresql://utilisateur:motdepasse@hôte:port/base?sslmode=…` ; si définie, prime sur les `POSTGRES_*`. Parseur maison (`config.settings.parse_database_url`) : les paramètres de la chaîne de requête vont dans `OPTIONS`, le mot de passe est décodé |
+| `POSTGRES_MIGRATION_USER` / `_PASSWORD` | — | rôle propriétaire avec lequel `migrate` et `createcachetable` tournent au démarrage, quand `POSTGRES_USER` est le rôle applicatif sans DDL (`deploy/creer_role_applicatif.sql`) |
+| `DATABASE_MIGRATION_URL` | — | même chose, sous forme d'URL, quand la base est désignée par `DATABASE_URL` |
+| `SAUVEGARDE_HEURE` / `SAUVEGARDE_PIECES_HEURE` / `SAUVEGARDE_RETENTION_JOURS` | `02:00` / `02:15` / `14` | heure UTC du `pg_dump` et du miroir des justificatifs, rétention des dumps (pile de production) |
 | `AWS_S3_ENDPOINT_URL` | — | active le stockage objet (MinIO) ; disque local si vide |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_STORAGE_BUCKET_NAME` | — / — / `justificatifs` | accès au stockage objet |
 | `MAX_PROOF_SIZE` | `20971520` | taille maximale d'un justificatif (octets) |
@@ -450,3 +475,39 @@ s'en détacher.
 Les alertes budgétaires deviennent des notifications persistantes, in-app et
 par e-mail, avec une clé d'unicité qui évite de signaler deux fois le même
 franchissement.
+
+## Import Excel et N°ORDRE
+
+`POST /api/imports/expenses.xlsx` (champ `file`, rôles de saisie) lit deux
+classeurs : l'export de la plateforme, et le **classeur historique du
+client** — feuille « BASE DE DONNEES ACTIONS », titre et note en tête,
+en-tête en septième ligne, neuf colonnes (N°ORDRE, DATE, TEAM, OWNER,
+LIBELLE DES TRANSACTIONS, DEPENSES, MONTANT JUSTIFIER, ECART, PIECES
+JUSTIFICATIVES). La ligne d'en-tête est reconnue à son contenu dans les
+quinze premières lignes ; seules ces six premières colonnes sont
+obligatoires.
+
+- Le classeur historique est mono-pays : passez le pays en paramètre,
+  `?country=<id>` (ou champ de formulaire `country`). Il est vérifié contre
+  le périmètre du compte ; un pays inconnu et un pays hors périmètre reçoivent
+  le même refus. Avec une colonne PAYS, le paramètre sert de repli aux
+  cellules vides.
+- Le **N°ORDRE est unique par pays**, comme dans le classeur : le « 12 » du
+  Togo et le « 12 » de la Côte d'Ivoire sont deux dossiers. Une ligne rejoint
+  le dossier de son pays s'il est encore en brouillon, sinon elle le crée ;
+  un entier est lu en texte (« 12 », jamais « 12.0 »).
+- Tout arrive en **brouillon**, sans montant justifié : MONTANT JUSTIFIER,
+  ECART et STATUT sont ignorés — le siège constate. La mention de la colonne
+  PIECES JUSTIFICATIVES est gardée en remarque de la ligne
+  (« Pièce : Reçu(justif incomplet) ») ; la pièce elle-même se dépose ensuite
+  sur le dossier.
+- Une équipe ou un manager que le pays ne connaît pas est **créé dans le
+  pays** (et journalisé dans l'historique) ; un homonyme d'un autre pays n'est
+  jamais réutilisé. `?dry_run=true` valide tout, compte ce qui serait créé
+  (`dossiers_crees`, `lignes_creees`, `equipes_creees`, `managers_crees`) et
+  n'écrit rien.
+- Rien n'est écrit tant qu'une ligne est en erreur ; chaque erreur porte le
+  numéro de ligne **du classeur**, tel qu'Excel l'affiche. Réimporter le même
+  fichier ne crée rien.
+- À la soumission d'un dossier, chaque ligne doit porter une équipe et un
+  manager : l'import les fournit, une saisie manuelle doit les compléter.

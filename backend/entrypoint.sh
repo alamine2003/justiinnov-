@@ -1,11 +1,31 @@
 #!/bin/sh
 set -e
 
+# Les migrations et la table de cache créent des tables : c'est du DDL, que
+# le rôle applicatif à moindre privilège (deploy/creer_role_applicatif.sql)
+# n'a pas le droit de faire. Si POSTGRES_MIGRATION_USER est défini, ces deux
+# commandes — et elles seules — tournent avec le rôle propriétaire ; le
+# serveur, lui, garde POSTGRES_USER. Avec une base désignée par DATABASE_URL,
+# c'est DATABASE_MIGRATION_URL qui joue ce rôle.
+en_tant_que_proprietaire() {
+  if [ -n "${DATABASE_MIGRATION_URL:-}" ]; then
+    env DATABASE_URL="$DATABASE_MIGRATION_URL" "$@"
+  elif [ -n "${POSTGRES_MIGRATION_USER:-}" ]; then
+    if [ -n "${DATABASE_URL:-}" ]; then
+      echo "⚠ POSTGRES_MIGRATION_USER est ignoré : DATABASE_URL prime. Définissez DATABASE_MIGRATION_URL."
+    fi
+    env POSTGRES_USER="$POSTGRES_MIGRATION_USER" \
+      POSTGRES_PASSWORD="${POSTGRES_MIGRATION_PASSWORD:-}" "$@"
+  else
+    "$@"
+  fi
+}
+
 echo "→ Application des migrations…"
-python manage.py migrate --noinput
+en_tant_que_proprietaire python manage.py migrate --noinput
 
 echo "→ Table de cache (limitation de débit partagée entre workers)…"
-python manage.py createcachetable
+en_tant_que_proprietaire python manage.py createcachetable
 
 echo "→ Stockage des justificatifs…"
 python manage.py ensure_bucket

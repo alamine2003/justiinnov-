@@ -97,6 +97,14 @@ class Team(TimeStampedModel):
     class Meta:
         ordering = ["name"]
         verbose_name = "Équipe"
+        # Deux « Équipe Lomé » dans le même pays ne se distinguent ni à
+        # l'écran ni dans un classeur importé : la ligne irait à l'une ou à
+        # l'autre au hasard. Le même nom reste possible dans deux pays.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["country", "name"], name="unique_equipe_par_pays"
+            )
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.country.name})"
@@ -143,6 +151,13 @@ class Project(TimeStampedModel):
     class Meta:
         ordering = ["-created_at"]
         verbose_name = "Projet"
+        # Même raison que pour l'équipe : une sous-enveloppe se rattache à
+        # un projet par son nom, il doit désigner un seul projet du pays.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["country", "name"], name="unique_projet_par_pays"
+            )
+        ]
 
     def __str__(self):
         return self.name
@@ -230,8 +245,11 @@ class ChangeLog(models.Model):
     )
     label = models.CharField("Libellé", max_length=250)
     action = models.CharField("Action", max_length=20, choices=Actions.choices)
+    # PROTECT, et non SET_NULL : l'historique est immuable en base (un
+    # déclencheur refuse toute mise à jour), et un pays qui a laissé des
+    # traces ne se supprime pas — il se désactive.
     country = models.ForeignKey(
-        Country, null=True, blank=True, on_delete=models.SET_NULL,
+        Country, null=True, blank=True, on_delete=models.PROTECT,
         related_name="history", verbose_name="Pays",
     )
     from_value = models.TextField("Valeur précédente", blank=True)

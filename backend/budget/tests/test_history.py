@@ -2,6 +2,8 @@
 
 from decimal import Decimal
 
+from django.db.models import Max
+
 from core.models import ChangeLog
 
 from .test_budgets import BudgetTestCase
@@ -10,11 +12,13 @@ from .test_budgets import BudgetTestCase
 class BudgetHistoryTests(BudgetTestCase):
     def setUp(self):
         super().setUp()
-        ChangeLog.objects.all().delete()
+        # Le journal est en ajout seul, jusque dans la base : on ignore ce
+        # qui précède le test au lieu de l'effacer.
+        self.repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
         self.login(self.doo)
 
     def entries(self, **filters):
-        return ChangeLog.objects.filter(**filters).order_by("id")
+        return ChangeLog.objects.filter(pk__gt=self.repere, **filters).order_by("id")
 
     def test_reduire_une_enveloppe_laisse_une_trace(self):
         """Régression : une enveloppe pouvait passer de 8 M à 400 000 sans que
@@ -106,10 +110,12 @@ class BudgetHistoryTests(BudgetTestCase):
 
         response = self.client.get("/api/history/", {"model_name": "budget"})
 
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(
-            response.data["results"][0]["model_name_display"], "Enveloppe budgétaire"
-        )
+        # Les enveloppes du décor ont déjà laissé leur création dans le
+        # journal : seule l'entrée écrite par ce test compte.
+        recentes = [e for e in response.data["results"] if e["id"] > self.repere]
+        self.assertEqual(len(recentes), 1)
+        self.assertEqual(recentes[0]["model_name_display"], "Enveloppe budgétaire")
+        self.assertEqual(recentes[0]["action"], ChangeLog.Actions.UPDATED)
 
 
 class SignalDurabilityTests(BudgetTestCase):
@@ -127,14 +133,16 @@ class SignalDurabilityTests(BudgetTestCase):
         import gc
 
         gc.collect()
-        ChangeLog.objects.all().delete()
+        repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
         self.login(self.doo)
 
         self.client.patch(
             f"/api/budgets/{self.budget_togo.pk}/", {"amount": "123456.00"}
         )
 
-        entry = ChangeLog.objects.filter(model_name=ChangeLog.Models.BUDGET).get()
+        entry = ChangeLog.objects.filter(
+            pk__gt=repere, model_name=ChangeLog.Models.BUDGET
+        ).get()
         self.assertEqual(entry.action, ChangeLog.Actions.UPDATED)
         self.assertEqual(entry.changed_fields, ["amount"])
         self.assertEqual(entry.performed_by, "do.innov")

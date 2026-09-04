@@ -23,29 +23,47 @@ dépensé, quand, où, au profit de qui — et où est la preuve**. D'où
 
 ### Correspondance avec le fichier Excel « BASE DE DONNEES ACTIONS »
 
-L'export `/api/exports/expenses.xlsx` reprend les colonnes d'origine, et
-l'import `/api/imports/expenses.xlsx` lit exactement ce format (13 colonnes).
+Le classeur réel du client (un par pays et par période) se présente ainsi :
+une feuille « BASE DE DONNEES ACTIONS », un titre fusionné en ligne 2, une
+note en ligne 4, **l'en-tête en ligne 7** et neuf colonnes exactement —
+N°ORDRE · DATE · TEAM · OWNER · LIBELLE DES TRANSACTIONS · DEPENSES ·
+MONTANT JUSTIFIER · ECART · PIECES JUSTIFICATIVES. Les N°ORDRE y sont des
+entiers **numérotés par pays** (1 → n, un numéro regroupant jusqu'à
+quelques dizaines de lignes), les dates n'ont pas d'heure, les montants sont
+entiers, MONTANT JUSTIFIER est parfois vide, et la colonne des pièces porte
+des mentions comme « Reçu » ou « Reçu(justif incomplet) ».
+
+L'export `/api/exports/expenses.xlsx` reprend ces colonnes en y ajoutant
+PAYS, DEVISE D'ORIGINE, MONTANT D'ORIGINE et STATUT (13 colonnes, en-tête en
+première ligne). L'import `/api/imports/expenses.xlsx` lit **les deux
+formats** : il cherche la ligne d'en-tête dans les quinze premières lignes
+(celle qui porte N°ORDRE et DEPENSES) et ne rend obligatoires que les six
+colonnes du classeur historique.
 
 | Colonne Excel | Modèle | Notes |
 |---|---|---|
-| N°ORDRE | `Dossier.number` | entité regroupant lignes et preuves |
-| DATE | `Expense.date` | date et heure, lues dans le fuseau du pays |
-| PAYS | `Expense.country` | ajoutée : le fichier d'origine était mono-pays |
-| TEAM | `Expense.team` | dupliqué sur chaque ligne |
-| OWNER | `Expense.owner` | manager propriétaire |
+| N°ORDRE | `Dossier.number` | entité regroupant lignes et preuves ; **unique par pays** ; un entier est lu en texte (« 12 », jamais « 12.0 ») |
+| DATE | `Expense.date` | date, avec ou sans heure, lue dans le fuseau du pays |
+| PAYS | `Expense.country` | *facultative* : absente du classeur historique (mono-pays), le pays vient alors du paramètre `country` de la requête, obligatoire et vérifié contre le périmètre ; il sert aussi de repli si la cellule est vide |
+| TEAM | `Expense.team` | dupliqué sur chaque ligne ; **une équipe inconnue est créée dans le pays** |
+| OWNER | `Expense.owner` | manager propriétaire ; **un manager inconnu est créé et rattaché au pays** (un homonyme d'un autre pays n'est pas réutilisé) |
 | LIBELLE DES TRANSACTIONS | `Expense.title` | |
 | DEPENSES | `Expense.amount` | dans la devise du pays |
-| DEVISE D'ORIGINE | `Expense.original_currency` | vide si décaissée dans la devise du pays |
-| MONTANT D'ORIGINE | `Expense.original_amount` | tel qu'il figure sur la pièce |
-| MONTANT JUSTIFIER | `Expense.justified_amount` | |
-| ECART | *calculé* = `amount − justified_amount` | jamais stocké |
-| STATUT | `Expense.status` | |
-| PIECES JUSTIFICATIVES | `Proof` (rattachées au dossier) | noms et état des pièces |
+| DEVISE D'ORIGINE | `Expense.original_currency` | *facultative* ; vide si décaissée dans la devise du pays |
+| MONTANT D'ORIGINE | `Expense.original_amount` | *facultative* ; tel qu'il figure sur la pièce |
+| MONTANT JUSTIFIER | — | **ignorée à l'import** : le siège constate, un montant justifié ne s'importe pas ; l'export l'écrit depuis `Expense.justified_amount` |
+| ECART | — | **ignorée à l'import** ; l'export l'écrit, *calculé* = `amount − justified_amount`, jamais stocké |
+| STATUT | — | **ignorée à l'import** : tout arrive en brouillon ; l'export l'écrit depuis `Expense.status` |
+| PIECES JUSTIFICATIVES | `Expense.note` à l'import (« Pièce : Reçu(justif incomplet) ») ; `Proof` à l'export | la mention du classeur est une information, pas une preuve : la pièce elle-même se dépose ensuite sur le dossier |
+
+Les entités de référentiel créées par l'import passent par le modèle, donc
+par l'historique (`ChangeLog`), au nom de celui qui importe ; la
+prévisualisation (`dry_run`) les compte sans les créer.
 
 > **Interprétation `N°ORDRE`** : le numéro d'ordre devient une entité
 > « dossier de justification » regroupant les preuves associées à une même
 > opération. Les lignes Excel deviennent des lignes de dépenses rattachées à
-> ce dossier.
+> ce dossier. Comme dans le classeur, le numéro est **propre à chaque pays**.
 
 ## 2. Référentiel (`core`)
 
@@ -58,9 +76,13 @@ suppression : l'API répond 405 sur `DELETE`.
   (`core/africa.py`), `currency`, `currency_symbol`, `timezone`, `managers`
   (M2M), `is_active`.
 - `Manager` — responsable ; peut exister sans compte utilisateur.
-- `Team`, `CostCenter` (`code` unique par pays), `Project` (`status`,
-  `budget`), `ExpenseTitle` (`label` unique par pays), `MarketingCategory`
-  (`name` unique par pays) — tous rattachés à un pays.
+- `Team` (`name` unique par pays, `unique_equipe_par_pays`), `CostCenter`
+  (`code` unique par pays), `Project` (`status`, `budget` ; `name` unique
+  par pays, `unique_projet_par_pays`), `ExpenseTitle` (`label` unique par
+  pays), `MarketingCategory` (`name` unique par pays) — tous rattachés à un
+  pays. Le même nom reste possible dans deux pays : le référentiel est
+  cloisonné. La migration `core.0010` a renommé les homonymes préexistants
+  avec un suffixe « (2) », « (3) »… plutôt que de les fusionner.
 - `ChangeLog` — journal des changements du référentiel et des budgets :
   `model_name`, `object_id`, `label`, `action` (création, mise à jour,
   changement de rattachement, désactivation, réactivation, suppression,
@@ -195,7 +217,7 @@ appuient.
 
 | Champ | Type | Notes |
 |---|---|---|
-| `number` | Char(50) | **N°ORDRE**, unique, auto-généré ou saisi |
+| `number` | Char(50) | **N°ORDRE**, **unique par pays** (`unique_dossier_par_pays`), saisi ou importé : le classeur du client numérote de 1 à n dans chaque pays |
 | `label` | Char(250) | |
 | `country` | FK → Country (PROTECT) | |
 | `team` | FK → Team (null) | contexte |
@@ -285,7 +307,9 @@ brouillon   soumis     en contrôle └▶ unjustified ┘
 ```
 
 - `submit` : le pays soumet le dossier, ses lignes partent avec lui. Un
-  dossier vide ne se soumet pas ; un dossier sans pièce se soumet avec un
+  dossier vide ne se soumet pas ; **chaque ligne doit porter une équipe et
+  un manager** (cahier des charges §7), sinon la soumission est refusée en
+  nommant les lignes incomplètes ; un dossier sans pièce se soumet avec un
   avertissement (`warn_without_proof_submission`).
 - `review` : mise en contrôle, facultative sauf si `require_review_step`.
 - `justify` / `reject` : le siège constate ; `reject` exige un motif et
@@ -362,6 +386,20 @@ AuditLog, ChangeLog, Notification ─▶ Country (null)
 | 10 | Identités dans les journaux | **en texte**, pas en clé étrangère |
 | 11 | Décaissement en devise étrangère | montant et taux d'origine **figés** sur la ligne, enveloppe monodevise |
 | 12 | Politique du circuit | `WorkflowConfiguration`, singleton modifiable par le siège |
+| 13 | N°ORDRE | **unique par pays**, comme dans le classeur du client ; deux pays peuvent porter le même numéro |
+| 14 | Nom d'équipe, nom de projet | **uniques par pays** ; le même nom reste possible dans deux pays |
+| 15 | Champs obligatoires à la soumission (CdC §7) | **équipe et manager** sur chaque ligne, vérifiés à la soumission seulement — pas de contrainte en base, l'import crée des brouillons incomplets. **Lieu, projet et intitulé restent facultatifs** : le classeur historique ne les porte pas, les exiger rendrait l'historique impossible à déclarer |
+| 16 | Import Excel | lit le classeur historique (en-tête cherché dans les 15 premières lignes, colonnes PAYS / devise / statut facultatives) ; équipes et managers inconnus **créés dans le pays** ; MONTANT JUSTIFIER, ECART et STATUT ignorés |
+
+### Décisions contraires au cahier des charges, assumées
+
+| # | Point du cahier des charges | Choix retenu et raison |
+|---|---|---|
+| C1 | §4 — validation par délégation au responsable pays | **Pas de délégation.** Le pays déclare, le siège constate : un responsable pays qui justifierait les dépenses de son pays viderait l'application de son objet. Les rôles de validation (`VALIDATION_ROLES`) excluent les rôles pays. |
+| C2 | §5.5 / §6 — opération de correction après soumission | **Aucune correction après soumission.** Une dépense soumise est irréversible ; la seule voie est `justify` / `reject` (motif obligatoire) puis clôture. Une erreur se traite par une nouvelle ligne ou un nouveau dossier, jamais en réécrivant la déclaration. |
+| C3 | §5.7 — rapports | **Rapport PDF par pays et exercice seulement** (`/api/exports/report.pdf?year=&country=`). Pas de rapport par équipe, manager ou période libre : ces découpages se lisent dans le tableau de bord (`/api/dashboard/breakdown/`) et l'export Excel. |
+| C4 | §5.2 — sous-enveloppes | **Par projet, équipe ou manager — pas par catégorie.** Une sous-enveloppe suit une dimension d'imputation d'une ligne ; la catégorie marketing est une étiquette d'analyse, pas une responsabilité budgétaire. |
+| C5 | Périmètre par équipe | `UserProfile.teams` existe mais **ne restreint rien aujourd'hui** : le cloisonnement se fait par pays. **Question ouverte** : faut-il un cloisonnement par équipe à l'intérieur d'un pays ? |
 
 ## 9. Stockage des fichiers
 

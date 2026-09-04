@@ -15,6 +15,23 @@
 # Les limites de mémoire (`mem_limit`) sont dimensionnées pour une machine de
 # 4 Go ; leur somme reste sous 3 Go. Un service qui les dépasse est tué et
 # relancé par `restart`, plutôt que d'emporter la machine avec lui.
+
+# Deux rôles Postgres : le propriétaire (POSTGRES_MIGRATION_USER, sinon
+# POSTGRES_USER) initialise la base, joue les migrations et fait les
+# sauvegardes ; le service tourne avec POSTGRES_USER. Tant que
+# creer_role_applicatif.sql n'a pas été joué, les deux sont le même rôle.
+x-proprietaire: &proprietaire
+  PGHOST: db
+  PGDATABASE: ${POSTGRES_DB:-justi_innov}
+  PGUSER: ${POSTGRES_MIGRATION_USER:-${POSTGRES_USER:-justi}}
+  PGPASSWORD: ${POSTGRES_MIGRATION_PASSWORD:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}}
+
+x-journal: &journal
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 x-backend: &backend
   image: ${BACKEND_IMAGE:?BACKEND_IMAGE manquant}:${IMAGE_TAG:?IMAGE_TAG manquant}
   env_file: .env
@@ -24,11 +41,7 @@ x-backend: &backend
     AWS_S3_ENDPOINT_URL: "http://minio:9000"
     DJANGO_DEBUG: "0"
   restart: unless-stopped
-  logging:
-    driver: json-file
-    options:
-      max-size: "20m"
-      max-file: "5"
+  logging: *journal
 
 services:
   db:
@@ -41,14 +54,16 @@ services:
     command: postgres -c shared_buffers=256MB -c effective_cache_size=768MB
     shm_size: 256m
     mem_limit: 1g
+    # Le superutilisateur du conteneur est le rôle propriétaire : celui qui
+    # existait avant creer_role_applicatif.sql, et qui garde le schéma.
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-justi_innov}
-      POSTGRES_USER: ${POSTGRES_USER:-justi}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}
+      POSTGRES_USER: ${POSTGRES_MIGRATION_USER:-${POSTGRES_USER:-justi}}
+      POSTGRES_PASSWORD: ${POSTGRES_MIGRATION_PASSWORD:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-justi} -d ${POSTGRES_DB:-justi_innov}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_MIGRATION_USER:-${POSTGRES_USER:-justi}} -d ${POSTGRES_DB:-justi_innov}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -120,8 +135,55 @@ services:
       - frontend
     restart: unless-stopped
 
+  # Sauvegardes nocturnes (sauvegarder.sh) dans le volume `sauvegardes` :
+  # un `pg_dump -Fc` par nuit, gardé 14 jours, et un miroir du bucket des
+  # justificatifs. Deux services parce que deux outils : pg_dump vient de
+  # l'image postgres, mc de l'image minio/mc. Le volume reste sur la machine ;
+  # la copie ailleurs est décrite dans README.md, et restaurer.sh fait le
+  # chemin inverse.
+  sauvegarde:
+    image: postgres:16.4-alpine
+    mem_limit: 128m
+    entrypoint: ["/sauvegarder.sh", "base"]
+    env_file: .env
+    environment:
+      <<: *proprietaire
+      SAUVEGARDE_HEURE: ${SAUVEGARDE_HEURE:-02:00}
+      SAUVEGARDE_RETENTION_JOURS: ${SAUVEGARDE_RETENTION_JOURS:-14}
+    volumes:
+      - ./sauvegarder.sh:/sauvegarder.sh:ro
+      - ./creer_role_applicatif.sql:/creer_role_applicatif.sql:ro
+      - sauvegardes:/sauvegardes
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *journal
+
+  sauvegarde-pieces:
+    # Étiquette épinglée, comme celle de MinIO : `latest` changerait sous nos
+    # pieds à chaque `pull`.
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    mem_limit: 128m
+    entrypoint: ["/sauvegarder.sh", "pieces"]
+    env_file: .env
+    environment:
+      AWS_S3_ENDPOINT_URL: "http://minio:9000"
+      # Un quart d'heure après la base, pour ne pas charger le disque deux
+      # fois en même temps.
+      SAUVEGARDE_HEURE: ${SAUVEGARDE_PIECES_HEURE:-02:15}
+    volumes:
+      - ./sauvegarder.sh:/sauvegarder.sh:ro
+      - sauvegardes:/sauvegardes
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *journal
+
 volumes:
   pgdata:
   miniodata:
   caddy_data:
   caddy_config:
+  sauvegardes:

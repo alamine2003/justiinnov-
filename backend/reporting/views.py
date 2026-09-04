@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, MultiPartParser
 
 from budget.aggregates import consolidation_par_pays, current_rates, to_xof
+from core.models import Country
 from core.requetes import client_ip
 from expenses.models import AuditLog
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
@@ -358,10 +359,14 @@ class CountryReportView(ExportView):
 
 
 class ExpensesImportView(APIView):
-    """Importe le format exact de l'export des dépenses.
+    """Importe l'export des dépenses ou le classeur historique du client.
 
     Réservé aux rôles de saisie : importer, c'est déclarer. Un contrôleur ou
     la direction des opérations lisent et constatent, ils ne déclarent pas.
+
+    Le classeur historique est mono-pays et n'a pas de colonne PAYS : le
+    pays vient alors du paramètre ``country`` (requête ou formulaire),
+    vérifié contre le périmètre du demandeur.
     """
 
     parser_classes = [MultiPartParser, FormParser]
@@ -374,7 +379,29 @@ class ExpensesImportView(APIView):
         if uploaded is None:
             raise ValidationError({"file": "Le champ file est obligatoire."})
         dry_run = str(request.query_params.get("dry_run", "false")).lower() == "true"
+        country = self._pays_de_l_import(request)
         with transaction.atomic():
-            resultat = importer_depenses(uploaded, request.user, dry_run=dry_run)
-            audit_import(request, resultat)
+            resultat = importer_depenses(
+                uploaded, request.user, dry_run=dry_run, country=country
+            )
+            audit_import(request, resultat, country=country)
         return Response(resultat)
+
+    def _pays_de_l_import(self, request):
+        """Le pays désigné par la requête, s'il est dans le périmètre.
+
+        Un pays inconnu et un pays hors périmètre reçoivent le même refus :
+        dire « hors périmètre » confirmerait qu'il existe.
+        """
+        brut = request.query_params.get("country") or request.data.get("country")
+        if brut in (None, ""):
+            return None
+        country_id = _as_int(brut, "country")
+        access = get_access(request.user)
+        candidats = Country.objects.filter(pk=country_id)
+        if not access.has_global_scope:
+            candidats = candidats.filter(pk__in=access.country_ids)
+        country = candidats.first()
+        if country is None:
+            raise ValidationError({"country": "Pays inconnu."})
+        return country

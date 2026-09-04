@@ -32,6 +32,9 @@ class DeviseDuDecaissementTests(ExpenseTestCase):
             "date": f"{self.year}-03-15T10:00:00Z",
             "title": "Hôtel",
             "amount": "10000.00",
+            # Une ligne ne se soumet qu'avec son équipe et son manager (§7).
+            "team": self.team.pk,
+            "owner": self.manager.pk,
         }
         data.update(overrides)
         return data

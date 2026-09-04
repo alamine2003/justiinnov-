@@ -2,6 +2,7 @@
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.db.models import Max
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -196,7 +197,9 @@ class HistoryScopeTests(ApiTestCase):
         ils étaient invisibles pour un rôle du siège limité à quelques pays."""
         autre = Country.objects.create(name="Bénin", code="BJ", currency="XOF")
         self._compte("doo.test", Role.DOO, [self.country])
-        ChangeLog.objects.all().delete()
+        # Le journal est en ajout seul : on ne le vide pas, on retient un
+        # repère et on ne juge que ce qui vient après.
+        repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
         ChangeLog.objects.create(
             model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
             label="Configuration", action=ChangeLog.Actions.UPDATED,
@@ -208,14 +211,14 @@ class HistoryScopeTests(ApiTestCase):
 
         response = self.client.get("/api/history/")
 
-        labels = {e["model_name"] for e in response.data["results"]}
+        nouvelles = [e for e in response.data["results"] if e["id"] > repere]
+        labels = {e["model_name"] for e in nouvelles}
         self.assertEqual(labels, {"workflow_configuration", "country"})
-        pays = {e["country"] for e in response.data["results"]}
+        pays = {e["country"] for e in nouvelles}
         self.assertEqual(pays, {None, self.country.pk})
 
     def test_un_responsable_pays_ne_voit_pas_les_entrees_sans_pays(self):
         self._compte("pays.test", Role.COUNTRY_MANAGER, [self.country])
-        ChangeLog.objects.all().delete()
         ChangeLog.objects.create(
             model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
             label="Configuration", action=ChangeLog.Actions.UPDATED,
@@ -223,7 +226,9 @@ class HistoryScopeTests(ApiTestCase):
 
         response = self.client.get("/api/history/")
 
-        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(
+            [e for e in response.data["results"] if e["country"] is None], []
+        )
 
 
 class PaginationTests(ApiTestCase):

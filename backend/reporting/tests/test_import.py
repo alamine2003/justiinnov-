@@ -1,6 +1,6 @@
 """Import Excel des dépenses, dans le contrat produit par l'export."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 from unittest import mock
@@ -11,8 +11,10 @@ from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from openpyxl import Workbook
 
+from accounts.models import Role
+from accounts.tests.test_scoping import make_user
 from budget.models import ExchangeRate
-from core.models import Manager
+from core.models import ChangeLog, Manager, Team
 from expenses.models import AuditLog, Dossier, Expense
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
@@ -155,14 +157,63 @@ class ImportTests(ExpenseTestCase):
         self.assertFalse(response.data["erreurs"])
         self.assertEqual(Expense.objects.get().owner, self.manager)
 
-    def test_un_manager_d_un_autre_pays_est_inconnu(self):
+    def test_un_homonyme_d_un_autre_pays_n_est_pas_reutilise(self):
+        """Le manager ivoirien n'est pas rattaché au Togo en douce : un
+        manager togolais est créé, le voisin reste tel quel."""
         voisin = Manager.objects.create(name="Awa Diop")
         self.ivoire.managers.add(voisin)
 
         response = self._importer(self._classeur([self._ligne(OWNER="Awa Diop")]))
 
-        self.assertIn("inconnu", response.data["erreurs"][0]["motif"])
-        self.assertEqual(Expense.objects.count(), 0)
+        self.assertFalse(response.data["erreurs"])
+        self.assertEqual(response.data["managers_crees"], 1)
+        owner = Expense.objects.get().owner
+        self.assertNotEqual(owner, voisin)
+        self.assertEqual(list(owner.countries.all()), [self.togo])
+        self.assertEqual(list(voisin.countries.all()), [self.ivoire])
+
+    def test_un_manager_inconnu_est_cree_et_rattache_au_pays(self):
+        """Le classeur historique est la première source du référentiel :
+        exiger sa saisie préalable rendrait l'import inutile. La création
+        passe par le modèle, donc par l'historique."""
+        response = self._importer(
+            self._classeur([
+                self._ligne(OWNER="Afi Lawson"),
+                self._ligne(OWNER="afi lawson", **{"LIBELLE DES TRANSACTIONS": "Hôtel"}),
+            ])
+        )
+
+        self.assertFalse(response.data["erreurs"])
+        self.assertEqual(response.data["managers_crees"], 1)
+        cree = Manager.objects.get(name="Afi Lawson")
+        self.assertEqual(list(cree.countries.all()), [self.togo])
+        self.assertEqual(Expense.objects.filter(owner=cree).count(), 2)
+        self.assertTrue(
+            ChangeLog.objects.filter(
+                model_name=ChangeLog.Models.MANAGER, action=ChangeLog.Actions.CREATED,
+                performed_by=self.owner.username,
+            ).exists()
+        )
+
+    def test_une_equipe_inconnue_est_creee_dans_le_pays(self):
+        response = self._importer(self._classeur([self._ligne(TEAM="Équipe Kara")]))
+
+        self.assertFalse(response.data["erreurs"])
+        self.assertEqual(response.data["equipes_creees"], 1)
+        equipe = Team.objects.get(name="Équipe Kara")
+        self.assertEqual(equipe.country, self.togo)
+        self.assertEqual(Expense.objects.get().team, equipe)
+
+    def test_la_previsualisation_ne_cree_ni_equipe_ni_manager(self):
+        response = self._importer(
+            self._classeur([self._ligne(TEAM="Équipe Kara", OWNER="Afi Lawson")]),
+            dry_run="true",
+        )
+
+        self.assertEqual(response.data["equipes_creees"], 1)
+        self.assertEqual(response.data["managers_crees"], 1)
+        self.assertFalse(Team.objects.filter(name="Équipe Kara").exists())
+        self.assertFalse(Manager.objects.filter(name="Afi Lawson").exists())
 
     # -- Devise d'origine (§5.3) -------------------------------------------
 
@@ -249,19 +300,21 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual([e["ligne"] for e in response.data["erreurs"]], [2, 3, 4, 5])
         self.assertEqual(Expense.objects.count(), 0)
 
-    def test_un_dossier_d_un_autre_pays_ne_se_devoile_pas(self):
-        Dossier.objects.create(
+    def test_le_meme_numero_dans_un_autre_pays_ne_gene_pas(self):
+        """Le N°ORDRE est unique par pays : le « N-VOISIN » ivoirien
+        n'empêche pas le Togo d'ouvrir le sien, et n'y reçoit aucune ligne."""
+        voisin = Dossier.objects.create(
             number="N-VOISIN", label="Abidjan", country=self.ivoire,
             date=date(self.year, 1, 10),
         )
 
         response = self._importer(self._classeur([self._ligne(**{"N°ORDRE": "N-VOISIN"})]))
 
-        motif = response.data["erreurs"][0]["motif"]
-        self.assertNotIn("autre pays", motif)
-        self.assertNotIn("Côte", motif)
-        self.assertIn("ne peut pas être utilisé", motif)
-        self.assertEqual(Expense.objects.count(), 0)
+        self.assertFalse(response.data["erreurs"])
+        self.assertEqual(response.data["dossiers_crees"], 1)
+        togolais = Dossier.objects.get(number="N-VOISIN", country=self.togo)
+        self.assertEqual(togolais.expenses.count(), 1)
+        self.assertEqual(voisin.expenses.count(), 0)
 
     def test_le_lecteur_xml_protege_est_utilise_quand_il_est_installe(self):
         """openpyxl bascule sur defusedxml dès que le paquet est présent : le
@@ -356,3 +409,226 @@ class ImportTests(ExpenseTestCase):
 
         self.assertFalse(response.data["erreurs"])
         self.assertEqual(Expense.objects.get().title, "Déplacement")
+
+
+class ClasseurHistoriqueTests(ExpenseTestCase):
+    """Le classeur réel du client, reproduit anonymement.
+
+    Une feuille « BASE DE DONNEES ACTIONS », un titre fusionné en ligne 2,
+    une note en ligne 4, l'en-tête en ligne 7 et neuf colonnes : N°ORDRE,
+    DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES, MONTANT JUSTIFIER,
+    ECART, PIECES JUSTIFICATIVES. Les N°ORDRE sont des entiers numérotés par
+    pays, un même numéro regroupant plusieurs lignes ; les dates n'ont pas
+    d'heure ; les montants sont entiers ; MONTANT JUSTIFIER est parfois vide.
+    """
+
+    COLONNES = [
+        "N°ORDRE", "DATE", "TEAM", "OWNER", "LIBELLE DES TRANSACTIONS",
+        "DEPENSES", "MONTANT JUSTIFIER", "ECART", "PIECES JUSTIFICATIVES",
+    ]
+
+    def setUp(self):
+        super().setUp()
+        self.lignes = [
+            [1, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Carburant", 15000, 15000, 0, "Reçu"],
+            [1, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Péage", 2000, None, 2000, ""],
+            [1, datetime(self.year, 1, 7), "Équipe A", "Owner Un", "Hôtel", 45000, 30000, 15000, "Reçu(justif incomplet)"],
+            [2, datetime(self.year, 1, 12), "Équipe B", "Owner Deux", "Impression flyers", 80000, 80000, 0, "Reçu"],
+        ]
+
+    def _classeur(self, lignes=None):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "BASE DE DONNEES ACTIONS"
+        sheet.merge_cells("A2:I2")
+        sheet["A2"] = "BASE DE DONNÉES DES ACTIONS — 1er trimestre"
+        sheet["A4"] = "Note : les montants sont en francs, les pièces au bureau."
+        for colonne, entete in enumerate(self.COLONNES, start=1):
+            sheet.cell(row=7, column=colonne, value=entete)
+        for indice, ligne in enumerate(lignes if lignes is not None else self.lignes, start=8):
+            for colonne, valeur in enumerate(ligne, start=1):
+                sheet.cell(row=indice, column=colonne, value=valeur)
+        contenu = BytesIO()
+        workbook.save(contenu)
+        contenu.seek(0)
+        return contenu
+
+    def _importer(self, contenu, user=None, **query):
+        self.login(user or self.owner)
+        url = "/api/imports/expenses.xlsx"
+        if query:
+            url += "?" + urlencode(query)
+        return self.client.post(
+            url, {"file": ("historique.xlsx", contenu, XLSX)}, format="multipart"
+        )
+
+    def test_le_classeur_historique_s_importe_dans_le_pays_de_la_requete(self):
+        response = self._importer(self._classeur(), country=self.togo.pk)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data["erreurs"])
+        self.assertEqual(response.data["dossiers_crees"], 2)
+        self.assertEqual(response.data["lignes_creees"], 4)
+        premier = Dossier.objects.get(country=self.togo, number="1")
+        self.assertEqual(premier.expenses.count(), 3)
+        self.assertEqual(premier.status, Status.DRAFT)
+        self.assertEqual(premier.date, date(self.year, 1, 6))
+        second = Dossier.objects.get(country=self.togo, number="2")
+        self.assertEqual(second.expenses.count(), 1)
+        self.assertTrue(
+            all(e.country == self.togo for e in Expense.objects.all())
+        )
+
+    def test_les_dates_sans_heure_et_les_montants_entiers_sont_lus(self):
+        self._importer(self._classeur(), country=self.togo.pk)
+
+        hotel = Expense.objects.get(title="Hôtel")
+        self.assertEqual(hotel.date.date(), date(self.year, 1, 7))
+        self.assertEqual(str(hotel.amount), "45000.00")
+
+    def test_le_montant_justifie_et_l_ecart_sont_ignores(self):
+        """Le siège constate : le classeur peut dire « justifié », il ne
+        prouve rien. Une cellule vide n'est pas non plus une erreur."""
+        self._importer(self._classeur(), country=self.togo.pk)
+
+        self.assertEqual(
+            set(Expense.objects.values_list("justified_amount", flat=True)),
+            {Decimal("0.00")},
+        )
+
+    def test_la_mention_de_piece_est_conservee_en_remarque(self):
+        self._importer(self._classeur(), country=self.togo.pk)
+
+        self.assertEqual(Expense.objects.get(title="Hôtel").note, "Pièce : Reçu(justif incomplet)")
+        self.assertEqual(Expense.objects.get(title="Carburant").note, "Pièce : Reçu")
+        self.assertEqual(Expense.objects.get(title="Péage").note, "")
+
+    def test_equipes_et_managers_inconnus_sont_crees_dans_le_pays(self):
+        response = self._importer(self._classeur(), country=self.togo.pk)
+
+        self.assertEqual(response.data["equipes_creees"], 2)
+        self.assertEqual(response.data["managers_crees"], 2)
+        equipe = Team.objects.get(name="Équipe A")
+        self.assertEqual(equipe.country, self.togo)
+        owner = Manager.objects.get(name="Owner Un")
+        self.assertEqual(list(owner.countries.all()), [self.togo])
+        self.assertEqual(Expense.objects.filter(team=equipe, owner=owner).count(), 3)
+
+    def test_sans_colonne_pays_le_parametre_country_est_obligatoire(self):
+        response = self._importer(self._classeur())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["erreurs"][0]["ligne"], 1)
+        self.assertIn("PAYS", response.data["erreurs"][0]["motif"])
+        self.assertIn("country", response.data["erreurs"][0]["motif"])
+        self.assertEqual(Expense.objects.count(), 0)
+        self.assertEqual(Team.objects.filter(name="Équipe A").count(), 0)
+
+    def test_un_pays_hors_perimetre_est_refuse_comme_un_pays_inconnu(self):
+        """Le responsable togolais ne verse pas dans la Côte d'Ivoire ; et le
+        refus ne dit pas si ce pays existe."""
+        hors = self._importer(self._classeur(), country=self.ivoire.pk)
+        inconnu = self._importer(self._classeur(), country=self.ivoire.pk + 1000)
+
+        self.assertEqual(hors.status_code, 400)
+        self.assertEqual(inconnu.status_code, 400)
+        self.assertEqual(hors.data, inconnu.data)
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_le_siege_importe_dans_n_importe_quel_pays(self):
+        siege = make_user("ceo.innov", Role.SUPER_ADMIN)
+
+        response = self._importer(self._classeur(), user=siege, country=self.ivoire.pk)
+
+        self.assertFalse(response.data["erreurs"])
+        self.assertEqual(Dossier.objects.filter(country=self.ivoire).count(), 2)
+
+    def test_le_pays_peut_venir_du_formulaire(self):
+        self.login(self.owner)
+
+        response = self.client.post(
+            "/api/imports/expenses.xlsx",
+            {"file": ("historique.xlsx", self._classeur(), XLSX), "country": self.togo.pk},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["lignes_creees"], 4)
+
+    def test_la_previsualisation_fonctionne_sur_ce_format(self):
+        response = self._importer(self._classeur(), country=self.togo.pk, dry_run="true")
+
+        self.assertTrue(response.data["dry_run"])
+        self.assertEqual(response.data["dossiers_crees"], 2)
+        self.assertEqual(response.data["lignes_creees"], 4)
+        self.assertEqual(response.data["equipes_creees"], 2)
+        self.assertEqual(response.data["managers_crees"], 2)
+        self.assertEqual(Expense.objects.count(), 0)
+        self.assertEqual(Dossier.objects.filter(country=self.togo).count(), 1)
+        self.assertFalse(Team.objects.filter(name="Équipe A").exists())
+        self.assertFalse(Manager.objects.filter(name="Owner Un").exists())
+
+    def test_les_erreurs_sont_signalees_au_numero_de_ligne_du_classeur(self):
+        """La ligne 9 du classeur est la ligne 9, pas la deuxième après
+        l'en-tête : le déclarant doit la retrouver dans Excel."""
+        lignes = list(self.lignes)
+        lignes[1] = [1, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Péage", "deux mille", None, None, ""]
+
+        response = self._importer(self._classeur(lignes), country=self.togo.pk)
+
+        self.assertEqual(len(response.data["erreurs"]), 1)
+        self.assertEqual(response.data["erreurs"][0]["ligne"], 9)
+        self.assertIn("DEPENSES", response.data["erreurs"][0]["motif"])
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_un_numero_d_ordre_numerique_rejoint_le_dossier_saisi_a_la_main(self):
+        """Un N°ORDRE lu en flottant donnerait « 1.0 » : il doit rejoindre
+        le dossier « 1 » ouvert à la main."""
+        self.dossier.number = "1"
+        self.dossier.save()
+        lignes = [[1.0, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Carburant", 15000, 15000, 0, "Reçu"]]
+
+        response = self._importer(self._classeur(lignes), country=self.togo.pk)
+
+        self.assertFalse(response.data["erreurs"])
+        self.assertEqual(response.data["dossiers_crees"], 0)
+        self.assertEqual(self.dossier.expenses.count(), 1)
+
+    def test_reimporter_le_classeur_historique_ne_cree_rien(self):
+        self._importer(self._classeur(), country=self.togo.pk)
+
+        response = self._importer(self._classeur(), country=self.togo.pk)
+
+        self.assertEqual(len(response.data["erreurs"]), 4)
+        self.assertEqual(Expense.objects.count(), 4)
+        self.assertEqual(Team.objects.filter(name="Équipe A").count(), 1)
+
+    def test_les_lignes_importees_se_soumettent_ensuite(self):
+        """L'import fournit équipe et manager : le dossier peut partir."""
+        self._importer(self._classeur(), country=self.togo.pk)
+        premier = Dossier.objects.get(country=self.togo, number="1")
+
+        response = self.submit_dossier(premier)
+
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_l_import_est_journalise_avec_son_pays(self):
+        self._importer(self._classeur(), country=self.togo.pk)
+
+        entry = AuditLog.objects.get(object_type="ExpenseImport")
+        self.assertEqual(entry.country, self.togo)
+        self.assertEqual(entry.detail["lignes_creees"], 4)
+
+    def test_sans_ligne_d_entete_le_classeur_est_refuse(self):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet["A1"] = "Un classeur qui n'a rien à voir"
+        sheet["A2"] = 42
+        contenu = BytesIO()
+        workbook.save(contenu)
+        contenu.seek(0)
+
+        response = self._importer(contenu, country=self.togo.pk)
+
+        self.assertEqual(response.data["erreurs"][0]["ligne"], 1)
+        self.assertIn("introuvable", response.data["erreurs"][0]["motif"])

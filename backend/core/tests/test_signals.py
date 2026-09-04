@@ -1,5 +1,7 @@
 """Tests de l'historisation automatique (``core.signals``)."""
 
+from django.db.models import Max
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 
 from core.models import ChangeLog, CostCenter, Country, Manager, Team
@@ -16,10 +18,19 @@ class ChangeLogTestCase(TestCase):
             name="Sénégal", code="SN", currency="XOF", timezone="Africa/Dakar"
         )
         self.team = Team.objects.create(country=self.ghana, name="Équipe Nord")
-        ChangeLog.objects.all().delete()
+        self.oublier()
+
+    def oublier(self):
+        """Ignore les entrées écrites jusqu'ici.
+
+        Le journal est en ajout seul, jusque dans la base (déclencheur) : le
+        vider n'est plus possible, même dans un test. On retient un repère et
+        ``entries`` ne lit que ce qui vient après.
+        """
+        self.repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
 
     def entries(self, **filters):
-        return ChangeLog.objects.filter(**filters).order_by("id")
+        return ChangeLog.objects.filter(pk__gt=self.repere, **filters).order_by("id")
 
 
 class CreationTests(ChangeLogTestCase):
@@ -126,25 +137,19 @@ class DeletionTests(ChangeLogTestCase):
         self.assertIn("Équipe Nord", entry.from_value)
         self.assertEqual(entry.to_value, "")
 
-    def test_suppression_en_cascade_d_un_pays(self):
-        """Les entités filles doivent être journalisées sans référence à un
-        pays supprimé (sinon violation de clé étrangère)."""
+    def test_un_pays_qui_a_laisse_des_traces_ne_se_supprime_pas(self):
+        """L'historique est immuable et pointe vers le pays : la base refuse
+        la suppression, même par un canal qui contourne l'API. Le pays se
+        désactive, il ne disparaît pas."""
         CostCenter.objects.create(country=self.ghana, code="CC01", name="Paris")
-        ChangeLog.objects.all().delete()
+        self.oublier()
 
-        self.ghana.delete()
+        with self.assertRaises(ProtectedError):
+            self.ghana.delete()
 
-        deleted = self.entries(action=ChangeLog.Actions.DELETED)
-        self.assertEqual(
-            set(deleted.values_list("model_name", flat=True)),
-            {
-                ChangeLog.Models.TEAM,
-                ChangeLog.Models.COST_CENTER,
-                ChangeLog.Models.COUNTRY,
-            },
-        )
-        # Aucune entrée ne pointe vers le pays supprimé.
-        self.assertFalse(deleted.filter(country__isnull=False).exists())
+        self.assertTrue(Country.objects.filter(pk=self.ghana.pk).exists())
+        self.assertTrue(CostCenter.objects.filter(code="CC01").exists())
+        self.assertFalse(self.entries(action=ChangeLog.Actions.DELETED).exists())
 
 
 class DiffEtAdresseTests(ChangeLogTestCase):
@@ -216,7 +221,7 @@ class ManagersDuPaysTests(ChangeLogTestCase):
         super().setUp()
         self.awa = Manager.objects.create(name="Awa Diop")
         self.kofi = Manager.objects.create(name="Kofi Mensah")
-        ChangeLog.objects.all().delete()
+        self.oublier()
 
     def test_ajout_d_un_manager(self):
         self.ghana.managers.add(self.awa)
@@ -229,7 +234,7 @@ class ManagersDuPaysTests(ChangeLogTestCase):
 
     def test_remplacement_des_managers(self):
         self.ghana.managers.add(self.awa)
-        ChangeLog.objects.all().delete()
+        self.oublier()
 
         self.ghana.managers.set([self.kofi])
 
@@ -239,7 +244,7 @@ class ManagersDuPaysTests(ChangeLogTestCase):
 
     def test_vidage_des_managers(self):
         self.ghana.managers.set([self.awa, self.kofi])
-        ChangeLog.objects.all().delete()
+        self.oublier()
 
         self.ghana.managers.clear()
 
@@ -256,7 +261,7 @@ class ManagersDuPaysTests(ChangeLogTestCase):
 
     def test_sans_changement_rien(self):
         self.ghana.managers.add(self.awa)
-        ChangeLog.objects.all().delete()
+        self.oublier()
 
         self.ghana.managers.add(self.awa)
 

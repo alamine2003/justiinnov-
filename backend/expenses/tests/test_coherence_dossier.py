@@ -15,7 +15,7 @@ from rest_framework.test import APITestCase
 
 from accounts.models import Role, UserProfile
 from budget.models import Budget
-from core.models import Country
+from core.models import Country, Manager, Team
 from expenses.models import Dossier, Expense
 from expenses.workflow import Status
 
@@ -30,6 +30,10 @@ class DossierCoherenceTests(APITestCase):
         self.budget = Budget.objects.create(
             country=self.pays, year=2026, amount="10000000"
         )
+        # Une ligne ne se soumet qu'avec son équipe et son manager (§7).
+        self.equipe = Team.objects.create(country=self.pays, name="Équipe Lomé")
+        self.manager = Manager.objects.create(name="Kodjo Mensah")
+        self.pays.managers.add(self.manager)
 
         self.rep = self._compte("togo.innov", Role.COUNTRY_MANAGER, [self.pays])
         self.siege = self._compte("ceo.innov", Role.SUPER_ADMIN)
@@ -56,6 +60,7 @@ class DossierCoherenceTests(APITestCase):
     def ligne(self, dossier, statut=Status.DRAFT, titre="Carburant"):
         return Expense.objects.create(
             dossier=dossier, country=self.pays, title=titre,
+            team=self.equipe, owner=self.manager,
             amount="50000", date=timezone.make_aware(datetime(2026, 1, 2)), place="Lomé",
             status=statut, created_by=self.rep.username,
             # Une ligne déclarée est imputée, la base l'exige.
