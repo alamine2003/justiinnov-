@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Bell, CheckCheck, Loader2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FormError } from "@/components/ui/form-error"
@@ -17,6 +18,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/reporting"
+import { notificationKindIcon } from "@/lib/labels"
 import type { AlertLevel, AppNotification } from "@/lib/types"
 import { cn, formatDate } from "@/lib/utils"
 
@@ -30,6 +32,7 @@ const LEVEL_DOT: Record<AlertLevel, string> = {
 const POLL_INTERVAL = 60_000
 
 export function NotificationBell() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [unread, setUnread] = useState(0)
@@ -95,11 +98,11 @@ export function NotificationBell() {
       const page = await fetchNotifications({ page_size: 30 })
       setItems(page.results)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Notifications indisponibles")
+      setError(e instanceof Error ? e.message : t("notifications.indisponibles"))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   const openPanel = async () => {
     setOpen(true)
@@ -118,7 +121,7 @@ export function NotificationBell() {
         navigate(notification.link)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Action impossible")
+      setError(e instanceof Error ? e.message : t("erreurs.action_impossible"))
     }
   }
 
@@ -128,7 +131,7 @@ export function NotificationBell() {
       await markAllNotificationsRead()
       await Promise.all([loadItems(), refreshCount()])
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Action impossible")
+      setError(e instanceof Error ? e.message : t("erreurs.action_impossible"))
     }
   }
 
@@ -137,7 +140,7 @@ export function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        aria-label={`Notifications${unread ? ` (${unread} non lues)` : ""}`}
+        aria-label={unread ? t("notifications.aria_non_lues", { count: unread }) : t("notifications.aria")}
         className="relative"
         onClick={() => void openPanel()}
       >
@@ -152,11 +155,8 @@ export function NotificationBell() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>Notifications</SheetTitle>
-            <SheetDescription>
-              Seuils budgétaires, dépenses à contrôler et décisions vous
-              concernant.
-            </SheetDescription>
+            <SheetTitle>{t("notifications.titre")}</SheetTitle>
+            <SheetDescription>{t("notifications.description")}</SheetDescription>
           </SheetHeader>
 
           <div className="mt-4 space-y-3 px-4 pb-6">
@@ -165,7 +165,7 @@ export function NotificationBell() {
             {unread > 0 && (
               <Button variant="outline" size="sm" onClick={() => void markAll()}>
                 <CheckCheck className="mr-1 h-4 w-4" aria-hidden />
-                Tout marquer comme lu
+                {t("notifications.tout_lu")}
               </Button>
             )}
 
@@ -175,50 +175,61 @@ export function NotificationBell() {
               </div>
             ) : items.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                Aucune notification.
+                {t("notifications.aucune")}
               </p>
             ) : (
-              items.map((notification) => (
-                <button
-                  key={notification.id}
-                  type="button"
-                  aria-label={notification.title}
-                  onClick={() => void handleClick(notification)}
-                  className={cn(
-                    "w-full rounded-lg border border-border/60 p-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    !notification.read_at && "bg-accent/20",
-                  )}
-                >
-                  <div className="flex items-start gap-2">
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-                        LEVEL_DOT[notification.level],
-                        notification.read_at && "opacity-30",
-                      )}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{notification.title}</p>
-                      {notification.body && (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                          {notification.body}
-                        </p>
-                      )}
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(notification.created_at)}
-                        </span>
-                        {notification.country_name && (
-                          <Badge variant="secondary" className="text-[10px]">
-                            {notification.country_name}
-                          </Badge>
+              items.map((notification) => {
+                const KindIcon = notificationKindIcon(notification.kind)
+                return (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    aria-label={notification.title}
+                    onClick={() => void handleClick(notification)}
+                    className={cn(
+                      "w-full rounded-lg border border-border/60 p-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      !notification.read_at && "bg-accent/20",
+                    )}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                          LEVEL_DOT[notification.level],
+                          notification.read_at && "opacity-30",
                         )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 text-sm font-medium">
+                          {KindIcon && (
+                            <KindIcon
+                              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                              aria-label={notification.kind_display}
+                            />
+                          )}
+                          {notification.title}
+                        </p>
+                        {notification.body && (
+                          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                            {notification.body}
+                          </p>
+                        )}
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(notification.created_at)}
+                          </span>
+                          {notification.country_name && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {notification.country_name}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
-              ))
+                  </button>
+                )
+              })
             )}
           </div>
         </SheetContent>

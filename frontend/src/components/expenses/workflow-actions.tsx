@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { Check, Loader2, Play, Search, Send, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -29,12 +31,19 @@ const AVAILABLE: Record<WorkflowStatus, TransitionName[]> = {
   closed: [],
 }
 
-const LABELS: Record<TransitionName, string> = {
-  submit: "Soumettre",
-  review: "Prendre en contrôle",
-  justify: "Marquer justifié",
-  reject: "Marquer non justifié",
-  close: "Clôturer",
+function transitionLabel(t: TFunction, action: TransitionName): string {
+  switch (action) {
+    case "submit":
+      return t("depenses.circuit.soumettre")
+    case "review":
+      return t("depenses.circuit.prendre_en_controle")
+    case "justify":
+      return t("depenses.circuit.marquer_justifie")
+    case "reject":
+      return t("depenses.circuit.marquer_non_justifie")
+    case "close":
+      return t("depenses.circuit.cloturer")
+  }
 }
 
 const ICONS = {
@@ -77,6 +86,7 @@ export function WorkflowActions({
   currency,
   subject = "expense",
 }: WorkflowActionsProps) {
+  const { t } = useTranslation()
   const { can, me } = useAuth()
   const [busy, setBusy] = useState<TransitionName | null>(null)
   const [rejecting, setRejecting] = useState(false)
@@ -129,7 +139,7 @@ export function WorkflowActions({
             ) : (
               <Icon className="mr-1 h-4 w-4" aria-hidden />
             )}
-            {LABELS[action]}
+            {transitionLabel(t, action)}
           </Button>
         )
       })}
@@ -154,8 +164,6 @@ export function WorkflowActions({
   )
 }
 
-const SUBJECT_LABEL = { expense: "la dépense", dossier: "le dossier" } as const
-
 /**
  * Les dialogues ne sont montés qu'ouverts : leur état repart de zéro à chaque
  * ouverture sans effet de réinitialisation.
@@ -169,6 +177,7 @@ function RejectDialog({
   onOpenChange: (open: boolean) => void
   onConfirm: (note: string) => Promise<void>
 }) {
+  const { t } = useTranslation()
   const [note, setNote] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -176,7 +185,7 @@ function RejectDialog({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!note.trim()) {
-      setError("Un refus doit être motivé.")
+      setError(t("depenses.rejet.motif_requis"))
       return
     }
     setSaving(true)
@@ -186,7 +195,7 @@ function RejectDialog({
       onOpenChange(false)
     } catch (err) {
       // Le dialogue reste ouvert : le motif saisi n'est pas perdu.
-      setError(err instanceof Error ? err.message : "Refus impossible")
+      setError(err instanceof Error ? err.message : t("depenses.rejet.impossible"))
     } finally {
       setSaving(false)
     }
@@ -196,29 +205,29 @@ function RejectDialog({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Marquer non justifié</DialogTitle>
+          <DialogTitle>{t("depenses.circuit.marquer_non_justifie")}</DialogTitle>
           <DialogDescription>
-            {subject === "dossier" ? "Le dossier reste" : "La dépense reste"} au
-            débit du budget : l'argent est sorti. Le motif est obligatoire et
-            reste attaché à l'historique.
+            {subject === "dossier"
+              ? t("depenses.rejet.description_dossier")
+              : t("depenses.rejet.description_depense")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
           <FormError>{error}</FormError>
           <div className="grid gap-2">
-            <Label htmlFor="reject-motif">Motif du refus</Label>
+            <Label htmlFor="reject-motif">{t("depenses.rejet.motif")}</Label>
             <Textarea
               id="reject-motif"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Facture illisible, montant incohérent…"
+              placeholder={t("depenses.rejet.motif_placeholder")}
               required
             />
           </div>
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Annuler
+                {t("commun.annuler")}
               </Button>
               <Button
                 type="submit"
@@ -227,7 +236,7 @@ function RejectDialog({
                 className="ml-2"
               >
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirmer
+                {t("commun.confirmer")}
               </Button>
             </div>
           </DialogFooter>
@@ -250,6 +259,7 @@ function JustifyDialog({
   onOpenChange: (open: boolean) => void
   onConfirm: (payload: TransitionPayload) => Promise<void>
 }) {
+  const { t } = useTranslation()
   const [justified, setJustified] = useState(amount ?? "")
   const [note, setNote] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -261,7 +271,7 @@ function JustifyDialog({
     if (subject === "expense") {
       const montant = normalizeDecimal(justified)
       if (montant === null) {
-        setError("Indiquez le montant justifié, en chiffres.")
+        setError(t("depenses.justification.montant_requis"))
         return
       }
       payload.justified_amount = montant
@@ -272,7 +282,7 @@ function JustifyDialog({
       await onConfirm(payload)
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Justification impossible")
+      setError(err instanceof Error ? err.message : t("depenses.justification.impossible"))
     } finally {
       setSaving(false)
     }
@@ -282,11 +292,11 @@ function JustifyDialog({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Marquer justifié</DialogTitle>
+          <DialogTitle>{t("depenses.circuit.marquer_justifie")}</DialogTitle>
           <DialogDescription>
             {subject === "expense"
-              ? "Le montant justifié est celui que les pièces attestent. Le serveur calcule l'écart avec la dépense."
-              : "Toutes les lignes du dossier seront marquées justifiées."}
+              ? t("depenses.justification.description_depense")
+              : t("depenses.justification.description_dossier")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
@@ -294,7 +304,9 @@ function JustifyDialog({
           {subject === "expense" && (
             <div className="grid gap-2">
               <Label htmlFor="justify-amount">
-                Montant justifié {currency ? `(${currency})` : ""}
+                {currency
+                  ? t("depenses.justification.montant_devise", { devise: currency })
+                  : t("depenses.justification.montant")}
               </Label>
               <Input
                 id="justify-amount"
@@ -305,31 +317,34 @@ function JustifyDialog({
               />
               {amount && (
                 <p className="text-xs text-muted-foreground">
-                  Dépense déclarée : {formatAmount(amount, currency)}. Par
-                  défaut, tout est justifié.
+                  {t("depenses.justification.declaree", {
+                    montant: formatAmount(amount, currency),
+                  })}
                 </p>
               )}
             </div>
           )}
           <div className="grid gap-2">
             <Label htmlFor="justify-note">
-              Note {subject === "expense" ? "(obligatoire si le montant est partiel)" : "(facultative)"}
+              {subject === "expense"
+                ? t("depenses.justification.note_partiel")
+                : t("depenses.justification.note_facultative")}
             </Label>
             <Textarea
               id="justify-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Facture n° 123 pour 80 %, reste sans pièce…"
+              placeholder={t("depenses.justification.note_placeholder")}
             />
           </div>
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Annuler
+                {t("commun.annuler")}
               </Button>
               <Button type="submit" disabled={saving} className="ml-2">
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirmer
+                {t("commun.confirmer")}
               </Button>
             </div>
           </DialogFooter>
@@ -338,5 +353,3 @@ function JustifyDialog({
     </Dialog>
   )
 }
-
-export { SUBJECT_LABEL as WORKFLOW_SUBJECT_LABEL }

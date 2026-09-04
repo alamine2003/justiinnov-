@@ -11,6 +11,7 @@ import type {
   ProofStatus,
   RegisterEntry,
   TransitionName,
+  WorkflowStatus,
 } from "@/lib/types"
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,20 @@ export function transitionDossier(
   return apiPost<DossierDetail & { warning?: string }>(`/dossiers/${id}/${action}/`, {
     note: data.note ?? "",
   })
+}
+
+/** Statuts depuis lesquels le siège peut rouvrir un dossier — reflète `expenses.workflow`. */
+export const REOPENABLE_STATUSES: WorkflowStatus[] = ["submitted", "in_review", "unjustified"]
+
+/** Un dossier dont une ligne est déjà justifiée ou clôturée ne se rouvre pas : le serveur refuserait. */
+export const REOPEN_BLOCKING_STATUSES: WorkflowStatus[] = ["justified", "closed"]
+
+/**
+ * Ramène un dossier déclaré au brouillon, avec le motif qui sera conservé
+ * dans le journal d'audit et transmis au pays.
+ */
+export function reopenDossier(id: number, note: string) {
+  return apiPost<DossierDetail>(`/dossiers/${id}/reopen/`, { note })
 }
 
 // ---------------------------------------------------------------------------

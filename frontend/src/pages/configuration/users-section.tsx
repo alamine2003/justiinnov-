@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
-import { AlertTriangle, Loader2, Pencil, Plus, Users } from "lucide-react"
+import { AlertTriangle, Loader2, Pencil, Plus, ShieldOff, Users } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,32 +29,41 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
-import { createUser, fetchPermissionMatrix, fetchUsers, updateUser } from "@/lib/accounts"
+import {
+  createUser,
+  fetchPermissionMatrix,
+  fetchUsers,
+  resetTwoFactor,
+  updateUser,
+} from "@/lib/accounts"
 import { useAuth } from "@/context/use-auth"
 import { fetchCountries } from "@/lib/countries"
+import { ROLES, roleLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import { STATUS_TONES } from "@/lib/status-styles"
 import {
-  ROLE_LABELS,
   type AccountUser,
   type CountrySummary,
   type PermissionMatrix,
   type Role,
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
+import { cn } from "@/lib/utils"
 
 export function UsersSection() {
+  const { t } = useTranslation()
   const { me } = useAuth()
   const [page, setPage] = useState(1)
   const [actionError, setActionError] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [toggling, setToggling] = useState<number | null>(null)
   const [editing, setEditing] = useState<AccountUser | null>(null)
+  const [resetting, setResetting] = useState<AccountUser | null>(null)
 
   const query = useQuery(
     `users:${page}`,
     (signal) => fetchUsers({ page, page_size: PAGE_SIZE }, signal),
-    { fallback: "Impossible de charger les comptes" },
+    { fallback: t("configuration.utilisateurs.chargement_impossible") },
   )
   const countries = useReferentiel("countries", () =>
     fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
@@ -73,7 +83,9 @@ export function UsersSection() {
       await updateUser(user.id, { is_active: !user.is_active })
       query.reload()
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Changement de statut impossible")
+      setActionError(
+        e instanceof Error ? e.message : t("configuration.utilisateurs.statut_impossible"),
+      )
     } finally {
       setToggling(null)
     }
@@ -85,10 +97,9 @@ export function UsersSection() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold">Comptes</h2>
+          <h2 className="text-sm font-semibold">{t("configuration.utilisateurs.titre")}</h2>
           <p className="text-xs text-muted-foreground">
-            Rôles et périmètres. Un compte du siège voit tous les pays ; un
-            responsable pays ne voit que les siens.
+            {t("configuration.utilisateurs.description")}
           </p>
         </div>
         <Button
@@ -98,18 +109,18 @@ export function UsersSection() {
           }}
         >
           <Plus className="mr-2 h-4 w-4" aria-hidden />
-          Créer un compte
+          {t("configuration.utilisateurs.creer")}
         </Button>
       </div>
 
       {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <TruncatedNotice page={countries.data} noun="pays" />
+      <TruncatedNotice page={countries.data} noun={t("configuration.pays.noun_pluriel")} />
 
       <Card className="border-border/60 shadow-sm">
         <CardContent className="pt-6">
@@ -117,12 +128,14 @@ export function UsersSection() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead scope="col">Identifiant</TableHead>
-                  <TableHead scope="col">Nom</TableHead>
-                  <TableHead scope="col">Rôle</TableHead>
-                  <TableHead scope="col">Périmètre</TableHead>
-                  <TableHead scope="col">Statut</TableHead>
-                  <TableHead scope="col" className="text-right">Actions</TableHead>
+                  <TableHead scope="col">{t("champs.username")}</TableHead>
+                  <TableHead scope="col">{t("commun.nom")}</TableHead>
+                  <TableHead scope="col">{t("champs.role")}</TableHead>
+                  <TableHead scope="col">{t("configuration.utilisateurs.perimetre")}</TableHead>
+                  <TableHead scope="col">{t("commun.statut")}</TableHead>
+                  <TableHead scope="col" className="text-right">
+                    {t("commun.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -132,8 +145,8 @@ export function UsersSection() {
                   <EmptyRow
                     colSpan={6}
                     icon={Users}
-                    title="Aucun compte"
-                    hint="Créez les comptes des représentants pays."
+                    title={t("configuration.utilisateurs.vide_titre")}
+                    hint={t("configuration.utilisateurs.vide_aide")}
                   />
                 ) : (
                   users.map((user) => {
@@ -142,16 +155,17 @@ export function UsersSection() {
                       <TableRow key={user.id}>
                         <TableCell className="font-medium">{user.username}</TableCell>
                         <TableCell className="text-muted-foreground">
-                          {[user.first_name, user.last_name].filter(Boolean).join(" ") || "—"}
+                          {[user.first_name, user.last_name].filter(Boolean).join(" ") ||
+                            t("commun.aucun")}
                         </TableCell>
                         <TableCell>
                           {user.role ? (
                             <Badge variant="secondary">
                               {matrix.data?.roles.find((r) => r.value === user.role)?.label ??
-                                ROLE_LABELS[user.role]}
+                                roleLabel(t, user.role)}
                             </Badge>
                           ) : (
-                            <Badge variant="outline">Sans rôle</Badge>
+                            <Badge variant="outline">{t("commun.sans_role")}</Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
@@ -160,18 +174,30 @@ export function UsersSection() {
                                 .map((c) => c.country_ref ?? c.name)
                                 .join(", ")
                             : user.role
-                              ? "Siège — tous pays"
-                              : "—"}
+                              ? t("commun.siege_tous_pays")
+                              : t("commun.aucun")}
                         </TableCell>
                         <TableCell>
                           {user.is_active ? (
-                            <Badge className={STATUS_TONES.SUCCES}>Actif</Badge>
+                            <Badge className={STATUS_TONES.SUCCES}>{t("commun.actif")}</Badge>
                           ) : (
-                            <Badge variant="secondary">Désactivé</Badge>
+                            <Badge variant="secondary">{t("commun.desactive")}</Badge>
                           )}
                           {user.must_change_password && (
                             <Badge variant="outline" className="ml-1">
-                              mot de passe provisoire
+                              {t("configuration.utilisateurs.mdp_provisoire")}
+                            </Badge>
+                          )}
+                          {/* Absent sur un serveur qui ne connaît pas la 2FA :
+                              on ne prétend alors rien. */}
+                          {user.totp_confirmed === true && (
+                            <Badge className={cn("ml-1", STATUS_TONES.SUCCES)}>
+                              {t("configuration.utilisateurs.totp_active")}
+                            </Badge>
+                          )}
+                          {user.totp_confirmed === false && (
+                            <Badge className={cn("ml-1", STATUS_TONES.ATTENTE)}>
+                              {t("configuration.utilisateurs.totp_a_enroler")}
                             </Badge>
                           )}
                         </TableCell>
@@ -181,7 +207,7 @@ export function UsersSection() {
                                 lisible : l'explication est à côté. */}
                             {self && (
                               <span className="text-xs text-muted-foreground">
-                                Un autre administrateur doit s'en charger.
+                                {t("configuration.utilisateurs.soi_meme")}
                               </span>
                             )}
                             <Button
@@ -193,12 +219,26 @@ export function UsersSection() {
                               {toggling === user.id ? (
                                 <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                               ) : null}
-                              {user.is_active ? "Désactiver" : "Activer"}
+                              {user.is_active ? t("commun.desactiver") : t("commun.activer")}
                             </Button>
+                            {user.totp_confirmed === true && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={t("configuration.utilisateurs.totp_reinitialiser_aria", {
+                                  nom: user.username,
+                                })}
+                                onClick={() => setResetting(user)}
+                              >
+                                <ShieldOff className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
-                              aria-label={`Modifier ${user.username}`}
+                              aria-label={t("configuration.utilisateurs.modifier_aria", {
+                                nom: user.username,
+                              })}
                               onClick={() => {
                                 setEditing(user)
                                 setFormOpen(true)
@@ -220,7 +260,10 @@ export function UsersSection() {
             page={page}
             count={query.data?.count ?? 0}
             onChange={setPage}
-            noun={["compte", "comptes"]}
+            noun={[
+              t("configuration.utilisateurs.noun_singulier"),
+              t("configuration.utilisateurs.noun_pluriel"),
+            ]}
           />
         </CardContent>
       </Card>
@@ -240,7 +283,87 @@ export function UsersSection() {
           }}
         />
       )}
+
+      {resetting && (
+        <ResetTwoFactorDialog
+          user={resetting}
+          onOpenChange={(open) => {
+            if (!open) setResetting(null)
+          }}
+          onDone={() => query.reload()}
+        />
+      )}
     </div>
+  )
+}
+
+/**
+ * Confirmation avant de réinitialiser l'enrôlement : le titulaire perdra
+ * l'accès jusqu'à ce qu'il ait lié à nouveau son application, et l'action
+ * est inscrite au journal.
+ */
+function ResetTwoFactorDialog({
+  user,
+  onOpenChange,
+  onDone,
+}: {
+  user: AccountUser
+  onOpenChange: (open: boolean) => void
+  onDone: () => void
+}) {
+  const { t } = useTranslation()
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const confirmer = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await resetTwoFactor(user.id)
+      onDone()
+      onOpenChange(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("configuration.utilisateurs.totp_reinit_impossible"))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {t("configuration.utilisateurs.totp_reinit_titre", { nom: user.username })}
+          </DialogTitle>
+          <DialogDescription>
+            {t("configuration.utilisateurs.totp_reinit_description")}
+          </DialogDescription>
+        </DialogHeader>
+        <FormError>{error}</FormError>
+        <DialogFooter>
+          <div>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {t("commun.annuler")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={saving}
+              className="ml-2"
+              onClick={() => void confirmer()}
+            >
+              {saving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldOff className="mr-2 h-4 w-4" aria-hidden />
+              )}
+              {t("configuration.utilisateurs.totp_reinitialiser")}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -257,12 +380,13 @@ function UserForm({
   editing: AccountUser | null
   onSaved: () => Promise<void>
 }) {
+  const { t } = useTranslation()
   const roles = matrix?.roles ?? []
   const [username, setUsername] = useState(editing?.username ?? "")
   const [firstName, setFirstName] = useState(editing?.first_name ?? "")
   const [lastName, setLastName] = useState(editing?.last_name ?? "")
   const [email, setEmail] = useState(editing?.email ?? "")
-  const [role, setRole] = useState<Role | "">(editing?.role ?? "country_manager")
+  const [role, setRole] = useState<Role | "">(editing?.role ?? "dm")
   const [countryIds, setCountryIds] = useState<number[]>(editing?.countries ?? [])
   // Le périmètre n'est envoyé que s'il a été touché : un PATCH qui renvoie
   // la liste telle quelle réécrit une trace de changement pour rien.
@@ -272,7 +396,12 @@ function UserForm({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const isHeadquarters = Boolean(roles.find((r) => r.value === role)?.siege)
+  // Le rattachement au siège vient du serveur. Tant que la matrice n'est pas
+  // chargée, il reste inconnu : le formulaire propose alors les rôles sans
+  // annoncer leur périmètre et laisse le serveur trancher, plutôt que de
+  // recopier ici une table de rôles qui divergerait.
+  const roleInfo = roles.find((r) => r.value === role)
+  const isHeadquarters = Boolean(roleInfo?.siege)
 
   const toggleCountry = (id: number, checked: boolean) => {
     setCountriesTouched(true)
@@ -284,15 +413,21 @@ function UserForm({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!role) {
-      setError("Choisissez un rôle.")
+      setError(t("configuration.utilisateurs.form.role_requis"))
       return
     }
-    if (!isHeadquarters && countryIds.length === 0) {
-      setError("Un rôle pays doit être rattaché à au moins un pays.")
+    if (roleInfo && !isHeadquarters && countryIds.length === 0) {
+      setError(t("configuration.utilisateurs.form.pays_requis"))
+      return
+    }
+    // L'adresse nomme le compte dans l'application d'authentification et
+    // reçoit les notifications ; le serveur en vérifie le domaine.
+    if (!email.trim()) {
+      setError(t("configuration.utilisateurs.form.email_requis"))
       return
     }
     if (!editing && !password) {
-      setError("Un mot de passe provisoire est nécessaire à la création.")
+      setError(t("configuration.utilisateurs.form.mdp_requis"))
       return
     }
     setSaving(true)
@@ -321,7 +456,7 @@ function UserForm({
       await onSaved()
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible")
+      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -331,22 +466,25 @@ function UserForm({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editing ? "Modifier le compte" : "Créer un compte"}</DialogTitle>
+          <DialogTitle>
+            {editing
+              ? t("configuration.utilisateurs.form.titre_modifier")
+              : t("configuration.utilisateurs.form.titre_creer")}
+          </DialogTitle>
           <DialogDescription>
-            Le mot de passe défini ici est provisoire : son titulaire sera invité
-            à le remplacer.
+            {t("configuration.utilisateurs.form.description")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
           <FormError>{error}</FormError>
 
           <div className="grid gap-2">
-            <Label htmlFor="user-username">Identifiant</Label>
+            <Label htmlFor="user-username">{t("champs.username")}</Label>
             <Input
               id="user-username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="pays.innov"
+              placeholder={t("configuration.utilisateurs.form.identifiant_exemple")}
               autoComplete="off"
               required
             />
@@ -354,7 +492,7 @@ function UserForm({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="user-first">Prénom</Label>
+              <Label htmlFor="user-first">{t("configuration.utilisateurs.form.prenom")}</Label>
               <Input
                 id="user-first"
                 value={firstName}
@@ -362,7 +500,7 @@ function UserForm({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="user-last">Nom</Label>
+              <Label htmlFor="user-last">{t("commun.nom")}</Label>
               <Input
                 id="user-last"
                 value={lastName}
@@ -372,43 +510,59 @@ function UserForm({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="user-email">Email</Label>
+            <Label htmlFor="user-email">{t("champs.email")}</Label>
             <Input
               id="user-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder={t("configuration.utilisateurs.form.email_exemple")}
+              autoComplete="off"
+              required
             />
+            <p className="text-xs text-muted-foreground">
+              {t("configuration.utilisateurs.form.email_aide")}
+            </p>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="user-role">Rôle</Label>
+            <Label htmlFor="user-role">{t("champs.role")}</Label>
             <NativeSelect
               id="user-role"
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
-              disabled={roles.length === 0}
               required
             >
-              {roles.length === 0 && <option value="">Rôles indisponibles</option>}
-              {roles.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label} — {r.siege ? "siège" : "pays"}
-                </option>
-              ))}
+              {roles.length > 0
+                ? roles.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.siege
+                        ? t("configuration.utilisateurs.form.role_siege", { role: r.label })
+                        : t("configuration.utilisateurs.form.role_pays", { role: r.label })}
+                    </option>
+                  ))
+                : ROLES.map((value) => (
+                    <option key={value} value={value}>
+                      {roleLabel(t, value)}
+                    </option>
+                  ))}
             </NativeSelect>
           </div>
 
           <fieldset className="grid gap-2">
-            <legend className="text-sm font-medium">Pays du périmètre</legend>
+            <legend className="text-sm font-medium">
+              {t("configuration.utilisateurs.form.perimetre_legend")}
+            </legend>
             {isHeadquarters ? (
               <p className="text-xs text-muted-foreground">
-                Rôle du siège : accès à tous les pays, sans rattachement.
+                {t("configuration.utilisateurs.form.siege_aide")}
               </p>
             ) : (
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-2">
                 {countries.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Aucun pays actif.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("configuration.utilisateurs.form.aucun_pays")}
+                  </p>
                 )}
                 {countries.map((c) => (
                   <label
@@ -431,7 +585,9 @@ function UserForm({
 
           <div className="grid gap-2">
             <Label htmlFor="user-password">
-              Mot de passe {editing && "(laisser vide pour ne pas changer)"}
+              {editing
+                ? t("configuration.utilisateurs.form.mot_de_passe_optionnel")
+                : t("configuration.utilisateurs.form.mot_de_passe")}
             </Label>
             <Input
               id="user-password"
@@ -444,18 +600,20 @@ function UserForm({
           </div>
 
           <div className="flex items-center justify-between rounded-lg border p-3">
-            <Label htmlFor="user-active" className="text-sm">Compte actif</Label>
+            <Label htmlFor="user-active" className="text-sm">
+              {t("configuration.utilisateurs.form.compte_actif")}
+            </Label>
             <Switch id="user-active" checked={active} onCheckedChange={setActive} />
           </div>
 
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Annuler
+                {t("commun.annuler")}
               </Button>
               <Button type="submit" disabled={saving} className="ml-2">
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Enregistrer
+                {t("commun.enregistrer")}
               </Button>
             </div>
           </DialogFooter>

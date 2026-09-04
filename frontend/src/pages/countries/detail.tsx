@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom"
 import { AlertTriangle, ArrowLeft, Loader2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -30,26 +31,28 @@ import {
   updateTeam,
 } from "@/lib/countries"
 import { useAuth } from "@/context/use-auth"
+import { PROJECT_STATUSES, projectStatusLabel } from "@/lib/labels"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import { STATUS_TONES } from "@/lib/status-styles"
-import { PROJECT_STATUS_LABELS, type CountryDetail } from "@/lib/types"
+import type { CountryDetail } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { formatAmount, normalizeDecimal } from "@/lib/utils"
 
-const PROJECT_STATUS_OPTIONS = Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}))
-
 function ActiveBadge({ active, feminine = false }: { active: boolean; feminine?: boolean }) {
+  const { t } = useTranslation()
   return active ? (
-    <Badge className={STATUS_TONES.SUCCES}>{feminine ? "Active" : "Actif"}</Badge>
+    <Badge className={STATUS_TONES.SUCCES}>
+      {feminine ? t("pays.statut.active") : t("pays.statut.actif")}
+    </Badge>
   ) : (
-    <Badge variant="secondary">{feminine ? "Inactive" : "Inactif"}</Badge>
+    <Badge variant="secondary">
+      {feminine ? t("pays.statut.inactive") : t("pays.statut.inactif")}
+    </Badge>
   )
 }
 
 export function CountryDetailPage() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const { can } = useAuth()
   const canManage = can("manage_subentities")
@@ -58,7 +61,7 @@ export function CountryDetailPage() {
   const query = useQuery(
     `country:detail:${countryId}`,
     (signal) => fetchCountry(countryId, signal),
-    { fallback: "Impossible de charger le pays" },
+    { fallback: t("pays.fiche.chargement_impossible") },
   )
   const country = query.data
 
@@ -77,7 +80,7 @@ export function CountryDetailPage() {
     return (
       <div className="flex h-64 items-center justify-center" aria-busy="true">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <span className="sr-only">Chargement du pays…</span>
+        <span className="sr-only">{t("pays.fiche.chargement")}</span>
       </div>
     )
   }
@@ -88,12 +91,17 @@ export function CountryDetailPage() {
         <BackLink />
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Pays introuvable</AlertTitle>
-          <AlertDescription>{query.error ?? "Ce pays n'existe pas ou n'est pas dans votre périmètre."}</AlertDescription>
+          <AlertTitle>{t("pays.fiche.introuvable_titre")}</AlertTitle>
+          <AlertDescription>{query.error ?? t("pays.fiche.introuvable_texte")}</AlertDescription>
         </Alert>
       </div>
     )
   }
+
+  const statutOptions = PROJECT_STATUSES.map((value) => ({
+    value,
+    label: projectStatusLabel(t, value),
+  }))
 
   const saver =
     (
@@ -116,12 +124,14 @@ export function CountryDetailPage() {
     const budget = typeof data.budget === "string" ? data.budget.trim() : ""
     const normalise = budget ? normalizeDecimal(budget) : null
     if (budget && normalise === null) {
-      throw new Error("Le budget doit être un nombre.")
+      throw new Error(t("pays.fiche.budget_nombre"))
     }
     return { ...data, budget: normalise }
   })
   const saveExpense = saver(createExpenseTitle, updateExpenseTitle)
   const saveCategory = saver(createMarketingCategory, updateMarketingCategory)
+
+  const devise = country.currency_symbol || country.currency
 
   return (
     <div className="space-y-6">
@@ -130,7 +140,7 @@ export function CountryDetailPage() {
       {query.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
           <AlertDescription>{query.error}</AlertDescription>
         </Alert>
       )}
@@ -151,7 +161,10 @@ export function CountryDetailPage() {
               </span>
               {country.currency_symbol} {country.currency} · {country.timezone}
               {query.refreshing && (
-                <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin align-middle" aria-label="Actualisation" />
+                <Loader2
+                  className="ml-2 inline h-3.5 w-3.5 animate-spin align-middle"
+                  aria-label={t("pays.fiche.actualisation")}
+                />
               )}
             </>
           }
@@ -159,22 +172,22 @@ export function CountryDetailPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Équipes" value={country.team_count} />
-        <StatCard label="Centres de coûts" value={country.cost_center_count} />
-        <StatCard label="Projets" value={country.project_count} />
-        <StatCard label="Intitulés de dépenses" value={country.expense_title_count} />
+        <StatCard label={t("pays.fiche.equipes")} value={country.team_count} />
+        <StatCard label={t("pays.fiche.centres_couts")} value={country.cost_center_count} />
+        <StatCard label={t("pays.fiche.projets")} value={country.project_count} />
+        <StatCard label={t("pays.fiche.intitules_depenses")} value={country.expense_title_count} />
       </div>
 
       <Tabs defaultValue="equipes">
         <TabsList className="flex w-full flex-wrap justify-start overflow-x-auto bg-muted/60">
-          <TabsTrigger value="managers">Manager(s)</TabsTrigger>
-          <TabsTrigger value="equipes">Équipes</TabsTrigger>
-          <TabsTrigger value="costs">Centres de coûts</TabsTrigger>
-          <TabsTrigger value="projets">Projets</TabsTrigger>
-          <TabsTrigger value="depenses">Intitulés de dépenses</TabsTrigger>
-          <TabsTrigger value="marketing">Catégories marketing</TabsTrigger>
-          <TabsTrigger value="beneficiaires">Bénéficiaires</TabsTrigger>
-          <TabsTrigger value="historique">Historique</TabsTrigger>
+          <TabsTrigger value="managers">{t("pays.fiche.managers")}</TabsTrigger>
+          <TabsTrigger value="equipes">{t("pays.fiche.equipes")}</TabsTrigger>
+          <TabsTrigger value="costs">{t("pays.fiche.centres_couts")}</TabsTrigger>
+          <TabsTrigger value="projets">{t("pays.fiche.projets")}</TabsTrigger>
+          <TabsTrigger value="depenses">{t("pays.fiche.intitules_depenses")}</TabsTrigger>
+          <TabsTrigger value="marketing">{t("pays.fiche.categories_marketing")}</TabsTrigger>
+          <TabsTrigger value="beneficiaires">{t("pays.fiche.beneficiaires")}</TabsTrigger>
+          <TabsTrigger value="historique">{t("pays.fiche.historique")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="managers" className="mt-4">
@@ -194,20 +207,26 @@ export function CountryDetailPage() {
           <Card className="border-border/60 shadow-sm">
             <CardContent className="pt-6">
               <ManageRows<CountryDetail["teams"][number]>
-                title="Équipes"
-                description="Équipes rattachées à ce pays."
+                title={t("pays.fiche.equipes")}
+                description={t("pays.equipes.description")}
                 rows={country.teams}
                 columns={[
-                  { key: "name", header: "Nom" },
+                  { key: "name", header: t("champs.name") },
                   {
                     key: "is_active",
-                    header: "Statut",
-                    render: (t) => <ActiveBadge active={t.is_active} feminine />,
+                    header: t("commun.statut"),
+                    render: (equipe) => <ActiveBadge active={equipe.is_active} feminine />,
                   },
                 ]}
-                detectActive={(t) => t.is_active}
+                detectActive={(equipe) => equipe.is_active}
                 defaultForm={{ name: "" }}
-                formFields={[{ key: "name", label: "Nom", placeholder: "Équipe commerciale" }]}
+                formFields={[
+                  {
+                    key: "name",
+                    label: t("champs.name"),
+                    placeholder: t("pays.equipes.nom_placeholder"),
+                  },
+                ]}
                 canManage={canManage}
                 onSave={saveTeam}
               />
@@ -219,22 +238,30 @@ export function CountryDetailPage() {
           <Card className="border-border/60 shadow-sm">
             <CardContent className="pt-6">
               <ManageRows<CountryDetail["cost_centers"][number]>
-                title="Centres de coûts"
+                title={t("pays.fiche.centres_couts")}
                 rows={country.cost_centers}
                 columns={[
-                  { key: "code", header: "Code" },
-                  { key: "name", header: "Libellé" },
+                  { key: "code", header: t("champs.code") },
+                  { key: "name", header: t("champs.label") },
                   {
                     key: "is_active",
-                    header: "Statut",
+                    header: t("commun.statut"),
                     render: (c) => <ActiveBadge active={c.is_active} />,
                   },
                 ]}
                 detectActive={(c) => c.is_active}
                 defaultForm={{ code: "", name: "" }}
                 formFields={[
-                  { key: "code", label: "Code", placeholder: "CC01" },
-                  { key: "name", label: "Libellé", placeholder: "Centre Paris" },
+                  {
+                    key: "code",
+                    label: t("champs.code"),
+                    placeholder: t("pays.centres_couts.code_placeholder"),
+                  },
+                  {
+                    key: "name",
+                    label: t("champs.label"),
+                    placeholder: t("pays.centres_couts.libelle_placeholder"),
+                  },
                 ]}
                 canManage={canManage}
                 onSave={saveCostCenter}
@@ -247,35 +274,39 @@ export function CountryDetailPage() {
           <Card className="border-border/60 shadow-sm">
             <CardContent className="pt-6">
               <ManageRows<CountryDetail["projects"][number]>
-                title="Projets"
+                title={t("pays.fiche.projets")}
                 rows={country.projects}
                 columns={[
-                  { key: "name", header: "Nom" },
+                  { key: "name", header: t("champs.name") },
                   {
                     key: "status",
-                    header: "Statut",
+                    header: t("commun.statut"),
                     render: (p) => <ProjectStatusBadge status={p.status} />,
                   },
                   {
                     key: "budget",
-                    header: "Budget",
+                    header: t("pays.fiche.budget"),
                     render: (p) =>
                       p.budget ? (
-                        formatAmount(p.budget, country.currency_symbol || country.currency)
+                        formatAmount(p.budget, devise)
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">{t("commun.aucun")}</span>
                       ),
                   },
                 ]}
                 detectActive={(p) => p.is_active}
                 defaultForm={{ name: "", status: "planned", budget: "" }}
                 formFields={[
-                  { key: "name", label: "Nom", placeholder: "Projet 2026" },
-                  { key: "status", label: "Statut", options: PROJECT_STATUS_OPTIONS },
+                  {
+                    key: "name",
+                    label: t("champs.name"),
+                    placeholder: t("pays.projets.nom_placeholder"),
+                  },
+                  { key: "status", label: t("commun.statut"), options: statutOptions },
                   {
                     key: "budget",
-                    label: `Budget (${country.currency_symbol || country.currency})`,
-                    placeholder: "0",
+                    label: t("pays.fiche.budget_devise", { devise }),
+                    placeholder: t("pays.projets.budget_placeholder"),
                     optional: true,
                     decimal: true,
                   },
@@ -291,22 +322,26 @@ export function CountryDetailPage() {
           <Card className="border-border/60 shadow-sm">
             <CardContent className="pt-6">
               <ManageRows<CountryDetail["expense_titles"][number]>
-                title="Intitulés de dépenses"
+                title={t("pays.fiche.intitules_depenses")}
                 rows={country.expense_titles}
                 columns={[
-                  { key: "label", header: "Intitulé" },
-                  { key: "description", header: "Description" },
+                  { key: "label", header: t("champs.expense_title") },
+                  { key: "description", header: t("commun.description") },
                   {
                     key: "is_active",
-                    header: "Statut",
+                    header: t("commun.statut"),
                     render: (e) => <ActiveBadge active={e.is_active} />,
                   },
                 ]}
                 detectActive={(e) => e.is_active}
                 defaultForm={{ label: "", description: "" }}
                 formFields={[
-                  { key: "label", label: "Intitulé", placeholder: "Frais de déplacement" },
-                  { key: "description", label: "Description", optional: true },
+                  {
+                    key: "label",
+                    label: t("champs.expense_title"),
+                    placeholder: t("pays.depenses.intitule_placeholder"),
+                  },
+                  { key: "description", label: t("commun.description"), optional: true },
                 ]}
                 canManage={canManage}
                 onSave={saveExpense}
@@ -319,22 +354,26 @@ export function CountryDetailPage() {
           <Card className="border-border/60 shadow-sm">
             <CardContent className="pt-6">
               <ManageRows<CountryDetail["marketing_categories"][number]>
-                title="Catégories marketing"
+                title={t("pays.fiche.categories_marketing")}
                 rows={country.marketing_categories}
                 columns={[
-                  { key: "name", header: "Nom" },
-                  { key: "description", header: "Description" },
+                  { key: "name", header: t("champs.name") },
+                  { key: "description", header: t("commun.description") },
                   {
                     key: "is_active",
-                    header: "Statut",
+                    header: t("commun.statut"),
                     render: (m) => <ActiveBadge active={m.is_active} feminine />,
                   },
                 ]}
                 detectActive={(m) => m.is_active}
                 defaultForm={{ name: "", description: "" }}
                 formFields={[
-                  { key: "name", label: "Nom", placeholder: "Marketing digital" },
-                  { key: "description", label: "Description", optional: true },
+                  {
+                    key: "name",
+                    label: t("champs.name"),
+                    placeholder: t("pays.marketing.nom_placeholder"),
+                  },
+                  { key: "description", label: t("commun.description"), optional: true },
                 ]}
                 canManage={canManage}
                 onSave={saveCategory}
@@ -360,6 +399,7 @@ export function CountryDetailPage() {
 }
 
 function BackLink() {
+  const { t } = useTranslation()
   return (
     <div className="flex">
       <Link
@@ -367,7 +407,7 @@ function BackLink() {
         className="inline-flex items-center rounded text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-        Retour aux pays
+        {t("pays.fiche.retour")}
       </Link>
     </div>
   )

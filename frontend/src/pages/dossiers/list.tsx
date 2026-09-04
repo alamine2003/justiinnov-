@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { AlertTriangle, FolderOpen, Loader2, Plus, Search } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -29,22 +30,20 @@ import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { StatusBadge } from "@/components/expenses/status-badge"
+import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
 import { createDossier, fetchDossiers } from "@/lib/expenses"
 import { fetchCountries, fetchCountry } from "@/lib/countries"
+import { WORKFLOW_STATUSES, workflowLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import {
-  WORKFLOW_LABELS,
-  type CountrySummary,
-  type WorkflowStatus,
-} from "@/lib/types"
+import { scopedTeams } from "@/lib/teams"
+import type { CountrySummary, WorkflowStatus } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatDay, todayIso } from "@/lib/utils"
 
-const STATUSES = Object.keys(WORKFLOW_LABELS) as WorkflowStatus[]
-
 export function DossiersPage() {
+  const { t } = useTranslation()
   const { can } = useAuth()
   const canCreate = can("record_expenses")
   const [params, setParams] = useSearchParams()
@@ -52,7 +51,7 @@ export function DossiersPage() {
   // Le statut vit dans l'URL : une tuile du tableau de bord ou un favori
   // doivent rouvrir la même vue.
   const statusParam = params.get("status") ?? ""
-  const statusFilter = (STATUSES as string[]).includes(statusParam)
+  const statusFilter = (WORKFLOW_STATUSES as string[]).includes(statusParam)
     ? (statusParam as WorkflowStatus)
     : ""
 
@@ -60,6 +59,7 @@ export function DossiersPage() {
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
   const [formOpen, setFormOpen] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const query = useQuery(
     JSON.stringify({ page, search: debouncedSearch, statusFilter }),
@@ -69,7 +69,7 @@ export function DossiersPage() {
       if (statusFilter) requestParams.status = statusFilter
       return fetchDossiers(requestParams, signal)
     },
-    { fallback: "Impossible de charger les dossiers" },
+    { fallback: t("dossiers.liste.chargement_impossible") },
   )
   const countries = useReferentiel("countries", () =>
     fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
@@ -96,25 +96,26 @@ export function DossiersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Dossiers de justification"
-        description="Un dossier porte un N°ORDRE et regroupe les dépenses et les preuves d'une même opération."
+        title={t("dossiers.liste.titre")}
+        description={t("dossiers.liste.description")}
       >
+        <ExportMenu onError={setExportError} />
         {canCreate && (
           <Button onClick={() => setFormOpen(true)}>
             <Plus className="mr-2 h-4 w-4" aria-hidden />
-            Nouveau dossier
+            {t("dossiers.liste.nouveau")}
           </Button>
         )}
       </PageHeader>
 
-      {query.error && (
+      {(query.error || exportError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>{query.error}</AlertDescription>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
+          <AlertDescription>{exportError ?? query.error}</AlertDescription>
         </Alert>
       )}
-      <TruncatedNotice page={countries.data} noun="pays" />
+      <TruncatedNotice page={countries.data} noun={t("dossiers.noms_pays")} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative w-full sm:max-w-xs">
@@ -125,8 +126,8 @@ export function DossiersPage() {
               setSearch(e.target.value)
               setPage(1)
             }}
-            placeholder="N°ORDRE ou libellé…"
-            aria-label="Rechercher un dossier"
+            placeholder={t("dossiers.liste.recherche_placeholder")}
+            aria-label={t("dossiers.liste.recherche_aria")}
             className="pl-9"
           />
         </div>
@@ -134,12 +135,12 @@ export function DossiersPage() {
           value={statusFilter}
           onChange={(e) => changeStatus(e.target.value)}
           className="sm:max-w-[12rem]"
-          aria-label="Filtrer par statut"
+          aria-label={t("dossiers.liste.filtrer_statut")}
         >
-          <option value="">Tous les statuts</option>
-          {STATUSES.map((value) => (
+          <option value="">{t("dossiers.liste.tous_statuts")}</option>
+          {WORKFLOW_STATUSES.map((value) => (
             <option key={value} value={value}>
-              {WORKFLOW_LABELS[value]}
+              {workflowLabel(t, value)}
             </option>
           ))}
         </NativeSelect>
@@ -151,14 +152,14 @@ export function DossiersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead scope="col">N°ORDRE</TableHead>
-                  <TableHead scope="col">Pays</TableHead>
-                  <TableHead scope="col">Date</TableHead>
-                  <TableHead scope="col" className="text-center">Lignes</TableHead>
-                  <TableHead scope="col" className="text-center">Preuves</TableHead>
-                  <TableHead scope="col" className="text-right">Dépenses</TableHead>
-                  <TableHead scope="col" className="text-right">Écart</TableHead>
-                  <TableHead scope="col">Statut</TableHead>
+                  <TableHead scope="col">{t("champs.number")}</TableHead>
+                  <TableHead scope="col">{t("commun.pays")}</TableHead>
+                  <TableHead scope="col">{t("commun.date")}</TableHead>
+                  <TableHead scope="col" className="text-center">{t("dossiers.liste.colonnes.lignes")}</TableHead>
+                  <TableHead scope="col" className="text-center">{t("dossiers.liste.colonnes.preuves")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("dossiers.liste.colonnes.depenses")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("dossiers.liste.colonnes.ecart")}</TableHead>
+                  <TableHead scope="col">{t("commun.statut")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -168,11 +169,11 @@ export function DossiersPage() {
                   <EmptyRow
                     colSpan={8}
                     icon={FolderOpen}
-                    title="Aucun dossier"
+                    title={t("dossiers.liste.vide.titre")}
                     hint={
                       canCreate
-                        ? "Créez un dossier pour y rattacher vos dépenses."
-                        : "Aucun dossier ne correspond à ces filtres."
+                        ? t("dossiers.liste.vide.aide_creer")
+                        : t("dossiers.liste.vide.aide_filtres")
                     }
                   />
                 ) : (
@@ -222,7 +223,7 @@ export function DossiersPage() {
             page={page}
             count={count}
             onChange={setPage}
-            noun={["dossier", "dossiers"]}
+            noun={[t("dossiers.nom_one"), t("dossiers.nom_other")]}
           />
         </CardContent>
       </Card>
@@ -249,6 +250,8 @@ function DossierForm({
   countries: CountrySummary[]
   onSaved: () => Promise<void>
 }) {
+  const { t } = useTranslation()
+  const { me } = useAuth()
   const [number, setNumber] = useState("")
   const [label, setLabel] = useState("")
   const [country, setCountry] = useState<number | "">(countries[0]?.id ?? "")
@@ -265,13 +268,17 @@ function DossierForm({
     () => fetchCountry(Number(country)),
     { enabled: country !== "" },
   )
-  const teams = (detail.data?.teams ?? []).filter((t) => t.is_active)
+  // Un manager rattaché à des équipes n'ouvre un dossier que pour elles.
+  const teams = scopedTeams(
+    (detail.data?.teams ?? []).filter((equipe) => equipe.is_active),
+    me,
+  )
   const managers = (detail.data?.managers ?? []).filter((m) => m.is_active)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (country === "") {
-      setError("Choisissez un pays.")
+      setError(t("dossiers.formulaire.choisir_pays"))
       return
     }
     setSaving(true)
@@ -288,7 +295,7 @@ function DossierForm({
       await onSaved()
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Création impossible")
+      setError(err instanceof Error ? err.message : t("dossiers.formulaire.creation_impossible"))
     } finally {
       setSaving(false)
     }
@@ -298,26 +305,24 @@ function DossierForm({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nouveau dossier</DialogTitle>
-          <DialogDescription>
-            Le N°ORDRE identifie l'ensemble documentaire ; il doit être unique.
-          </DialogDescription>
+          <DialogTitle>{t("dossiers.liste.nouveau")}</DialogTitle>
+          <DialogDescription>{t("dossiers.formulaire.description")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
           <FormError>{error}</FormError>
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="dos-number">N°ORDRE</Label>
+              <Label htmlFor="dos-number">{t("champs.number")}</Label>
               <Input
                 id="dos-number"
                 value={number}
                 onChange={(e) => setNumber(e.target.value)}
-                placeholder="N-2026-001"
+                placeholder={t("dossiers.formulaire.numero_placeholder")}
                 required
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="dos-date">Date</Label>
+              <Label htmlFor="dos-date">{t("commun.date")}</Label>
               <Input
                 id="dos-date"
                 type="date"
@@ -328,17 +333,17 @@ function DossierForm({
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="dos-label">Libellé</Label>
+            <Label htmlFor="dos-label">{t("champs.label")}</Label>
             <Input
               id="dos-label"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Mission commerciale Lomé"
+              placeholder={t("dossiers.formulaire.libelle_placeholder")}
               required
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="dos-country">Pays</Label>
+            <Label htmlFor="dos-country">{t("commun.pays")}</Label>
             <NativeSelect
               id="dos-country"
               value={country}
@@ -349,7 +354,9 @@ function DossierForm({
               }}
               required
             >
-              {countries.length === 0 && <option value="">Aucun pays disponible</option>}
+              {countries.length === 0 && (
+                <option value="">{t("dossiers.formulaire.aucun_pays")}</option>
+              )}
               {countries.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.country_ref ? `${c.country_ref} — ` : ""}
@@ -360,7 +367,7 @@ function DossierForm({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="dos-team">Équipe</Label>
+              <Label htmlFor="dos-team">{t("champs.team")}</Label>
               <NativeSelect
                 id="dos-team"
                 value={team}
@@ -369,16 +376,16 @@ function DossierForm({
                 }
                 disabled={detail.loading}
               >
-                <option value="">—</option>
-                {teams.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
+                <option value="">{t("commun.aucun")}</option>
+                {teams.map((equipe) => (
+                  <option key={equipe.id} value={equipe.id}>
+                    {equipe.name}
                   </option>
                 ))}
               </NativeSelect>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="dos-owner">Manager responsable</Label>
+              <Label htmlFor="dos-owner">{t("dossiers.formulaire.manager_responsable")}</Label>
               <NativeSelect
                 id="dos-owner"
                 value={owner}
@@ -387,7 +394,7 @@ function DossierForm({
                 }
                 disabled={detail.loading}
               >
-                <option value="">—</option>
+                <option value="">{t("commun.aucun")}</option>
                 {managers.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
@@ -400,11 +407,11 @@ function DossierForm({
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Annuler
+                {t("commun.annuler")}
               </Button>
               <Button type="submit" disabled={saving} className="ml-2">
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Créer
+                {t("commun.creer")}
               </Button>
             </div>
           </DialogFooter>

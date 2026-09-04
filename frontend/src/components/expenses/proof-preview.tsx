@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Download, Loader2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -32,6 +33,7 @@ export function ProofPreview({
   proof: Proof | null
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   // L'état porte l'identifiant de la pièce chargée : « en cours » se déduit
   // de la comparaison, sans écrire dans l'état au début de l'effet.
   const [source, setSource] = useState<Source | null>(null)
@@ -58,11 +60,13 @@ export function ProofPreview({
       })
       .catch((e: unknown) => {
         if (revoked) return
+        // Une erreur sans message est traduite au rendu, pas ici : l'effet ne
+        // dépend ainsi pas de la langue et ne recharge pas le fichier.
         setSource({
           proofId,
           url: null,
           type: "",
-          error: e instanceof Error ? e.message : "Aperçu indisponible",
+          error: e instanceof Error ? e.message : "",
         })
       })
 
@@ -84,7 +88,7 @@ export function ProofPreview({
     try {
       await downloadProof(proof)
     } catch (e) {
-      setDownloadError(e instanceof Error ? e.message : "Téléchargement impossible")
+      setDownloadError(e instanceof Error ? e.message : t("pieces.telechargement_impossible"))
     } finally {
       setDownloading(false)
     }
@@ -96,7 +100,7 @@ export function ProofPreview({
         <DialogHeader>
           <DialogTitle>{proof.original_name}</DialogTitle>
           <DialogDescription>
-            {proof.kind_display} · version {proof.version} ·{" "}
+            {proof.kind_display} · {t("pieces.apercu.version", { version: proof.version })} ·{" "}
             <span className="font-mono">{proof.sha256.slice(0, 16)}…</span>
           </DialogDescription>
         </DialogHeader>
@@ -105,10 +109,14 @@ export function ProofPreview({
           {loading && (
             <div className="flex h-96 items-center justify-center" aria-busy="true">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              <span className="sr-only">Chargement de l'aperçu…</span>
+              <span className="sr-only">{t("pieces.apercu.chargement")}</span>
             </div>
           )}
-          {current?.error && <FormError className="m-4">{current.error}</FormError>}
+          {current && current.error !== null && (
+            <FormError className="m-4">
+              {current.error || t("pieces.apercu.indisponible")}
+            </FormError>
+          )}
           {current?.url &&
             (isImage ? (
               <img
@@ -133,7 +141,7 @@ export function ProofPreview({
             ) : (
               <Download className="mr-1 h-4 w-4" aria-hidden />
             )}
-            Télécharger
+            {t("commun.telecharger")}
           </Button>
         </div>
       </DialogContent>

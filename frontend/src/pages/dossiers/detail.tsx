@@ -1,6 +1,16 @@
 import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, FileText, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowLeft,
+  FileText,
+  Loader2,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -19,6 +29,7 @@ import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { ExpenseForm } from "@/components/expenses/expense-form"
 import { ProofPanel } from "@/components/expenses/proof-panel"
 import { OriginalAmount } from "@/components/expenses/original-amount"
+import { ReopenDossier } from "@/components/expenses/reopen-dossier"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
 import { useAuth } from "@/context/use-auth"
@@ -27,12 +38,14 @@ import {
   deleteExpenseDraft,
   fetchBeneficiaries,
   fetchDossier,
+  reopenDossier,
   transitionDossier,
   transitionExpense,
   updateExpense,
 } from "@/lib/expenses"
 import { fetchCountry } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
+import { scopedTeams } from "@/lib/teams"
 import {
   DELETABLE_STATUSES,
   LOCKED_STATUSES,
@@ -43,15 +56,16 @@ import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatDateIn, formatDay } from "@/lib/utils"
 
 export function DossierDetailPage() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const dossierId = Number(id)
-  const { can } = useAuth()
+  const { can, me } = useAuth()
   const canWrite = can("record_expenses")
 
   const query = useQuery(
     `dossier:${dossierId}`,
     (signal) => fetchDossier(dossierId, signal),
-    { fallback: "Impossible de charger le dossier" },
+    { fallback: t("dossiers.detail.chargement_impossible") },
   )
   const dossier = query.data
   const countryId = dossier?.country
@@ -97,7 +111,7 @@ export function DossierDetailPage() {
       )
       query.reload()
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Action impossible")
+      setActionError(e instanceof Error ? e.message : t("erreurs.action_impossible"))
       throw e
     }
   }
@@ -111,9 +125,20 @@ export function DossierDetailPage() {
       if (result.warning) setNotice(result.warning)
       query.reload()
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Action impossible")
+      setActionError(e instanceof Error ? e.message : t("erreurs.action_impossible"))
       throw e
     }
+  }
+
+  // La réouverture n'est pas une transition du circuit : elle a sa propre
+  // route et son propre droit. Le dialogue affiche lui-même les refus par
+  // champ, d'où l'erreur relancée ; la fiche est relue au succès.
+  const reopen = async (note: string) => {
+    if (!dossier) return
+    setActionError(null)
+    setNotice(null)
+    await reopenDossier(dossier.id, note)
+    query.reload()
   }
 
   const removeDraft = async (expense: Expense) => {
@@ -128,7 +153,7 @@ export function DossierDetailPage() {
       )
       query.reload()
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Suppression impossible")
+      setActionError(e instanceof Error ? e.message : t("dossiers.detail.suppression_impossible"))
     } finally {
       setDeletingId(null)
     }
@@ -138,7 +163,7 @@ export function DossierDetailPage() {
     return (
       <div className="flex h-64 items-center justify-center" aria-busy="true">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <span className="sr-only">Chargement du dossier…</span>
+        <span className="sr-only">{t("dossiers.detail.chargement")}</span>
       </div>
     )
   }
@@ -149,8 +174,10 @@ export function DossierDetailPage() {
         <BackLink />
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Dossier introuvable</AlertTitle>
-          <AlertDescription>{query.error ?? "Ce dossier n'existe pas ou n'est pas dans votre périmètre."}</AlertDescription>
+          <AlertTitle>{t("dossiers.detail.introuvable_titre")}</AlertTitle>
+          <AlertDescription>
+            {query.error ?? t("dossiers.detail.introuvable_texte")}
+          </AlertDescription>
         </Alert>
       </div>
     )
@@ -158,9 +185,13 @@ export function DossierDetailPage() {
 
   const locked = LOCKED_STATUSES.includes(dossier.status)
   const currencySymbol = country.data?.currency_symbol || dossier.currency
-  const teams = (country.data?.teams ?? []).filter((t) => t.is_active)
+  // Un manager rattaché à des équipes ne saisit que pour elles.
+  const teams = scopedTeams(
+    (country.data?.teams ?? []).filter((equipe) => equipe.is_active),
+    me,
+  )
   const projects = (country.data?.projects ?? []).filter((p) => p.is_active)
-  const expenseTitles = (country.data?.expense_titles ?? []).filter((t) => t.is_active)
+  const expenseTitles = (country.data?.expense_titles ?? []).filter((titre) => titre.is_active)
   const marketingCategories = (country.data?.marketing_categories ?? []).filter((c) => c.is_active)
   const managers = (country.data?.managers ?? []).filter((m) => m.is_active)
 
@@ -185,25 +216,36 @@ export function DossierDetailPage() {
       {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
           <AlertDescription>{actionError ?? query.error}</AlertDescription>
         </Alert>
       )}
       {country.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Référentiel du pays indisponible</AlertTitle>
+          <AlertTitle>{t("dossiers.detail.referentiel_indisponible")}</AlertTitle>
           <AlertDescription>{country.error}</AlertDescription>
         </Alert>
       )}
       {notice && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Avertissement budgétaire</AlertTitle>
+          <AlertTitle>{t("dossiers.detail.avertissement_budgetaire")}</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       )}
-      <TruncatedNotice page={beneficiaries.data} noun="bénéficiaires" />
+      {/* Rouvert par le siège : le motif reste affiché tant que le dossier
+          n'a pas été soumis à nouveau. */}
+      {dossier.reopen_note && dossier.status === "draft" && (
+        <Alert>
+          <RotateCcw className="h-4 w-4" />
+          <AlertTitle>{t("dossiers.reouverture.bandeau_titre")}</AlertTitle>
+          <AlertDescription>
+            {t("dossiers.reouverture.bandeau_motif", { motif: dossier.reopen_note })}
+          </AlertDescription>
+        </Alert>
+      )}
+      <TruncatedNotice page={beneficiaries.data} noun={t("dossiers.noms_beneficiaires")} />
 
       <PageHeader
         title={dossier.number}
@@ -216,12 +258,18 @@ export function DossierDetailPage() {
             {formatDay(dossier.date)}
             {dossier.team_name && ` · ${dossier.team_name}`}
             {dossier.owner_name && ` · ${dossier.owner_name}`}
-            {dossier.created_by && ` · créé par ${dossier.created_by}`}
+            {dossier.created_by &&
+              ` · ${t("dossiers.detail.cree_par", { nom: dossier.created_by })}`}
             {query.refreshing && (
-              <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin align-middle" aria-label="Actualisation" />
+              <Loader2
+                className="ml-2 inline h-3.5 w-3.5 animate-spin align-middle"
+                aria-label={t("dossiers.detail.actualisation")}
+              />
             )}
             {dossier.note && (
-              <span className="mt-1 block italic">Contrôle : {dossier.note}</span>
+              <span className="mt-1 block italic">
+                {t("dossiers.detail.note_controle", { note: dossier.note })}
+              </span>
             )}
           </>
         }
@@ -231,15 +279,22 @@ export function DossierDetailPage() {
           subject="dossier"
           onTransition={runDossierTransition}
         />
+        <ReopenDossier dossier={dossier} onReopen={reopen} />
       </PageHeader>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Dépenses" value={formatAmount(dossier.totals.amount, currencySymbol)} />
-        <StatCard label="Montant justifié" value={formatAmount(dossier.totals.justified, currencySymbol)} />
         <StatCard
-          label="Écart"
+          label={t("dossiers.detail.stat_depenses")}
+          value={formatAmount(dossier.totals.amount, currencySymbol)}
+        />
+        <StatCard
+          label={t("champs.justified_amount")}
+          value={formatAmount(dossier.totals.justified, currencySymbol)}
+        />
+        <StatCard
+          label={t("dossiers.detail.stat_ecart")}
           value={formatAmount(dossier.totals.gap, currencySymbol)}
-          hint={Number(dossier.totals.gap) > 0 ? "Dépensé sans preuve à l'appui" : undefined}
+          hint={Number(dossier.totals.gap) > 0 ? t("dossiers.detail.ecart_aide") : undefined}
         />
       </div>
 
@@ -247,9 +302,9 @@ export function DossierDetailPage() {
         <CardContent className="space-y-3 pt-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold">Lignes de dépenses</h3>
+              <h3 className="text-sm font-semibold">{t("dossiers.detail.lignes_titre")}</h3>
               <p className="text-xs text-muted-foreground">
-                Chaque ligne suit son propre circuit de justification.
+                {t("dossiers.detail.lignes_description")}
               </p>
             </div>
             {canWrite && !locked && (
@@ -261,7 +316,7 @@ export function DossierDetailPage() {
                 }}
               >
                 <Plus className="mr-1 h-4 w-4" aria-hidden />
-                Ajouter
+                {t("commun.ajouter")}
               </Button>
             )}
           </div>
@@ -270,13 +325,13 @@ export function DossierDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead scope="col">Libellé</TableHead>
-                  <TableHead scope="col">Date</TableHead>
-                  <TableHead scope="col" className="text-right">Dépense</TableHead>
-                  <TableHead scope="col" className="text-right">Justifié</TableHead>
-                  <TableHead scope="col" className="text-right">Écart</TableHead>
-                  <TableHead scope="col">Statut</TableHead>
-                  <TableHead scope="col" className="text-right">Actions</TableHead>
+                  <TableHead scope="col">{t("champs.label")}</TableHead>
+                  <TableHead scope="col">{t("commun.date")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("dossiers.detail.colonnes.depense")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("dossiers.detail.colonnes.justifie")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("dossiers.detail.colonnes.ecart")}</TableHead>
+                  <TableHead scope="col">{t("commun.statut")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -284,11 +339,11 @@ export function DossierDetailPage() {
                   <EmptyRow
                     colSpan={7}
                     icon={FileText}
-                    title="Aucune ligne"
+                    title={t("dossiers.detail.vide.titre")}
                     hint={
                       canWrite && !locked
-                        ? "Ajoutez les dépenses de ce dossier avant de le soumettre."
-                        : "Ce dossier ne contient aucune dépense."
+                        ? t("dossiers.detail.vide.aide_ajouter")
+                        : t("dossiers.detail.vide.aide_verrouille")
                     }
                   />
                 ) : (
@@ -297,16 +352,18 @@ export function DossierDetailPage() {
                       <TableCell>
                         <p className="font-medium">{expense.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {expense.place || "—"}
-                          {expense.budget_label && ` · imputé sur ${expense.budget_label}`}
-                          {expense.created_by && ` · saisie par ${expense.created_by}`}
+                          {expense.place || t("commun.aucun")}
+                          {expense.budget_label &&
+                            ` · ${t("dossiers.detail.impute_sur", { budget: expense.budget_label })}`}
+                          {expense.created_by &&
+                            ` · ${t("dossiers.detail.saisie_par", { nom: expense.created_by })}`}
                         </p>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatDateIn(expense.date, expense.country_timezone)}
                         <br />
                         <span className="opacity-70">
-                          heure {expense.country_timezone}
+                          {t("dossiers.detail.heure_fuseau", { fuseau: expense.country_timezone })}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -331,7 +388,7 @@ export function DossierDetailPage() {
                         <StatusBadge status={expense.status} label={expense.status_display} />
                         {expense.control_note && (
                           <p className="mt-1 max-w-[14rem] text-xs italic text-muted-foreground">
-                            Contrôle : {expense.control_note}
+                            {t("dossiers.detail.note_controle", { note: expense.control_note })}
                           </p>
                         )}
                         {expense.note && (
@@ -346,7 +403,7 @@ export function DossierDetailPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              aria-label={`Modifier ${expense.title}`}
+                              aria-label={t("dossiers.detail.modifier_aria", { titre: expense.title })}
                               onClick={() => {
                                 setEditing(expense)
                                 setFormOpen(true)
@@ -359,7 +416,7 @@ export function DossierDetailPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              aria-label={`Supprimer le brouillon ${expense.title}`}
+                              aria-label={t("dossiers.detail.supprimer_aria", { titre: expense.title })}
                               className="text-destructive hover:text-destructive"
                               disabled={deletingId === expense.id}
                               onClick={() => void removeDraft(expense)}
@@ -428,13 +485,14 @@ export function DossierDetailPage() {
 }
 
 function BackLink() {
+  const { t } = useTranslation()
   return (
     <Link
       to="/dossiers"
       className="inline-flex items-center rounded text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-      Retour aux dossiers
+      {t("dossiers.detail.retour")}
     </Link>
   )
 }

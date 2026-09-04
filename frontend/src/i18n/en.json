@@ -1,0 +1,1003 @@
+{
+  "app": {
+    "titre": "JUSTI INNOV — Budget control",
+    "tagline": "Budget control application",
+    "description": "Tracking of country spending and supporting documents: what was spent, when, where, for whom, and where the proof is."
+  },
+  "commun": {
+    "annuler": "Cancel",
+    "enregistrer": "Save",
+    "confirmer": "Confirm",
+    "fermer": "Close",
+    "reessayer": "Retry",
+    "chargement": "Loading…",
+    "actions": "Actions",
+    "erreur": "Error",
+    "actif": "Active",
+    "desactive": "Deactivated",
+    "activer": "Activate",
+    "desactiver": "Deactivate",
+    "modifier": "Edit",
+    "creer": "Create",
+    "ajouter": "Add",
+    "retirer": "Remove",
+    "rechercher": "Search",
+    "tous": "All",
+    "toutes": "All",
+    "oui": "Yes",
+    "non": "No",
+    "statut": "Status",
+    "date": "Date",
+    "montant": "Amount",
+    "pays": "Country",
+    "nom": "Name",
+    "code": "Code",
+    "description": "Description",
+    "annee": "Year",
+    "devise": "Currency",
+    "siege_tous_pays": "Headquarters — all countries",
+    "sans_role": "No role",
+    "aucun": "—",
+    "voir": "View",
+    "telecharger": "Download",
+    "precedent": "Previous",
+    "suivant": "Next",
+    "page_sur": "page {{page}} of {{total}}",
+    "elements_one": "{{count}} item",
+    "elements_other": "{{count}} items",
+    "separateur_libelle": ": "
+  },
+  "nav": {
+    "principale": "Main navigation",
+    "pilotage": "Overview",
+    "dossiers": "Files",
+    "registre": "Register",
+    "budgets": "Budgets",
+    "pays": "Countries",
+    "audit": "Audit",
+    "configuration": "Settings",
+    "ouvrir_menu": "Open menu",
+    "deconnexion": "Sign out",
+    "menu_utilisateur": "Account menu",
+    "reservee_siege": "This page is restricted to headquarters: you have been taken back to the dashboard.",
+    "equipes": "Teams"
+  },
+  "erreurs": {
+    "injoignable": "Server unreachable. Check your connection.",
+    "generique": "An error occurred",
+    "chargement_impossible": "Unable to load",
+    "referentiel_indisponible": "Reference data unavailable",
+    "action_impossible": "Action failed",
+    "enregistrement_impossible": "Unable to save",
+    "profil_indisponible": "Profile unavailable",
+    "profil_illisible": "Unable to read your profile: {{message}}",
+    "affichage_echoue": "Display failed",
+    "inattendue": "An unexpected error occurred.",
+    "recharger": "Reload the page"
+  },
+  "champs": {
+    "amount": "Amount",
+    "justified_amount": "Justified amount",
+    "original_amount": "Amount paid",
+    "original_currency": "Currency",
+    "date": "Date",
+    "title": "Label",
+    "label": "Label",
+    "place": "Place",
+    "note": "Reason",
+    "reason": "Reason",
+    "number": "ORDER No.",
+    "country": "Country",
+    "countries": "Countries",
+    "team": "Team",
+    "project": "Project",
+    "owner": "Manager",
+    "manager": "Manager",
+    "beneficiary": "Beneficiary",
+    "expense_title": "Expense title",
+    "marketing_category": "Category",
+    "payment_method": "Payment method",
+    "username": "Username",
+    "password": "Password",
+    "current_password": "Current password",
+    "new_password": "New password",
+    "email": "Email",
+    "role": "Role",
+    "year": "Year",
+    "currency": "Currency",
+    "timezone": "Time zone",
+    "code": "Code",
+    "name": "Name",
+    "file": "File",
+    "kind": "Type",
+    "source": "Source budget",
+    "target": "Target budget",
+    "rate_to_xof": "Rate",
+    "valid_from": "Valid from",
+    "alert_thresholds": "Alert thresholds",
+    "unjustified_alert_days": "Alert delay",
+    "unusual_expense_factor": "Unusual expense factor",
+    "default_overrun_policy": "Overrun policy",
+    "language": "Language"
+  },
+  "libelles": {
+    "roles": {
+      "super_admin": "Super administrator (CEO, COO, DEV)",
+      "admin": "Administrator (HR)",
+      "df": "CFO — finance department",
+      "dm": "DM — manager's supervisor",
+      "manager": "Manager"
+    },
+    "workflow": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "in_review": "Under review",
+      "justified": "Justified",
+      "unjustified": "Unjustified",
+      "closed": "Closed"
+    },
+    "piece_statut": {
+      "received": "Received",
+      "incomplete": "Incomplete",
+      "to_review": "To review",
+      "validated": "Validated",
+      "rejected": "Rejected",
+      "archived": "Archived"
+    },
+    "piece_type": {
+      "receipt": "Receipt",
+      "invoice": "Invoice",
+      "discharge": "Discharge",
+      "deliverable": "Deliverable",
+      "other": "Other"
+    },
+    "projet_statut": {
+      "planned": "Planned",
+      "active": "In progress",
+      "on_hold": "On hold",
+      "completed": "Completed"
+    },
+    "depassement": {
+      "block": "Block",
+      "warn": "Warn",
+      "approval": "Require approval"
+    },
+    "alerte_niveau": {
+      "info": "Info",
+      "warning": "Warning",
+      "critical": "Critical"
+    },
+    "audit_action": {
+      "created": "Creation",
+      "updated": "Update",
+      "deleted": "Draft deletion",
+      "submitted": "Submission",
+      "reviewed": "Taken under review",
+      "justified": "Justification",
+      "unjustified": "Recorded as unjustified",
+      "closed": "Closure",
+      "proof_uploaded": "Proof uploaded",
+      "proof_replaced": "Proof replaced",
+      "approved": "Proof validated",
+      "rejected": "Proof rejected",
+      "downloaded": "Download",
+      "reopened": "Reopening"
+    },
+    "beneficiaire_type": {
+      "prospect": "Prospect",
+      "client": "Client",
+      "supplier": "Supplier",
+      "beneficiary": "Beneficiary",
+      "other": "Other"
+    },
+    "theme": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "langue": {
+      "fr": "Français",
+      "en": "English"
+    },
+    "notification_type": {
+      "dossier_reopened": "File reopened"
+    }
+  },
+  "layout": {
+    "version": "Version",
+    "developpe_par": "Developed by",
+    "copyright": "© {{periode}} {{nom}}. All rights reserved.",
+    "theme_bouton": "Interface theme",
+    "langue_bouton": "Interface language",
+    "hors_ligne_titre": "Unable to reach the server",
+    "hors_ligne_texte": "Check your network access: the data shown may be out of date and nothing you enter will be saved."
+  },
+  "notifications": {
+    "titre": "Notifications",
+    "aria": "Notifications",
+    "aria_non_lues": "Notifications ({{count}} unread)",
+    "description": "Budget thresholds, expenses to review and decisions that concern you.",
+    "tout_lu": "Mark all as read",
+    "aucune": "No notifications.",
+    "indisponibles": "Notifications unavailable"
+  },
+  "pwa": {
+    "installer": "Install the app",
+    "installation_impossible": "Installation failed",
+    "note_connexion": "Available as a desktop app on Windows and macOS: install it from Chrome or Edge to open it outside the browser."
+  },
+  "ui": {
+    "tronque_titre": "Incomplete list",
+    "tronque_texte": "Only {{affiches}} {{nom}} out of {{total}} are listed. Refine your search or contact headquarters."
+  },
+  "auth": {
+    "connexion": "Sign in",
+    "sous_titre": "Sign in to access your scope.",
+    "identifiant": "Username",
+    "mot_de_passe": "Password",
+    "afficher_mdp": "Show password",
+    "masquer_mdp": "Hide password",
+    "se_connecter": "Sign in",
+    "oubli": "Forgot your password? Contact a headquarters administrator.",
+    "acces_reserve": "Access restricted to accounts opened by headquarters.",
+    "slogan_ligne1": "Know where every franc goes,",
+    "slogan_ligne2": "and what justifies it.",
+    "intro": "Country budget tracking, from the allocated budget down to the supporting document.",
+    "promesses": {
+      "enveloppe_titre": "One budget per country",
+      "enveloppe_texte": "Allocated, committed, spent and remaining budget, in real time.",
+      "justifiee_titre": "Every expense justified",
+      "justifiee_texte": "Date, place, beneficiary and supporting document, for every amount.",
+      "trace_titre": "Nothing gets lost",
+      "trace_texte": "A declared expense is final and every action is recorded."
+    },
+    "identifiants_requis": "Enter your username and password.",
+    "identifiants_invalides": "Invalid credentials",
+    "mdp": {
+      "a_remplacer_titre": "Password to replace",
+      "a_remplacer_texte": "Your password was set by headquarters: it has been passed around, and until it is replaced your actions do not commit you. The platform stays closed until then.",
+      "choisir": "Choose your password",
+      "regles": "At least 10 characters, neither too common nor purely numeric. It must be known to you alone.",
+      "actuel": "Current password",
+      "nouveau": "New password",
+      "confirmation": "Confirmation",
+      "non_identiques": "The two entries do not match.",
+      "changement_impossible": "Unable to change password"
+    },
+    "totp": {
+      "code": "Two-factor authentication code",
+      "aide": "Enter the six-digit code shown by your authenticator app.",
+      "code_requis": "Enter the code from your authenticator app.",
+      "plus_acces": "I no longer have access to my app",
+      "plus_acces_texte": "Only a headquarters administrator can reset your two-factor authentication. Contact them: a new enrolment will be offered at your next sign-in.",
+      "a_enroler_titre": "Two-factor authentication to set up",
+      "a_enroler_texte": "A password alone is not enough to commit your signature. Link an authenticator app to your account: the platform stays closed until then.",
+      "enroler": "Link your authenticator app",
+      "consigne": "Scan this code with your authenticator app, then enter the code it shows.",
+      "qr_alt": "Enrolment QR code",
+      "secret": "Key to enter manually",
+      "secret_aide": "This key will not be shown again: type it into the app if you cannot scan the code.",
+      "copier": "Copy",
+      "copie": "Copied",
+      "code_six": "Six-digit code",
+      "code_six_chiffres": "The code has six digits.",
+      "enrolement_impossible": "Unable to start enrolment",
+      "confirmation_impossible": "Unable to confirm",
+      "aide_connexion": "Enter the six-digit code from your authenticator app. Leave empty if you are not enrolled yet."
+    }
+  },
+  "dossiers": {
+    "nom_one": "file",
+    "nom_other": "files",
+    "noms_pays": "countries",
+    "noms_beneficiaires": "beneficiaries",
+    "liste": {
+      "titre": "Justification files",
+      "description": "A file carries an ORDER No. and groups the expenses and proofs of a single operation.",
+      "nouveau": "New file",
+      "chargement_impossible": "Unable to load the files",
+      "recherche_placeholder": "ORDER No. or label…",
+      "recherche_aria": "Search for a file",
+      "filtrer_statut": "Filter by status",
+      "tous_statuts": "All statuses",
+      "colonnes": {
+        "lignes": "Lines",
+        "preuves": "Proofs",
+        "depenses": "Expenses",
+        "ecart": "Gap"
+      },
+      "vide": {
+        "titre": "No file",
+        "aide_creer": "Create a file to attach your expenses to it.",
+        "aide_filtres": "No file matches these filters."
+      }
+    },
+    "formulaire": {
+      "description": "The ORDER No. identifies the set of documents; it must be unique.",
+      "choisir_pays": "Choose a country.",
+      "creation_impossible": "Unable to create",
+      "numero_placeholder": "N-2026-001",
+      "libelle_placeholder": "Sales mission in Lomé",
+      "aucun_pays": "No country available",
+      "manager_responsable": "Responsible manager"
+    },
+    "detail": {
+      "chargement_impossible": "Unable to load the file",
+      "chargement": "Loading the file…",
+      "introuvable_titre": "File not found",
+      "introuvable_texte": "This file does not exist or is outside your scope.",
+      "referentiel_indisponible": "Country reference data unavailable",
+      "avertissement_budgetaire": "Budget warning",
+      "suppression_impossible": "Unable to delete",
+      "cree_par": "created by {{nom}}",
+      "actualisation": "Refreshing",
+      "note_controle": "Review: {{note}}",
+      "stat_depenses": "Expenses",
+      "stat_ecart": "Gap",
+      "ecart_aide": "Spent without supporting proof",
+      "lignes_titre": "Expense lines",
+      "lignes_description": "Each line follows its own justification workflow.",
+      "colonnes": {
+        "depense": "Expense",
+        "justifie": "Justified",
+        "ecart": "Gap"
+      },
+      "vide": {
+        "titre": "No line",
+        "aide_ajouter": "Add the expenses of this file before submitting it.",
+        "aide_verrouille": "This file contains no expense."
+      },
+      "impute_sur": "charged to {{budget}}",
+      "saisie_par": "entered by {{nom}}",
+      "heure_fuseau": "{{fuseau}} time",
+      "modifier_aria": "Edit {{titre}}",
+      "supprimer_aria": "Delete the draft {{titre}}",
+      "retour": "Back to files"
+    },
+    "reouverture": {
+      "rouvrir": "Reopen",
+      "titre": "Reopen file {{numero}}",
+      "description": "The file and its lines return to draft; the country is notified and will have to submit it again. The reason is kept in the audit log.",
+      "motif": "Reason",
+      "motif_placeholder": "Document to replace, amount to correct…",
+      "motif_requis": "A reopening must be justified.",
+      "lignes_bloquantes": "A line already justified or closed prevents reopening.",
+      "impossible": "Unable to reopen",
+      "bandeau_titre": "File reopened by headquarters",
+      "bandeau_motif": "Reason: {{motif}}"
+    }
+  },
+  "depenses": {
+    "nom_one": "expense",
+    "nom_other": "expenses",
+    "montant_sur_piece": "i.e. {{montant}} on the supporting document",
+    "modes_paiement": {
+      "cash": "Cash",
+      "transfer": "Bank transfer",
+      "mobile": "Mobile money",
+      "card": "Card",
+      "check": "Cheque",
+      "other": "Other"
+    },
+    "formulaire": {
+      "titre_modifier": "Edit the expense",
+      "titre_ajouter": "Add an expense",
+      "description": "What was spent, when, where and for whom. Headquarters will record what the supporting documents justify.",
+      "date_requise": "Enter the date and time of the expense.",
+      "montant_requis": "Enter the amount of the expense, in figures.",
+      "montant_decaisse_requis": "Enter the amount paid, in figures.",
+      "libelle": "Transaction label",
+      "libelle_placeholder": "Fuel for the Lomé mission",
+      "date_heure": "Date and time ({{fuseau}} time)",
+      "lieu_placeholder": "Lomé",
+      "montant": "Expense ({{devise}})",
+      "montant_placeholder": "12,500.00",
+      "converti_serveur": "converted by the server",
+      "autre_devise": "Paid in another currency",
+      "autre_devise_aide": "Enter the amount as it appears on the supporting document. The server converts it to {{devise}} at the rate of the expense date and freezes that rate: the figure will not change.",
+      "devise_iso": "Currency (ISO 4217)",
+      "devise_placeholder": "EUR",
+      "montant_decaisse_placeholder": "120.00",
+      "intitule": "Expense title",
+      "categorie": "Marketing category",
+      "manager_responsable": "Responsible manager",
+      "beneficiaire": "Prospect / beneficiary"
+    },
+    "circuit": {
+      "soumettre": "Submit",
+      "prendre_en_controle": "Take under review",
+      "marquer_justifie": "Mark as justified",
+      "marquer_non_justifie": "Mark as unjustified",
+      "cloturer": "Close"
+    },
+    "rejet": {
+      "description_depense": "The expense remains charged to the budget: the money is gone. The reason is mandatory and stays attached to the history.",
+      "description_dossier": "The file remains charged to the budget: the money is gone. The reason is mandatory and stays attached to the history.",
+      "motif": "Reason for rejection",
+      "motif_placeholder": "Unreadable invoice, inconsistent amount…",
+      "motif_requis": "A rejection must state a reason.",
+      "impossible": "Unable to reject"
+    },
+    "justification": {
+      "description_depense": "The justified amount is the one the supporting documents attest. The server computes the gap with the expense.",
+      "description_dossier": "All the lines of the file will be marked as justified.",
+      "montant_requis": "Enter the justified amount, in figures.",
+      "impossible": "Unable to justify",
+      "montant": "Justified amount",
+      "montant_devise": "Justified amount ({{devise}})",
+      "declaree": "Declared expense: {{montant}}. By default, everything is justified.",
+      "note_partiel": "Note (mandatory if the amount is partial)",
+      "note_facultative": "Note (optional)",
+      "note_placeholder": "Invoice No. 123 for 80%, remainder without proof…"
+    }
+  },
+  "pieces": {
+    "titre": "Supporting documents",
+    "description": "Attached to the file; each file carries its SHA-256 fingerprint.",
+    "deposer": "Upload",
+    "telechargement_impossible": "Unable to download",
+    "colonnes": {
+      "depot": "Uploaded"
+    },
+    "vide": {
+      "titre": "No supporting document",
+      "aide_deposer": "Upload the invoice, receipt or discharge that attests the expense.",
+      "aide_sans_piece": "The file was declared without a supporting document."
+    },
+    "par": "by {{nom}}",
+    "previsualiser_aria": "Preview {{nom}}",
+    "telecharger_aria": "Download {{nom}}",
+    "controler_aria": "Review {{nom}}",
+    "taille": {
+      "octets": "{{valeur}} B",
+      "ko": "{{valeur}} KB",
+      "mo": "{{valeur}} MB"
+    },
+    "depot": {
+      "titre": "Upload a supporting document",
+      "formats": "Accepted formats: {{formats}}.",
+      "formats_generique": "PDF, image or document.",
+      "doublon": "A file already present on this file is refused, unless it explicitly replaces an earlier version.",
+      "fichier_requis": "Select a file.",
+      "trop_gros": "The file weighs {{taille}}; the limit is {{limite}}.",
+      "impossible": "Unable to upload",
+      "taille_max": "Maximum size: {{taille}}.",
+      "remplace": "Replaces (optional)",
+      "nouveau": "New supporting document",
+      "envoi_aria": "Uploading the file",
+      "envoi": "Uploading… {{pourcentage}}%"
+    },
+    "controle": {
+      "titre": "Document review",
+      "description": "{{nom}} — a rejection must state a reason.",
+      "decision": "Decision",
+      "motif_requis": "A rejection must state a reason.",
+      "impossible": "Unable to review",
+      "choix": {
+        "validated": "Validate the document",
+        "to_review": "To review",
+        "incomplete": "Mark as incomplete",
+        "rejected": "Reject",
+        "archived": "Archive"
+      }
+    },
+    "apercu": {
+      "indisponible": "Preview unavailable",
+      "chargement": "Loading the preview…",
+      "version": "version {{version}}"
+    }
+  },
+  "registre": {
+    "titre": "Justification register",
+    "description": "Where the money went: every expense with its date, place, beneficiary — and the supporting document that attests it.",
+    "chargement_impossible": "Unable to load the register",
+    "sans_piece_one": "{{count}} expense without proof on this page",
+    "sans_piece_other": "{{count}} expenses without proof on this page",
+    "sans_piece_aide": "A payment without a supporting document remains charged to the budget.",
+    "filtres": "Filters",
+    "recherche": "Search",
+    "recherche_placeholder": "Label, place, ORDER No.…",
+    "tous_pays": "All countries",
+    "du": "From",
+    "du_heure": "From ({{fuseau}} time)",
+    "au": "To",
+    "colonnes": {
+      "date_heure": "Date and time (local)",
+      "depense": "Expense",
+      "equipe_manager": "Team / Manager",
+      "justifie": "Justified",
+      "ecart": "Gap",
+      "preuve": "Proof"
+    },
+    "vide": {
+      "titre": "No expense in this scope",
+      "aide": "Widen the period or remove a filter."
+    },
+    "heure_locale": "local time · {{fuseau}}",
+    "pieces_one": "{{count}} proof",
+    "pieces_other": "{{count}} proofs",
+    "incomplet": "incomplete",
+    "aucune": "none"
+  },
+  "budgets": {
+    "titre": "Budgets",
+    "description": "Annual budgets per country, sub-budgets per project, team or manager, and reallocations.",
+    "attribuer": "Allocate a budget",
+    "erreur_chargement": "Unable to load budgets",
+    "noms": {
+      "enveloppes": "budgets",
+      "pays": "countries"
+    },
+    "conversion": {
+      "titre": "Incomplete conversion",
+      "texte": "No known rate for {{devises}}: these amounts are excluded from the consolidated total rather than absorbed into it."
+    },
+    "indicateurs": {
+      "disponible_consolide": "Consolidated remaining",
+      "taux_en_vigueur": "Converted at the current rate",
+      "pays_dotes": "Countries funded",
+      "enveloppes": "Budgets"
+    },
+    "onglets": {
+      "pays": "By country",
+      "enveloppes": "Budgets",
+      "reallocations": "Reallocations"
+    },
+    "colonnes": {
+      "enveloppe": "Budget",
+      "engage": "Committed",
+      "consomme": "Spent",
+      "disponible": "Remaining",
+      "disponible_devise": "Remaining ({{devise}})",
+      "execution": "Execution",
+      "depassement": "Overrun"
+    },
+    "vide": {
+      "pays_titre": "No budget allocated",
+      "pays_indication_siege": "Allocate an annual budget to each country you track.",
+      "pays_indication_pays": "Headquarters has not allocated a budget to your scope yet.",
+      "enveloppes_titre": "No budget",
+      "enveloppes_indication_siege": "Allocate a budget to start tracking.",
+      "enveloppes_indication_pays": "No budget in your scope."
+    },
+    "dont_reparti": "of which {{montant}} allocated",
+    "taux_inconnu": "unknown rate",
+    "inactive": "inactive",
+    "modifier_aria": "Edit the {{pays}} {{annee}} budget",
+    "portee": {
+      "country": "Country budget",
+      "project": "Sub-budget — project",
+      "team": "Sub-budget — team",
+      "manager": "Sub-budget — manager"
+    },
+    "form": {
+      "titre_modifier": "Edit the budget",
+      "description": "A sub-budget splits the country budget along a single dimension: a project, a team or a manager.",
+      "pays_requis": "Select a country.",
+      "montant_requis": "Enter the budget amount, in figures.",
+      "montant_exemple": "10,000,000",
+      "portee": "Scope",
+      "depassement": "In case of overrun",
+      "active": "Active"
+    },
+    "realloc": {
+      "titre": "Reallocations",
+      "description": "Transfers between budgets, justified and subject to approval.",
+      "demander": "Request",
+      "nom_pluriel": "reallocations",
+      "colonnes": {
+        "transfert": "Transfer",
+        "justification": "Justification"
+      },
+      "vide_titre": "No reallocation",
+      "vide_indication_siege": "Request a transfer to move an amount from one budget to another.",
+      "vide_indication_pays": "No transfer has been requested in your scope.",
+      "vers": "to",
+      "par": "by {{auteur}}",
+      "decision": "Decision: {{note}}",
+      "approuver": "Approve",
+      "refuser": "Reject",
+      "approbation_impossible": "Approval failed",
+      "refus_impossible": "Rejection failed",
+      "demande_impossible": "Request failed",
+      "form_titre": "Request a reallocation",
+      "form_description": "The transfer is carried out only once approved.",
+      "montant_requis": "Enter the amount to transfer, in figures.",
+      "enveloppes_identiques": "Choose two different budgets.",
+      "option_source": "{{libelle}} ({{montant}} remaining)",
+      "motif_placeholder": "Reason for the transfer",
+      "envoyer": "Send",
+      "refus_titre": "Reject the reallocation",
+      "refus_description": "A rejection must state a reason: the reason is kept in the history.",
+      "motif_refus": "Reason for rejection",
+      "motif_requis": "A rejection must state a reason."
+    }
+  },
+  "pilotage": {
+    "titre": "Overview",
+    "description_siege": "Consolidation of all countries, converted into {{devise}}.",
+    "description_pays": "Spending and alerts for your scope.",
+    "erreur_chargement": "Unable to load the dashboard",
+    "chargement": "Loading the dashboard…",
+    "tous_pays": "All countries",
+    "actualisation": "Refreshing",
+    "noms": {
+      "pays": "countries"
+    },
+    "conversion": {
+      "titre": "Incomplete conversion",
+      "texte": "No known rate for {{devises}}: these amounts are excluded from the consolidated total."
+    },
+    "indicateurs": {
+      "enveloppe": "Budget",
+      "consomme": "Spent",
+      "engage": "Committed",
+      "sans_preuve": "Without proof",
+      "disponible": "Remaining",
+      "consolides": "{{montant}} consolidated",
+      "taux_execution": "Execution rate {{taux}}",
+      "soumis_ou_controle": "Submitted or under review",
+      "justifie_a": "Justified at {{taux}}"
+    },
+    "charge": {
+      "a_controler": "Lines to review",
+      "brouillon": "Draft lines",
+      "non_justifiees": "Unjustified lines",
+      "dossiers_ouverts": "Open files"
+    },
+    "alertes_one": "{{count}} alert",
+    "alertes_other": "{{count}} alerts",
+    "autres_alertes_one": "{{count}} more alert — the most serious ones are shown first.",
+    "autres_alertes_other": "{{count}} more alerts — the most serious ones are shown first.",
+    "par_pays": "By country",
+    "colonnes": {
+      "enveloppe": "Budget",
+      "engage": "Committed",
+      "consomme": "Spent",
+      "justifie": "Justified",
+      "sans_preuve": "Without proof",
+      "disponible": "Remaining",
+      "execution": "Execution"
+    },
+    "vide": {
+      "pays_titre": "No budget for this period",
+      "pays_indication": "Allocate a budget from the Budgets page to track spending."
+    },
+    "choisir_pays": "Choose a country to display its breakdown by month, team, manager, project, category and expense title.",
+    "repartition": {
+      "titre": "Breakdown",
+      "par_mois": "By month",
+      "par_equipe": "By team",
+      "par_manager": "By manager",
+      "par_projet": "By project",
+      "par_categorie": "By category",
+      "par_intitule": "By expense title",
+      "colonnes": {
+        "libelle": "Label",
+        "lignes": "Lines",
+        "depenses": "Expenses",
+        "justifie": "Justified",
+        "ecart": "Gap"
+      },
+      "vide_titre": "No expense for this period",
+      "vide_indication": "Change the year or the country to see a breakdown."
+    }
+  },
+  "pays": {
+    "statut": {
+      "actif": "Active",
+      "inactif": "Inactive",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "liste": {
+      "titre": "Country management",
+      "description": "Set the currency, the time zone and the assignments of each country.",
+      "chargement_impossible": "Unable to load countries",
+      "statut_impossible": "Unable to change the status",
+      "nom_singulier": "country",
+      "nom_pluriel": "countries",
+      "modifier_titre": "Edit {{nom}}",
+      "modifier_aria": "Edit {{nom}}",
+      "rechercher_placeholder": "Search for a country…",
+      "rechercher_aria": "Search for a country",
+      "filtrer_statut": "Filter by status",
+      "filtre_actifs": "Active",
+      "filtre_inactifs": "Inactive",
+      "vide_titre": "No country found",
+      "vide_indice_gestion": "Add a country from the list of African ISO codes.",
+      "vide_indice": "No country matches these filters.",
+      "reactiver": "Reactivate"
+    },
+    "formulaire": {
+      "titre_ajout": "Add a country",
+      "description": "Choose the country, then its currency and time zone.",
+      "liste_indisponible": "Country list unavailable",
+      "choix_requis": "Choose a country from the list.",
+      "choisir": "Choose a country…",
+      "note_afrique": "The platform tracks the group's African subsidiaries. Countries already registered do not appear in this list.",
+      "code_iso": "ISO code",
+      "devise_iso": "Currency (ISO 4217)",
+      "symbole": "Symbol",
+      "actif_label": "Active country",
+      "actif_aide": "Once deactivated, the country remains readable but no longer appears in active lists."
+    },
+    "fiche": {
+      "chargement": "Loading the country…",
+      "chargement_impossible": "Unable to load the country",
+      "actualisation": "Refreshing",
+      "introuvable_titre": "Country not found",
+      "introuvable_texte": "This country does not exist or is not within your scope.",
+      "retour": "Back to countries",
+      "budget": "Budget",
+      "budget_devise": "Budget ({{devise}})",
+      "budget_nombre": "The budget must be a number.",
+      "equipes": "Teams",
+      "centres_couts": "Cost centres",
+      "projets": "Projects",
+      "intitules_depenses": "Expense titles",
+      "categories_marketing": "Marketing categories",
+      "beneficiaires": "Beneficiaries",
+      "historique": "History",
+      "managers": "Manager(s)"
+    },
+    "equipes": {
+      "description": "Teams assigned to this country.",
+      "nom_placeholder": "Sales team"
+    },
+    "centres_couts": {
+      "code_placeholder": "CC01",
+      "libelle_placeholder": "Paris centre"
+    },
+    "projets": {
+      "nom_placeholder": "Project 2026",
+      "budget_placeholder": "0"
+    },
+    "depenses": {
+      "intitule_placeholder": "Travel expenses"
+    },
+    "marketing": {
+      "nom_placeholder": "Digital marketing"
+    },
+    "managers": {
+      "titre": "Manager(s)",
+      "description": "Country managers assigned to this country.",
+      "fonction": "Position",
+      "retrait_impossible": "Unable to remove",
+      "vide_titre": "No manager assigned",
+      "vide_indice_gestion": "Add a manager to assign expenses and a sub-budget to them.",
+      "vide_indice": "Headquarters has not assigned any manager to this country.",
+      "modifier_aria": "Edit {{nom}}",
+      "retirer_aria": "Remove {{nom}} from the country",
+      "dialogue_modifier": "Edit a manager",
+      "dialogue_ajouter": "Add a manager",
+      "aide_modifier": "Update the manager's details.",
+      "aide_ajouter": "Create the manager and assign them to this country.",
+      "nom_placeholder": "Jean Dupont",
+      "email_placeholder": "jean.dupont@example.com",
+      "fonction_placeholder": "Sales manager"
+    },
+    "beneficiaires": {
+      "titre": "Prospects and beneficiaries",
+      "description": "Who receives the money, or who the expense targets. The list belongs to the country.",
+      "indisponibles": "Beneficiaries unavailable",
+      "nom_pluriel": "beneficiaries",
+      "vide": "No beneficiary. Add some to be able to link them to expenses.",
+      "contact": "Contact",
+      "nom_placeholder": "Lome service station",
+      "contact_placeholder": "Phone or email"
+    },
+    "historique": {
+      "indisponible": "History unavailable",
+      "nom_pluriel": "entries",
+      "vide_titre": "No history",
+      "vide_texte": "Assignment and configuration changes will appear here.",
+      "par": "by {{nom}}",
+      "de": "from: {{valeur}}",
+      "vers": "to: {{valeur}}",
+      "champs": "fields: {{liste}}"
+    },
+    "lignes": {
+      "vide": "No entry.",
+      "vide_indice": "Click on “{{action}}” to create the first entry.",
+      "modifier_aria": "Edit {{nom}}",
+      "dialogue_modifier": "Edit — {{titre}}",
+      "dialogue_ajouter": "Add — {{titre}}",
+      "champ_obligatoire": "The “{{champ}}” field is required.",
+      "facultatif": "(optional)"
+    }
+  },
+  "configuration": {
+    "titre": "Settings",
+    "description": "Platform settings, accounts, countries and permissions. Restricted to headquarters administrators.",
+    "onglets": {
+      "general": "General",
+      "utilisateurs": "Users",
+      "pays": "Countries",
+      "permissions": "Permissions",
+      "import": "Import"
+    },
+    "general": {
+      "parametres_titre": "Server and workflow settings",
+      "parametres_texte": "Server settings are read-only. The workflow policy below can be changed by headquarters and takes effect without a restart.",
+      "application": "Application",
+      "developpement": "Development",
+      "fuseau_serveur": "Server time zone",
+      "mode_debug": "Debug mode",
+      "active": "Enabled",
+      "alertes": "Alerts",
+      "seuils_consommation": "Consumption thresholds",
+      "seuil_pourcent": "{{valeur}}%",
+      "depense_inhabituelle": "Unusual expense",
+      "depense_inhabituelle_valeur": "above {{facteur}} × the country average",
+      "justificatifs": "Supporting documents",
+      "stockage": "Storage",
+      "taille_max": "Maximum size",
+      "taille_max_valeur": "{{taille}} MB",
+      "formats": "Accepted formats",
+      "budget_notifications": "Budget and notifications",
+      "devise_consolidation": "Consolidation currency",
+      "envoi_emails": "Email sending",
+      "smtp_configure": "SMTP server configured",
+      "smtp_absent": "No server — messages go to the logs",
+      "expediteur": "Sender"
+    },
+    "workflow": {
+      "titre": "Workflow",
+      "enregistree_titre": "Policy saved",
+      "enregistree_texte": "It applies to every expense from now on.",
+      "controle_obligatoire": "Review step required before justification",
+      "controle_obligatoire_aide": "A submitted expense must first go through “Under review”.",
+      "avertir_sans_piece": "Warn when no supporting document",
+      "avertir_sans_piece_aide": "Flag the missing document at submission time.",
+      "delai_alerte": "Alert delay without justification (days)",
+      "facteur_inhabituel": "Unusual expense factor",
+      "seuils": "Alert thresholds in % (comma separated)",
+      "politique_defaut": "Default overrun policy",
+      "enregistrer": "Save the policy",
+      "enregistrement": "Saving…",
+      "corriger": "Correct the fields flagged below.",
+      "jours_invalides": "Enter a whole number of days, zero or more.",
+      "facteur_invalide": "Enter a strictly positive decimal factor.",
+      "seuils_invalides": "Invalid thresholds: {{valeurs}}. Enter whole percentages separated by commas.",
+      "seuil_requis": "Enter at least one threshold."
+    },
+    "permissions": {
+      "non_modifiables": "Permissions cannot be changed",
+      "droit": "Permission",
+      "siege": "headquarters",
+      "pays": "country"
+    },
+    "utilisateurs": {
+      "titre": "Accounts",
+      "description": "Roles and scopes. A headquarters account sees every country; a country manager sees only their own.",
+      "creer": "Create an account",
+      "chargement_impossible": "Unable to load the accounts",
+      "statut_impossible": "Unable to change the status",
+      "perimetre": "Scope",
+      "vide_titre": "No account",
+      "vide_aide": "Create the accounts of the country representatives.",
+      "mdp_provisoire": "temporary password",
+      "soi_meme": "Another administrator has to do it.",
+      "modifier_aria": "Edit {{nom}}",
+      "noun_singulier": "account",
+      "noun_pluriel": "accounts",
+      "form": {
+        "titre_creer": "Create an account",
+        "titre_modifier": "Edit the account",
+        "description": "The password set here is temporary: its holder will be asked to replace it.",
+        "identifiant_exemple": "country.innov",
+        "prenom": "First name",
+        "role_siege": "{{role}} — headquarters",
+        "role_pays": "{{role}} — country",
+        "perimetre_legend": "Countries in scope",
+        "siege_aide": "Headquarters role: access to every country, with no attachment.",
+        "aucun_pays": "No active country.",
+        "mot_de_passe": "Password",
+        "mot_de_passe_optionnel": "Password (leave blank to keep it)",
+        "compte_actif": "Account active",
+        "role_requis": "Choose a role.",
+        "pays_requis": "A country role must be attached to at least one country.",
+        "mdp_requis": "A temporary password is required to create an account.",
+        "email_requis": "An e-mail address is required.",
+        "email_aide": "@innovpharma.net address: it names the account in the authenticator app.",
+        "email_exemple": "first.last@innovpharma.net"
+      },
+      "totp_active": "2FA active",
+      "totp_a_enroler": "2FA to set up",
+      "totp_reinitialiser": "Reset 2FA",
+      "totp_reinitialiser_aria": "Reset two-factor authentication for {{nom}}",
+      "totp_reinit_titre": "Reset two-factor authentication for {{nom}}",
+      "totp_reinit_description": "The account will lose access to the platform until its holder links an authenticator app again. The action is recorded in the audit log.",
+      "totp_reinit_impossible": "Unable to reset"
+    },
+    "pays": {
+      "titre": "Countries",
+      "description": "Functional identifier, currency, time zone. A country is never deleted: it is deactivated, so that its history stays readable.",
+      "chargement_impossible": "Unable to load the countries",
+      "statut_impossible": "Unable to change the status",
+      "noun_singulier": "country",
+      "noun_pluriel": "countries",
+      "ajouter": "Add a country",
+      "modifier": "Edit {{nom}}"
+    },
+    "taux": {
+      "titre": "Exchange rates to XOF",
+      "description": "A rate is never edited: publish a new one, dated. Amounts already consolidated keep the rate of their date.",
+      "publier": "Publish a rate",
+      "indisponibles": "Rates unavailable",
+      "noun": "rates",
+      "col_unite": "1 unit in XOF",
+      "vide_titre": "No rate published",
+      "vide_aide": "Countries outside the XOF zone will not be consolidated as long as no rate exists.",
+      "en_vigueur": "in force",
+      "historique": "historical",
+      "dialogue_description": "How many XOF one unit of this currency is worth, and from when.",
+      "devise_iso": "Currency (ISO 4217)",
+      "devise_exemple": "MAD",
+      "valeur": "1 unit is worth (XOF)",
+      "valeur_exemple": "65.500000",
+      "publier_action": "Publish",
+      "devise_invalide": "Enter a three-letter currency code (ISO 4217).",
+      "taux_invalide": "Enter a strictly positive decimal rate."
+    },
+    "import": {
+      "titre": "Expense import",
+      "description": "What comes in through a workbook arrives as a draft and then follows the same circuit as entered expenses. Simulate first: nothing is written while the workbook contains an error.",
+      "classeur": "Excel workbook (.xlsx)",
+      "pays_colonne": "From the workbook's COUNTRY column",
+      "pays_aide": "Required for a workbook without a COUNTRY column.",
+      "fichier": "File",
+      "fichier_aide": "Expense export or historical workbook, in .xlsx format.",
+      "fichier_requis": "Choose an .xlsx workbook.",
+      "simulation": "Simulation (dry run)",
+      "simulation_aide": "Checks the workbook and counts what would be created, without writing anything.",
+      "simuler": "Simulate the import",
+      "importer": "Import",
+      "impossible": "Import failed",
+      "resultat_simulation": "Simulation result",
+      "resultat_import": "Import result",
+      "lignes_creees": "Lines created",
+      "equipes_creees": "Teams created",
+      "managers_crees": "Managers created",
+      "rien_ecrit": "A workbook with errors is not imported: fix the reported lines, then try again.",
+      "ligne": "Line {{numero}}"
+    }
+  },
+  "audit": {
+    "titre": "Audit log",
+    "description": "Who did what, when and from which address. Entries can neither be edited nor deleted.",
+    "chargement_impossible": "Unable to load the audit log",
+    "recherche_placeholder": "User or label…",
+    "recherche_aria": "Search the audit log",
+    "filtre_action_aria": "Filter by action",
+    "toutes_actions": "All actions",
+    "col_utilisateur": "User",
+    "col_action": "Action",
+    "col_objet": "Object",
+    "col_detail": "Detail",
+    "col_origine": "Origin",
+    "vide_titre": "No entry",
+    "vide_aide": "The log fills up as actions are taken.",
+    "detail_citation": "“{{texte}}”",
+    "detail_montant": "amount {{avant}} → {{apres}}",
+    "detail_empreinte": "fingerprint {{empreinte}}…",
+    "noun_singulier": "entry",
+    "noun_pluriel": "entries"
+  },
+  "exports": {
+    "exporter": "Export",
+    "depenses": "Expenses",
+    "rapprochement": "Reconciliation",
+    "rapport_pdf": "PDF report",
+    "formats": {
+      "xlsx": "Excel (.xlsx)",
+      "csv": "CSV (.csv)",
+      "docx": "Word (.docx)"
+    },
+    "audit_note": "Every export is recorded in the audit log.",
+    "periode_aria": "Export period",
+    "exercice_entier": "Whole year",
+    "impossible": "Export failed"
+  }
+}

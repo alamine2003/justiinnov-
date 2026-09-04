@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Loader2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,14 +15,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
-import {
-  OVERRUN_POLICY_LABELS,
-  type Budget,
-  type CountrySummary,
-  type Manager,
-  type OverrunPolicy,
-  type Project,
-  type Team,
+import { OVERRUN_POLICIES, overrunPolicyLabel } from "@/lib/labels"
+import type {
+  Budget,
+  CountrySummary,
+  Manager,
+  OverrunPolicy,
+  Project,
+  Team,
 } from "@/lib/types"
 import { normalizeDecimal } from "@/lib/utils"
 
@@ -37,14 +38,9 @@ export interface BudgetFormValues {
 }
 
 /** Dimensions selon lesquelles une enveloppe pays peut être découpée (§5.2). */
-const SCOPES = [
-  { value: "country", label: "Enveloppe du pays" },
-  { value: "project", label: "Sous-enveloppe — projet" },
-  { value: "team", label: "Sous-enveloppe — équipe" },
-  { value: "manager", label: "Sous-enveloppe — manager" },
-] as const
+const SCOPES = ["country", "project", "team", "manager"] as const
 
-type Scope = (typeof SCOPES)[number]["value"]
+type Scope = (typeof SCOPES)[number]
 
 interface BudgetFormProps {
   open: boolean
@@ -89,6 +85,7 @@ function BudgetFormBody({
   editing,
   defaultPolicy = "block",
 }: Omit<BudgetFormProps, "open">) {
+  const { t } = useTranslation()
   const [country, setCountry] = useState<number | "">(editing?.country ?? countries[0]?.id ?? "")
   const [year, setYear] = useState(editing?.year ?? CURRENT_YEAR)
   const [scope, setScope] = useState<Scope>(editing?.scope_kind ?? "country")
@@ -103,17 +100,17 @@ function BudgetFormBody({
 
   // Une sous-enveloppe ne porte que sur une entité du pays choisi.
   const eligibleProjects = projects.filter((p) => p.country === country)
-  const eligibleTeams = teams.filter((t) => t.country === country)
+  const eligibleTeams = teams.filter((equipe) => equipe.country === country)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (country === "") {
-      setError("Sélectionnez un pays.")
+      setError(t("budgets.form.pays_requis"))
       return
     }
     const montant = normalizeDecimal(amount)
     if (montant === null) {
-      setError("Indiquez le montant de l'enveloppe, en chiffres.")
+      setError(t("budgets.form.montant_requis"))
       return
     }
     setSaving(true)
@@ -133,7 +130,7 @@ function BudgetFormBody({
       })
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible")
+      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -145,18 +142,15 @@ function BudgetFormBody({
     <>
       <DialogHeader>
         <DialogTitle>
-          {editing ? "Modifier l'enveloppe" : "Attribuer une enveloppe"}
+          {editing ? t("budgets.form.titre_modifier") : t("budgets.attribuer")}
         </DialogTitle>
-        <DialogDescription>
-          Une sous-enveloppe découpe l'enveloppe du pays selon une seule
-          dimension : un projet, une équipe ou un manager.
-        </DialogDescription>
+        <DialogDescription>{t("budgets.form.description")}</DialogDescription>
       </DialogHeader>
       <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
         <FormError>{error}</FormError>
 
         <div className="grid gap-2">
-          <Label htmlFor="budget-country">Pays</Label>
+          <Label htmlFor="budget-country">{t("commun.pays")}</Label>
           <NativeSelect
             id="budget-country"
             value={country}
@@ -178,7 +172,7 @@ function BudgetFormBody({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="budget-year">Année</Label>
+            <Label htmlFor="budget-year">{t("commun.annee")}</Label>
             <NativeSelect
               id="budget-year"
               value={year}
@@ -194,21 +188,24 @@ function BudgetFormBody({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="budget-amount">
-              Montant {selectedCountry ? `(${selectedCountry.currency_symbol || selectedCountry.currency})` : ""}
+              {t("commun.montant")}{" "}
+              {selectedCountry
+                ? `(${selectedCountry.currency_symbol || selectedCountry.currency})`
+                : ""}
             </Label>
             <Input
               id="budget-amount"
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="10 000 000"
+              placeholder={t("budgets.form.montant_exemple")}
               required
             />
           </div>
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="budget-scope">Portée</Label>
+          <Label htmlFor="budget-scope">{t("budgets.form.portee")}</Label>
           <NativeSelect
             id="budget-scope"
             value={scope}
@@ -216,8 +213,8 @@ function BudgetFormBody({
             disabled={Boolean(editing)}
           >
             {SCOPES.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+              <option key={option} value={option}>
+                {t(`budgets.portee.${option}`)}
               </option>
             ))}
           </NativeSelect>
@@ -225,7 +222,7 @@ function BudgetFormBody({
 
         {scope === "project" && (
           <div className="grid gap-2">
-            <Label htmlFor="budget-project">Projet</Label>
+            <Label htmlFor="budget-project">{t("champs.project")}</Label>
             <NativeSelect
               id="budget-project"
               value={project}
@@ -235,7 +232,7 @@ function BudgetFormBody({
               disabled={Boolean(editing)}
               required
             >
-              <option value="">—</option>
+              <option value="">{t("commun.aucun")}</option>
               {eligibleProjects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -247,7 +244,7 @@ function BudgetFormBody({
 
         {scope === "team" && (
           <div className="grid gap-2">
-            <Label htmlFor="budget-team">Équipe</Label>
+            <Label htmlFor="budget-team">{t("champs.team")}</Label>
             <NativeSelect
               id="budget-team"
               value={team}
@@ -257,10 +254,10 @@ function BudgetFormBody({
               disabled={Boolean(editing)}
               required
             >
-              <option value="">—</option>
-              {eligibleTeams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              <option value="">{t("commun.aucun")}</option>
+              {eligibleTeams.map((equipe) => (
+                <option key={equipe.id} value={equipe.id}>
+                  {equipe.name}
                 </option>
               ))}
             </NativeSelect>
@@ -269,7 +266,7 @@ function BudgetFormBody({
 
         {scope === "manager" && (
           <div className="grid gap-2">
-            <Label htmlFor="budget-manager">Manager</Label>
+            <Label htmlFor="budget-manager">{t("champs.manager")}</Label>
             <NativeSelect
               id="budget-manager"
               value={manager}
@@ -279,7 +276,7 @@ function BudgetFormBody({
               disabled={Boolean(editing)}
               required
             >
-              <option value="">—</option>
+              <option value="">{t("commun.aucun")}</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -290,33 +287,33 @@ function BudgetFormBody({
         )}
 
         <div className="grid gap-2">
-          <Label htmlFor="budget-policy">En cas de dépassement</Label>
+          <Label htmlFor="budget-policy">{t("budgets.form.depassement")}</Label>
           <NativeSelect
             id="budget-policy"
             value={policy}
             onChange={(e) => setPolicy(e.target.value as OverrunPolicy)}
           >
-            {Object.entries(OVERRUN_POLICY_LABELS).map(([value, label]) => (
+            {OVERRUN_POLICIES.map((value) => (
               <option key={value} value={value}>
-                {label}
+                {overrunPolicyLabel(t, value)}
               </option>
             ))}
           </NativeSelect>
         </div>
 
         <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label htmlFor="budget-active" className="text-sm">Active</Label>
+          <Label htmlFor="budget-active" className="text-sm">{t("budgets.form.active")}</Label>
           <Switch id="budget-active" checked={active} onCheckedChange={setActive} />
         </div>
 
         <DialogFooter>
           <div>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
+              {t("commun.annuler")}
             </Button>
             <Button type="submit" disabled={saving} className="ml-2">
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Enregistrer
+              {t("commun.enregistrer")}
             </Button>
           </div>
         </DialogFooter>

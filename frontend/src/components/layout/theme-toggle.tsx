@@ -1,4 +1,5 @@
 import { Monitor, Moon, Sun } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -8,11 +9,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useTheme } from "@/context/use-theme"
-import { THEME_LABELS, THEMES, type Theme } from "@/lib/theme"
+import { themeLabel } from "@/lib/labels"
+import { THEMES, type Theme } from "@/lib/theme"
 
 const ICONES = { light: Sun, dark: Moon, system: Monitor }
 
 export function ThemeToggle() {
+  const { t } = useTranslation()
   const { theme, resolved, setTheme } = useTheme()
   const Icone = resolved === "dark" ? Moon : Sun
 
@@ -20,7 +23,7 @@ export function ThemeToggle() {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="icon" aria-label="Thème de l'interface">
+          <Button variant="ghost" size="icon" aria-label={t("layout.theme_bouton")}>
             <Icone className="h-4 w-4" />
           </Button>
         }
@@ -40,7 +43,7 @@ export function ThemeToggle() {
             return (
               <DropdownMenuRadioItem key={valeur} value={valeur} closeOnClick>
                 <IconeOption className="h-4 w-4" aria-hidden />
-                {THEME_LABELS[valeur]}
+                {themeLabel(t, valeur)}
               </DropdownMenuRadioItem>
             )
           })}

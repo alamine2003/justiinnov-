@@ -5,6 +5,7 @@ import type {
   Me,
   Paginated,
   PermissionMatrix,
+  TotpEnrolment,
   WorkflowConfiguration,
 } from "@/lib/types"
 
@@ -18,6 +19,30 @@ export function changePassword(currentPassword: string, newPassword: string) {
     current_password: currentPassword,
     new_password: newPassword,
   })
+}
+
+// ---------------------------------------------------------------------------
+// Double authentification
+// ---------------------------------------------------------------------------
+
+/** Génère (ou régénère) le secret d'enrôlement ; il n'est montré qu'ici. */
+export function enrolTwoFactor() {
+  return apiPost<TotpEnrolment>("/me/2fa/enrol/", {})
+}
+
+/** Premier code valide : l'enrôlement est confirmé et la plateforme s'ouvre. */
+export function confirmTwoFactor(code: string) {
+  return apiPost<{ totp_confirmed: boolean }>("/me/2fa/confirm/", { code })
+}
+
+/** Réinitialise l'enrôlement d'un compte : son titulaire devra recommencer. */
+export function resetTwoFactor(userId: number) {
+  return apiPost<AccountUser>(`/users/${userId}/reset-2fa/`, {})
+}
+
+/** Vrai tant que le compte n'a pas droit à l'application : mot de passe provisoire ou 2FA à enrôler. */
+export function platformClosed(me: Me | null): boolean {
+  return Boolean(me && (me.must_change_password || me.totp_confirmed === false))
 }
 
 export function fetchUsers(params?: Record<string, unknown>, signal?: AbortSignal) {

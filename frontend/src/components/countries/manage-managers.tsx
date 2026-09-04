@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Link2, Loader2, Pencil, Plus, Unlink, Users } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,6 +46,7 @@ export function ManageManagers({
   onRefresh,
   canManage,
 }: ManageManagersProps) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState<Manager | null | "nouveau">(null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +61,7 @@ export function ManageManagers({
       )
       await onRefresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Retrait impossible")
+      setError(e instanceof Error ? e.message : t("pays.managers.retrait_impossible"))
     } finally {
       setBusyId(null)
     }
@@ -69,15 +71,13 @@ export function ManageManagers({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold">Manager(s)</h3>
-          <p className="text-xs text-muted-foreground">
-            Responsables rattachés à ce pays.
-          </p>
+          <h3 className="text-sm font-semibold">{t("pays.managers.titre")}</h3>
+          <p className="text-xs text-muted-foreground">{t("pays.managers.description")}</p>
         </div>
         {canManage && (
           <Button size="sm" onClick={() => setEditing("nouveau")}>
             <Plus className="mr-1 h-4 w-4" aria-hidden />
-            Ajouter
+            {t("commun.ajouter")}
           </Button>
         )}
       </div>
@@ -88,11 +88,11 @@ export function ManageManagers({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead scope="col">Manager</TableHead>
-              <TableHead scope="col">Email</TableHead>
-              <TableHead scope="col">Fonction</TableHead>
-              <TableHead scope="col">Statut</TableHead>
-              <TableHead scope="col" className="text-right">Actions</TableHead>
+              <TableHead scope="col">{t("champs.manager")}</TableHead>
+              <TableHead scope="col">{t("champs.email")}</TableHead>
+              <TableHead scope="col">{t("pays.managers.fonction")}</TableHead>
+              <TableHead scope="col">{t("commun.statut")}</TableHead>
+              <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -100,11 +100,11 @@ export function ManageManagers({
               <EmptyRow
                 colSpan={5}
                 icon={Users}
-                title="Aucun manager rattaché"
+                title={t("pays.managers.vide_titre")}
                 hint={
                   canManage
-                    ? "Ajoutez un manager pour lui rattacher des dépenses et une sous-enveloppe."
-                    : "Le siège n'a rattaché aucun manager à ce pays."
+                    ? t("pays.managers.vide_indice_gestion")
+                    : t("pays.managers.vide_indice")
                 }
               />
             ) : (
@@ -114,16 +114,20 @@ export function ManageManagers({
                     <span className="font-medium">{manager.name}</span>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {manager.email || <span className="text-muted-foreground/60">—</span>}
+                    {manager.email || (
+                      <span className="text-muted-foreground/60">{t("commun.aucun")}</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {manager.title || <span className="text-muted-foreground/60">—</span>}
+                    {manager.title || (
+                      <span className="text-muted-foreground/60">{t("commun.aucun")}</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {manager.is_active ? (
-                      <Badge className={STATUS_TONES.SUCCES}>Actif</Badge>
+                      <Badge className={STATUS_TONES.SUCCES}>{t("pays.statut.actif")}</Badge>
                     ) : (
-                      <Badge variant="secondary">Inactif</Badge>
+                      <Badge variant="secondary">{t("pays.statut.inactif")}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
@@ -133,7 +137,7 @@ export function ManageManagers({
                           variant="ghost"
                           size="icon"
                           onClick={() => setEditing(manager)}
-                          aria-label={`Modifier ${manager.name}`}
+                          aria-label={t("pays.managers.modifier_aria", { nom: manager.name })}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -141,7 +145,7 @@ export function ManageManagers({
                           variant="ghost"
                           size="icon"
                           onClick={() => void handleDetach(manager)}
-                          aria-label={`Retirer ${manager.name} du pays`}
+                          aria-label={t("pays.managers.retirer_aria", { nom: manager.name })}
                           disabled={busyId === manager.id}
                           className="text-muted-foreground hover:text-destructive"
                         >
@@ -153,7 +157,7 @@ export function ManageManagers({
                         </Button>
                       </>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground">{t("commun.aucun")}</span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -190,6 +194,7 @@ function ManagerDialog({
   onClose: () => void
   onSaved: () => void | Promise<void>
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(manager?.name ?? "")
   const [email, setEmail] = useState(manager?.email ?? "")
   const [title, setTitle] = useState(manager?.title ?? "")
@@ -215,7 +220,7 @@ function ManagerDialog({
       await onSaved()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible")
+      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -227,57 +232,57 @@ function ManagerDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Link2 className="h-4 w-4" aria-hidden />
-            {manager ? "Modifier" : "Ajouter"} un manager
+            {manager
+              ? t("pays.managers.dialogue_modifier")
+              : t("pays.managers.dialogue_ajouter")}
           </DialogTitle>
           <DialogDescription>
-            {manager
-              ? "Mettez à jour les informations du manager."
-              : "Créer le manager et le rattacher à ce pays."}
+            {manager ? t("pays.managers.aide_modifier") : t("pays.managers.aide_ajouter")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
           <FormError>{error}</FormError>
           <div className="grid gap-2">
-            <Label htmlFor="m-name">Nom</Label>
+            <Label htmlFor="m-name">{t("champs.name")}</Label>
             <Input
               id="m-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Jean Dupont"
+              placeholder={t("pays.managers.nom_placeholder")}
               required
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="m-email">Email</Label>
+            <Label htmlFor="m-email">{t("champs.email")}</Label>
             <Input
               id="m-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="jean.dupont@exemple.fr"
+              placeholder={t("pays.managers.email_placeholder")}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="m-title">Fonction</Label>
+            <Label htmlFor="m-title">{t("pays.managers.fonction")}</Label>
             <Input
               id="m-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Responsable commercial"
+              placeholder={t("pays.managers.fonction_placeholder")}
             />
           </div>
           <div className="flex items-center justify-between rounded-lg border p-3">
-            <Label htmlFor="m-active" className="text-sm">Actif</Label>
+            <Label htmlFor="m-active" className="text-sm">{t("commun.actif")}</Label>
             <Switch id="m-active" checked={active} onCheckedChange={setActive} />
           </div>
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={onClose}>
-                Annuler
+                {t("commun.annuler")}
               </Button>
               <Button type="submit" disabled={saving} className="ml-2">
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Enregistrer
+                {t("commun.enregistrer")}
               </Button>
             </div>
           </DialogFooter>

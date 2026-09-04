@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
+  Download,
   FolderOpen,
   Globe,
   Info,
@@ -12,8 +13,8 @@ import {
   Settings,
   Wallet,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -24,10 +25,14 @@ import {
 } from "@/components/ui/sheet"
 import { AppFooter } from "@/components/layout/app-footer"
 import { BrandMark } from "@/components/layout/brand-mark"
+import { LanguageToggle } from "@/components/layout/language-toggle"
 import { NotificationBell } from "@/components/layout/notification-bell"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
+import { UserMenu } from "@/components/layout/user-menu"
 import { useAuth } from "@/context/use-auth"
+import { platformClosed } from "@/lib/accounts"
 import { BRAND } from "@/lib/brand"
+import { useInstallPrompt } from "@/lib/install-prompt"
 import { cn } from "@/lib/utils"
 
 function NavItem({
@@ -61,10 +66,12 @@ function NavItem({
 }
 
 export function AppLayout() {
+  const { t } = useTranslation()
   const { logout, me, can } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const { available: installable, install } = useInstallPrompt()
   const notice = (location.state as { notice?: string } | null)?.notice
 
   const handleLogout = async () => {
@@ -75,36 +82,38 @@ export function AppLayout() {
   // Un représentant pays n'a qu'un périmètre : l'afficher évite toute
   // ambiguïté sur les données consultées.
   const scope = me?.has_global_scope
-    ? "Siège — tous pays"
+    ? t("commun.siege_tous_pays")
     : me?.countries.map((c) => c.country_ref ?? c.name).join(", ")
 
-  // Aucun menu tant que le mot de passe du siège n'est pas remplacé : chaque
-  // entrée mènerait à une page que le serveur refuse de servir.
-  const navigation = me?.must_change_password ? null : (
+  // Aucun menu tant que le mot de passe du siège n'est pas remplacé ni la
+  // double authentification enrôlée : chaque entrée mènerait à une page que
+  // le serveur refuse de servir.
+  const closed = platformClosed(me)
+  const navigation = closed ? null : (
     <>
       <NavItem to="/" icon={LayoutDashboard} onNavigate={() => setMenuOpen(false)}>
-        Pilotage
+        {t("nav.pilotage")}
       </NavItem>
       <NavItem to="/dossiers" icon={FolderOpen} onNavigate={() => setMenuOpen(false)}>
-        Dossiers
+        {t("nav.dossiers")}
       </NavItem>
       <NavItem to="/registre" icon={ListChecks} onNavigate={() => setMenuOpen(false)}>
-        Registre
+        {t("nav.registre")}
       </NavItem>
       <NavItem to="/budgets" icon={Wallet} onNavigate={() => setMenuOpen(false)}>
-        Budgets
+        {t("nav.budgets")}
       </NavItem>
       <NavItem to="/countries" icon={Globe} onNavigate={() => setMenuOpen(false)}>
-        Pays
+        {t("nav.pays")}
       </NavItem>
       {can("view_audit") && (
         <NavItem to="/audit" icon={ScrollText} onNavigate={() => setMenuOpen(false)}>
-          Audit
+          {t("nav.audit")}
         </NavItem>
       )}
       {can("manage_users") && (
         <NavItem to="/configuration" icon={Settings} onNavigate={() => setMenuOpen(false)}>
-          Configuration
+          {t("nav.configuration")}
         </NavItem>
       )}
     </>
@@ -133,27 +142,22 @@ export function AppLayout() {
           {/* Sous `md`, les sept entrées ne tiennent pas : elles passent dans
               un panneau latéral, pour que la page ne défile jamais
               horizontalement. */}
-          <nav aria-label="Navigation principale" className="hidden items-center gap-1 md:flex">
+          <nav aria-label={t("nav.principale")} className="hidden items-center gap-1 md:flex">
             {navigation}
           </nav>
 
           <div className="flex items-center gap-1">
-            {me && (
-              <Badge variant="secondary" className="ml-2 hidden font-normal lg:inline-flex">
-                {me.username} · {me.role_display}
-              </Badge>
-            )}
-            {!me?.must_change_password && <NotificationBell />}
+            {!closed && <NotificationBell />}
+            <LanguageToggle persistOnServer />
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={() => void handleLogout()} className="hidden md:inline-flex">
-              <LogOut className="mr-2 h-4 w-4" aria-hidden />
-              Déconnexion
-            </Button>
+            <div className="hidden md:block">
+              <UserMenu onLogout={() => void handleLogout()} />
+            </div>
             <Button
               variant="ghost"
               size="icon"
               className="md:hidden"
-              aria-label="Ouvrir le menu"
+              aria-label={t("nav.ouvrir_menu")}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen(true)}
             >
@@ -171,13 +175,19 @@ export function AppLayout() {
               {me ? `${me.username} · ${me.role_display}` : scope}
             </SheetDescription>
           </SheetHeader>
-          <nav aria-label="Navigation principale" className="flex flex-col gap-1 px-4">
+          <nav aria-label={t("nav.principale")} className="flex flex-col gap-1 px-4">
             {navigation}
           </nav>
-          <div className="mt-auto px-4 pb-6">
+          <div className="mt-auto space-y-2 px-4 pb-6">
+            {installable && (
+              <Button variant="ghost" className="w-full" onClick={() => void install()}>
+                <Download className="mr-2 h-4 w-4" aria-hidden />
+                {t("pwa.installer")}
+              </Button>
+            )}
             <Button variant="outline" className="w-full" onClick={() => void handleLogout()}>
               <LogOut className="mr-2 h-4 w-4" aria-hidden />
-              Déconnexion
+              {t("nav.deconnexion")}
             </Button>
           </div>
         </SheetContent>

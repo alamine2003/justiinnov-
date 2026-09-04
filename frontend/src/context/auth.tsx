@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
+import i18next from "i18next"
 import {
   ApiError,
   apiLogout,
@@ -7,6 +8,7 @@ import {
   clearToken,
   getToken,
   onPasswordChangeRequired,
+  onTotpSetupRequired,
   onUnauthorized,
   setToken,
 } from "@/lib/api"
@@ -14,6 +16,7 @@ import { fetchMe } from "@/lib/accounts"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import type { Me, Permissions } from "@/lib/types"
 import { AuthContext } from "@/context/auth-context"
+import { currentLanguage, isLanguage } from "@/i18n"
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
@@ -50,7 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoadingProfile(true)
     setProfileError(null)
     try {
-      setMe(await fetchMe())
+      const profile = await fetchMe()
+      setMe(profile)
+      // La langue enregistrée sur le profil l'emporte : elle suit la
+      // personne d'un poste à l'autre. Un serveur qui ne connaît pas encore
+      // le champ laisse la langue du navigateur.
+      if (isLanguage(profile.language) && profile.language !== currentLanguage()) {
+        await i18next.changeLanguage(profile.language)
+      }
     } catch (e) {
       // Seule une session refusée (jeton périmé ou révoqué) justifie de
       // repartir de zéro. Une panne réseau ou un 502 se signale, sans
@@ -59,9 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         clearSession()
       } else {
-        const message = e instanceof Error ? e.message : "Profil indisponible"
+        const message = e instanceof Error ? e.message : i18next.t("erreurs.profil_indisponible")
         setProfileError(message)
-        throw new Error(`Impossible de lire votre profil : ${message}`)
+        throw new Error(i18next.t("erreurs.profil_illisible", { message }))
       }
     } finally {
       setLoadingProfile(false)
@@ -69,13 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession])
 
   const login = useCallback(
-    async (username: string, password: string) => {
+    async (username: string, password: string, code?: string) => {
       // Passe par le client partagé pour bénéficier de la normalisation des
       // erreurs (`ApiError`) : sans elle, un 400 remonte « Request failed with
-      // status code 400 » au lieu du message du serveur.
+      // status code 400 » au lieu du message du serveur. Le code n'est
+      // envoyé que s'il a été saisi : le serveur dit lui-même s'il en faut un.
       const { token: newToken } = await apiPost<{ token: string }>(
         "/token-auth/",
-        { username, password },
+        code ? { username, password, code } : { username, password },
       )
       setToken(newToken)
       setTokenState(newToken)
@@ -110,11 +121,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession, navigate])
 
   useEffect(() => {
-    return onPasswordChangeRequired(() => {
+    const relire = () => {
       refreshProfile().catch(() => {
         // Déjà signalé par `profileError`.
       })
-    })
+    }
+    const unsubscribePassword = onPasswordChangeRequired(relire)
+    const unsubscribeTotp = onTotpSetupRequired(relire)
+    return () => {
+      unsubscribePassword()
+      unsubscribeTotp()
+    }
   }, [refreshProfile])
 
   const can = useCallback(

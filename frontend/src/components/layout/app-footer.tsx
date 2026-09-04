@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { BRAND, copyright } from "@/lib/brand"
 
 /**
@@ -8,20 +9,22 @@ import { BRAND, copyright } from "@/lib/brand"
  * surprend.
  */
 export function AppFooter() {
+  const { t } = useTranslation()
   return (
     <footer className="mt-12 border-t border-border/60 bg-card/40">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-6 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <p>
           {copyright()}{" "}
-          <span className="text-muted-foreground/70">{BRAND.tagline}.</span>
+          <span className="text-muted-foreground/70">{t("app.tagline")}.</span>
         </p>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>
-            Version <span className="font-medium text-foreground">{BRAND.version}</span>
+            {t("layout.version")}{" "}
+            <span className="font-medium text-foreground">{BRAND.version}</span>
           </span>
           <span aria-hidden className="text-border">·</span>
           <span>
-            Développé par{" "}
+            {t("layout.developpe_par")}{" "}
             <span className="font-medium text-foreground">{BRAND.developer}</span>
           </span>
         </p>

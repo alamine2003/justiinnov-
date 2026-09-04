@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 import { AlertTriangle } from "lucide-react"
+import i18next from "i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface State {
@@ -28,11 +29,11 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
         <div className="mx-auto max-w-2xl p-6">
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>L'affichage a échoué</AlertTitle>
+            <AlertTitle>{i18next.t("erreurs.affichage_echoue")}</AlertTitle>
             <AlertDescription>
-              <p>{this.state.error.message || "Une erreur inattendue est survenue."}</p>
+              <p>{this.state.error.message || i18next.t("erreurs.inattendue")}</p>
               <p>
-                <a href={window.location.pathname}>Recharger la page</a>
+                <a href={window.location.pathname}>{i18next.t("erreurs.recharger")}</a>
               </p>
             </AlertDescription>
           </Alert>

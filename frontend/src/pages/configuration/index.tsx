@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react"
 import { useSearchParams } from "react-router-dom"
 import { AlertTriangle, CheckCircle2, Info, Loader2, Lock, Save } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,8 +23,10 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CountriesSection } from "@/pages/configuration/countries-section"
+import { ImportSection } from "@/pages/configuration/import-section"
 import { RatesSection } from "@/pages/configuration/rates-section"
 import { UsersSection } from "@/pages/configuration/users-section"
+import { useAuth } from "@/context/use-auth"
 import {
   fetchConfiguration,
   fetchPermissionMatrix,
@@ -30,34 +34,35 @@ import {
 } from "@/lib/accounts"
 import { ApiError, type FieldErrors } from "@/lib/api"
 import { BRAND } from "@/lib/brand"
+import { OVERRUN_POLICIES, overrunPolicyLabel } from "@/lib/labels"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import { STATUS_TONES } from "@/lib/status-styles"
-import {
-  OVERRUN_POLICY_LABELS,
-  type OverrunPolicy,
-  type WorkflowConfiguration,
-} from "@/lib/types"
+import { type OverrunPolicy, type WorkflowConfiguration } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { normalizeDecimal } from "@/lib/utils"
 
-const ONGLETS = [
-  { value: "general", label: "Général" },
-  { value: "utilisateurs", label: "Utilisateurs" },
-  { value: "pays", label: "Pays" },
-  { value: "permissions", label: "Permissions" },
-] as const
+/**
+ * Identifiants d'onglets : valeurs techniques, reprises dans l'URL
+ * (`?onglet=utilisateurs`). Seuls les libellés sont traduits.
+ */
+const ONGLETS = ["general", "utilisateurs", "pays", "permissions", "import"] as const
 
 export function ConfigurationPage() {
+  const { t } = useTranslation()
+  const { can } = useAuth()
   // L'onglet vit dans l'URL : un lien vers « Configuration › Permissions »
   // doit rouvrir cet onglet, pas le premier.
   const [params, setParams] = useSearchParams()
   const onglet = params.get("onglet") ?? "general"
+  // L'import manipule des fichiers : réservé, comme les exports, aux
+  // administrateurs (`export_data`).
+  const onglets = ONGLETS.filter((value) => value !== "import" || can("export_data"))
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Configuration"
-        description="Paramètres de la plateforme, comptes, pays et droits. Réservé aux administrateurs du siège."
+        title={t("configuration.titre")}
+        description={t("configuration.description")}
       />
 
       <Tabs
@@ -65,9 +70,9 @@ export function ConfigurationPage() {
         onValueChange={(value) => setParams({ onglet: value })}
       >
         <TabsList className="flex w-full flex-wrap justify-start bg-muted/60">
-          {ONGLETS.map((item) => (
-            <TabsTrigger key={item.value} value={item.value}>
-              {item.label}
+          {onglets.map((value) => (
+            <TabsTrigger key={value} value={value}>
+              {t(`configuration.onglets.${value}`)}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -84,12 +89,18 @@ export function ConfigurationPage() {
         <TabsContent value="permissions" className="mt-4">
           <PermissionsSection />
         </TabsContent>
+        {can("export_data") && (
+          <TabsContent value="import" className="mt-4">
+            <ImportSection />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )
 }
 
 function GeneralSection() {
+  const { t } = useTranslation()
   const query = useQuery("configuration:page", () => fetchConfiguration())
   const config = query.data
 
@@ -101,65 +112,80 @@ function GeneralSection() {
     <div className="space-y-4">
       <Alert>
         <Info className="h-4 w-4" />
-        <AlertTitle>Paramètres du serveur et du workflow</AlertTitle>
-        <AlertDescription>
-          Les paramètres du serveur sont en lecture seule. La politique du
-          workflow ci-dessous est modifiable par le siège et prend effet sans
-          redémarrage.
-        </AlertDescription>
+        <AlertTitle>{t("configuration.general.parametres_titre")}</AlertTitle>
+        <AlertDescription>{t("configuration.general.parametres_texte")}</AlertDescription>
       </Alert>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Bloc titre="Application">
-          <Ligne label="Nom" valeur={BRAND.name} />
-          <Ligne label="Version" valeur={BRAND.version} />
-          <Ligne label="Développement" valeur={BRAND.developer} />
-          <Ligne label="Fuseau du serveur" valeur={config.systeme.fuseau} />
+        <Bloc titre={t("configuration.general.application")}>
+          <Ligne label={t("commun.nom")} valeur={BRAND.name} />
+          <Ligne label={t("layout.version")} valeur={BRAND.version} />
+          <Ligne label={t("configuration.general.developpement")} valeur={BRAND.developer} />
           <Ligne
-            label="Mode debug"
-            valeur={config.systeme.mode_debug ? "Activé" : "Désactivé"}
+            label={t("configuration.general.fuseau_serveur")}
+            valeur={config.systeme.fuseau}
+          />
+          <Ligne
+            label={t("configuration.general.mode_debug")}
+            valeur={
+              config.systeme.mode_debug
+                ? t("configuration.general.active")
+                : t("commun.desactive")
+            }
             alerte={config.systeme.mode_debug}
           />
         </Bloc>
 
-        <Bloc titre="Alertes">
+        <Bloc titre={t("configuration.general.alertes")}>
           <Ligne
-            label="Seuils de consommation"
-            valeur={config.alertes.seuils.map((s) => `${s} %`).join(" · ")}
+            label={t("configuration.general.seuils_consommation")}
+            valeur={config.alertes.seuils
+              .map((s) => t("configuration.general.seuil_pourcent", { valeur: s }))
+              .join(" · ")}
           />
           <Ligne
-            label="Dépense inhabituelle"
-            valeur={`au-delà de ${config.alertes.facteur_depense_inhabituelle} × la moyenne du pays`}
+            label={t("configuration.general.depense_inhabituelle")}
+            valeur={t("configuration.general.depense_inhabituelle_valeur", {
+              facteur: config.alertes.facteur_depense_inhabituelle,
+            })}
           />
         </Bloc>
 
-        <Bloc titre="Justificatifs">
-          <Ligne label="Stockage" valeur={config.justificatifs.stockage} />
+        <Bloc titre={t("configuration.general.justificatifs")}>
           <Ligne
-            label="Taille maximale"
-            valeur={`${config.justificatifs.taille_max_mo} Mo`}
+            label={t("configuration.general.stockage")}
+            valeur={config.justificatifs.stockage}
           />
           <Ligne
-            label="Formats acceptés"
+            label={t("configuration.general.taille_max")}
+            valeur={t("configuration.general.taille_max_valeur", {
+              taille: config.justificatifs.taille_max_mo,
+            })}
+          />
+          <Ligne
+            label={t("configuration.general.formats")}
             valeur={config.justificatifs.formats_acceptes.join(" ")}
           />
         </Bloc>
 
-        <Bloc titre="Budget et notifications">
+        <Bloc titre={t("configuration.general.budget_notifications")}>
           <Ligne
-            label="Devise de consolidation"
+            label={t("configuration.general.devise_consolidation")}
             valeur={config.budget.devise_de_consolidation}
           />
           <Ligne
-            label="Envoi d'e-mails"
+            label={t("configuration.general.envoi_emails")}
             valeur={
               config.notifications.email_configure
-                ? "Serveur SMTP configuré"
-                : "Aucun serveur — les messages partent dans les logs"
+                ? t("configuration.general.smtp_configure")
+                : t("configuration.general.smtp_absent")
             }
             alerte={!config.notifications.email_configure}
           />
-          <Ligne label="Expéditeur" valeur={config.notifications.expediteur} />
+          <Ligne
+            label={t("configuration.general.expediteur")}
+            valeur={config.notifications.expediteur}
+          />
         </Bloc>
       </div>
 
@@ -189,18 +215,21 @@ interface WorkflowDraft {
 }
 
 /** Valide la saisie et la traduit pour le serveur ; renvoie les erreurs par champ sinon. */
-function validateWorkflow(draft: WorkflowDraft): {
+function validateWorkflow(
+  t: TFunction,
+  draft: WorkflowDraft,
+): {
   values?: Partial<WorkflowConfiguration>
   errors: FieldErrors
 } {
   const errors: FieldErrors = {}
   const jours = Number(draft.unjustified_alert_days.trim())
   if (draft.unjustified_alert_days.trim() === "" || !Number.isInteger(jours) || jours < 0) {
-    errors.unjustified_alert_days = ["Indiquez un nombre entier de jours, positif ou nul."]
+    errors.unjustified_alert_days = [t("configuration.workflow.jours_invalides")]
   }
   const facteur = normalizeDecimal(draft.unusual_expense_factor)
   if (facteur === null || Number(facteur) <= 0) {
-    errors.unusual_expense_factor = ["Indiquez un facteur décimal strictement positif."]
+    errors.unusual_expense_factor = [t("configuration.workflow.facteur_invalide")]
   }
   // Chaque seuil est vérifié ; un « abc » ou un « -5 » est signalé au lieu
   // d'être filtré en silence — ce qui laissait croire qu'il avait été retenu.
@@ -215,10 +244,10 @@ function validateWorkflow(draft: WorkflowDraft): {
   }
   if (invalides.length > 0) {
     errors.alert_thresholds = [
-      `Seuils invalides : ${invalides.join(", ")}. Indiquez des pourcentages entiers séparés par des virgules.`,
+      t("configuration.workflow.seuils_invalides", { valeurs: invalides.join(", ") }),
     ]
   } else if (seuils.length === 0) {
-    errors.alert_thresholds = ["Indiquez au moins un seuil."]
+    errors.alert_thresholds = [t("configuration.workflow.seuil_requis")]
   }
   if (Object.keys(errors).length > 0) return { errors }
   return {
@@ -241,6 +270,7 @@ function WorkflowForm({
   workflow: WorkflowConfiguration
   onSaved: (workflow: WorkflowConfiguration) => void
 }) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState<WorkflowDraft>({
     require_review_step: workflow.require_review_step,
     warn_without_proof_submission: workflow.warn_without_proof_submission,
@@ -261,11 +291,11 @@ function WorkflowForm({
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    const { values, errors } = validateWorkflow(draft)
+    const { values, errors } = validateWorkflow(t, draft)
     setFieldErrors(errors)
     setError(null)
     if (!values) {
-      setError("Corrigez les champs signalés.")
+      setError(t("configuration.workflow.corriger"))
       return
     }
     setSaving(true)
@@ -275,7 +305,7 @@ function WorkflowForm({
       setSaved(true)
     } catch (e) {
       if (e instanceof ApiError) setFieldErrors(e.fields)
-      setError(e instanceof Error ? e.message : "Enregistrement impossible")
+      setError(e instanceof Error ? e.message : t("erreurs.enregistrement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -286,7 +316,9 @@ function WorkflowForm({
   return (
     <Card className="border-border/60 shadow-sm">
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">Workflow</CardTitle>
+        <CardTitle className="text-sm font-semibold">
+          {t("configuration.workflow.titre")}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit} noValidate>
@@ -294,17 +326,19 @@ function WorkflowForm({
           {saved && (
             <Alert className="sm:col-span-2">
               <CheckCircle2 className="h-4 w-4" />
-              <AlertTitle>Politique enregistrée</AlertTitle>
-              <AlertDescription>Elle s'applique dès maintenant à toutes les dépenses.</AlertDescription>
+              <AlertTitle>{t("configuration.workflow.enregistree_titre")}</AlertTitle>
+              <AlertDescription>
+                {t("configuration.workflow.enregistree_texte")}
+              </AlertDescription>
             </Alert>
           )}
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3 sm:col-span-2">
             <div>
               <Label htmlFor="require_review_step" className="block text-sm font-medium">
-                Contrôle obligatoire avant justification
+                {t("configuration.workflow.controle_obligatoire")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Une dépense soumise doit d'abord passer « En contrôle ».
+                {t("configuration.workflow.controle_obligatoire_aide")}
               </p>
             </div>
             <Switch
@@ -316,10 +350,10 @@ function WorkflowForm({
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3 sm:col-span-2">
             <div>
               <Label htmlFor="warn_without_proof_submission" className="block text-sm font-medium">
-                Avertir sans justificatif
+                {t("configuration.workflow.avertir_sans_piece")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Signaler l'absence de pièce au moment de la soumission.
+                {t("configuration.workflow.avertir_sans_piece_aide")}
               </p>
             </div>
             <Switch
@@ -328,7 +362,11 @@ function WorkflowForm({
               onCheckedChange={(checked) => set("warn_without_proof_submission", checked)}
             />
           </div>
-          <Champ id="unjustified_alert_days" label="Délai d'alerte sans justification (jours)" erreur={champ("unjustified_alert_days")}>
+          <Champ
+            id="unjustified_alert_days"
+            label={t("configuration.workflow.delai_alerte")}
+            erreur={champ("unjustified_alert_days")}
+          >
             <Input
               id="unjustified_alert_days"
               inputMode="numeric"
@@ -337,7 +375,11 @@ function WorkflowForm({
               aria-invalid={Boolean(champ("unjustified_alert_days"))}
             />
           </Champ>
-          <Champ id="unusual_expense_factor" label="Facteur de dépense inhabituelle" erreur={champ("unusual_expense_factor")}>
+          <Champ
+            id="unusual_expense_factor"
+            label={t("configuration.workflow.facteur_inhabituel")}
+            erreur={champ("unusual_expense_factor")}
+          >
             <Input
               id="unusual_expense_factor"
               inputMode="decimal"
@@ -346,7 +388,11 @@ function WorkflowForm({
               aria-invalid={Boolean(champ("unusual_expense_factor"))}
             />
           </Champ>
-          <Champ id="alert_thresholds" label="Seuils d'alerte en % (séparés par des virgules)" erreur={champ("alert_thresholds")}>
+          <Champ
+            id="alert_thresholds"
+            label={t("configuration.workflow.seuils")}
+            erreur={champ("alert_thresholds")}
+          >
             <Input
               id="alert_thresholds"
               value={draft.alert_thresholds}
@@ -355,15 +401,19 @@ function WorkflowForm({
               aria-invalid={Boolean(champ("alert_thresholds"))}
             />
           </Champ>
-          <Champ id="default_overrun_policy" label="Politique de dépassement par défaut" erreur={champ("default_overrun_policy")}>
+          <Champ
+            id="default_overrun_policy"
+            label={t("configuration.workflow.politique_defaut")}
+            erreur={champ("default_overrun_policy")}
+          >
             <NativeSelect
               id="default_overrun_policy"
               value={draft.default_overrun_policy}
               onChange={(e) => set("default_overrun_policy", e.target.value as OverrunPolicy)}
             >
-              {Object.entries(OVERRUN_POLICY_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
+              {OVERRUN_POLICIES.map((policy) => (
+                <option key={policy} value={policy}>
+                  {overrunPolicyLabel(t, policy)}
                 </option>
               ))}
             </NativeSelect>
@@ -375,7 +425,9 @@ function WorkflowForm({
               ) : (
                 <Save className="mr-2 h-4 w-4" aria-hidden />
               )}
-              {saving ? "Enregistrement…" : "Enregistrer la politique"}
+              {saving
+                ? t("configuration.workflow.enregistrement")
+                : t("configuration.workflow.enregistrer")}
             </Button>
           </div>
         </form>
@@ -409,6 +461,7 @@ function Champ({
 }
 
 function PermissionsSection() {
+  const { t } = useTranslation()
   const query = useQuery("permissions", () => fetchPermissionMatrix())
   const matrix = query.data
 
@@ -420,7 +473,7 @@ function PermissionsSection() {
     <div className="space-y-4">
       <Alert>
         <Lock className="h-4 w-4" />
-        <AlertTitle>Droits non modifiables</AlertTitle>
+        <AlertTitle>{t("configuration.permissions.non_modifiables")}</AlertTitle>
         <AlertDescription>{matrix.note}</AlertDescription>
       </Alert>
 
@@ -431,13 +484,15 @@ function PermissionsSection() {
               <TableHeader>
                 <TableRow>
                   <TableHead scope="col" className="sticky left-0 z-10 min-w-[16rem] bg-card">
-                    Droit
+                    {t("configuration.permissions.droit")}
                   </TableHead>
                   {matrix.roles.map((role) => (
                     <TableHead scope="col" key={role.value} className="text-center">
                       <span className="block">{role.label}</span>
                       <span className="text-[10px] font-normal text-muted-foreground">
-                        {role.siege ? "siège" : "pays"}
+                        {role.siege
+                          ? t("configuration.permissions.siege")
+                          : t("configuration.permissions.pays")}
                       </span>
                     </TableHead>
                   ))}
@@ -455,9 +510,11 @@ function PermissionsSection() {
                     {matrix.roles.map((role) => (
                       <TableCell key={role.value} className="text-center">
                         {capability.roles.includes(role.value) ? (
-                          <Badge className={STATUS_TONES.SUCCES}>oui</Badge>
+                          <Badge className={STATUS_TONES.SUCCES}>{t("commun.oui")}</Badge>
                         ) : (
-                          <span className="text-muted-foreground/40" aria-label="non">—</span>
+                          <span className="text-muted-foreground/40" aria-label={t("commun.non")}>
+                            {t("commun.aucun")}
+                          </span>
                         )}
                       </TableCell>
                     ))}
@@ -507,19 +564,21 @@ function Ligne({
 }
 
 function Chargement() {
+  const { t } = useTranslation()
   return (
     <div className="flex h-40 items-center justify-center" aria-busy="true">
       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      <span className="sr-only">Chargement…</span>
+      <span className="sr-only">{t("commun.chargement")}</span>
     </div>
   )
 }
 
 function Erreur({ message }: { message: string }) {
+  const { t } = useTranslation()
   return (
     <Alert variant="destructive">
       <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>Erreur</AlertTitle>
+      <AlertTitle>{t("commun.erreur")}</AlertTitle>
       <AlertDescription>{message}</AlertDescription>
     </Alert>
   )

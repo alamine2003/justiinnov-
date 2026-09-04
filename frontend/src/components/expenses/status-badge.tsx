@@ -1,17 +1,13 @@
+import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { PROJECT_STYLE, PROOF_STYLE, WORKFLOW_STYLE } from "@/lib/status-styles"
-import {
-  PROJECT_STATUS_LABELS,
-  PROOF_STATUS_LABELS,
-  WORKFLOW_LABELS,
-  type ProjectStatus,
-  type ProofStatus,
-  type WorkflowStatus,
-} from "@/lib/types"
+import { projectStatusLabel, proofStatusLabel, workflowLabel } from "@/lib/labels"
+import type { ProjectStatus, ProofStatus, WorkflowStatus } from "@/lib/types"
 
 /**
  * Le libellé vient du serveur (`status_display`) quand la page l'a ; la table
- * locale ne sert que de repli, pour ne jamais afficher une clé brute.
+ * locale (`lib/labels.ts`) ne sert que de repli, pour ne jamais afficher une
+ * clé brute.
  */
 export function StatusBadge({
   status,
@@ -20,9 +16,10 @@ export function StatusBadge({
   status: WorkflowStatus
   label?: string
 }) {
+  const { t } = useTranslation()
   return (
     <Badge className={WORKFLOW_STYLE[status] ?? "bg-secondary"}>
-      {label ?? WORKFLOW_LABELS[status] ?? status}
+      {label ?? workflowLabel(t, status)}
     </Badge>
   )
 }
@@ -34,9 +31,10 @@ export function ProofStatusBadge({
   status: ProofStatus
   label?: string
 }) {
+  const { t } = useTranslation()
   return (
     <Badge className={PROOF_STYLE[status] ?? "bg-secondary"}>
-      {label ?? PROOF_STATUS_LABELS[status] ?? status}
+      {label ?? proofStatusLabel(t, status)}
     </Badge>
   )
 }
@@ -48,9 +46,10 @@ export function ProjectStatusBadge({
   status: ProjectStatus
   label?: string
 }) {
+  const { t } = useTranslation()
   return (
     <Badge className={PROJECT_STYLE[status] ?? "bg-secondary"}>
-      {label ?? PROJECT_STATUS_LABELS[status] ?? status}
+      {label ?? projectStatusLabel(t, status)}
     </Badge>
   )
 }

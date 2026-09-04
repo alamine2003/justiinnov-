@@ -15,12 +15,6 @@ export const THEME_STORAGE_KEY = "justi_theme"
 
 export const THEMES: Theme[] = ["light", "dark", "system"]
 
-export const THEME_LABELS: Record<Theme, string> = {
-  light: "Clair",
-  dark: "Sombre",
-  system: "Système",
-}
-
 export function readStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY)

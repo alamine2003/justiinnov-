@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig } from "axios"
+import i18next from "i18next"
 
 const TOKEN_KEY = "justi_token"
 
@@ -8,12 +9,25 @@ export type FieldErrors = Record<string, string[]>
 export class ApiError extends Error {
   status: number
   fields: FieldErrors
-  constructor(status: number, message: string, fields: FieldErrors = {}) {
+  /** Corps brut de la réponse, pour les indicateurs qui ne sont pas des champs (`totp_required`). */
+  data: unknown
+  constructor(status: number, message: string, fields: FieldErrors = {}, data: unknown = null) {
     super(message)
     this.status = status
     this.fields = fields
+    this.data = data
     this.name = "ApiError"
   }
+}
+
+/** Vrai quand la réponse porte un indicateur booléen donné (`{"totp_required": true}`). */
+export function hasFlag(error: unknown, flag: string): boolean {
+  return (
+    error instanceof ApiError &&
+    typeof error.data === "object" &&
+    error.data !== null &&
+    (error.data as Record<string, unknown>)[flag] === true
+  )
 }
 
 export function getToken(): string | null {
@@ -38,6 +52,7 @@ type Listener = () => void
 
 const unauthorizedListeners = new Set<Listener>()
 const passwordChangeListeners = new Set<Listener>()
+const totpSetupListeners = new Set<Listener>()
 
 /** Abonne à la perte de session (401). Renvoie la fonction de désabonnement. */
 export function onUnauthorized(listener: Listener): () => void {
@@ -51,69 +66,50 @@ export function onPasswordChangeRequired(listener: Listener): () => void {
   return () => passwordChangeListeners.delete(listener)
 }
 
+/** Abonne au refus « double authentification à enrôler » (403 `totp_setup_required`). */
+export function onTotpSetupRequired(listener: Listener): () => void {
+  totpSetupListeners.add(listener)
+  return () => totpSetupListeners.delete(listener)
+}
+
 export const api = axios.create({
   baseURL: "/api",
 })
+
+// Langue demandée au serveur pour ses libellés (`*_display`, messages
+// d'erreur, alertes). Tenue à jour par `i18n/index.ts` à chaque changement.
+let apiLanguage = "fr"
+
+export function setApiLanguage(language: string) {
+  apiLanguage = language
+}
 
 api.interceptors.request.use((config) => {
   const token = getToken()
   if (token) {
     config.headers.Authorization = `Token ${token}`
   }
+  config.headers["Accept-Language"] = apiLanguage
   return config
 })
 
-/** Libellés des champs les plus courants, pour préfixer les messages. */
-const FIELD_LABELS: Record<string, string> = {
-  amount: "Montant",
-  justified_amount: "Montant justifié",
-  original_amount: "Montant décaissé",
-  original_currency: "Devise",
-  date: "Date",
-  title: "Libellé",
-  label: "Libellé",
-  place: "Lieu",
-  note: "Motif",
-  reason: "Motif",
-  number: "N°ORDRE",
-  country: "Pays",
-  countries: "Pays",
-  team: "Équipe",
-  project: "Projet",
-  owner: "Manager",
-  manager: "Manager",
-  beneficiary: "Bénéficiaire",
-  expense_title: "Intitulé",
-  marketing_category: "Catégorie",
-  payment_method: "Mode de paiement",
-  username: "Identifiant",
-  password: "Mot de passe",
-  current_password: "Mot de passe actuel",
-  new_password: "Nouveau mot de passe",
-  email: "E-mail",
-  role: "Rôle",
-  year: "Année",
-  currency: "Devise",
-  timezone: "Fuseau horaire",
-  code: "Code",
-  name: "Nom",
-  file: "Fichier",
-  kind: "Type",
-  source: "Enveloppe source",
-  target: "Enveloppe destinataire",
-  rate_to_xof: "Taux",
-  valid_from: "En vigueur depuis",
-  alert_thresholds: "Seuils d'alerte",
-  unjustified_alert_days: "Délai d'alerte",
-  unusual_expense_factor: "Facteur de dépense inhabituelle",
-  default_overrun_policy: "Politique de dépassement",
-}
+/** Champs dont le libellé est connu, pour préfixer les messages (`champs.*` des traductions). */
+const KNOWN_FIELDS = new Set([
+  "amount", "justified_amount", "original_amount", "original_currency", "date",
+  "title", "label", "place", "note", "reason", "number", "country", "countries",
+  "team", "project", "owner", "manager", "beneficiary", "expense_title",
+  "marketing_category", "payment_method", "username", "password",
+  "current_password", "new_password", "email", "role", "year", "currency",
+  "timezone", "code", "name", "file", "kind", "source", "target", "rate_to_xof",
+  "valid_from", "alert_thresholds", "unjustified_alert_days",
+  "unusual_expense_factor", "default_overrun_policy", "language",
+])
 
 const GENERIC_KEYS = new Set(["detail", "message", "non_field_errors"])
 
 function fieldLabel(path: string): string {
   const last = path.split(".").pop() ?? path
-  return FIELD_LABELS[last] ?? path
+  return KNOWN_FIELDS.has(last) ? i18next.t(`champs.${last}`, { defaultValue: path }) : path
 }
 
 /**
@@ -169,7 +165,7 @@ export function readErrorMessage(data: unknown): string | null {
   const errors = Object.entries(readFieldErrors(payload)).flatMap(([path, messages]) =>
     GENERIC_KEYS.has(path)
       ? messages
-      : messages.map((message) => `${fieldLabel(path)} : ${message}`),
+      : messages.map((message) => `${fieldLabel(path)}${i18next.t("commun.separateur_libelle")}${message}`),
   )
   return errors.length > 0 ? errors.join(" ") : null
 }
@@ -184,27 +180,31 @@ api.interceptors.response.use(
     if (!response) {
       // Pas de réponse HTTP : serveur arrêté, réseau coupé, proxy absent. Le
       // message d'axios (« Network Error ») ne dit rien à l'utilisateur.
-      return Promise.reject(new ApiError(0, "Serveur injoignable. Vérifiez votre connexion."))
+      return Promise.reject(new ApiError(0, i18next.t("erreurs.injoignable")))
     }
     if (response.status === 401) {
       clearToken()
       unauthorizedListeners.forEach((listener) => listener())
     }
-    if (
-      response.status === 403 &&
-      response.data &&
-      typeof response.data === "object" &&
-      (response.data as Record<string, unknown>).must_change_password === true
-    ) {
+    if (response.status === 403 && response.data && typeof response.data === "object") {
+      const flags = response.data as Record<string, unknown>
       // Le serveur ferme la plateforme tant que le mot de passe provisoire
-      // n'est pas remplacé : le profil doit être relu pour monter l'écran.
-      passwordChangeListeners.forEach((listener) => listener())
+      // n'est pas remplacé, puis tant que la double authentification n'est
+      // pas enrôlée : le profil doit être relu pour monter l'écran voulu.
+      if (flags.must_change_password === true) {
+        passwordChangeListeners.forEach((listener) => listener())
+      }
+      if (flags.totp_setup_required === true) {
+        totpSetupListeners.forEach((listener) => listener())
+      }
     }
     const message =
       readErrorMessage(response.data) ||
       error.message ||
-      "Une erreur est survenue"
-    return Promise.reject(new ApiError(response.status, message, readFieldErrors(response.data)))
+      i18next.t("erreurs.generique")
+    return Promise.reject(
+      new ApiError(response.status, message, readFieldErrors(response.data), response.data),
+    )
   },
 )
 

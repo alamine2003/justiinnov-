@@ -1,4 +1,5 @@
 import * as React from "react"
+import i18next from "i18next"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
@@ -69,7 +70,7 @@ function DialogContent({
             }
           >
             <XIcon />
-            <span className="sr-only">Fermer</span>
+            <span className="sr-only">{i18next.t("commun.fermer")}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -107,7 +108,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant="outline" />}>
-          Fermer
+          {i18next.t("commun.fermer")}
         </DialogPrimitive.Close>
       )}
     </div>

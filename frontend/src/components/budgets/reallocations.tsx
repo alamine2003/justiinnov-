@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { ArrowRight, ArrowRightLeft, Check, Loader2, Plus, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -43,6 +44,7 @@ interface ReallocationsProps {
 }
 
 export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsProps) {
+  const { t } = useTranslation()
   const query = useQuery(
     "reallocations",
     (signal) => fetchReallocations({ page_size: 100 }, signal),
@@ -61,7 +63,7 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
       query.reload()
       onChanged()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Approbation impossible")
+      setError(e instanceof Error ? e.message : t("budgets.realloc.approbation_impossible"))
     } finally {
       setBusyId(null)
     }
@@ -71,31 +73,31 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold">Réallocations</h3>
+          <h3 className="text-sm font-semibold">{t("budgets.realloc.titre")}</h3>
           <p className="text-xs text-muted-foreground">
-            Transferts entre enveloppes, justifiés et soumis à approbation.
+            {t("budgets.realloc.description")}
           </p>
         </div>
         {canDecide && (
           <Button size="sm" onClick={() => setFormOpen(true)}>
             <Plus className="mr-1 h-4 w-4" aria-hidden />
-            Demander
+            {t("budgets.realloc.demander")}
           </Button>
         )}
       </div>
 
       <FormError>{error ?? query.error}</FormError>
-      <TruncatedNotice page={query.data} noun="réallocations" />
+      <TruncatedNotice page={query.data} noun={t("budgets.realloc.nom_pluriel")} />
 
       <div className="overflow-x-auto rounded-lg border border-border/60 shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead scope="col">Transfert</TableHead>
-              <TableHead scope="col" className="text-right">Montant</TableHead>
-              <TableHead scope="col">Justification</TableHead>
-              <TableHead scope="col">Statut</TableHead>
-              <TableHead scope="col" className="text-right">Actions</TableHead>
+              <TableHead scope="col">{t("budgets.realloc.colonnes.transfert")}</TableHead>
+              <TableHead scope="col" className="text-right">{t("commun.montant")}</TableHead>
+              <TableHead scope="col">{t("budgets.realloc.colonnes.justification")}</TableHead>
+              <TableHead scope="col">{t("commun.statut")}</TableHead>
+              <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -105,11 +107,11 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
               <EmptyRow
                 colSpan={5}
                 icon={ArrowRightLeft}
-                title="Aucune réallocation"
+                title={t("budgets.realloc.vide_titre")}
                 hint={
                   canDecide
-                    ? "Demandez un transfert pour déplacer un montant d'une enveloppe à une autre."
-                    : "Aucun transfert n'a été demandé sur votre périmètre."
+                    ? t("budgets.realloc.vide_indication_siege")
+                    : t("budgets.realloc.vide_indication_pays")
                 }
               />
             ) : (
@@ -118,12 +120,13 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
                   <TableCell>
                     <div className="flex items-center gap-2 text-sm">
                       <span>{row.source_label}</span>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground" aria-label="vers" />
+                      <ArrowRight className="h-3 w-3 text-muted-foreground" aria-label={t("budgets.realloc.vers")} />
                       <span>{row.target_label}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {formatDate(row.created_at)}
-                      {row.requested_by && ` · par ${row.requested_by}`}
+                      {row.requested_by &&
+                        ` · ${t("budgets.realloc.par", { auteur: row.requested_by })}`}
                     </p>
                   </TableCell>
                   <TableCell className="text-right font-medium">
@@ -135,7 +138,7 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
                     </p>
                     {row.decision_note && (
                       <p className="line-clamp-2 text-xs italic text-muted-foreground">
-                        Décision : {row.decision_note}
+                        {t("budgets.realloc.decision", { note: row.decision_note })}
                       </p>
                     )}
                   </TableCell>
@@ -150,7 +153,7 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label="Approuver"
+                          aria-label={t("budgets.realloc.approuver")}
                           disabled={busyId === row.id}
                           onClick={() => void handleApprove(row)}
                         >
@@ -163,7 +166,7 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label="Refuser"
+                          aria-label={t("budgets.realloc.refuser")}
                           className="text-destructive hover:text-destructive"
                           onClick={() => setRejecting(row)}
                         >
@@ -214,6 +217,7 @@ function ReallocationForm({
   budgets: Budget[]
   onSaved: () => Promise<void>
 }) {
+  const { t } = useTranslation()
   const [source, setSource] = useState<number | "">(budgets[0]?.id ?? "")
   const [target, setTarget] = useState<number | "">(budgets[1]?.id ?? "")
   const [amount, setAmount] = useState("")
@@ -225,11 +229,11 @@ function ReallocationForm({
     e.preventDefault()
     const montant = normalizeDecimal(amount)
     if (montant === null) {
-      setError("Indiquez le montant à transférer, en chiffres.")
+      setError(t("budgets.realloc.montant_requis"))
       return
     }
     if (source === target) {
-      setError("Choisissez deux enveloppes différentes.")
+      setError(t("budgets.realloc.enveloppes_identiques"))
       return
     }
     setSaving(true)
@@ -239,7 +243,7 @@ function ReallocationForm({
       await onSaved()
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Demande impossible")
+      setError(err instanceof Error ? err.message : t("budgets.realloc.demande_impossible"))
     } finally {
       setSaving(false)
     }
@@ -252,15 +256,13 @@ function ReallocationForm({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Demander une réallocation</DialogTitle>
-          <DialogDescription>
-            Le transfert n'est exécuté qu'après approbation.
-          </DialogDescription>
+          <DialogTitle>{t("budgets.realloc.form_titre")}</DialogTitle>
+          <DialogDescription>{t("budgets.realloc.form_description")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
           <FormError>{error}</FormError>
           <div className="grid gap-2">
-            <Label htmlFor="realloc-source">Enveloppe source</Label>
+            <Label htmlFor="realloc-source">{t("champs.source")}</Label>
             <NativeSelect
               id="realloc-source"
               value={source}
@@ -268,13 +270,16 @@ function ReallocationForm({
             >
               {budgets.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {libelle(b)} ({formatAmount(b.figures.remaining, b.currency)} disponibles)
+                  {t("budgets.realloc.option_source", {
+                    libelle: libelle(b),
+                    montant: formatAmount(b.figures.remaining, b.currency),
+                  })}
                 </option>
               ))}
             </NativeSelect>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="realloc-target">Enveloppe destinataire</Label>
+            <Label htmlFor="realloc-target">{t("champs.target")}</Label>
             <NativeSelect
               id="realloc-target"
               value={target}
@@ -288,7 +293,7 @@ function ReallocationForm({
             </NativeSelect>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="realloc-amount">Montant</Label>
+            <Label htmlFor="realloc-amount">{t("commun.montant")}</Label>
             <Input
               id="realloc-amount"
               inputMode="decimal"
@@ -298,23 +303,23 @@ function ReallocationForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="realloc-reason">Justification</Label>
+            <Label htmlFor="realloc-reason">{t("budgets.realloc.colonnes.justification")}</Label>
             <Textarea
               id="realloc-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Motif du transfert"
+              placeholder={t("budgets.realloc.motif_placeholder")}
               required
             />
           </div>
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Annuler
+                {t("commun.annuler")}
               </Button>
               <Button type="submit" disabled={saving} className="ml-2">
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Envoyer
+                {t("budgets.realloc.envoyer")}
               </Button>
             </div>
           </DialogFooter>
@@ -333,6 +338,7 @@ function RejectDialog({
   onClose: () => void
   onRejected: () => Promise<void>
 }) {
+  const { t } = useTranslation()
   const [note, setNote] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -340,7 +346,7 @@ function RejectDialog({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!note.trim()) {
-      setError("Un refus doit être motivé.")
+      setError(t("budgets.realloc.motif_requis"))
       return
     }
     setSaving(true)
@@ -350,7 +356,7 @@ function RejectDialog({
       await onRejected()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Refus impossible")
+      setError(err instanceof Error ? err.message : t("budgets.realloc.refus_impossible"))
     } finally {
       setSaving(false)
     }
@@ -360,15 +366,13 @@ function RejectDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Refuser la réallocation</DialogTitle>
-          <DialogDescription>
-            Un refus doit être motivé : le motif est conservé dans l'historique.
-          </DialogDescription>
+          <DialogTitle>{t("budgets.realloc.refus_titre")}</DialogTitle>
+          <DialogDescription>{t("budgets.realloc.refus_description")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
           <FormError>{error}</FormError>
           <div className="grid gap-2">
-            <Label htmlFor="reject-note">Motif du refus</Label>
+            <Label htmlFor="reject-note">{t("budgets.realloc.motif_refus")}</Label>
             <Textarea
               id="reject-note"
               value={note}
@@ -379,7 +383,7 @@ function RejectDialog({
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={onClose}>
-                Annuler
+                {t("commun.annuler")}
               </Button>
               <Button
                 type="submit"
@@ -388,7 +392,7 @@ function RejectDialog({
                 className="ml-2"
               >
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Refuser
+                {t("budgets.realloc.refuser")}
               </Button>
             </div>
           </DialogFooter>

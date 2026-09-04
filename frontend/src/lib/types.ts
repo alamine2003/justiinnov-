@@ -32,13 +32,6 @@ export interface CostCenter {
 
 export type ProjectStatus = "planned" | "active" | "on_hold" | "completed"
 
-export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  planned: "Planifié",
-  active: "En cours",
-  on_hold: "En pause",
-  completed: "Terminé",
-}
-
 export interface Project {
   id: number
   country: number
@@ -129,24 +122,13 @@ export interface Paginated<T> {
 // Comptes, rôles et périmètres
 // ---------------------------------------------------------------------------
 
+/** Les libellés des rôles, comme ceux des statuts, vivent dans `lib/labels.ts`. */
 export type Role =
   | "super_admin"
   | "admin"
-  | "doo"
-  | "country_manager"
-  | "owner"
-  | "controller"
-  | "auditor"
-
-export const ROLE_LABELS: Record<Role, string> = {
-  super_admin: "Super administrateur",
-  admin: "Administrateur plateforme",
-  doo: "Direction des opérations",
-  country_manager: "Responsable pays",
-  owner: "Manager / Owner",
-  controller: "Contrôleur / Finance",
-  auditor: "Auditeur",
-}
+  | "df"
+  | "dm"
+  | "manager"
 
 export interface ScopeCountry {
   id: number
@@ -167,6 +149,17 @@ export interface Permissions {
   record_expenses: boolean
   validate_expenses: boolean
   view_audit: boolean
+  /** Exports et import de classeurs : administrateurs seulement. */
+  export_data: boolean
+  /** Réouverture d'un dossier déclaré : administrateurs seulement. */
+  reopen_dossiers: boolean
+}
+
+/** Équipe du périmètre d'un manager, en représentation compacte. */
+export interface ScopeTeam {
+  id: number
+  name: string
+  country: number
 }
 
 export interface Me {
@@ -179,8 +172,17 @@ export interface Me {
   role: Role | null
   role_display: string
   countries: ScopeCountry[]
+  /** Équipes auxquelles un manager est rattaché ; vide pour les autres rôles. */
+  teams?: ScopeTeam[]
   has_global_scope: boolean
   must_change_password: boolean
+  /**
+   * Double authentification enrôlée. `false` ferme la plateforme jusqu'à
+   * l'enrôlement ; absent sur un serveur qui ne la connaît pas encore.
+   */
+  totp_confirmed?: boolean
+  /** Langue de l'interface enregistrée sur le profil ; absente sur un serveur qui ne la connaît pas encore. */
+  language?: "fr" | "en"
   permissions: Permissions
   /** Politique du workflow, lue par l'interface pour ne proposer que les transitions permises. */
   workflow: { require_review_step: boolean }
@@ -198,6 +200,15 @@ export interface AccountUser {
   countries: number[]
   countries_detail: ScopeCountry[]
   must_change_password: boolean
+  /** Lecture seule : seul le titulaire enrôle, seul un administrateur réinitialise. */
+  totp_confirmed?: boolean
+}
+
+/** Secret d'enrôlement, remis une seule fois par `POST /me/2fa/enrol/`. */
+export interface TotpEnrolment {
+  otpauth_uri: string
+  qr_png_base64: string
+  secret: string
 }
 
 // ---------------------------------------------------------------------------
@@ -205,12 +216,6 @@ export interface AccountUser {
 // ---------------------------------------------------------------------------
 
 export type OverrunPolicy = "block" | "warn" | "approval"
-
-export const OVERRUN_POLICY_LABELS: Record<OverrunPolicy, string> = {
-  block: "Bloquer",
-  warn: "Alerter",
-  approval: "Soumettre à approbation",
-}
 
 /** Indicateurs calculés côté serveur — jamais recalculés dans l'interface. */
 export interface BudgetFigures {
@@ -319,15 +324,6 @@ export type WorkflowStatus =
   | "unjustified"
   | "closed"
 
-export const WORKFLOW_LABELS: Record<WorkflowStatus, string> = {
-  draft: "Brouillon",
-  submitted: "Soumis",
-  in_review: "En contrôle",
-  justified: "Justifié",
-  unjustified: "Non justifié",
-  closed: "Clôturé",
-}
-
 /**
  * Une dépense déclarée est irréversible : elle ne se modifie plus.
  * Doit refléter `expenses.workflow.LOCKED_STATUSES`.
@@ -369,6 +365,8 @@ export interface Dossier {
   status: WorkflowStatus
   status_display: string
   note: string
+  /** Motif de la dernière réouverture par le siège ; vide sinon. */
+  reopen_note?: string
   totals: DossierTotals
   expense_count: number
   proof_count: number
@@ -430,23 +428,6 @@ export type ProofStatus =
   | "rejected"
   | "archived"
 
-export const PROOF_STATUS_LABELS: Record<ProofStatus, string> = {
-  received: "Reçu",
-  incomplete: "Incomplet",
-  to_review: "À contrôler",
-  validated: "Validé",
-  rejected: "Rejeté",
-  archived: "Archivé",
-}
-
-export const PROOF_KIND_LABELS: Record<string, string> = {
-  receipt: "Reçu",
-  invoice: "Facture",
-  discharge: "Décharge",
-  deliverable: "Livrable",
-  other: "Autre",
-}
-
 export interface Proof {
   id: number
   dossier: number
@@ -504,26 +485,11 @@ export interface Beneficiary {
   is_active: boolean
 }
 
-/** Types de bénéficiaire, dans l'ordre du modèle de données. */
-export const BENEFICIARY_KINDS: { value: string; label: string }[] = [
-  { value: "prospect", label: "Prospect" },
-  { value: "client", label: "Client" },
-  { value: "supplier", label: "Fournisseur" },
-  { value: "beneficiary", label: "Bénéficiaire" },
-  { value: "other", label: "Autre" },
-]
-
 // ---------------------------------------------------------------------------
 // Pilotage, alertes et notifications
 // ---------------------------------------------------------------------------
 
 export type AlertLevel = "info" | "warning" | "critical"
-
-export const ALERT_LEVEL_LABELS: Record<AlertLevel, string> = {
-  info: "Info",
-  warning: "Alerte",
-  critical: "Critique",
-}
 
 export interface Alert {
   kind: string
@@ -608,27 +574,6 @@ export interface AppNotification {
   country_name: string | null
   read_at: string | null
   created_at: string
-}
-
-/**
- * Actions proposées au filtre du journal. Les entrées affichent le libellé du
- * serveur (`action_display`) ; cette table ne sert qu'à proposer les valeurs
- * avant qu'une entrée soit chargée.
- */
-export const AUDIT_ACTION_LABELS: Record<string, string> = {
-  created: "Création",
-  updated: "Modification",
-  deleted: "Suppression d'un brouillon",
-  submitted: "Soumission",
-  reviewed: "Mise en contrôle",
-  justified: "Justification",
-  unjustified: "Constat de non-justification",
-  closed: "Clôture",
-  proof_uploaded: "Dépôt de justificatif",
-  proof_replaced: "Remplacement de justificatif",
-  approved: "Validation d'un justificatif",
-  rejected: "Rejet d'un justificatif",
-  downloaded: "Téléchargement",
 }
 
 export interface AuditEntry {

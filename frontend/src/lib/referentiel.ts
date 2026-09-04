@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useState } from "react"
+import i18next from "i18next"
 import { isCancelled } from "@/lib/api"
 import type { Paginated } from "@/lib/types"
 
@@ -99,7 +100,7 @@ export function useReferentiel<T>(
         setState((current) => ({
           key,
           data: current.data,
-          error: e instanceof Error ? e.message : "Référentiel indisponible",
+          error: e instanceof Error ? e.message : i18next.t("erreurs.referentiel_indisponible"),
         }))
       })
     return () => {

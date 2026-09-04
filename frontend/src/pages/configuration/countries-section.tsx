@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { AlertTriangle } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { CountryForm, type CountryFormValues } from "@/components/countries/country-form"
@@ -19,6 +20,7 @@ type StatusFilter = "all" | "active" | "inactive"
  * d'un pays à deux endroits garantirait qu'ils divergent.
  */
 export function CountriesSection() {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
@@ -36,7 +38,7 @@ export function CountriesSection() {
       if (debouncedSearch) params.search = debouncedSearch
       return fetchCountries(params, signal)
     },
-    { fallback: "Impossible de charger les pays" },
+    { fallback: t("configuration.pays.chargement_impossible") },
   )
 
   const afterWrite = () => {
@@ -61,7 +63,9 @@ export function CountriesSection() {
       await updateCountry(country.id, { is_active: !country.is_active })
       afterWrite()
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Changement de statut impossible")
+      setActionError(
+        e instanceof Error ? e.message : t("configuration.pays.statut_impossible"),
+      )
     } finally {
       setTogglingId(null)
     }
@@ -70,17 +74,16 @@ export function CountriesSection() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-sm font-semibold">Pays</h2>
+        <h2 className="text-sm font-semibold">{t("configuration.pays.titre")}</h2>
         <p className="text-xs text-muted-foreground">
-          Identifiant fonctionnel, devise, fuseau horaire. Un pays ne se
-          supprime pas : il se désactive, pour que son historique reste lisible.
+          {t("configuration.pays.description")}
         </p>
       </div>
 
       {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
           <AlertDescription>{actionError ?? query.error}</AlertDescription>
         </Alert>
       )}
@@ -115,7 +118,7 @@ export function CountriesSection() {
         page={page}
         count={query.data?.count ?? 0}
         onChange={setPage}
-        noun={["pays", "pays"]}
+        noun={[t("configuration.pays.noun_singulier"), t("configuration.pays.noun_pluriel")]}
       />
 
       <CountryForm
@@ -137,7 +140,11 @@ export function CountriesSection() {
               }
             : undefined
         }
-        title={editing ? `Modifier ${editing.name}` : "Ajouter un pays"}
+        title={
+          editing
+            ? t("configuration.pays.modifier", { nom: editing.name })
+            : t("configuration.pays.ajouter")
+        }
       />
     </div>
   )

@@ -18,7 +18,7 @@ async function main() {
   const errors: string[] = []
 
   for (const { nom, width, height } of FORMATS) {
-    const page = await browser.newPage({ viewport: { width, height } })
+    const page = await browser.newPage({ viewport: { width, height }, locale: "fr-FR" })
     page.on("pageerror", (e) => errors.push(String(e)))
     page.on("console", (m) => {
       if (m.type() === "error") errors.push(m.text())

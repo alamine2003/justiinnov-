@@ -1,3 +1,5 @@
+import i18next from "i18next"
+
 /**
  * Identité de l'application.
  *
@@ -7,7 +9,7 @@
  */
 export const BRAND = {
   name: "JUSTI INNOV",
-  tagline: "Application de contrôle budgétaire",
+  /** La signature (« Application de contrôle budgétaire ») est traduite : clé `app.tagline`. */
   version: "1.0.0",
   developer: "Al Amine DEV",
   /** Année de première mise en service, pour la mention de copyright. */
@@ -18,8 +20,8 @@ export const BRAND = {
 
 /** Mention de copyright, l'année courante si elle dépasse la mise en service. */
 export function copyright(): string {
-  const année = new Date().getFullYear()
-  const période =
-    année > BRAND.since ? `${BRAND.since}–${année}` : `${BRAND.since}`
-  return `© ${période} ${BRAND.name}. Tous droits réservés.`
+  const annee = new Date().getFullYear()
+  const periode =
+    annee > BRAND.since ? `${BRAND.since}–${annee}` : `${BRAND.since}`
+  return i18next.t("layout.copyright", { periode, nom: BRAND.name })
 }

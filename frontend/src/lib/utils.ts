@@ -1,32 +1,34 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { currentLocale } from "@/i18n"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-const LOCALE = "fr-FR"
-
 // Les formateurs `Intl` coûtent cher à construire ; un tableau de cinquante
-// lignes en créait plusieurs centaines. Ils sont réutilisés par options.
+// lignes en créait plusieurs centaines. Ils sont réutilisés par locale et
+// options : la locale suit la langue de l'interface.
 const numberFormats = new Map<string, Intl.NumberFormat>()
 const dateFormats = new Map<string, Intl.DateTimeFormat>()
 
 function numberFormat(options: Intl.NumberFormatOptions): Intl.NumberFormat {
-  const key = JSON.stringify(options)
+  const locale = currentLocale()
+  const key = `${locale}${JSON.stringify(options)}`
   let format = numberFormats.get(key)
   if (!format) {
-    format = new Intl.NumberFormat(LOCALE, options)
+    format = new Intl.NumberFormat(locale, options)
     numberFormats.set(key, format)
   }
   return format
 }
 
 function dateFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const key = JSON.stringify(options)
+  const locale = currentLocale()
+  const key = `${locale}${JSON.stringify(options)}`
   let format = dateFormats.get(key)
   if (!format) {
-    format = new Intl.DateTimeFormat(LOCALE, options)
+    format = new Intl.DateTimeFormat(locale, options)
     dateFormats.set(key, format)
   }
   return format
@@ -225,7 +227,8 @@ export function fromCountryLocalInput(
 }
 
 /**
- * Normalise une saisie décimale « à la française » (« 1 234,56 ») en chaîne
+ * Normalise une saisie décimale « à la française » (« 1 234,56 ») ou anglaise
+ * (« 1,234.56 ») en chaîne
  * acceptée par le serveur (« 1234.56»). Renvoie `null` si la saisie n'est
  * pas un nombre.
  */
@@ -236,7 +239,12 @@ export function normalizeDecimal(input: string): string | null {
   return compact
 }
 
-/** Accorde un nom en nombre : « 1 dossier », « 3 dossiers ». */
+/**
+ * Accorde un nom en nombre : « 1 dossier », « 3 dossiers ».
+ *
+ * Préférez une clé de traduction avec `count` (`_one` / `_other`) : ce
+ * secours ne sert qu'à un nom déjà traduit par l'appelant.
+ */
 export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return `${numberFormat({}).format(count)} ${count > 1 ? plural : singular}`
 }

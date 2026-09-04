@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { formatAmount } from "@/lib/utils"
 
 /**
@@ -15,10 +16,11 @@ export function OriginalAmount({
   currency: string
   amount: string | null
 }) {
+  const { t } = useTranslation()
   if (!currency || amount === null) return null
   return (
     <span className="block text-xs font-normal text-muted-foreground">
-      soit {formatAmount(amount, currency)} sur la pièce
+      {t("depenses.montant_sur_piece", { montant: formatAmount(amount, currency) })}
     </span>
   )
 }

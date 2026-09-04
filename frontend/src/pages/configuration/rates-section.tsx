@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { AlertTriangle, Coins, Loader2, Plus } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,10 +39,11 @@ import { formatAmount, formatDay, normalizeDecimal, todayIso } from "@/lib/utils
  * imprimé hier ne serait plus reproductible aujourd'hui.
  */
 export function RatesSection() {
+  const { t } = useTranslation()
   const query = useQuery(
     "exchange-rates",
     (signal) => fetchExchangeRates({ page_size: 100 }, signal),
-    { fallback: "Taux indisponibles" },
+    { fallback: t("configuration.taux.indisponibles") },
   )
   const rates = query.data?.results ?? []
   const [open, setOpen] = useState(false)
@@ -62,36 +64,39 @@ export function RatesSection() {
       <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
         <div>
           <CardTitle className="text-sm font-semibold">
-            Taux de change vers le XOF
+            {t("configuration.taux.titre")}
           </CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Un taux ne se modifie pas : publiez-en un nouveau, daté. Les montants
-            déjà consolidés conservent le taux de leur date.
+            {t("configuration.taux.description")}
           </p>
         </div>
         <Button size="sm" onClick={() => setOpen(true)}>
           <Plus className="mr-2 h-4 w-4" aria-hidden />
-          Publier un taux
+          {t("configuration.taux.publier")}
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         {query.error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Erreur</AlertTitle>
+            <AlertTitle>{t("commun.erreur")}</AlertTitle>
             <AlertDescription>{query.error}</AlertDescription>
           </Alert>
         )}
-        <TruncatedNotice page={query.data} noun="taux" />
+        <TruncatedNotice page={query.data} noun={t("configuration.taux.noun")} />
 
         <div className="overflow-x-auto rounded-lg border border-border/60">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead scope="col">Devise</TableHead>
-                <TableHead scope="col" className="text-right">1 unité en XOF</TableHead>
-                <TableHead scope="col">En vigueur depuis</TableHead>
-                <TableHead scope="col" className="text-right">Statut</TableHead>
+                <TableHead scope="col">{t("commun.devise")}</TableHead>
+                <TableHead scope="col" className="text-right">
+                  {t("configuration.taux.col_unite")}
+                </TableHead>
+                <TableHead scope="col">{t("champs.valid_from")}</TableHead>
+                <TableHead scope="col" className="text-right">
+                  {t("commun.statut")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -101,8 +106,8 @@ export function RatesSection() {
                 <EmptyRow
                   colSpan={4}
                   icon={Coins}
-                  title="Aucun taux publié"
-                  hint="Les pays hors zone XOF ne seront pas consolidés tant qu'aucun taux n'existe."
+                  title={t("configuration.taux.vide_titre")}
+                  hint={t("configuration.taux.vide_aide")}
                 />
               ) : (
                 rates.map((rate) => (
@@ -114,9 +119,13 @@ export function RatesSection() {
                     <TableCell>{formatDay(rate.valid_from)}</TableCell>
                     <TableCell className="text-right">
                       {courants.has(rate.id) ? (
-                        <Badge className={STATUS_TONES.SUCCES}>en vigueur</Badge>
+                        <Badge className={STATUS_TONES.SUCCES}>
+                          {t("configuration.taux.en_vigueur")}
+                        </Badge>
                       ) : (
-                        <Badge variant="outline">historique</Badge>
+                        <Badge variant="outline">
+                          {t("configuration.taux.historique")}
+                        </Badge>
                       )}
                     </TableCell>
                   </TableRow>
@@ -144,6 +153,7 @@ function RateForm({
   onOpenChange: (open: boolean) => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const [currency, setCurrency] = useState("")
   const [rate, setRate] = useState("")
   const [validFrom, setValidFrom] = useState(todayIso())
@@ -154,11 +164,11 @@ function RateForm({
     e.preventDefault()
     const taux = normalizeDecimal(rate)
     if (currency.trim().length !== 3) {
-      setError("Indiquez un code devise à trois lettres (ISO 4217).")
+      setError(t("configuration.taux.devise_invalide"))
       return
     }
     if (taux === null || Number(taux) <= 0) {
-      setError("Indiquez un taux décimal strictement positif.")
+      setError(t("configuration.taux.taux_invalide"))
       return
     }
     setSaving(true)
@@ -172,7 +182,7 @@ function RateForm({
       onSaved()
       onOpenChange(false)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Enregistrement impossible")
+      setError(e instanceof Error ? e.message : t("erreurs.enregistrement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -183,39 +193,38 @@ function RateForm({
       <DialogContent className="sm:max-w-md shadow-xl">
         <form onSubmit={handleSubmit} noValidate>
           <DialogHeader>
-            <DialogTitle>Publier un taux</DialogTitle>
+            <DialogTitle>{t("configuration.taux.publier")}</DialogTitle>
             <DialogDescription>
-              Combien de XOF vaut une unité de cette devise, et à partir de
-              quand.
+              {t("configuration.taux.dialogue_description")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <FormError>{error}</FormError>
             <div className="space-y-2">
-              <Label htmlFor="rate-currency">Devise (ISO 4217)</Label>
+              <Label htmlFor="rate-currency">{t("configuration.taux.devise_iso")}</Label>
               <Input
                 id="rate-currency"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value.toUpperCase())}
                 maxLength={3}
-                placeholder="MAD"
+                placeholder={t("configuration.taux.devise_exemple")}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="rate-value">1 unité vaut (XOF)</Label>
+              <Label htmlFor="rate-value">{t("configuration.taux.valeur")}</Label>
               <Input
                 id="rate-value"
                 inputMode="decimal"
                 value={rate}
                 onChange={(e) => setRate(e.target.value)}
-                placeholder="65,500000"
+                placeholder={t("configuration.taux.valeur_exemple")}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="rate-from">En vigueur depuis</Label>
+              <Label htmlFor="rate-from">{t("champs.valid_from")}</Label>
               <Input
                 id="rate-from"
                 type="date"
@@ -232,11 +241,11 @@ function RateForm({
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Annuler
+              {t("commun.annuler")}
             </Button>
             <Button type="submit" disabled={saving}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Publier
+              {t("configuration.taux.publier_action")}
             </Button>
           </DialogFooter>
         </form>

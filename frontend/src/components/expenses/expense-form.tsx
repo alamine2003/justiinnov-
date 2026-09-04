@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Loader2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -29,14 +30,8 @@ import {
   toCountryLocalInput,
 } from "@/lib/utils"
 
-const PAYMENT_METHODS: Record<string, string> = {
-  cash: "Espèces",
-  transfer: "Virement",
-  mobile: "Mobile money",
-  card: "Carte",
-  check: "Chèque",
-  other: "Autre",
-}
+/** Modes de paiement, dans l'ordre du modèle de données. */
+const PAYMENT_METHODS = ["cash", "transfer", "mobile", "card", "check", "other"] as const
 
 interface ExpenseFormProps {
   open: boolean
@@ -93,6 +88,7 @@ function ExpenseFormBody({
   currency,
   timezone,
 }: Omit<ExpenseFormProps, "open">) {
+  const { t } = useTranslation()
   const [title, setTitle] = useState(editing?.title ?? "")
   const [date, setDate] = useState(
     toCountryLocalInput(editing?.date ?? new Date().toISOString(), timezone),
@@ -123,18 +119,18 @@ function ExpenseFormBody({
     e.preventDefault()
     const instant = fromCountryLocalInput(date, timezone)
     if (!instant) {
-      setError("Indiquez la date et l'heure de la dépense.")
+      setError(t("depenses.formulaire.date_requise"))
       return
     }
     const enDeviseEtrangere = devisePresente && montantDevise.trim() !== ""
     const montant = enDeviseEtrangere ? null : normalizeDecimal(amount)
     if (!enDeviseEtrangere && montant === null) {
-      setError("Indiquez le montant de la dépense, en chiffres.")
+      setError(t("depenses.formulaire.montant_requis"))
       return
     }
     const montantEtranger = enDeviseEtrangere ? normalizeDecimal(montantDevise) : null
     if (enDeviseEtrangere && montantEtranger === null) {
-      setError("Indiquez le montant décaissé, en chiffres.")
+      setError(t("depenses.formulaire.montant_decaisse_requis"))
       return
     }
     setSaving(true)
@@ -161,7 +157,7 @@ function ExpenseFormBody({
       })
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible")
+      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -171,30 +167,29 @@ function ExpenseFormBody({
     <>
       <DialogHeader>
         <DialogTitle>
-          {editing ? "Modifier la dépense" : "Ajouter une dépense"}
+          {editing ? t("depenses.formulaire.titre_modifier") : t("depenses.formulaire.titre_ajouter")}
         </DialogTitle>
-        <DialogDescription>
-          Ce qui a été dépensé, quand, où et pour qui. Le siège constatera ce
-          que les pièces justifient.
-        </DialogDescription>
+        <DialogDescription>{t("depenses.formulaire.description")}</DialogDescription>
       </DialogHeader>
       <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
         <FormError>{error}</FormError>
 
         <div className="grid gap-2">
-          <Label htmlFor="exp-title">Libellé de la transaction</Label>
+          <Label htmlFor="exp-title">{t("depenses.formulaire.libelle")}</Label>
           <Input
             id="exp-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Carburant mission Lomé"
+            placeholder={t("depenses.formulaire.libelle_placeholder")}
             required
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="exp-date">Date et heure (heure de {timezone})</Label>
+            <Label htmlFor="exp-date">
+              {t("depenses.formulaire.date_heure", { fuseau: timezone })}
+            </Label>
             <Input
               id="exp-date"
               type="datetime-local"
@@ -204,39 +199,45 @@ function ExpenseFormBody({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="exp-place">Lieu</Label>
+            <Label htmlFor="exp-place">{t("champs.place")}</Label>
             <Input
               id="exp-place"
               value={place}
               onChange={(e) => setPlace(e.target.value)}
-              placeholder="Lomé"
+              placeholder={t("depenses.formulaire.lieu_placeholder")}
             />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="exp-amount">Dépense ({currency})</Label>
+            <Label htmlFor="exp-amount">
+              {t("depenses.formulaire.montant", { devise: currency })}
+            </Label>
             <Input
               id="exp-amount"
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               disabled={devisePresente}
-              placeholder={devisePresente ? "converti par le serveur" : "12 500,00"}
+              placeholder={
+                devisePresente
+                  ? t("depenses.formulaire.converti_serveur")
+                  : t("depenses.formulaire.montant_placeholder")
+              }
               required={!devisePresente}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="exp-payment">Mode de paiement</Label>
+            <Label htmlFor="exp-payment">{t("champs.payment_method")}</Label>
             <NativeSelect
               id="exp-payment"
               value={payment}
               onChange={(e) => setPayment(e.target.value)}
             >
-              {Object.entries(PAYMENT_METHODS).map(([value, label]) => (
+              {PAYMENT_METHODS.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {t(`depenses.modes_paiement.${value}`)}
                 </option>
               ))}
             </NativeSelect>
@@ -251,32 +252,30 @@ function ExpenseFormBody({
           open={deviseOuverte || undefined}
         >
           <summary className="cursor-pointer text-sm font-medium">
-            Payé dans une autre devise
+            {t("depenses.formulaire.autre_devise")}
           </summary>
           <p className="mt-2 text-xs text-muted-foreground">
-            Saisissez le montant tel qu'il figure sur la pièce. Le serveur le
-            convertit en {currency} au taux du jour de la dépense et fige ce
-            taux : le chiffre ne bougera plus.
+            {t("depenses.formulaire.autre_devise_aide", { devise: currency })}
           </p>
           <div className="mt-3 grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="exp-devise">Devise (ISO 4217)</Label>
+              <Label htmlFor="exp-devise">{t("depenses.formulaire.devise_iso")}</Label>
               <Input
                 id="exp-devise"
                 value={devise}
                 onChange={(e) => setDevise(e.target.value.toUpperCase())}
                 maxLength={3}
-                placeholder="EUR"
+                placeholder={t("depenses.formulaire.devise_placeholder")}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="exp-montant-devise">Montant décaissé</Label>
+              <Label htmlFor="exp-montant-devise">{t("champs.original_amount")}</Label>
               <Input
                 id="exp-montant-devise"
                 inputMode="decimal"
                 value={montantDevise}
                 onChange={(e) => setMontantDevise(e.target.value)}
-                placeholder="120,00"
+                placeholder={t("depenses.formulaire.montant_decaisse_placeholder")}
                 required={devisePresente}
               />
             </div>
@@ -285,7 +284,7 @@ function ExpenseFormBody({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="exp-expense-title">Intitulé de dépense</Label>
+            <Label htmlFor="exp-expense-title">{t("depenses.formulaire.intitule")}</Label>
             <NativeSelect
               id="exp-expense-title"
               value={expenseTitle}
@@ -293,16 +292,16 @@ function ExpenseFormBody({
                 setExpenseTitle(e.target.value === "" ? "" : Number(e.target.value))
               }
             >
-              <option value="">—</option>
-              {expenseTitles.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
+              <option value="">{t("commun.aucun")}</option>
+              {expenseTitles.map((titre) => (
+                <option key={titre.id} value={titre.id}>
+                  {titre.label}
                 </option>
               ))}
             </NativeSelect>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="exp-category">Catégorie marketing</Label>
+            <Label htmlFor="exp-category">{t("depenses.formulaire.categorie")}</Label>
             <NativeSelect
               id="exp-category"
               value={category}
@@ -310,7 +309,7 @@ function ExpenseFormBody({
                 setCategory(e.target.value === "" ? "" : Number(e.target.value))
               }
             >
-              <option value="">—</option>
+              <option value="">{t("commun.aucun")}</option>
               {marketingCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -322,7 +321,7 @@ function ExpenseFormBody({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="exp-team">Équipe</Label>
+            <Label htmlFor="exp-team">{t("champs.team")}</Label>
             <NativeSelect
               id="exp-team"
               value={team}
@@ -330,16 +329,16 @@ function ExpenseFormBody({
                 setTeam(e.target.value === "" ? "" : Number(e.target.value))
               }
             >
-              <option value="">—</option>
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              <option value="">{t("commun.aucun")}</option>
+              {teams.map((equipe) => (
+                <option key={equipe.id} value={equipe.id}>
+                  {equipe.name}
                 </option>
               ))}
             </NativeSelect>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="exp-project">Projet</Label>
+            <Label htmlFor="exp-project">{t("champs.project")}</Label>
             <NativeSelect
               id="exp-project"
               value={project}
@@ -347,7 +346,7 @@ function ExpenseFormBody({
                 setProject(e.target.value === "" ? "" : Number(e.target.value))
               }
             >
-              <option value="">—</option>
+              <option value="">{t("commun.aucun")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -359,7 +358,7 @@ function ExpenseFormBody({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="exp-owner">Manager responsable</Label>
+            <Label htmlFor="exp-owner">{t("depenses.formulaire.manager_responsable")}</Label>
             <NativeSelect
               id="exp-owner"
               value={owner}
@@ -367,7 +366,7 @@ function ExpenseFormBody({
                 setOwner(e.target.value === "" ? "" : Number(e.target.value))
               }
             >
-              <option value="">—</option>
+              <option value="">{t("commun.aucun")}</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -376,7 +375,7 @@ function ExpenseFormBody({
             </NativeSelect>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="exp-beneficiary">Prospect / bénéficiaire</Label>
+            <Label htmlFor="exp-beneficiary">{t("depenses.formulaire.beneficiaire")}</Label>
             <NativeSelect
               id="exp-beneficiary"
               value={beneficiary}
@@ -384,7 +383,7 @@ function ExpenseFormBody({
                 setBeneficiary(e.target.value === "" ? "" : Number(e.target.value))
               }
             >
-              <option value="">—</option>
+              <option value="">{t("commun.aucun")}</option>
               {beneficiaries.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
@@ -395,7 +394,7 @@ function ExpenseFormBody({
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="exp-description">Description</Label>
+          <Label htmlFor="exp-description">{t("commun.description")}</Label>
           <Textarea
             id="exp-description"
             value={description}
@@ -406,11 +405,11 @@ function ExpenseFormBody({
         <DialogFooter>
           <div>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
+              {t("commun.annuler")}
             </Button>
             <Button type="submit" disabled={saving} className="ml-2">
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Enregistrer
+              {t("commun.enregistrer")}
             </Button>
           </div>
         </DialogFooter>

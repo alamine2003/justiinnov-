@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { AlertTriangle } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CountryForm, type CountryFormValues } from "@/components/countries/country-form"
 import { CountryTable } from "@/components/countries/country-table"
@@ -19,6 +20,7 @@ import { useQuery } from "@/lib/use-query"
 type StatusFilter = "all" | "active" | "inactive"
 
 export function CountriesPage() {
+  const { t } = useTranslation()
   const { can } = useAuth()
   const canManage = can("manage_countries")
   const [page, setPage] = useState(1)
@@ -38,7 +40,7 @@ export function CountriesPage() {
       if (debouncedSearch) params.search = debouncedSearch
       return fetchCountries(params, signal)
     },
-    { fallback: "Impossible de charger les pays" },
+    { fallback: t("pays.liste.chargement_impossible") },
   )
 
   const afterWrite = () => {
@@ -64,7 +66,7 @@ export function CountriesPage() {
       await updateCountry(country.id, { is_active: !country.is_active })
       afterWrite()
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Changement de statut impossible")
+      setActionError(e instanceof Error ? e.message : t("pays.liste.statut_impossible"))
     } finally {
       setTogglingId(null)
     }
@@ -72,15 +74,12 @@ export function CountriesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Gestion des pays"
-        description="Définissez la devise, le fuseau horaire et les rattachements de chaque pays."
-      />
+      <PageHeader title={t("pays.liste.titre")} description={t("pays.liste.description")} />
 
       {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
           <AlertDescription>{actionError ?? query.error}</AlertDescription>
         </Alert>
       )}
@@ -115,7 +114,7 @@ export function CountriesPage() {
         page={page}
         count={query.data?.count ?? 0}
         onChange={setPage}
-        noun={["pays", "pays"]}
+        noun={[t("pays.liste.nom_singulier"), t("pays.liste.nom_pluriel")]}
       />
 
       <CountryForm
@@ -137,7 +136,11 @@ export function CountriesPage() {
               }
             : undefined
         }
-        title={editing ? `Modifier ${editing.name}` : "Ajouter un pays"}
+        title={
+          editing
+            ? t("pays.liste.modifier_titre", { nom: editing.name })
+            : t("pays.formulaire.titre_ajout")
+        }
       />
     </div>
   )

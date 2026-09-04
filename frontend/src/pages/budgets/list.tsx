@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { AlertTriangle, Pencil, Plus, Wallet } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,6 +35,7 @@ import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatRate } from "@/lib/utils"
 
 export function BudgetsPage() {
+  const { t } = useTranslation()
   const { can } = useAuth()
   const canManage = can("manage_budgets")
 
@@ -46,7 +48,7 @@ export function BudgetsPage() {
       ])
       return { budgets, summary }
     },
-    { fallback: "Impossible de charger les budgets" },
+    { fallback: t("budgets.erreur_chargement") },
   )
   const budgets = query.data?.budgets.results ?? []
   const summary = query.data?.summary ?? null
@@ -98,8 +100,8 @@ export function BudgetsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Budgets"
-        description="Enveloppes annuelles par pays, sous-enveloppes par projet, équipe ou manager, et réallocations."
+        title={t("budgets.titre")}
+        description={t("budgets.description")}
       >
         {canManage && (
           <Button
@@ -109,7 +111,7 @@ export function BudgetsPage() {
             }}
           >
             <Plus className="mr-2 h-4 w-4" aria-hidden />
-            Attribuer une enveloppe
+            {t("budgets.attribuer")}
           </Button>
         )}
       </PageHeader>
@@ -117,20 +119,21 @@ export function BudgetsPage() {
       {(query.error || referentielError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
           <AlertDescription>{query.error ?? referentielError}</AlertDescription>
         </Alert>
       )}
-      <TruncatedNotice page={query.data?.budgets} noun="enveloppes" />
-      <TruncatedNotice page={countries.data} noun="pays" />
+      <TruncatedNotice page={query.data?.budgets} noun={t("budgets.noms.enveloppes")} />
+      <TruncatedNotice page={countries.data} noun={t("budgets.noms.pays")} />
 
       {summary && summary.unconverted_currencies.length > 0 && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Conversion incomplète</AlertTitle>
+          <AlertTitle>{t("budgets.conversion.titre")}</AlertTitle>
           <AlertDescription>
-            Aucun taux connu pour {summary.unconverted_currencies.join(", ")} : ces
-            montants sont exclus du total consolidé plutôt que d'y être absorbés.
+            {t("budgets.conversion.texte", {
+              devises: summary.unconverted_currencies.join(", "),
+            })}
           </AlertDescription>
         </Alert>
       )}
@@ -138,19 +141,27 @@ export function BudgetsPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           icon={Wallet}
-          label="Disponible consolidé"
+          label={t("budgets.indicateurs.disponible_consolide")}
           value={formatAmount(summary?.total_remaining_xof, consolidatedSymbol)}
-          hint="Converti au taux en vigueur"
+          hint={t("budgets.indicateurs.taux_en_vigueur")}
         />
-        <StatCard icon={Wallet} label="Pays dotés" value={summary?.countries.length ?? 0} />
-        <StatCard icon={Wallet} label="Enveloppes" value={query.data?.budgets.count ?? 0} />
+        <StatCard
+          icon={Wallet}
+          label={t("budgets.indicateurs.pays_dotes")}
+          value={summary?.countries.length ?? 0}
+        />
+        <StatCard
+          icon={Wallet}
+          label={t("budgets.indicateurs.enveloppes")}
+          value={query.data?.budgets.count ?? 0}
+        />
       </div>
 
       <Tabs defaultValue="pays">
         <TabsList className="bg-muted/60">
-          <TabsTrigger value="pays">Par pays</TabsTrigger>
-          <TabsTrigger value="enveloppes">Enveloppes</TabsTrigger>
-          <TabsTrigger value="reallocations">Réallocations</TabsTrigger>
+          <TabsTrigger value="pays">{t("budgets.onglets.pays")}</TabsTrigger>
+          <TabsTrigger value="enveloppes">{t("budgets.onglets.enveloppes")}</TabsTrigger>
+          <TabsTrigger value="reallocations">{t("budgets.onglets.reallocations")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pays" className="mt-4">
@@ -160,12 +171,14 @@ export function BudgetsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead scope="col">Pays</TableHead>
-                      <TableHead scope="col" className="text-right">Enveloppe</TableHead>
-                      <TableHead scope="col" className="text-right">Engagé</TableHead>
-                      <TableHead scope="col" className="text-right">Consommé</TableHead>
-                      <TableHead scope="col" className="text-right">Disponible</TableHead>
-                      <TableHead scope="col" className="text-right">Disponible ({consolidatedSymbol})</TableHead>
+                      <TableHead scope="col">{t("commun.pays")}</TableHead>
+                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.enveloppe")}</TableHead>
+                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.engage")}</TableHead>
+                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.consomme")}</TableHead>
+                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.disponible")}</TableHead>
+                      <TableHead scope="col" className="text-right">
+                        {t("budgets.colonnes.disponible_devise", { devise: consolidatedSymbol })}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -175,11 +188,11 @@ export function BudgetsPage() {
                       <EmptyRow
                         colSpan={6}
                         icon={Wallet}
-                        title="Aucune enveloppe attribuée"
+                        title={t("budgets.vide.pays_titre")}
                         hint={
                           canManage
-                            ? "Attribuez une enveloppe annuelle à chaque pays suivi."
-                            : "Le siège n'a pas encore attribué d'enveloppe à votre périmètre."
+                            ? t("budgets.vide.pays_indication_siege")
+                            : t("budgets.vide.pays_indication_pays")
                         }
                       />
                     ) : (
@@ -188,14 +201,17 @@ export function BudgetsPage() {
                           <TableCell>
                             <p className="font-medium">{row.country_name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {row.country_ref ?? "—"} · {symbolOf(row.country, row.currency)}
+                              {row.country_ref ?? t("commun.aucun")} ·{" "}
+                              {symbolOf(row.country, row.currency)}
                             </p>
                           </TableCell>
                           <TableCell className="text-right">
                             {formatAmount(row.allocated)}
                             {Number(row.sub_allocated) > 0 && (
                               <p className="text-xs text-muted-foreground">
-                                dont {formatAmount(row.sub_allocated)} réparti
+                                {t("budgets.dont_reparti", {
+                                  montant: formatAmount(row.sub_allocated),
+                                })}
                               </p>
                             )}
                           </TableCell>
@@ -216,7 +232,7 @@ export function BudgetsPage() {
                           <TableCell className="text-right text-muted-foreground">
                             {row.remaining_xof
                               ? formatAmount(row.remaining_xof)
-                              : "taux inconnu"}
+                              : t("budgets.taux_inconnu")}
                           </TableCell>
                         </TableRow>
                       ))
@@ -235,14 +251,16 @@ export function BudgetsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead scope="col">Enveloppe</TableHead>
-                      <TableHead scope="col">Année</TableHead>
-                      <TableHead scope="col" className="text-right">Montant</TableHead>
-                      <TableHead scope="col" className="text-right">Engagé</TableHead>
-                      <TableHead scope="col" className="text-right">Disponible</TableHead>
-                      <TableHead scope="col">Exécution</TableHead>
-                      <TableHead scope="col">Dépassement</TableHead>
-                      {canManage && <TableHead scope="col" className="text-right">Actions</TableHead>}
+                      <TableHead scope="col">{t("budgets.colonnes.enveloppe")}</TableHead>
+                      <TableHead scope="col">{t("commun.annee")}</TableHead>
+                      <TableHead scope="col" className="text-right">{t("commun.montant")}</TableHead>
+                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.engage")}</TableHead>
+                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.disponible")}</TableHead>
+                      <TableHead scope="col">{t("budgets.colonnes.execution")}</TableHead>
+                      <TableHead scope="col">{t("budgets.colonnes.depassement")}</TableHead>
+                      {canManage && (
+                        <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -252,11 +270,11 @@ export function BudgetsPage() {
                       <EmptyRow
                         colSpan={canManage ? 8 : 7}
                         icon={Wallet}
-                        title="Aucune enveloppe"
+                        title={t("budgets.vide.enveloppes_titre")}
                         hint={
                           canManage
-                            ? "Attribuez une enveloppe pour commencer le suivi."
-                            : "Aucune enveloppe sur votre périmètre."
+                            ? t("budgets.vide.enveloppes_indication_siege")
+                            : t("budgets.vide.enveloppes_indication_pays")
                         }
                       />
                     ) : (
@@ -265,8 +283,8 @@ export function BudgetsPage() {
                           <TableCell>
                             <p className="font-medium">{budget.country_name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {budget.scope_label ?? "Enveloppe du pays"}
-                              {!budget.is_active && " · inactive"}
+                              {budget.scope_label ?? t("budgets.portee.country")}
+                              {!budget.is_active && ` · ${t("budgets.inactive")}`}
                             </p>
                           </TableCell>
                           <TableCell>{budget.year}</TableCell>
@@ -297,7 +315,10 @@ export function BudgetsPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label={`Modifier l'enveloppe ${budget.country_name} ${budget.year}`}
+                                aria-label={t("budgets.modifier_aria", {
+                                  pays: budget.country_name,
+                                  annee: budget.year,
+                                })}
                                 onClick={() => {
                                   setEditing(budget)
                                   setFormOpen(true)

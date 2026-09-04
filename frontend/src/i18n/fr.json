@@ -1,0 +1,1003 @@
+{
+  "app": {
+    "titre": "JUSTI INNOV — Contrôle budgétaire",
+    "tagline": "Application de contrôle budgétaire",
+    "description": "Suivi des dépenses des pays et de leurs justificatifs : ce qui a été dépensé, quand, où, au profit de qui, et où est la preuve."
+  },
+  "commun": {
+    "annuler": "Annuler",
+    "enregistrer": "Enregistrer",
+    "confirmer": "Confirmer",
+    "fermer": "Fermer",
+    "reessayer": "Réessayer",
+    "chargement": "Chargement…",
+    "actions": "Actions",
+    "erreur": "Erreur",
+    "actif": "Actif",
+    "desactive": "Désactivé",
+    "activer": "Activer",
+    "desactiver": "Désactiver",
+    "modifier": "Modifier",
+    "creer": "Créer",
+    "ajouter": "Ajouter",
+    "retirer": "Retirer",
+    "rechercher": "Rechercher",
+    "tous": "Tous",
+    "toutes": "Toutes",
+    "oui": "Oui",
+    "non": "Non",
+    "statut": "Statut",
+    "date": "Date",
+    "montant": "Montant",
+    "pays": "Pays",
+    "nom": "Nom",
+    "code": "Code",
+    "description": "Description",
+    "annee": "Année",
+    "devise": "Devise",
+    "siege_tous_pays": "Siège — tous pays",
+    "sans_role": "Sans rôle",
+    "aucun": "—",
+    "voir": "Voir",
+    "telecharger": "Télécharger",
+    "precedent": "Précédent",
+    "suivant": "Suivant",
+    "page_sur": "page {{page}} sur {{total}}",
+    "elements_one": "{{count}} élément",
+    "elements_other": "{{count}} éléments",
+    "separateur_libelle": " : "
+  },
+  "nav": {
+    "principale": "Navigation principale",
+    "pilotage": "Pilotage",
+    "dossiers": "Dossiers",
+    "registre": "Registre",
+    "budgets": "Budgets",
+    "pays": "Pays",
+    "audit": "Audit",
+    "configuration": "Configuration",
+    "ouvrir_menu": "Ouvrir le menu",
+    "deconnexion": "Déconnexion",
+    "menu_utilisateur": "Menu du compte",
+    "reservee_siege": "Page réservée au siège : vous avez été ramené au tableau de bord.",
+    "equipes": "Équipes"
+  },
+  "erreurs": {
+    "injoignable": "Serveur injoignable. Vérifiez votre connexion.",
+    "generique": "Une erreur est survenue",
+    "chargement_impossible": "Chargement impossible",
+    "referentiel_indisponible": "Référentiel indisponible",
+    "action_impossible": "Action impossible",
+    "enregistrement_impossible": "Enregistrement impossible",
+    "profil_indisponible": "Profil indisponible",
+    "profil_illisible": "Impossible de lire votre profil : {{message}}",
+    "affichage_echoue": "L'affichage a échoué",
+    "inattendue": "Une erreur inattendue est survenue.",
+    "recharger": "Recharger la page"
+  },
+  "champs": {
+    "amount": "Montant",
+    "justified_amount": "Montant justifié",
+    "original_amount": "Montant décaissé",
+    "original_currency": "Devise",
+    "date": "Date",
+    "title": "Libellé",
+    "label": "Libellé",
+    "place": "Lieu",
+    "note": "Motif",
+    "reason": "Motif",
+    "number": "N°ORDRE",
+    "country": "Pays",
+    "countries": "Pays",
+    "team": "Équipe",
+    "project": "Projet",
+    "owner": "Manager",
+    "manager": "Manager",
+    "beneficiary": "Bénéficiaire",
+    "expense_title": "Intitulé",
+    "marketing_category": "Catégorie",
+    "payment_method": "Mode de paiement",
+    "username": "Identifiant",
+    "password": "Mot de passe",
+    "current_password": "Mot de passe actuel",
+    "new_password": "Nouveau mot de passe",
+    "email": "E-mail",
+    "role": "Rôle",
+    "year": "Année",
+    "currency": "Devise",
+    "timezone": "Fuseau horaire",
+    "code": "Code",
+    "name": "Nom",
+    "file": "Fichier",
+    "kind": "Type",
+    "source": "Enveloppe source",
+    "target": "Enveloppe destinataire",
+    "rate_to_xof": "Taux",
+    "valid_from": "En vigueur depuis",
+    "alert_thresholds": "Seuils d'alerte",
+    "unjustified_alert_days": "Délai d'alerte",
+    "unusual_expense_factor": "Facteur de dépense inhabituelle",
+    "default_overrun_policy": "Politique de dépassement",
+    "language": "Langue"
+  },
+  "libelles": {
+    "roles": {
+      "super_admin": "Super administrateur (DG, DO, CEO, DEV)",
+      "admin": "Administrateur (RH)",
+      "df": "DF — direction financière",
+      "dm": "DM — supérieur du manager",
+      "manager": "Manager"
+    },
+    "workflow": {
+      "draft": "Brouillon",
+      "submitted": "Soumis",
+      "in_review": "En contrôle",
+      "justified": "Justifié",
+      "unjustified": "Non justifié",
+      "closed": "Clôturé"
+    },
+    "piece_statut": {
+      "received": "Reçu",
+      "incomplete": "Incomplet",
+      "to_review": "À contrôler",
+      "validated": "Validé",
+      "rejected": "Rejeté",
+      "archived": "Archivé"
+    },
+    "piece_type": {
+      "receipt": "Reçu",
+      "invoice": "Facture",
+      "discharge": "Décharge",
+      "deliverable": "Livrable",
+      "other": "Autre"
+    },
+    "projet_statut": {
+      "planned": "Planifié",
+      "active": "En cours",
+      "on_hold": "En pause",
+      "completed": "Terminé"
+    },
+    "depassement": {
+      "block": "Bloquer",
+      "warn": "Alerter",
+      "approval": "Soumettre à approbation"
+    },
+    "alerte_niveau": {
+      "info": "Info",
+      "warning": "Alerte",
+      "critical": "Critique"
+    },
+    "audit_action": {
+      "created": "Création",
+      "updated": "Modification",
+      "deleted": "Suppression d'un brouillon",
+      "submitted": "Soumission",
+      "reviewed": "Mise en contrôle",
+      "justified": "Justification",
+      "unjustified": "Constat de non-justification",
+      "closed": "Clôture",
+      "proof_uploaded": "Dépôt de justificatif",
+      "proof_replaced": "Remplacement de justificatif",
+      "approved": "Validation d'un justificatif",
+      "rejected": "Rejet d'un justificatif",
+      "downloaded": "Téléchargement",
+      "reopened": "Réouverture"
+    },
+    "beneficiaire_type": {
+      "prospect": "Prospect",
+      "client": "Client",
+      "supplier": "Fournisseur",
+      "beneficiary": "Bénéficiaire",
+      "other": "Autre"
+    },
+    "theme": {
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Système"
+    },
+    "langue": {
+      "fr": "Français",
+      "en": "English"
+    },
+    "notification_type": {
+      "dossier_reopened": "Dossier rouvert"
+    }
+  },
+  "layout": {
+    "version": "Version",
+    "developpe_par": "Développé par",
+    "copyright": "© {{periode}} {{nom}}. Tous droits réservés.",
+    "theme_bouton": "Thème de l'interface",
+    "langue_bouton": "Langue de l'interface",
+    "hors_ligne_titre": "Connexion au serveur impossible",
+    "hors_ligne_texte": "Vérifiez votre accès au réseau : les données affichées peuvent être obsolètes et aucune saisie ne sera enregistrée."
+  },
+  "notifications": {
+    "titre": "Notifications",
+    "aria": "Notifications",
+    "aria_non_lues": "Notifications ({{count}} non lues)",
+    "description": "Seuils budgétaires, dépenses à contrôler et décisions vous concernant.",
+    "tout_lu": "Tout marquer comme lu",
+    "aucune": "Aucune notification.",
+    "indisponibles": "Notifications indisponibles"
+  },
+  "pwa": {
+    "installer": "Installer l'application",
+    "installation_impossible": "Installation impossible",
+    "note_connexion": "Disponible en application de bureau sur Windows et macOS : installez-la depuis Chrome ou Edge pour l'ouvrir sans le navigateur."
+  },
+  "ui": {
+    "tronque_titre": "Liste incomplète",
+    "tronque_texte": "Seuls {{affiches}} {{nom}} sur {{total}} sont proposés. Affinez la recherche ou contactez le siège."
+  },
+  "auth": {
+    "connexion": "Connexion",
+    "sous_titre": "Identifiez-vous pour accéder à votre périmètre.",
+    "identifiant": "Identifiant",
+    "mot_de_passe": "Mot de passe",
+    "afficher_mdp": "Afficher le mot de passe",
+    "masquer_mdp": "Masquer le mot de passe",
+    "se_connecter": "Se connecter",
+    "oubli": "Mot de passe oublié ? Contactez un administrateur du siège.",
+    "acces_reserve": "Accès réservé aux comptes ouverts par le siège.",
+    "slogan_ligne1": "Savoir où va chaque franc,",
+    "slogan_ligne2": "et ce qui le justifie.",
+    "intro": "Le suivi budgétaire des pays, du budget attribué jusqu'à la pièce justificative.",
+    "promesses": {
+      "enveloppe_titre": "Une enveloppe par pays",
+      "enveloppe_texte": "Budget attribué, engagé, consommé et disponible, en temps réel.",
+      "justifiee_titre": "Chaque dépense justifiée",
+      "justifiee_texte": "Date, lieu, bénéficiaire et pièce à l'appui, pour chaque montant.",
+      "trace_titre": "Rien ne se perd",
+      "trace_texte": "Une dépense déclarée est définitive et toute action est tracée."
+    },
+    "identifiants_requis": "Renseignez votre identifiant et votre mot de passe.",
+    "identifiants_invalides": "Identifiants invalides",
+    "mdp": {
+      "a_remplacer_titre": "Mot de passe à remplacer",
+      "a_remplacer_texte": "Votre mot de passe a été défini par le siège : il a circulé, et tant qu'il n'est pas remplacé vos actions ne vous engagent pas. La plateforme reste fermée jusque-là.",
+      "choisir": "Choisissez votre mot de passe",
+      "regles": "Au moins 10 caractères, ni trop courant ni uniquement numérique. Il ne doit être connu que de vous.",
+      "actuel": "Mot de passe actuel",
+      "nouveau": "Nouveau mot de passe",
+      "confirmation": "Confirmation",
+      "non_identiques": "Les deux saisies ne correspondent pas.",
+      "changement_impossible": "Changement impossible"
+    },
+    "totp": {
+      "code": "Code de double authentification",
+      "aide": "Saisissez le code à six chiffres affiché par votre application d'authentification.",
+      "code_requis": "Saisissez le code de votre application d'authentification.",
+      "plus_acces": "Je n'ai plus accès à mon application",
+      "plus_acces_texte": "Seul un administrateur du siège peut réinitialiser votre double authentification. Contactez-le : un nouvel enrôlement vous sera proposé à la connexion suivante.",
+      "a_enroler_titre": "Double authentification à activer",
+      "a_enroler_texte": "Un mot de passe seul ne suffit pas à engager votre signature. Liez une application d'authentification à votre compte : la plateforme reste fermée jusque-là.",
+      "enroler": "Lier votre application d'authentification",
+      "consigne": "Scannez ce code avec votre application d'authentification, puis saisissez le code qu'elle affiche.",
+      "qr_alt": "QR code d'enrôlement",
+      "secret": "Clé à saisir manuellement",
+      "secret_aide": "Cette clé ne sera plus montrée : saisissez-la dans l'application si vous ne pouvez pas scanner le code.",
+      "copier": "Copier",
+      "copie": "Copiée",
+      "code_six": "Code à six chiffres",
+      "code_six_chiffres": "Le code comporte six chiffres.",
+      "enrolement_impossible": "Enrôlement impossible",
+      "confirmation_impossible": "Confirmation impossible",
+      "aide_connexion": "Saisissez le code à six chiffres de votre application d'authentification. Laissez vide si vous n'êtes pas encore enrôlé."
+    }
+  },
+  "dossiers": {
+    "nom_one": "dossier",
+    "nom_other": "dossiers",
+    "noms_pays": "pays",
+    "noms_beneficiaires": "bénéficiaires",
+    "liste": {
+      "titre": "Dossiers de justification",
+      "description": "Un dossier porte un N°ORDRE et regroupe les dépenses et les preuves d'une même opération.",
+      "nouveau": "Nouveau dossier",
+      "chargement_impossible": "Impossible de charger les dossiers",
+      "recherche_placeholder": "N°ORDRE ou libellé…",
+      "recherche_aria": "Rechercher un dossier",
+      "filtrer_statut": "Filtrer par statut",
+      "tous_statuts": "Tous les statuts",
+      "colonnes": {
+        "lignes": "Lignes",
+        "preuves": "Preuves",
+        "depenses": "Dépenses",
+        "ecart": "Écart"
+      },
+      "vide": {
+        "titre": "Aucun dossier",
+        "aide_creer": "Créez un dossier pour y rattacher vos dépenses.",
+        "aide_filtres": "Aucun dossier ne correspond à ces filtres."
+      }
+    },
+    "formulaire": {
+      "description": "Le N°ORDRE identifie l'ensemble documentaire ; il doit être unique.",
+      "choisir_pays": "Choisissez un pays.",
+      "creation_impossible": "Création impossible",
+      "numero_placeholder": "N-2026-001",
+      "libelle_placeholder": "Mission commerciale Lomé",
+      "aucun_pays": "Aucun pays disponible",
+      "manager_responsable": "Manager responsable"
+    },
+    "detail": {
+      "chargement_impossible": "Impossible de charger le dossier",
+      "chargement": "Chargement du dossier…",
+      "introuvable_titre": "Dossier introuvable",
+      "introuvable_texte": "Ce dossier n'existe pas ou n'est pas dans votre périmètre.",
+      "referentiel_indisponible": "Référentiel du pays indisponible",
+      "avertissement_budgetaire": "Avertissement budgétaire",
+      "suppression_impossible": "Suppression impossible",
+      "cree_par": "créé par {{nom}}",
+      "actualisation": "Actualisation",
+      "note_controle": "Contrôle : {{note}}",
+      "stat_depenses": "Dépenses",
+      "stat_ecart": "Écart",
+      "ecart_aide": "Dépensé sans preuve à l'appui",
+      "lignes_titre": "Lignes de dépenses",
+      "lignes_description": "Chaque ligne suit son propre circuit de justification.",
+      "colonnes": {
+        "depense": "Dépense",
+        "justifie": "Justifié",
+        "ecart": "Écart"
+      },
+      "vide": {
+        "titre": "Aucune ligne",
+        "aide_ajouter": "Ajoutez les dépenses de ce dossier avant de le soumettre.",
+        "aide_verrouille": "Ce dossier ne contient aucune dépense."
+      },
+      "impute_sur": "imputé sur {{budget}}",
+      "saisie_par": "saisie par {{nom}}",
+      "heure_fuseau": "heure {{fuseau}}",
+      "modifier_aria": "Modifier {{titre}}",
+      "supprimer_aria": "Supprimer le brouillon {{titre}}",
+      "retour": "Retour aux dossiers"
+    },
+    "reouverture": {
+      "rouvrir": "Rouvrir",
+      "titre": "Rouvrir le dossier {{numero}}",
+      "description": "Le dossier et ses lignes reviennent au brouillon ; le pays est prévenu et devra le soumettre à nouveau. Le motif est conservé dans le journal d'audit.",
+      "motif": "Motif",
+      "motif_placeholder": "Pièce à remplacer, montant à corriger…",
+      "motif_requis": "Une réouverture doit être motivée.",
+      "lignes_bloquantes": "Une ligne déjà justifiée ou clôturée empêche la réouverture.",
+      "impossible": "Réouverture impossible",
+      "bandeau_titre": "Dossier rouvert par le siège",
+      "bandeau_motif": "Motif : {{motif}}"
+    }
+  },
+  "depenses": {
+    "nom_one": "dépense",
+    "nom_other": "dépenses",
+    "montant_sur_piece": "soit {{montant}} sur la pièce",
+    "modes_paiement": {
+      "cash": "Espèces",
+      "transfer": "Virement",
+      "mobile": "Mobile money",
+      "card": "Carte",
+      "check": "Chèque",
+      "other": "Autre"
+    },
+    "formulaire": {
+      "titre_modifier": "Modifier la dépense",
+      "titre_ajouter": "Ajouter une dépense",
+      "description": "Ce qui a été dépensé, quand, où et pour qui. Le siège constatera ce que les pièces justifient.",
+      "date_requise": "Indiquez la date et l'heure de la dépense.",
+      "montant_requis": "Indiquez le montant de la dépense, en chiffres.",
+      "montant_decaisse_requis": "Indiquez le montant décaissé, en chiffres.",
+      "libelle": "Libellé de la transaction",
+      "libelle_placeholder": "Carburant mission Lomé",
+      "date_heure": "Date et heure (heure de {{fuseau}})",
+      "lieu_placeholder": "Lomé",
+      "montant": "Dépense ({{devise}})",
+      "montant_placeholder": "12 500,00",
+      "converti_serveur": "converti par le serveur",
+      "autre_devise": "Payé dans une autre devise",
+      "autre_devise_aide": "Saisissez le montant tel qu'il figure sur la pièce. Le serveur le convertit en {{devise}} au taux du jour de la dépense et fige ce taux : le chiffre ne bougera plus.",
+      "devise_iso": "Devise (ISO 4217)",
+      "devise_placeholder": "EUR",
+      "montant_decaisse_placeholder": "120,00",
+      "intitule": "Intitulé de dépense",
+      "categorie": "Catégorie marketing",
+      "manager_responsable": "Manager responsable",
+      "beneficiaire": "Prospect / bénéficiaire"
+    },
+    "circuit": {
+      "soumettre": "Soumettre",
+      "prendre_en_controle": "Prendre en contrôle",
+      "marquer_justifie": "Marquer justifié",
+      "marquer_non_justifie": "Marquer non justifié",
+      "cloturer": "Clôturer"
+    },
+    "rejet": {
+      "description_depense": "La dépense reste au débit du budget : l'argent est sorti. Le motif est obligatoire et reste attaché à l'historique.",
+      "description_dossier": "Le dossier reste au débit du budget : l'argent est sorti. Le motif est obligatoire et reste attaché à l'historique.",
+      "motif": "Motif du refus",
+      "motif_placeholder": "Facture illisible, montant incohérent…",
+      "motif_requis": "Un refus doit être motivé.",
+      "impossible": "Refus impossible"
+    },
+    "justification": {
+      "description_depense": "Le montant justifié est celui que les pièces attestent. Le serveur calcule l'écart avec la dépense.",
+      "description_dossier": "Toutes les lignes du dossier seront marquées justifiées.",
+      "montant_requis": "Indiquez le montant justifié, en chiffres.",
+      "impossible": "Justification impossible",
+      "montant": "Montant justifié",
+      "montant_devise": "Montant justifié ({{devise}})",
+      "declaree": "Dépense déclarée : {{montant}}. Par défaut, tout est justifié.",
+      "note_partiel": "Note (obligatoire si le montant est partiel)",
+      "note_facultative": "Note (facultative)",
+      "note_placeholder": "Facture n° 123 pour 80 %, reste sans pièce…"
+    }
+  },
+  "pieces": {
+    "titre": "Pièces justificatives",
+    "description": "Rattachées au dossier ; chaque fichier porte son empreinte SHA-256.",
+    "deposer": "Déposer",
+    "telechargement_impossible": "Téléchargement impossible",
+    "colonnes": {
+      "depot": "Dépôt"
+    },
+    "vide": {
+      "titre": "Aucun justificatif",
+      "aide_deposer": "Déposez la facture, le reçu ou la décharge qui atteste la dépense.",
+      "aide_sans_piece": "Le dossier a été déclaré sans pièce."
+    },
+    "par": "par {{nom}}",
+    "previsualiser_aria": "Prévisualiser {{nom}}",
+    "telecharger_aria": "Télécharger {{nom}}",
+    "controler_aria": "Contrôler {{nom}}",
+    "taille": {
+      "octets": "{{valeur}} o",
+      "ko": "{{valeur}} ko",
+      "mo": "{{valeur}} Mo"
+    },
+    "depot": {
+      "titre": "Déposer un justificatif",
+      "formats": "Formats acceptés : {{formats}}.",
+      "formats_generique": "PDF, image ou document.",
+      "doublon": "Un fichier déjà présent sur ce dossier est refusé, sauf s'il remplace explicitement une version antérieure.",
+      "fichier_requis": "Sélectionnez un fichier.",
+      "trop_gros": "Le fichier pèse {{taille}} ; la limite est de {{limite}}.",
+      "impossible": "Dépôt impossible",
+      "taille_max": "Taille maximale : {{taille}}.",
+      "remplace": "Remplace (facultatif)",
+      "nouveau": "Nouveau justificatif",
+      "envoi_aria": "Envoi du fichier",
+      "envoi": "Envoi… {{pourcentage}} %"
+    },
+    "controle": {
+      "titre": "Contrôle documentaire",
+      "description": "{{nom}} — un rejet doit être motivé.",
+      "decision": "Décision",
+      "motif_requis": "Un rejet doit être motivé.",
+      "impossible": "Contrôle impossible",
+      "choix": {
+        "validated": "Valider la pièce",
+        "to_review": "À contrôler",
+        "incomplete": "Marquer incomplet",
+        "rejected": "Rejeter",
+        "archived": "Archiver"
+      }
+    },
+    "apercu": {
+      "indisponible": "Aperçu indisponible",
+      "chargement": "Chargement de l'aperçu…",
+      "version": "version {{version}}"
+    }
+  },
+  "registre": {
+    "titre": "Registre de justification",
+    "description": "Où est passé l'argent : chaque dépense avec sa date, son lieu, son bénéficiaire — et la pièce qui l'atteste.",
+    "chargement_impossible": "Impossible de charger le registre",
+    "sans_piece_one": "{{count}} dépense sans pièce sur cette page",
+    "sans_piece_other": "{{count}} dépenses sans pièce sur cette page",
+    "sans_piece_aide": "Un décaissement sans justificatif reste au débit du budget.",
+    "filtres": "Filtres",
+    "recherche": "Recherche",
+    "recherche_placeholder": "Libellé, lieu, N°ORDRE…",
+    "tous_pays": "Tous les pays",
+    "du": "Du",
+    "du_heure": "Du (heure {{fuseau}})",
+    "au": "Au",
+    "colonnes": {
+      "date_heure": "Date et heure (locale)",
+      "depense": "Dépense",
+      "equipe_manager": "Équipe / Manager",
+      "justifie": "Justifié",
+      "ecart": "Écart",
+      "preuve": "Preuve"
+    },
+    "vide": {
+      "titre": "Aucune dépense sur ce périmètre",
+      "aide": "Élargissez la période ou retirez un filtre."
+    },
+    "heure_locale": "heure locale · {{fuseau}}",
+    "pieces_one": "{{count}} pièce",
+    "pieces_other": "{{count}} pièces",
+    "incomplet": "incomplet",
+    "aucune": "aucune"
+  },
+  "budgets": {
+    "titre": "Budgets",
+    "description": "Enveloppes annuelles par pays, sous-enveloppes par projet, équipe ou manager, et réallocations.",
+    "attribuer": "Attribuer une enveloppe",
+    "erreur_chargement": "Impossible de charger les budgets",
+    "noms": {
+      "enveloppes": "enveloppes",
+      "pays": "pays"
+    },
+    "conversion": {
+      "titre": "Conversion incomplète",
+      "texte": "Aucun taux connu pour {{devises}} : ces montants sont exclus du total consolidé plutôt que d'y être absorbés."
+    },
+    "indicateurs": {
+      "disponible_consolide": "Disponible consolidé",
+      "taux_en_vigueur": "Converti au taux en vigueur",
+      "pays_dotes": "Pays dotés",
+      "enveloppes": "Enveloppes"
+    },
+    "onglets": {
+      "pays": "Par pays",
+      "enveloppes": "Enveloppes",
+      "reallocations": "Réallocations"
+    },
+    "colonnes": {
+      "enveloppe": "Enveloppe",
+      "engage": "Engagé",
+      "consomme": "Consommé",
+      "disponible": "Disponible",
+      "disponible_devise": "Disponible ({{devise}})",
+      "execution": "Exécution",
+      "depassement": "Dépassement"
+    },
+    "vide": {
+      "pays_titre": "Aucune enveloppe attribuée",
+      "pays_indication_siege": "Attribuez une enveloppe annuelle à chaque pays suivi.",
+      "pays_indication_pays": "Le siège n'a pas encore attribué d'enveloppe à votre périmètre.",
+      "enveloppes_titre": "Aucune enveloppe",
+      "enveloppes_indication_siege": "Attribuez une enveloppe pour commencer le suivi.",
+      "enveloppes_indication_pays": "Aucune enveloppe sur votre périmètre."
+    },
+    "dont_reparti": "dont {{montant}} réparti",
+    "taux_inconnu": "taux inconnu",
+    "inactive": "inactive",
+    "modifier_aria": "Modifier l'enveloppe {{pays}} {{annee}}",
+    "portee": {
+      "country": "Enveloppe du pays",
+      "project": "Sous-enveloppe — projet",
+      "team": "Sous-enveloppe — équipe",
+      "manager": "Sous-enveloppe — manager"
+    },
+    "form": {
+      "titre_modifier": "Modifier l'enveloppe",
+      "description": "Une sous-enveloppe découpe l'enveloppe du pays selon une seule dimension : un projet, une équipe ou un manager.",
+      "pays_requis": "Sélectionnez un pays.",
+      "montant_requis": "Indiquez le montant de l'enveloppe, en chiffres.",
+      "montant_exemple": "10 000 000",
+      "portee": "Portée",
+      "depassement": "En cas de dépassement",
+      "active": "Active"
+    },
+    "realloc": {
+      "titre": "Réallocations",
+      "description": "Transferts entre enveloppes, justifiés et soumis à approbation.",
+      "demander": "Demander",
+      "nom_pluriel": "réallocations",
+      "colonnes": {
+        "transfert": "Transfert",
+        "justification": "Justification"
+      },
+      "vide_titre": "Aucune réallocation",
+      "vide_indication_siege": "Demandez un transfert pour déplacer un montant d'une enveloppe à une autre.",
+      "vide_indication_pays": "Aucun transfert n'a été demandé sur votre périmètre.",
+      "vers": "vers",
+      "par": "par {{auteur}}",
+      "decision": "Décision : {{note}}",
+      "approuver": "Approuver",
+      "refuser": "Refuser",
+      "approbation_impossible": "Approbation impossible",
+      "refus_impossible": "Refus impossible",
+      "demande_impossible": "Demande impossible",
+      "form_titre": "Demander une réallocation",
+      "form_description": "Le transfert n'est exécuté qu'après approbation.",
+      "montant_requis": "Indiquez le montant à transférer, en chiffres.",
+      "enveloppes_identiques": "Choisissez deux enveloppes différentes.",
+      "option_source": "{{libelle}} ({{montant}} disponibles)",
+      "motif_placeholder": "Motif du transfert",
+      "envoyer": "Envoyer",
+      "refus_titre": "Refuser la réallocation",
+      "refus_description": "Un refus doit être motivé : le motif est conservé dans l'historique.",
+      "motif_refus": "Motif du refus",
+      "motif_requis": "Un refus doit être motivé."
+    }
+  },
+  "pilotage": {
+    "titre": "Pilotage",
+    "description_siege": "Consolidation de tous les pays, convertie en {{devise}}.",
+    "description_pays": "Consommation et alertes de votre périmètre.",
+    "erreur_chargement": "Impossible de charger le tableau de bord",
+    "chargement": "Chargement du tableau de bord…",
+    "tous_pays": "Tous les pays",
+    "actualisation": "Actualisation",
+    "noms": {
+      "pays": "pays"
+    },
+    "conversion": {
+      "titre": "Conversion incomplète",
+      "texte": "Aucun taux connu pour {{devises}} : ces montants sont exclus du total consolidé."
+    },
+    "indicateurs": {
+      "enveloppe": "Enveloppe",
+      "consomme": "Consommé",
+      "engage": "Engagé",
+      "sans_preuve": "Sans preuve",
+      "disponible": "Disponible",
+      "consolides": "{{montant}} consolidés",
+      "taux_execution": "Taux d'exécution {{taux}}",
+      "soumis_ou_controle": "Soumis ou en contrôle",
+      "justifie_a": "Justifié à {{taux}}"
+    },
+    "charge": {
+      "a_controler": "Lignes à contrôler",
+      "brouillon": "Lignes en brouillon",
+      "non_justifiees": "Lignes non justifiées",
+      "dossiers_ouverts": "Dossiers ouverts"
+    },
+    "alertes_one": "{{count}} alerte",
+    "alertes_other": "{{count}} alertes",
+    "autres_alertes_one": "{{count}} autre alerte — les plus graves sont affichées en premier.",
+    "autres_alertes_other": "{{count}} autres alertes — les plus graves sont affichées en premier.",
+    "par_pays": "Par pays",
+    "colonnes": {
+      "enveloppe": "Enveloppe",
+      "engage": "Engagé",
+      "consomme": "Consommé",
+      "justifie": "Justifié",
+      "sans_preuve": "Sans preuve",
+      "disponible": "Disponible",
+      "execution": "Exécution"
+    },
+    "vide": {
+      "pays_titre": "Aucune enveloppe sur la période",
+      "pays_indication": "Attribuez une enveloppe depuis la page Budgets pour suivre la consommation."
+    },
+    "choisir_pays": "Choisissez un pays pour afficher sa répartition par mois, équipe, manager, projet, catégorie et intitulé.",
+    "repartition": {
+      "titre": "Répartition",
+      "par_mois": "Par mois",
+      "par_equipe": "Par équipe",
+      "par_manager": "Par manager",
+      "par_projet": "Par projet",
+      "par_categorie": "Par catégorie",
+      "par_intitule": "Par intitulé",
+      "colonnes": {
+        "libelle": "Libellé",
+        "lignes": "Lignes",
+        "depenses": "Dépenses",
+        "justifie": "Justifié",
+        "ecart": "Écart"
+      },
+      "vide_titre": "Aucune dépense sur la période",
+      "vide_indication": "Changez d'année ou de pays pour voir une répartition."
+    }
+  },
+  "pays": {
+    "statut": {
+      "actif": "Actif",
+      "inactif": "Inactif",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "liste": {
+      "titre": "Gestion des pays",
+      "description": "Définissez la devise, le fuseau horaire et les rattachements de chaque pays.",
+      "chargement_impossible": "Impossible de charger les pays",
+      "statut_impossible": "Changement de statut impossible",
+      "nom_singulier": "pays",
+      "nom_pluriel": "pays",
+      "modifier_titre": "Modifier {{nom}}",
+      "modifier_aria": "Modifier {{nom}}",
+      "rechercher_placeholder": "Rechercher un pays…",
+      "rechercher_aria": "Rechercher un pays",
+      "filtrer_statut": "Filtrer par statut",
+      "filtre_actifs": "Actifs",
+      "filtre_inactifs": "Inactifs",
+      "vide_titre": "Aucun pays trouvé",
+      "vide_indice_gestion": "Ajoutez un pays depuis la liste des codes ISO d'Afrique.",
+      "vide_indice": "Aucun pays ne correspond à ces filtres.",
+      "reactiver": "Réactiver"
+    },
+    "formulaire": {
+      "titre_ajout": "Ajouter un pays",
+      "description": "Choisissez le pays, puis sa devise et son fuseau horaire.",
+      "liste_indisponible": "Liste des pays indisponible",
+      "choix_requis": "Choisissez un pays dans la liste.",
+      "choisir": "Choisir un pays…",
+      "note_afrique": "La plateforme suit les filiales africaines du groupe. Les pays déjà enregistrés n'apparaissent pas dans cette liste.",
+      "code_iso": "Code ISO",
+      "devise_iso": "Devise (ISO 4217)",
+      "symbole": "Symbole",
+      "actif_label": "Pays actif",
+      "actif_aide": "Désactivé, le pays reste consultable mais n'apparaît plus dans les listes actives."
+    },
+    "fiche": {
+      "chargement": "Chargement du pays…",
+      "chargement_impossible": "Impossible de charger le pays",
+      "actualisation": "Actualisation",
+      "introuvable_titre": "Pays introuvable",
+      "introuvable_texte": "Ce pays n'existe pas ou n'est pas dans votre périmètre.",
+      "retour": "Retour aux pays",
+      "budget": "Budget",
+      "budget_devise": "Budget ({{devise}})",
+      "budget_nombre": "Le budget doit être un nombre.",
+      "equipes": "Équipes",
+      "centres_couts": "Centres de coûts",
+      "projets": "Projets",
+      "intitules_depenses": "Intitulés de dépenses",
+      "categories_marketing": "Catégories marketing",
+      "beneficiaires": "Bénéficiaires",
+      "historique": "Historique",
+      "managers": "Manager(s)"
+    },
+    "equipes": {
+      "description": "Équipes rattachées à ce pays.",
+      "nom_placeholder": "Équipe commerciale"
+    },
+    "centres_couts": {
+      "code_placeholder": "CC01",
+      "libelle_placeholder": "Centre Paris"
+    },
+    "projets": {
+      "nom_placeholder": "Projet 2026",
+      "budget_placeholder": "0"
+    },
+    "depenses": {
+      "intitule_placeholder": "Frais de déplacement"
+    },
+    "marketing": {
+      "nom_placeholder": "Marketing digital"
+    },
+    "managers": {
+      "titre": "Manager(s)",
+      "description": "Responsables rattachés à ce pays.",
+      "fonction": "Fonction",
+      "retrait_impossible": "Retrait impossible",
+      "vide_titre": "Aucun manager rattaché",
+      "vide_indice_gestion": "Ajoutez un manager pour lui rattacher des dépenses et une sous-enveloppe.",
+      "vide_indice": "Le siège n'a rattaché aucun manager à ce pays.",
+      "modifier_aria": "Modifier {{nom}}",
+      "retirer_aria": "Retirer {{nom}} du pays",
+      "dialogue_modifier": "Modifier un manager",
+      "dialogue_ajouter": "Ajouter un manager",
+      "aide_modifier": "Mettez à jour les informations du manager.",
+      "aide_ajouter": "Créer le manager et le rattacher à ce pays.",
+      "nom_placeholder": "Jean Dupont",
+      "email_placeholder": "jean.dupont@exemple.fr",
+      "fonction_placeholder": "Responsable commercial"
+    },
+    "beneficiaires": {
+      "titre": "Prospects et bénéficiaires",
+      "description": "Qui reçoit l'argent, ou qui la dépense vise. La liste est propre au pays.",
+      "indisponibles": "Bénéficiaires indisponibles",
+      "nom_pluriel": "bénéficiaires",
+      "vide": "Aucun bénéficiaire. Ajoutez-en pour pouvoir les rattacher aux dépenses.",
+      "contact": "Contact",
+      "nom_placeholder": "Station Lomé",
+      "contact_placeholder": "Téléphone ou e-mail"
+    },
+    "historique": {
+      "indisponible": "Historique indisponible",
+      "nom_pluriel": "entrées",
+      "vide_titre": "Aucun historique",
+      "vide_texte": "Les changements de rattachement et de configuration apparaîtront ici.",
+      "par": "par {{nom}}",
+      "de": "de : {{valeur}}",
+      "vers": "vers : {{valeur}}",
+      "champs": "champs : {{liste}}"
+    },
+    "lignes": {
+      "vide": "Aucune entrée.",
+      "vide_indice": "Cliquez sur « {{action}} » pour créer la première entrée.",
+      "modifier_aria": "Modifier {{nom}}",
+      "dialogue_modifier": "Modifier — {{titre}}",
+      "dialogue_ajouter": "Ajouter — {{titre}}",
+      "champ_obligatoire": "Le champ « {{champ}} » est obligatoire.",
+      "facultatif": "(facultatif)"
+    }
+  },
+  "configuration": {
+    "titre": "Configuration",
+    "description": "Paramètres de la plateforme, comptes, pays et droits. Réservé aux administrateurs du siège.",
+    "onglets": {
+      "general": "Général",
+      "utilisateurs": "Utilisateurs",
+      "pays": "Pays",
+      "permissions": "Permissions",
+      "import": "Import"
+    },
+    "general": {
+      "parametres_titre": "Paramètres du serveur et du workflow",
+      "parametres_texte": "Les paramètres du serveur sont en lecture seule. La politique du workflow ci-dessous est modifiable par le siège et prend effet sans redémarrage.",
+      "application": "Application",
+      "developpement": "Développement",
+      "fuseau_serveur": "Fuseau du serveur",
+      "mode_debug": "Mode debug",
+      "active": "Activé",
+      "alertes": "Alertes",
+      "seuils_consommation": "Seuils de consommation",
+      "seuil_pourcent": "{{valeur}} %",
+      "depense_inhabituelle": "Dépense inhabituelle",
+      "depense_inhabituelle_valeur": "au-delà de {{facteur}} × la moyenne du pays",
+      "justificatifs": "Justificatifs",
+      "stockage": "Stockage",
+      "taille_max": "Taille maximale",
+      "taille_max_valeur": "{{taille}} Mo",
+      "formats": "Formats acceptés",
+      "budget_notifications": "Budget et notifications",
+      "devise_consolidation": "Devise de consolidation",
+      "envoi_emails": "Envoi d'e-mails",
+      "smtp_configure": "Serveur SMTP configuré",
+      "smtp_absent": "Aucun serveur — les messages partent dans les logs",
+      "expediteur": "Expéditeur"
+    },
+    "workflow": {
+      "titre": "Workflow",
+      "enregistree_titre": "Politique enregistrée",
+      "enregistree_texte": "Elle s'applique dès maintenant à toutes les dépenses.",
+      "controle_obligatoire": "Contrôle obligatoire avant justification",
+      "controle_obligatoire_aide": "Une dépense soumise doit d'abord passer « En contrôle ».",
+      "avertir_sans_piece": "Avertir sans justificatif",
+      "avertir_sans_piece_aide": "Signaler l'absence de pièce au moment de la soumission.",
+      "delai_alerte": "Délai d'alerte sans justification (jours)",
+      "facteur_inhabituel": "Facteur de dépense inhabituelle",
+      "seuils": "Seuils d'alerte en % (séparés par des virgules)",
+      "politique_defaut": "Politique de dépassement par défaut",
+      "enregistrer": "Enregistrer la politique",
+      "enregistrement": "Enregistrement…",
+      "corriger": "Corrigez les champs signalés.",
+      "jours_invalides": "Indiquez un nombre entier de jours, positif ou nul.",
+      "facteur_invalide": "Indiquez un facteur décimal strictement positif.",
+      "seuils_invalides": "Seuils invalides : {{valeurs}}. Indiquez des pourcentages entiers séparés par des virgules.",
+      "seuil_requis": "Indiquez au moins un seuil."
+    },
+    "permissions": {
+      "non_modifiables": "Droits non modifiables",
+      "droit": "Droit",
+      "siege": "siège",
+      "pays": "pays"
+    },
+    "utilisateurs": {
+      "titre": "Comptes",
+      "description": "Rôles et périmètres. Un compte du siège voit tous les pays ; un responsable pays ne voit que les siens.",
+      "creer": "Créer un compte",
+      "chargement_impossible": "Impossible de charger les comptes",
+      "statut_impossible": "Changement de statut impossible",
+      "perimetre": "Périmètre",
+      "vide_titre": "Aucun compte",
+      "vide_aide": "Créez les comptes des représentants pays.",
+      "mdp_provisoire": "mot de passe provisoire",
+      "soi_meme": "Un autre administrateur doit s'en charger.",
+      "modifier_aria": "Modifier {{nom}}",
+      "noun_singulier": "compte",
+      "noun_pluriel": "comptes",
+      "form": {
+        "titre_creer": "Créer un compte",
+        "titre_modifier": "Modifier le compte",
+        "description": "Le mot de passe défini ici est provisoire : son titulaire sera invité à le remplacer.",
+        "identifiant_exemple": "pays.innov",
+        "prenom": "Prénom",
+        "role_siege": "{{role}} — siège",
+        "role_pays": "{{role}} — pays",
+        "perimetre_legend": "Pays du périmètre",
+        "siege_aide": "Rôle du siège : accès à tous les pays, sans rattachement.",
+        "aucun_pays": "Aucun pays actif.",
+        "mot_de_passe": "Mot de passe",
+        "mot_de_passe_optionnel": "Mot de passe (laisser vide pour ne pas changer)",
+        "compte_actif": "Compte actif",
+        "role_requis": "Choisissez un rôle.",
+        "pays_requis": "Un rôle pays doit être rattaché à au moins un pays.",
+        "mdp_requis": "Un mot de passe provisoire est nécessaire à la création.",
+        "email_requis": "Une adresse e-mail est nécessaire.",
+        "email_aide": "Adresse @innovpharma.net : elle nomme le compte dans l'application d'authentification.",
+        "email_exemple": "prenom.nom@innovpharma.net"
+      },
+      "totp_active": "2FA active",
+      "totp_a_enroler": "2FA à enrôler",
+      "totp_reinitialiser": "Réinitialiser la 2FA",
+      "totp_reinitialiser_aria": "Réinitialiser la double authentification de {{nom}}",
+      "totp_reinit_titre": "Réinitialiser la double authentification de {{nom}}",
+      "totp_reinit_description": "Le compte perdra l'accès à la plateforme jusqu'à ce que son titulaire ait lié à nouveau son application d'authentification. L'action est inscrite au journal d'audit.",
+      "totp_reinit_impossible": "Réinitialisation impossible"
+    },
+    "pays": {
+      "titre": "Pays",
+      "description": "Identifiant fonctionnel, devise, fuseau horaire. Un pays ne se supprime pas : il se désactive, pour que son historique reste lisible.",
+      "chargement_impossible": "Impossible de charger les pays",
+      "statut_impossible": "Changement de statut impossible",
+      "noun_singulier": "pays",
+      "noun_pluriel": "pays",
+      "ajouter": "Ajouter un pays",
+      "modifier": "Modifier {{nom}}"
+    },
+    "taux": {
+      "titre": "Taux de change vers le XOF",
+      "description": "Un taux ne se modifie pas : publiez-en un nouveau, daté. Les montants déjà consolidés conservent le taux de leur date.",
+      "publier": "Publier un taux",
+      "indisponibles": "Taux indisponibles",
+      "noun": "taux",
+      "col_unite": "1 unité en XOF",
+      "vide_titre": "Aucun taux publié",
+      "vide_aide": "Les pays hors zone XOF ne seront pas consolidés tant qu'aucun taux n'existe.",
+      "en_vigueur": "en vigueur",
+      "historique": "historique",
+      "dialogue_description": "Combien de XOF vaut une unité de cette devise, et à partir de quand.",
+      "devise_iso": "Devise (ISO 4217)",
+      "devise_exemple": "MAD",
+      "valeur": "1 unité vaut (XOF)",
+      "valeur_exemple": "65,500000",
+      "publier_action": "Publier",
+      "devise_invalide": "Indiquez un code devise à trois lettres (ISO 4217).",
+      "taux_invalide": "Indiquez un taux décimal strictement positif."
+    },
+    "import": {
+      "titre": "Import de dépenses",
+      "description": "Ce qui entre par un classeur arrive en brouillon et suit ensuite le même circuit que les dépenses saisies. Simulez d'abord : rien n'est écrit tant que le classeur contient une erreur.",
+      "classeur": "Classeur Excel (.xlsx)",
+      "pays_colonne": "Selon la colonne PAYS du classeur",
+      "pays_aide": "Obligatoire pour un classeur sans colonne PAYS.",
+      "fichier": "Fichier",
+      "fichier_aide": "Export des dépenses ou classeur historique, au format .xlsx.",
+      "fichier_requis": "Choisissez un classeur .xlsx.",
+      "simulation": "Simulation (dry run)",
+      "simulation_aide": "Vérifie le classeur et compte ce qui serait créé, sans rien écrire.",
+      "simuler": "Simuler l'import",
+      "importer": "Importer",
+      "impossible": "Import impossible",
+      "resultat_simulation": "Résultat de la simulation",
+      "resultat_import": "Résultat de l'import",
+      "lignes_creees": "Lignes créées",
+      "equipes_creees": "Équipes créées",
+      "managers_crees": "Managers créés",
+      "rien_ecrit": "Un classeur en erreur n'est pas importé : corrigez les lignes signalées, puis recommencez.",
+      "ligne": "Ligne {{numero}}"
+    }
+  },
+  "audit": {
+    "titre": "Journal d'audit",
+    "description": "Qui a fait quoi, quand et depuis quelle adresse. Les entrées ne sont ni modifiables ni supprimables.",
+    "chargement_impossible": "Impossible de charger le journal",
+    "recherche_placeholder": "Utilisateur ou libellé…",
+    "recherche_aria": "Rechercher dans le journal",
+    "filtre_action_aria": "Filtrer par action",
+    "toutes_actions": "Toutes les actions",
+    "col_utilisateur": "Utilisateur",
+    "col_action": "Action",
+    "col_objet": "Objet",
+    "col_detail": "Détail",
+    "col_origine": "Origine",
+    "vide_titre": "Aucune entrée",
+    "vide_aide": "Le journal se remplit à mesure des actions.",
+    "detail_citation": "« {{texte}} »",
+    "detail_montant": "montant {{avant}} → {{apres}}",
+    "detail_empreinte": "empreinte {{empreinte}}…",
+    "noun_singulier": "entrée",
+    "noun_pluriel": "entrées"
+  },
+  "exports": {
+    "exporter": "Exporter",
+    "depenses": "Dépenses",
+    "rapprochement": "Rapprochement",
+    "rapport_pdf": "Rapport PDF",
+    "formats": {
+      "xlsx": "Excel (.xlsx)",
+      "csv": "CSV (.csv)",
+      "docx": "Word (.docx)"
+    },
+    "audit_note": "Chaque export est inscrit au journal d'audit.",
+    "periode_aria": "Période de l'export",
+    "exercice_entier": "Exercice entier",
+    "impossible": "Export impossible"
+  }
+}

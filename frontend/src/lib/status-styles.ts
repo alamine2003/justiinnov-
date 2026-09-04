@@ -72,4 +72,5 @@ export const ACTION_STYLE: Record<string, string> = {
   approved: SUCCES,
   rejected: DANGER,
   downloaded: ARCHIVE,
+  reopened: ATTENTE,
 }

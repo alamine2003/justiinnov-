@@ -9,6 +9,7 @@ import {
   onUnauthorized,
   readErrorMessage,
   readFieldErrors,
+  setApiLanguage,
   setToken,
 } from "./api"
 
@@ -153,5 +154,29 @@ describe("intercepteur de réponse", () => {
       status: 0,
       message: expect.stringContaining("injoignable"),
     })
+  })
+})
+
+describe("langue des requêtes", () => {
+  const adaptateurInitial = axios.defaults.adapter
+
+  afterEach(() => {
+    api.defaults.adapter = adaptateurInitial
+    setApiLanguage("fr")
+  })
+
+  it("envoie la langue de l'interface dans Accept-Language", async () => {
+    // Les libellés du serveur (`*_display`, alertes) suivent cet en-tête :
+    // sans lui, l'interface anglaise afficherait des statuts en français.
+    let recu: string | undefined
+    api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+      recu = config.headers["Accept-Language"] as string | undefined
+      return { status: 200, statusText: "", headers: {}, config, data: {} }
+    }
+
+    setApiLanguage("en")
+    await apiGet("/me/")
+
+    expect(recu).toBe("en")
   })
 })

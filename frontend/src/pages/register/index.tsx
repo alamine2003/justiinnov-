@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { AlertTriangle, FileWarning, Paperclip, Search } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,26 +25,20 @@ import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { useAuth } from "@/context/use-auth"
 import { fetchCountries } from "@/lib/countries"
 import { fetchRegister } from "@/lib/expenses"
+import { WORKFLOW_STATUSES, workflowLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import { WORKFLOW_LABELS, type WorkflowStatus } from "@/lib/types"
+import type { WorkflowStatus } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
-import {
-  cn,
-  formatAmount,
-  formatDateIn,
-  fromCountryLocalInput,
-  pluralize,
-} from "@/lib/utils"
-
-const STATUSES = Object.keys(WORKFLOW_LABELS) as WorkflowStatus[]
+import { cn, formatAmount, formatDateIn, fromCountryLocalInput } from "@/lib/utils"
 
 export function RegisterPage() {
+  const { t } = useTranslation()
   const { me } = useAuth()
   const [params, setParams] = useSearchParams()
 
   const statusParam = params.get("status") ?? ""
-  const statusFilter = (STATUSES as string[]).includes(statusParam)
+  const statusFilter = (WORKFLOW_STATUSES as string[]).includes(statusParam)
     ? (statusParam as WorkflowStatus)
     : ""
 
@@ -82,7 +77,7 @@ export function RegisterPage() {
       if (fin) requestParams.date__lte = fin
       return fetchRegister(requestParams, signal)
     },
-    { fallback: "Impossible de charger le registre" },
+    { fallback: t("registre.chargement_impossible") },
   )
 
   const entries = query.data?.results ?? []
@@ -104,41 +99,34 @@ export function RegisterPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Registre de justification"
-        description="Où est passé l'argent : chaque dépense avec sa date, son lieu, son bénéficiaire — et la pièce qui l'atteste."
-      />
+      <PageHeader title={t("registre.titre")} description={t("registre.description")} />
 
       {query.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
           <AlertDescription>{query.error}</AlertDescription>
         </Alert>
       )}
-      <TruncatedNotice page={countries.data} noun="pays" />
+      <TruncatedNotice page={countries.data} noun={t("dossiers.noms_pays")} />
 
       {withoutProof > 0 && (
         <Alert>
           <FileWarning className="h-4 w-4" />
-          <AlertTitle>
-            {pluralize(withoutProof, "dépense sans pièce", "dépenses sans pièce")} sur cette page
-          </AlertTitle>
-          <AlertDescription>
-            Un décaissement sans justificatif reste au débit du budget.
-          </AlertDescription>
+          <AlertTitle>{t("registre.sans_piece", { count: withoutProof })}</AlertTitle>
+          <AlertDescription>{t("registre.sans_piece_aide")}</AlertDescription>
         </Alert>
       )}
 
       <Card className="border-border/60 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold">Filtres</CardTitle>
+          <CardTitle className="text-sm font-semibold">{t("registre.filtres")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="grid gap-1.5">
               <Label htmlFor="reg-search" className="text-xs">
-                Recherche
+                {t("registre.recherche")}
               </Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -149,24 +137,24 @@ export function RegisterPage() {
                     setSearch(e.target.value)
                     setPage(1)
                   }}
-                  placeholder="Libellé, lieu, N°ORDRE…"
+                  placeholder={t("registre.recherche_placeholder")}
                   className="pl-9"
                 />
               </div>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="reg-status" className="text-xs">
-                Statut
+                {t("commun.statut")}
               </Label>
               <NativeSelect
                 id="reg-status"
                 value={statusFilter}
                 onChange={(e) => changeStatus(e.target.value)}
               >
-                <option value="">Tous</option>
-                {STATUSES.map((value) => (
+                <option value="">{t("commun.tous")}</option>
+                {WORKFLOW_STATUSES.map((value) => (
                   <option key={value} value={value}>
-                    {WORKFLOW_LABELS[value]}
+                    {workflowLabel(t, value)}
                   </option>
                 ))}
               </NativeSelect>
@@ -174,7 +162,7 @@ export function RegisterPage() {
             {me?.has_global_scope && (
               <div className="grid gap-1.5">
                 <Label htmlFor="reg-country" className="text-xs">
-                  Pays
+                  {t("commun.pays")}
                 </Label>
                 <NativeSelect
                   id="reg-country"
@@ -184,7 +172,7 @@ export function RegisterPage() {
                     setPage(1)
                   }}
                 >
-                  <option value="">Tous les pays</option>
+                  <option value="">{t("registre.tous_pays")}</option>
                   {(countries.data?.results ?? []).map((country) => (
                     <option key={country.id} value={country.id}>
                       {country.country_ref ? `${country.country_ref} — ` : ""}
@@ -196,7 +184,7 @@ export function RegisterPage() {
             )}
             <div className="grid gap-1.5">
               <Label htmlFor="reg-from" className="text-xs">
-                Du{timezone ? ` (heure ${timezone})` : ""}
+                {timezone ? t("registre.du_heure", { fuseau: timezone }) : t("registre.du")}
               </Label>
               <Input
                 id="reg-from"
@@ -210,7 +198,7 @@ export function RegisterPage() {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="reg-to" className="text-xs">
-                Au
+                {t("registre.au")}
               </Label>
               <Input
                 id="reg-to"
@@ -232,17 +220,17 @@ export function RegisterPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead scope="col">Date et heure (locale)</TableHead>
-                  <TableHead scope="col">N°ORDRE</TableHead>
-                  <TableHead scope="col">Dépense</TableHead>
-                  <TableHead scope="col">Lieu</TableHead>
-                  <TableHead scope="col">Bénéficiaire</TableHead>
-                  <TableHead scope="col">Équipe / Manager</TableHead>
-                  <TableHead scope="col" className="text-right">Montant</TableHead>
-                  <TableHead scope="col" className="text-right">Justifié</TableHead>
-                  <TableHead scope="col" className="text-right">Écart</TableHead>
-                  <TableHead scope="col">Preuve</TableHead>
-                  <TableHead scope="col">Statut</TableHead>
+                  <TableHead scope="col">{t("registre.colonnes.date_heure")}</TableHead>
+                  <TableHead scope="col">{t("champs.number")}</TableHead>
+                  <TableHead scope="col">{t("registre.colonnes.depense")}</TableHead>
+                  <TableHead scope="col">{t("champs.place")}</TableHead>
+                  <TableHead scope="col">{t("champs.beneficiary")}</TableHead>
+                  <TableHead scope="col">{t("registre.colonnes.equipe_manager")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("commun.montant")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("registre.colonnes.justifie")}</TableHead>
+                  <TableHead scope="col" className="text-right">{t("registre.colonnes.ecart")}</TableHead>
+                  <TableHead scope="col">{t("registre.colonnes.preuve")}</TableHead>
+                  <TableHead scope="col">{t("commun.statut")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -252,8 +240,8 @@ export function RegisterPage() {
                   <EmptyRow
                     colSpan={11}
                     icon={FileWarning}
-                    title="Aucune dépense sur ce périmètre"
-                    hint="Élargissez la période ou retirez un filtre."
+                    title={t("registre.vide.titre")}
+                    hint={t("registre.vide.aide")}
                   />
                 ) : (
                   entries.map((entry) => (
@@ -262,7 +250,7 @@ export function RegisterPage() {
                         {formatDateIn(entry.date, entry.country_timezone)}
                         <br />
                         <span className="opacity-70">
-                          heure locale · {entry.country_timezone}
+                          {t("registre.heure_locale", { fuseau: entry.country_timezone })}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -289,15 +277,15 @@ export function RegisterPage() {
                         </p>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {entry.place || "—"}
+                        {entry.place || t("commun.aucun")}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {entry.beneficiary_name ?? "—"}
+                        {entry.beneficiary_name ?? t("commun.aucun")}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {entry.team_name ?? "—"}
+                        {entry.team_name ?? t("commun.aucun")}
                         <br />
-                        {entry.owner_name || entry.created_by || "—"}
+                        {entry.owner_name || entry.created_by || t("commun.aucun")}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatAmount(entry.amount, entry.currency)}
@@ -321,16 +309,16 @@ export function RegisterPage() {
                         {entry.has_proof ? (
                           <div className="flex items-center gap-1 text-xs">
                             <Paperclip className="h-3 w-3 text-muted-foreground" aria-hidden />
-                            {pluralize(entry.proofs.length, "pièce")}
+                            {t("registre.pieces", { count: entry.proofs.length })}
                             {entry.proofs.some((p) => !p.is_complete) && (
                               <Badge variant="outline" className="ml-1 text-[10px]">
-                                incomplet
+                                {t("registre.incomplet")}
                               </Badge>
                             )}
                           </div>
                         ) : (
                           <Badge variant="outline" className="text-destructive">
-                            aucune
+                            {t("registre.aucune")}
                           </Badge>
                         )}
                       </TableCell>
@@ -348,7 +336,7 @@ export function RegisterPage() {
             page={page}
             count={count}
             onChange={setPage}
-            noun={["dépense", "dépenses"]}
+            noun={[t("depenses.nom_one"), t("depenses.nom_other")]}
           />
         </CardContent>
       </Card>

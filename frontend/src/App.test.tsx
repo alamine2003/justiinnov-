@@ -11,11 +11,13 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
     first_name: "",
     last_name: "",
     email: "",
-    role: "country_manager",
+    role: "dm",
     role_display: "Responsable pays",
     countries: [{ id: 1, name: "Togo", code: "TG", country_ref: "TG" }],
+    teams: [],
     has_global_scope: false,
     must_change_password: false,
+    totp_confirmed: true,
     workflow: { require_review_step: false },
     ...overrides,
     permissions: {
@@ -26,6 +28,8 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
       record_expenses: true,
       validate_expenses: false,
       view_audit: false,
+      export_data: false,
+      reopen_dossiers: false,
       ...overrides.permissions,
     },
   }
@@ -68,6 +72,9 @@ vi.mock("@/pages/dashboard", () => ({ DashboardPage: () => <h1>Pilotage</h1> }))
 vi.mock("@/pages/configuration", () => ({ ConfigurationPage: () => <h1>Configuration</h1> }))
 vi.mock("@/pages/audit/list", () => ({ AuditPage: () => <h1>Journal d'audit</h1> }))
 vi.mock("@/pages/password", () => ({ PasswordPage: () => <h1>Choisissez votre mot de passe</h1> }))
+vi.mock("@/pages/two-factor", () => ({
+  TwoFactorPage: () => <h1>Lier votre application d'authentification</h1>,
+}))
 
 function ouvrir(chemin: string) {
   return render(
@@ -115,6 +122,40 @@ describe("garde des routes", () => {
   it("renvoie l'écran de changement vers l'accueil une fois le mot de passe remplacé", async () => {
     me = profil({})
     ouvrir("/mot-de-passe")
+
+    expect(await screen.findByRole("heading", { name: "Pilotage" })).toBeInTheDocument()
+  })
+
+  it("n'ouvre que l'écran d'enrôlement tant que la double authentification n'est pas confirmée", async () => {
+    me = profil({ totp_confirmed: false })
+    ouvrir("/dossiers")
+
+    expect(
+      await screen.findByRole("heading", { name: "Lier votre application d'authentification" }),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/2fa"))
+  })
+
+  it("fait passer le mot de passe provisoire avant l'enrôlement", async () => {
+    // Le serveur refuse tout dans cet ordre : d'abord le mot de passe.
+    me = profil({ must_change_password: true, totp_confirmed: false })
+    ouvrir("/2fa")
+
+    expect(
+      await screen.findByRole("heading", { name: "Choisissez votre mot de passe" }),
+    ).toBeInTheDocument()
+  })
+
+  it("renvoie l'écran d'enrôlement vers l'accueil une fois la 2FA confirmée", async () => {
+    me = profil({ totp_confirmed: true })
+    ouvrir("/2fa")
+
+    expect(await screen.findByRole("heading", { name: "Pilotage" })).toBeInTheDocument()
+  })
+
+  it("laisse entrer un profil d'un serveur qui ne connaît pas encore la 2FA", async () => {
+    me = profil({ totp_confirmed: undefined })
+    ouvrir("/")
 
     expect(await screen.findByRole("heading", { name: "Pilotage" })).toBeInTheDocument()
   })

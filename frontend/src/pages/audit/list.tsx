@@ -1,5 +1,7 @@
 import { useState } from "react"
 import { AlertTriangle, ScrollText, Search } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -17,33 +19,39 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { fetchAudit } from "@/lib/expenses"
+import { AUDIT_ACTIONS, auditActionLabel } from "@/lib/labels"
 import { ACTION_STYLE } from "@/lib/status-styles"
-import { AUDIT_ACTION_LABELS, type AuditEntry } from "@/lib/types"
+import { type AuditEntry } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
 import { formatDate } from "@/lib/utils"
 
 /** Résume le détail JSON d'une entrée en une phrase lisible. */
-function summarize(entry: AuditEntry): string {
+function summarize(t: TFunction, entry: AuditEntry): string {
   const detail = entry.detail ?? {}
   const parts: string[] = []
   if (typeof detail.from_status === "string" && typeof detail.to_status === "string") {
     parts.push(`${detail.from_status} → ${detail.to_status}`)
   }
-  if (typeof detail.note === "string" && detail.note) parts.push(`« ${detail.note} »`)
-  if (typeof detail.reason === "string" && detail.reason) parts.push(`« ${detail.reason} »`)
+  if (typeof detail.note === "string" && detail.note) {
+    parts.push(t("audit.detail_citation", { texte: detail.note }))
+  }
+  if (typeof detail.reason === "string" && detail.reason) {
+    parts.push(t("audit.detail_citation", { texte: detail.reason }))
+  }
   const before = detail.before as Record<string, string> | undefined
   const after = detail.after as Record<string, string> | undefined
   if (before && after && before.amount !== after.amount) {
-    parts.push(`montant ${before.amount} → ${after.amount}`)
+    parts.push(t("audit.detail_montant", { avant: before.amount, apres: after.amount }))
   }
   if (typeof detail.sha256 === "string") {
-    parts.push(`empreinte ${detail.sha256.slice(0, 12)}…`)
+    parts.push(t("audit.detail_empreinte", { empreinte: detail.sha256.slice(0, 12) }))
   }
   return parts.join(" · ")
 }
 
 export function AuditPage() {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
@@ -61,7 +69,7 @@ export function AuditPage() {
       if (actionFilter) params.action = actionFilter
       return fetchAudit(params, signal)
     },
-    { fallback: "Impossible de charger le journal" },
+    { fallback: t("audit.chargement_impossible") },
   )
   const entries = query.data?.results ?? []
   const count = query.data?.count ?? 0
@@ -69,14 +77,14 @@ export function AuditPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Journal d'audit"
-        description="Qui a fait quoi, quand et depuis quelle adresse. Les entrées ne sont ni modifiables ni supprimables."
+        title={t("audit.titre")}
+        description={t("audit.description")}
       />
 
       {query.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
+          <AlertTitle>{t("commun.erreur")}</AlertTitle>
           <AlertDescription>{query.error}</AlertDescription>
         </Alert>
       )}
@@ -90,8 +98,8 @@ export function AuditPage() {
               setSearch(e.target.value)
               setPage(1)
             }}
-            placeholder="Utilisateur ou libellé…"
-            aria-label="Rechercher dans le journal"
+            placeholder={t("audit.recherche_placeholder")}
+            aria-label={t("audit.recherche_aria")}
             className="pl-9"
           />
         </div>
@@ -102,12 +110,12 @@ export function AuditPage() {
             setPage(1)
           }}
           className="sm:max-w-[16rem]"
-          aria-label="Filtrer par action"
+          aria-label={t("audit.filtre_action_aria")}
         >
-          <option value="">Toutes les actions</option>
-          {Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
+          <option value="">{t("audit.toutes_actions")}</option>
+          {AUDIT_ACTIONS.map((action) => (
+            <option key={action} value={action}>
+              {auditActionLabel(t, action)}
             </option>
           ))}
         </NativeSelect>
@@ -119,12 +127,12 @@ export function AuditPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead scope="col">Date</TableHead>
-                  <TableHead scope="col">Utilisateur</TableHead>
-                  <TableHead scope="col">Action</TableHead>
-                  <TableHead scope="col">Objet</TableHead>
-                  <TableHead scope="col">Détail</TableHead>
-                  <TableHead scope="col">Origine</TableHead>
+                  <TableHead scope="col">{t("commun.date")}</TableHead>
+                  <TableHead scope="col">{t("audit.col_utilisateur")}</TableHead>
+                  <TableHead scope="col">{t("audit.col_action")}</TableHead>
+                  <TableHead scope="col">{t("audit.col_objet")}</TableHead>
+                  <TableHead scope="col">{t("audit.col_detail")}</TableHead>
+                  <TableHead scope="col">{t("audit.col_origine")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -134,8 +142,8 @@ export function AuditPage() {
                   <EmptyRow
                     colSpan={6}
                     icon={ScrollText}
-                    title="Aucune entrée"
-                    hint="Le journal se remplit à mesure des actions."
+                    title={t("audit.vide_titre")}
+                    hint={t("audit.vide_aide")}
                   />
                 ) : (
                   entries.map((entry) => (
@@ -143,7 +151,9 @@ export function AuditPage() {
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                         {formatDate(entry.created_at)}
                       </TableCell>
-                      <TableCell className="font-medium">{entry.user || "—"}</TableCell>
+                      <TableCell className="font-medium">
+                        {entry.user || t("commun.aucun")}
+                      </TableCell>
                       <TableCell>
                         <Badge className={ACTION_STYLE[entry.action] ?? "bg-secondary"}>
                           {entry.action_display}
@@ -157,10 +167,10 @@ export function AuditPage() {
                         </p>
                       </TableCell>
                       <TableCell className="max-w-sm text-xs text-muted-foreground">
-                        {summarize(entry)}
+                        {summarize(t, entry)}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
-                        {entry.ip_address ?? "—"}
+                        {entry.ip_address ?? t("commun.aucun")}
                       </TableCell>
                     </TableRow>
                   ))
@@ -173,7 +183,7 @@ export function AuditPage() {
             page={page}
             count={count}
             onChange={setPage}
-            noun={["entrée", "entrées"]}
+            noun={[t("audit.noun_singulier"), t("audit.noun_pluriel")]}
           />
         </CardContent>
       </Card>

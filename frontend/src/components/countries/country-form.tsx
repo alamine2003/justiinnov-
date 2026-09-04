@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Loader2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -61,6 +62,7 @@ function CountryFormBody({
   initial,
   title,
 }: Omit<CountryFormProps, "open">) {
+  const { t } = useTranslation()
   const [values, setValues] = useState<CountryFormValues>(initial ?? DEFAULTS)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -69,7 +71,7 @@ function CountryFormBody({
   // Chargée à l'ouverture seulement : la liste change dès qu'un pays est créé.
   const disponibles = useQuery("countries:disponibles", () => fetchAvailableCountries(), {
     enabled: creation,
-    fallback: "Liste des pays indisponible",
+    fallback: t("pays.formulaire.liste_indisponible"),
   })
 
   const setField = (field: keyof CountryFormValues, value: unknown) => {
@@ -79,7 +81,7 @@ function CountryFormBody({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (creation && !values.code) {
-      setError("Choisissez un pays dans la liste.")
+      setError(t("pays.formulaire.choix_requis"))
       return
     }
     setSaving(true)
@@ -88,7 +90,7 @@ function CountryFormBody({
       await onSave(values)
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible")
+      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -97,16 +99,14 @@ function CountryFormBody({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{title ?? "Ajouter un pays"}</DialogTitle>
-        <DialogDescription>
-          Choisissez le pays, puis sa devise et son fuseau horaire.
-        </DialogDescription>
+        <DialogTitle>{title ?? t("pays.formulaire.titre_ajout")}</DialogTitle>
+        <DialogDescription>{t("pays.formulaire.description")}</DialogDescription>
       </DialogHeader>
       <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
         <FormError>{error ?? disponibles.error}</FormError>
         {creation ? (
           <div className="grid gap-2">
-            <Label htmlFor="pays">Pays</Label>
+            <Label htmlFor="pays">{t("commun.pays")}</Label>
             <NativeSelect
               id="pays"
               value={values.code}
@@ -122,7 +122,7 @@ function CountryFormBody({
               required
             >
               <option value="">
-                {disponibles.loading ? "Chargement…" : "Choisir un pays…"}
+                {disponibles.loading ? t("commun.chargement") : t("pays.formulaire.choisir")}
               </option>
               {(disponibles.data ?? []).map((pays) => (
                 <option key={pays.code} value={pays.code}>
@@ -130,15 +130,12 @@ function CountryFormBody({
                 </option>
               ))}
             </NativeSelect>
-            <p className="text-xs text-muted-foreground">
-              La plateforme suit les filiales africaines du groupe. Les pays
-              déjà enregistrés n'apparaissent pas dans cette liste.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("pays.formulaire.note_afrique")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Nom</Label>
+              <Label htmlFor="name">{t("champs.name")}</Label>
               <Input
                 id="name"
                 value={values.name}
@@ -147,7 +144,7 @@ function CountryFormBody({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="code">Code ISO</Label>
+              <Label htmlFor="code">{t("pays.formulaire.code_iso")}</Label>
               <Input
                 id="code"
                 value={values.code}
@@ -160,7 +157,7 @@ function CountryFormBody({
         )}
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="currency">Devise (ISO 4217)</Label>
+            <Label htmlFor="currency">{t("pays.formulaire.devise_iso")}</Label>
             <Input
               id="currency"
               value={values.currency}
@@ -171,7 +168,7 @@ function CountryFormBody({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="currency_symbol">Symbole</Label>
+            <Label htmlFor="currency_symbol">{t("pays.formulaire.symbole")}</Label>
             <Input
               id="currency_symbol"
               value={values.currency_symbol}
@@ -182,7 +179,7 @@ function CountryFormBody({
           </div>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="timezone">Fuseau horaire</Label>
+          <Label htmlFor="timezone">{t("champs.timezone")}</Label>
           <Input
             id="timezone"
             value={values.timezone}
@@ -193,10 +190,10 @@ function CountryFormBody({
         </div>
         <div className="flex items-center justify-between rounded-lg border p-3">
           <div>
-            <Label htmlFor="country-active" className="text-sm font-medium">Pays actif</Label>
-            <p className="text-xs text-muted-foreground">
-              Désactivé, le pays reste consultable mais n'apparaît plus dans les listes actives.
-            </p>
+            <Label htmlFor="country-active" className="text-sm font-medium">
+              {t("pays.formulaire.actif_label")}
+            </Label>
+            <p className="text-xs text-muted-foreground">{t("pays.formulaire.actif_aide")}</p>
           </div>
           <Switch
             id="country-active"
@@ -206,11 +203,11 @@ function CountryFormBody({
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Annuler
+            {t("commun.annuler")}
           </Button>
           <Button type="submit" disabled={saving}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Enregistrer
+            {t("commun.enregistrer")}
           </Button>
         </DialogFooter>
       </form>

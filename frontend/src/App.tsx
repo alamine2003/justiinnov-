@@ -1,6 +1,7 @@
 import { Suspense, lazy, type ReactNode } from "react"
 import { Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { Loader2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { AppLayout } from "@/components/layout/app-layout"
 import { ErrorBoundary } from "@/components/ui/error-boundary"
 import { useAuth } from "@/context/use-auth"
@@ -19,12 +20,14 @@ const CountryDetailPage = lazy(() => import("@/pages/countries/detail").then((m)
 const AuditPage = lazy(() => import("@/pages/audit/list").then((m) => ({ default: m.AuditPage })))
 const ConfigurationPage = lazy(() => import("@/pages/configuration").then((m) => ({ default: m.ConfigurationPage })))
 const PasswordPage = lazy(() => import("@/pages/password").then((m) => ({ default: m.PasswordPage })))
+const TwoFactorPage = lazy(() => import("@/pages/two-factor").then((m) => ({ default: m.TwoFactorPage })))
 
 export function FullPageLoader() {
+  const { t } = useTranslation()
   return (
     <div className="flex min-h-screen items-center justify-center" aria-busy="true">
       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      <span className="sr-only">Chargement…</span>
+      <span className="sr-only">{t("commun.chargement")}</span>
     </div>
   )
 }
@@ -32,7 +35,11 @@ export function FullPageLoader() {
 /** Chemin de l'écran de remplacement du mot de passe provisoire. */
 export const PASSWORD_PATH = "/mot-de-passe"
 
+/** Chemin de l'écran d'enrôlement de la double authentification. */
+export const TOTP_PATH = "/2fa"
+
 function Protected({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
   const { isAuthenticated, me, loadingProfile, profileError, refreshProfile } = useAuth()
   const location = useLocation()
 
@@ -49,7 +56,7 @@ function Protected({ children }: { children: ReactNode }) {
             className="underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => void refreshProfile().catch(() => {})}
           >
-            Réessayer
+            {t("commun.reessayer")}
           </button>
         </div>
       </div>
@@ -63,6 +70,11 @@ function Protected({ children }: { children: ReactNode }) {
   // serveur refuse tout le reste, chaque page serait un mur d'erreurs.
   if (me.must_change_password && location.pathname !== PASSWORD_PATH) {
     return <Navigate to={PASSWORD_PATH} replace />
+  }
+  // Puis, mot de passe remplacé, la double authentification : même
+  // fermeture tant que l'application d'authentification n'est pas liée.
+  if (!me.must_change_password && me.totp_confirmed === false && location.pathname !== TOTP_PATH) {
+    return <Navigate to={TOTP_PATH} replace />
   }
   return <>{children}</>
 }
@@ -79,13 +91,14 @@ function RequirePermission({
   permission: keyof Permissions
   children: ReactNode
 }) {
+  const { t } = useTranslation()
   const { can } = useAuth()
   if (!can(permission)) {
     return (
       <Navigate
         to="/"
         replace
-        state={{ notice: "Page réservée au siège : vous avez été ramené au tableau de bord." }}
+        state={{ notice: t("nav.reservee_siege") }}
       />
     )
   }
@@ -98,6 +111,14 @@ function PasswordRoute() {
     return <Navigate to="/" replace />
   }
   return <PasswordPage />
+}
+
+function TwoFactorRoute() {
+  const { me } = useAuth()
+  if (!me || me.totp_confirmed !== false) {
+    return <Navigate to="/" replace />
+  }
+  return <TwoFactorPage />
 }
 
 export default function App() {
@@ -115,6 +136,7 @@ export default function App() {
           }
         >
           <Route path={PASSWORD_PATH} element={<PasswordRoute />} />
+          <Route path={TOTP_PATH} element={<TwoFactorRoute />} />
           <Route path="/countries" element={<CountriesPage />} />
           <Route path="/countries/:id" element={<CountryDetailPage />} />
           <Route path="/budgets" element={<BudgetsPage />} />

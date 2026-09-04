@@ -9,7 +9,8 @@ export interface AuthContextValue {
   loadingProfile: boolean
   /** Échec de lecture du profil qui n'est pas une perte de session (panne, 502). */
   profileError: string | null
-  login: (username: string, password: string) => Promise<void>
+  /** `code` : code de double authentification, exigé une fois l'enrôlement confirmé. */
+  login: (username: string, password: string, code?: string) => Promise<void>
   logout: () => Promise<void>
   refreshProfile: () => Promise<void>
   /** Remplace le jeton de session, après un changement de mot de passe. */

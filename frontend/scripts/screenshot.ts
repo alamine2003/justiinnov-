@@ -4,8 +4,8 @@
  * Les identifiants ne sont jamais codés en dur — ils viennent de
  * l'environnement :
  *
- *   SHOT_HQ_USER=admin.innov SHOT_HQ_PASSWORD=… \
- *   SHOT_COUNTRY_USER=togo.innov SHOT_COUNTRY_PASSWORD=… \
+ *   SHOT_HQ_USER=admin.innov SHOT_HQ_PASSWORD=… SHOT_HQ_TOTP_SECRET=… \
+ *   SHOT_COUNTRY_USER=togo.innov SHOT_COUNTRY_PASSWORD=… SHOT_COUNTRY_TOTP_SECRET=… \
  *   npx tsx scripts/screenshot.ts
  *
  * Le script échoue (code de sortie 1) sur toute erreur de console et sur
@@ -13,20 +13,10 @@
  * périmètre, une redirection absente, un titre qui manque.
  */
 import { chromium, type Browser, type Page } from "playwright"
+import { credentials, signIn } from "./login.ts"
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:5173"
 const OUT = process.env.SHOT_OUT ?? "/tmp"
-
-function credentials(prefix: string) {
-  const user = process.env[`SHOT_${prefix}_USER`]
-  const password = process.env[`SHOT_${prefix}_PASSWORD`]
-  if (!user || !password) {
-    throw new Error(
-      `SHOT_${prefix}_USER et SHOT_${prefix}_PASSWORD doivent être définis.`,
-    )
-  }
-  return { user, password }
-}
 
 const errors: string[] = []
 const failures: string[] = []
@@ -42,7 +32,9 @@ function expect(condition: boolean, message: string) {
 }
 
 async function newPage(browser: Browser, viewport = { width: 1440, height: 900 }) {
-  const page = await browser.newPage({ viewport })
+  // Le navigateur de Playwright se présente en anglais ; l'interface suivrait
+  // cette langue et les attentes ci-dessous, écrites en français, échoueraient.
+  const page = await browser.newPage({ viewport, locale: "fr-FR" })
   page.on("console", (m) => {
     if (m.type() === "error") errors.push(`[console] ${m.text()}`)
   })
@@ -51,16 +43,10 @@ async function newPage(browser: Browser, viewport = { width: 1440, height: 900 }
 }
 
 async function login(page: Page, prefix: string) {
-  const { user, password } = credentials(prefix)
-  await page.goto(`${BASE}/login`, { waitUntil: "networkidle" })
-  await page.fill("#username", user)
-  await page.fill("#password", password)
-  await page.click("button[type=submit]")
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
-    timeout: 15000,
-  })
+  const account = credentials(prefix)
+  await signIn(page, BASE, account)
   await page.waitForTimeout(1500)
-  return user
+  return account.user
 }
 
 async function shot(page: Page, name: string) {
@@ -95,6 +81,30 @@ async function main() {
   await hq.waitForTimeout(1200)
   expect((await hq.getByRole("tab").count()) >= 6, "la répartition d'un pays propose ses onglets")
   await shot(hq, "pilotage_pays")
+
+  // Le sélecteur de langue est un groupe radio, comme celui du thème.
+  await hq.getByRole("button", { name: "Langue de l'interface" }).click()
+  const menuLangue = hq.getByRole("menu")
+  await menuLangue.waitFor({ state: "visible" })
+  await hq.waitForTimeout(300)
+  expect(
+    (await hq.getByRole("menuitemradio", { name: "English" }).count()) === 1,
+    "le sélecteur de langue propose l'anglais",
+  )
+  await hq.getByRole("menuitemradio", { name: "English" }).click()
+  await menuLangue.waitFor({ state: "hidden" })
+  await hq.waitForTimeout(1200)
+  const navAnglaise = await hq.locator("nav[aria-label='Main navigation'] a").allTextContents()
+  expect(navAnglaise.some((t) => t.includes("Settings")), "l'interface passe en anglais")
+  expect((await hq.getAttribute("html", "lang")) === "en", "<html lang> suit la langue")
+  await shot(hq, "pilotage_en")
+  await hq.getByRole("button", { name: "Interface language" }).click()
+  await menuLangue.waitFor({ state: "visible" })
+  await hq.waitForTimeout(300)
+  await hq.getByRole("menuitemradio", { name: "Français" }).click()
+  await menuLangue.waitFor({ state: "hidden" })
+  await hq.waitForTimeout(1200)
+  expect((await hq.getAttribute("html", "lang")) === "fr", "le retour au français est appliqué")
 
   await hq.locator('button[aria-label^="Notifications"]').click()
   await hq.waitForTimeout(900)

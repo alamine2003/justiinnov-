@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { KeyRound, Loader2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,6 +23,7 @@ import { changePassword } from "@/lib/accounts"
  * vers l'application.
  */
 export function PasswordNotice() {
+  const { t } = useTranslation()
   const { me, refreshProfile, replaceToken } = useAuth()
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
@@ -36,7 +38,7 @@ export function PasswordNotice() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (next !== confirmation) {
-      setError("Les deux saisies ne correspondent pas.")
+      setError(t("auth.mdp.non_identiques"))
       return
     }
     setSaving(true)
@@ -48,7 +50,7 @@ export function PasswordNotice() {
       if (token) replaceToken(token)
       await refreshProfile()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Changement impossible")
+      setError(err instanceof Error ? err.message : t("auth.mdp.changement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -58,27 +60,20 @@ export function PasswordNotice() {
     <div className="mx-auto max-w-lg space-y-6">
       <Alert className="border-statut-attente/40 bg-statut-attente/10">
         <KeyRound className="h-4 w-4" />
-        <AlertTitle>Mot de passe à remplacer</AlertTitle>
-        <AlertDescription>
-          Votre mot de passe a été défini par le siège : il a circulé, et tant
-          qu'il n'est pas remplacé vos actions ne vous engagent pas. La
-          plateforme reste fermée jusque-là.
-        </AlertDescription>
+        <AlertTitle>{t("auth.mdp.a_remplacer_titre")}</AlertTitle>
+        <AlertDescription>{t("auth.mdp.a_remplacer_texte")}</AlertDescription>
       </Alert>
 
       <Card className="border-border/60 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Choisissez votre mot de passe</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Au moins 10 caractères, ni trop courant ni uniquement numérique. Il
-            ne doit être connu que de vous.
-          </p>
+          <CardTitle className="text-sm font-semibold">{t("auth.mdp.choisir")}</CardTitle>
+          <p className="text-xs text-muted-foreground">{t("auth.mdp.regles")}</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="grid gap-4">
             <FormError>{error}</FormError>
             <div className="grid gap-2">
-              <Label htmlFor="pwd-current">Mot de passe actuel</Label>
+              <Label htmlFor="pwd-current">{t("auth.mdp.actuel")}</Label>
               <Input
                 id="pwd-current"
                 type="password"
@@ -89,7 +84,7 @@ export function PasswordNotice() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pwd-new">Nouveau mot de passe</Label>
+              <Label htmlFor="pwd-new">{t("auth.mdp.nouveau")}</Label>
               <Input
                 id="pwd-new"
                 type="password"
@@ -100,7 +95,7 @@ export function PasswordNotice() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pwd-confirm">Confirmation</Label>
+              <Label htmlFor="pwd-confirm">{t("auth.mdp.confirmation")}</Label>
               <Input
                 id="pwd-confirm"
                 type="password"
@@ -113,7 +108,7 @@ export function PasswordNotice() {
             <div className="flex justify-end">
               <Button type="submit" disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Enregistrer
+                {t("commun.enregistrer")}
               </Button>
             </div>
           </form>

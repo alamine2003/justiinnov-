@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom"
 import { Globe, Pencil, Plus, Search } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,11 +18,7 @@ import type { CountrySummary } from "@/lib/types"
 
 type StatusFilter = "all" | "active" | "inactive"
 
-const FILTER_LABELS: Record<StatusFilter, string> = {
-  all: "Tous",
-  active: "Actifs",
-  inactive: "Inactifs",
-}
+const STATUS_FILTERS: StatusFilter[] = ["all", "active", "inactive"]
 
 interface CountryTableProps {
   countries: CountrySummary[]
@@ -52,8 +49,15 @@ export function CountryTable({
   canManage,
   togglingId = null,
 }: CountryTableProps) {
+  const { t } = useTranslation()
   // La colonne « Actions » n'existe que si le rôle peut agir.
   const columnCount = 7 + (canManage ? 1 : 0)
+
+  const filterLabels: Record<StatusFilter, string> = {
+    all: t("commun.tous"),
+    active: t("pays.liste.filtre_actifs"),
+    inactive: t("pays.liste.filtre_inactifs"),
+  }
 
   return (
     <div className="space-y-4">
@@ -63,15 +67,15 @@ export function CountryTable({
           <Input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Rechercher un pays…"
-            aria-label="Rechercher un pays"
+            placeholder={t("pays.liste.rechercher_placeholder")}
+            aria-label={t("pays.liste.rechercher_aria")}
             className="pl-9"
           />
         </div>
         <div className="flex items-center gap-2">
           <fieldset className="inline-flex rounded-lg border border-border/60 bg-muted/60 p-0.5 shadow-inner shadow-black/5">
-            <legend className="sr-only">Filtrer par statut</legend>
-            {(["all", "active", "inactive"] as const).map((status) => (
+            <legend className="sr-only">{t("pays.liste.filtrer_statut")}</legend>
+            {STATUS_FILTERS.map((status) => (
               <Button
                 key={status}
                 variant="ghost"
@@ -84,14 +88,14 @@ export function CountryTable({
                 }
                 onClick={() => onFilterStatus(status)}
               >
-                {FILTER_LABELS[status]}
+                {filterLabels[status]}
               </Button>
             ))}
           </fieldset>
           {canManage && (
             <Button onClick={onAdd}>
               <Plus className="mr-2 h-4 w-4" aria-hidden />
-              Ajouter
+              {t("commun.ajouter")}
             </Button>
           )}
         </div>
@@ -101,14 +105,16 @@ export function CountryTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead scope="col">Pays</TableHead>
-              <TableHead scope="col">Devise</TableHead>
-              <TableHead scope="col">Fuseau horaire</TableHead>
-              <TableHead scope="col" className="text-center">Équipes</TableHead>
-              <TableHead scope="col" className="text-center">Centres de coûts</TableHead>
-              <TableHead scope="col" className="text-center">Projets</TableHead>
-              <TableHead scope="col">Statut</TableHead>
-              {canManage && <TableHead scope="col" className="text-right">Actions</TableHead>}
+              <TableHead scope="col">{t("commun.pays")}</TableHead>
+              <TableHead scope="col">{t("commun.devise")}</TableHead>
+              <TableHead scope="col">{t("champs.timezone")}</TableHead>
+              <TableHead scope="col" className="text-center">{t("pays.fiche.equipes")}</TableHead>
+              <TableHead scope="col" className="text-center">{t("pays.fiche.centres_couts")}</TableHead>
+              <TableHead scope="col" className="text-center">{t("pays.fiche.projets")}</TableHead>
+              <TableHead scope="col">{t("commun.statut")}</TableHead>
+              {canManage && (
+                <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -118,11 +124,11 @@ export function CountryTable({
               <EmptyRow
                 colSpan={columnCount}
                 icon={Globe}
-                title="Aucun pays trouvé"
+                title={t("pays.liste.vide_titre")}
                 hint={
                   canManage
-                    ? "Ajoutez un pays depuis la liste des codes ISO d'Afrique."
-                    : "Aucun pays ne correspond à ces filtres."
+                    ? t("pays.liste.vide_indice_gestion")
+                    : t("pays.liste.vide_indice")
                 }
               />
             ) : (
@@ -161,9 +167,9 @@ export function CountryTable({
                   <TableCell className="text-center">{country.project_count}</TableCell>
                   <TableCell>
                     {country.is_active ? (
-                      <Badge className={STATUS_TONES.SUCCES}>Actif</Badge>
+                      <Badge className={STATUS_TONES.SUCCES}>{t("pays.statut.actif")}</Badge>
                     ) : (
-                      <Badge variant="secondary">Inactif</Badge>
+                      <Badge variant="secondary">{t("pays.statut.inactif")}</Badge>
                     )}
                   </TableCell>
                   {canManage && (
@@ -172,7 +178,7 @@ export function CountryTable({
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={`Modifier ${country.name}`}
+                          aria-label={t("pays.liste.modifier_aria", { nom: country.name })}
                           onClick={() => onEdit(country)}
                         >
                           <Pencil className="h-4 w-4" />
@@ -184,7 +190,9 @@ export function CountryTable({
                           disabled={togglingId === country.id}
                           onClick={() => onToggle(country)}
                         >
-                          {country.is_active ? "Désactiver" : "Réactiver"}
+                          {country.is_active
+                            ? t("commun.desactiver")
+                            : t("pays.liste.reactiver")}
                         </Button>
                       </div>
                     </TableCell>

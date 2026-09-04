@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react"
 import { Inbox, Loader2, Pencil, Plus } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -25,12 +26,14 @@ import {
 
 export interface ColumnDef<T> {
   key: keyof T | string
+  /** En-tête déjà traduit par l'appelant. */
   header: string
   render?: (item: T) => ReactNode
 }
 
 export interface FormField {
   key: string
+  /** Libellé déjà traduit par l'appelant. */
   label: string
   placeholder?: string
   type?: string
@@ -43,6 +46,7 @@ export interface FormField {
 }
 
 interface ManageRowsProps<T extends { id: number }> {
+  /** Titre déjà traduit ; les libellés viennent tous de l'appelant. */
   title: string
   description?: string
   rows: T[]
@@ -65,8 +69,8 @@ export function ManageRows<T extends { id: number }>({
   rows,
   columns,
   loading,
-  emptyMessage = "Aucune entrée.",
-  createLabel = "Ajouter",
+  emptyMessage,
+  createLabel,
   onSave,
   canManage = true,
   detectActive,
@@ -74,7 +78,9 @@ export function ManageRows<T extends { id: number }>({
   formFields,
   extraForm,
 }: ManageRowsProps<T>) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState<T | "nouveau" | null>(null)
+  const action = createLabel ?? t("commun.ajouter")
 
   return (
     <div className="space-y-3">
@@ -88,7 +94,7 @@ export function ManageRows<T extends { id: number }>({
         {canManage && (
           <Button size="sm" onClick={() => setEditing("nouveau")}>
             <Plus className="mr-1 h-4 w-4" aria-hidden />
-            {createLabel}
+            {action}
           </Button>
         )}
       </div>
@@ -100,7 +106,9 @@ export function ManageRows<T extends { id: number }>({
               {columns.map((col) => (
                 <TableHead scope="col" key={String(col.key)}>{col.header}</TableHead>
               ))}
-              {canManage && <TableHead scope="col" className="text-right">Actions</TableHead>}
+              {canManage && (
+                <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -110,8 +118,8 @@ export function ManageRows<T extends { id: number }>({
               <EmptyRow
                 colSpan={columns.length + (canManage ? 1 : 0)}
                 icon={Inbox}
-                title={emptyMessage}
-                hint={canManage ? `Cliquez sur « ${createLabel} » pour créer la première entrée.` : undefined}
+                title={emptyMessage ?? t("pays.lignes.vide")}
+                hint={canManage ? t("pays.lignes.vide_indice", { action }) : undefined}
               />
             ) : (
               rows.map((item) => (
@@ -129,7 +137,14 @@ export function ManageRows<T extends { id: number }>({
                         variant="ghost"
                         size="icon"
                         onClick={() => setEditing(item)}
-                        aria-label={`Modifier ${String((item as Record<string, unknown>).name ?? (item as Record<string, unknown>).label ?? (item as Record<string, unknown>).code ?? item.id)}`}
+                        aria-label={t("pays.lignes.modifier_aria", {
+                          nom: String(
+                            (item as Record<string, unknown>).name ??
+                              (item as Record<string, unknown>).label ??
+                              (item as Record<string, unknown>).code ??
+                              item.id,
+                          ),
+                        })}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -178,6 +193,7 @@ function RowDialog<T extends { id: number }>({
   onSave: (data: Record<string, unknown>, id?: number) => Promise<void>
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<Record<string, string>>(() =>
     item
       ? Object.fromEntries(
@@ -196,7 +212,7 @@ function RowDialog<T extends { id: number }>({
     e.preventDefault()
     const manquant = formFields.find((f) => !f.optional && !form[f.key]?.trim())
     if (manquant) {
-      setError(`Le champ « ${manquant.label} » est obligatoire.`)
+      setError(t("pays.lignes.champ_obligatoire", { champ: manquant.label }))
       return
     }
     setSaving(true)
@@ -205,7 +221,7 @@ function RowDialog<T extends { id: number }>({
       await onSave({ ...form, is_active: active }, item?.id)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible")
+      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
     } finally {
       setSaving(false)
     }
@@ -216,7 +232,9 @@ function RowDialog<T extends { id: number }>({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {item ? "Modifier" : "Ajouter"} — {title}
+            {item
+              ? t("pays.lignes.dialogue_modifier", { titre: title })
+              : t("pays.lignes.dialogue_ajouter", { titre: title })}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
@@ -225,7 +243,11 @@ function RowDialog<T extends { id: number }>({
             <div className="grid gap-2" key={f.key}>
               <Label htmlFor={`row-${f.key}`}>
                 {f.label}
-                {f.optional && <span className="ml-1 text-xs text-muted-foreground">(facultatif)</span>}
+                {f.optional && (
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    {t("pays.lignes.facultatif")}
+                  </span>
+                )}
               </Label>
               {f.options ? (
                 <NativeSelect
@@ -259,17 +281,17 @@ function RowDialog<T extends { id: number }>({
           ))}
           {extraForm}
           <div className="flex items-center justify-between rounded-lg border p-3">
-            <Label htmlFor="row-active" className="text-sm">Actif</Label>
+            <Label htmlFor="row-active" className="text-sm">{t("commun.actif")}</Label>
             <Switch id="row-active" checked={active} onCheckedChange={setActive} />
           </div>
           <DialogFooter>
             <div>
               <Button type="button" variant="outline" onClick={onClose}>
-                Annuler
+                {t("commun.annuler")}
               </Button>
               <Button type="submit" disabled={saving} className="ml-2">
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Enregistrer
+                {t("commun.enregistrer")}
               </Button>
             </div>
           </DialogFooter>

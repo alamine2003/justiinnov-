@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { isTruncated } from "@/lib/referentiel"
 import type { Paginated } from "@/lib/types"
@@ -13,16 +14,17 @@ export function TruncatedNotice({
   noun,
 }: {
   page: Paginated<unknown> | null | undefined
+  /** Nom des objets listés, déjà traduit, au pluriel. */
   noun: string
 }) {
+  const { t } = useTranslation()
   if (!isTruncated(page)) return null
   return (
     <Alert>
       <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>Liste incomplète</AlertTitle>
+      <AlertTitle>{t("ui.tronque_titre")}</AlertTitle>
       <AlertDescription>
-        Seuls {page!.results.length} {noun} sur {page!.count} sont proposés.
-        Affinez la recherche ou contactez le siège.
+        {t("ui.tronque_texte", { affiches: page!.results.length, nom: noun, total: page!.count })}
       </AlertDescription>
     </Alert>
   )

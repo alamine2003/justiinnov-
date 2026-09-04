@@ -1,5 +1,11 @@
-/** Revue visuelle des deux thèmes sur les écrans principaux. */
+/**
+ * Revue visuelle des deux thèmes sur les écrans principaux.
+ *
+ *   SHOT_HQ_USER=… SHOT_HQ_PASSWORD=… SHOT_HQ_TOTP_SECRET=… \
+ *   npx tsx scripts/shot-theme.mts
+ */
 import { chromium } from "playwright"
+import { credentials, signIn } from "./login.ts"
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:5173"
 const OUT = process.env.SHOT_OUT ?? "/tmp"
@@ -13,15 +19,12 @@ const pages = [
   ["login", "/login"],
 ] as const
 
-const user = process.env.SHOT_HQ_USER
-const password = process.env.SHOT_HQ_PASSWORD
-if (!user || !password) {
-  throw new Error("SHOT_HQ_USER et SHOT_HQ_PASSWORD doivent être définis.")
-}
+// Lève une erreur explicite si les identifiants manquent.
+const compte = credentials("HQ")
 
 const erreurs: string[] = []
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: "fr-FR" })
 page.on("console", (message) => {
   if (message.type() === "error") erreurs.push(`[console] ${message.text()}`)
 })
@@ -51,13 +54,7 @@ async function capturer(nom: string, chemin: string) {
   await page.screenshot({ path: `${OUT}/shot_theme_${nom}_sombre.png` })
 }
 
-await page.goto(`${BASE}/login`, { waitUntil: "networkidle" })
-await page.fill("#username", user)
-await page.fill("#password", password)
-await page.click("button[type=submit]")
-await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
-  timeout: 15000,
-})
+await signIn(page, BASE, compte)
 
 for (const [nom, chemin] of pages.slice(0, -1)) {
   await capturer(nom, chemin)
