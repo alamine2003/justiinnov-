@@ -27,6 +27,7 @@
 	# Caddy ; voir .env.example (« HSTS »). La directive `header` s'applique
 	# avant tout `handle` : Grafana en bénéficie aussi.
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	header Permissions-Policy "camera=(), microphone=(), geolocation=()"
 
 	# Les justificatifs peuvent peser jusqu'à 20 Mo (MAX_PROOF_SIZE) ; un peu
 	# de marge pour l'enveloppe multipart.

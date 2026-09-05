@@ -118,7 +118,7 @@ exec gunicorn -c gunicorn.conf.py config.wsgi:application \
   --threads "${GUNICORN_THREADS:-4}" \
   --timeout "${GUNICORN_TIMEOUT:-120}" \
   --graceful-timeout 30 \
-  --max-requests 1000 --max-requests-jitter 100 \
+  --max-requests 10000 --max-requests-jitter 1000 \
   --worker-tmp-dir /dev/shm \
   --access-logfile - \
   --forwarded-allow-ips '*'
