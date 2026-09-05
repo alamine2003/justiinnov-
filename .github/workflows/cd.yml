@@ -222,10 +222,14 @@ jobs:
           HOST: ${{ secrets.DEPLOY_HOST }}
           USER_SSH: ${{ secrets.DEPLOY_USER }}
         run: |
-          for nom in SSH_KEY KNOWN_HOSTS HOST USER_SSH; do
+          # Chaque variable locale est nommée d'après son secret, pour que le
+          # message d'erreur dise exactement ce qu'il faut ajouter dans
+          # Settings › Environments.
+          for couple in SSH_KEY:DEPLOY_SSH_KEY KNOWN_HOSTS:DEPLOY_KNOWN_HOSTS HOST:DEPLOY_HOST USER_SSH:DEPLOY_USER; do
+            nom="${couple%%:*}"; secret="${couple#*:}"
             eval "valeur=\$$nom"
             if [ -z "$valeur" ]; then
-              echo "✘ Secret DEPLOY_${nom#USER_} manquant sur l'environnement." >&2
+              echo "✘ Secret $secret manquant sur l'environnement." >&2
               exit 1
             fi
           done

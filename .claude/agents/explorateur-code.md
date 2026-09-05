@@ -21,7 +21,7 @@ modifies rien.
 | Alertes, exports, import | `backend/reporting/` |
 | Notifications | `backend/notifications/triggers.py`, `services.py` |
 | Client API, types, libellés | `frontend/src/lib/` |
-| Traductions | `frontend/src/i18n/`, `backend/*/locale/en/` |
+| Traductions | `frontend/src/i18n/`, `backend/locale/en/` (catalogue unique) |
 | Règles d'interface | `DESIGN.md` |
 | Déploiement | `deploy/`, `.github/workflows/` |
 

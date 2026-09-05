@@ -38,16 +38,23 @@ En développement, les ports ne sont ouverts que sur la boucle locale. La
 supervision n'existe que dans la pile de production
 (`deploy/docker-compose.prod.yml`).
 
-Applications Django :
-
-| App        | Rôle |
-|------------|------|
-| `core`     | Référentiel (pays, managers, équipes, centres de coûts, projets, intitulés, catégories) et historique |
-| `accounts` | Profils, rôles, périmètres pays et équipes, double authentification, langue |
-| `budget`   | Enveloppes annuelles, sous-enveloppes, réallocations, taux de change |
-| `expenses` | Dossiers (N°ORDRE), dépenses, justificatifs, circuit et réouverture, audit |
-| `notifications` | Notifications in-app et e-mail |
-| `reporting` | Tableaux de bord, alertes, imports et exports (administrateurs) |
+Applications Django, dans l'ordre strict de leurs dépendances, vérifié par
+`core/tests/test_dependances.py` : `core` (référentiel, historique) <
+`accounts` (rôles, périmètres, 2FA) < `notifications` < `budget`
+(enveloppes, réallocations, taux) < `expenses` (dossiers, dépenses, pièces,
+circuit) < `reporting` (tableau de bord, alertes, imports, exports). Trois
+primitives portent les règles transversales, tout le reste leur délègue :
+le **journal** (`core.journal.tracer`, seule écriture de `ChangeLog` et
+`AuditLog`), le **périmètre** (`accounts.perimetre.filtrer`, seul filtre par
+pays et par équipe, appliqué sur le queryset) et les **transitions**
+(`expenses/transitions.py`, `budget/transitions.py` : les règles du circuit
+sont des services ; une vue ne porte que verrou HTTP, sérialisation et
+réponse). Le contrat d'API est **généré** depuis le code
+(`docs/api/schema.json`, `frontend/src/lib/types.generated.ts`, section
+« API REST ») ; la suite backend — neuf cents tests, moins de dix secondes
+en parallèle — se lance sur une base privée (section « Tests »). Entités,
+champs et décisions numérotées (38 à 41 pour ce qui précède) sont dans
+[`docs/model-de-donnees.md`](docs/model-de-donnees.md), qui fait foi.
 
 ## Démarrage (Docker)
 
@@ -57,7 +64,10 @@ docker compose up -d          # db, minio, backend, scheduler, frontend
 
 - Frontend : http://localhost:5173
 - API : http://localhost:8000/api/
-- Admin Django : http://localhost:8000/admin/
+- Admin Django : http://localhost:8000/admin/ — soumis aux mêmes verrous
+  que l'API (mot de passe provisoire, double authentification si elle est
+  exigée) ; en production, nginx ne relaie que `/api/` et `/admin/` n'est
+  pas joignable de l'extérieur
 - `GET /api/health/` : état du serveur et de la base, sans authentification ;
   c'est ce que lisent les contrôles de santé Docker et la livraison continue.
 
@@ -132,40 +142,31 @@ certains, `admin` et `super_admin` jamais. Un `manager` **sans** périmètre
 ne voit rien — l'absence de périmètre ne vaut jamais autorisation générale.
 Un pays hors périmètre répond 404, sans révéler son existence.
 
-### Double authentification et adresses professionnelles
+### Comptes, double authentification et adresses professionnelles
 
-Chaque compte peut se protéger par un code à usage unique (TOTP, RFC 6238)
-en plus de son mot de passe : un mot de passe seul, réutilisé ou
-intercepté, suffirait à signer une justification au nom d'un autre. **Elle
-est facultative par défaut** — la direction a reporté son obligation — et
-se propose depuis le menu du compte (« Activer la double authentification ») :
-le titulaire scanne un QR avec son application d'authentification et
-saisit un premier code ; le secret n'est remis qu'une fois. Un compte
-enrôlé présente ensuite son code à chaque connexion, et le menu le montre
-(« 2FA active »). Elle est recommandée à qui contrôle ou justifie.
+Chaque compte peut se protéger par un code à usage unique (TOTP) en plus
+de son mot de passe ; **facultative par défaut**, la double authentification
+s'impose à tous avec `DJANGO_TOTP_REQUIRED=1`. Son fonctionnement, l'API
+(`/api/me/2fa/…`, `POST /api/users/{id}/reset-2fa/`), la réinitialisation
+par un administrateur et le cas du dernier `super_admin` sont décrits dans
+[`deploy/README.md`](deploy/README.md) (« Double authentification ») ; les
+champs, dans [`docs/model-de-donnees.md`](docs/model-de-donnees.md) (§3).
+Ce que le code garantit, en bref :
 
-`DJANGO_TOTP_REQUIRED=1` l'impose à tous : la plateforme reste alors
-fermée à un compte non enrôlé jusqu'à son premier code, comme avec un mot
-de passe provisoire. La politique se lit dans `GET /api/me/`
-(`totp_required`, aux côtés de `totp_confirmed`) ; l'interface n'y redirige
-que si les deux le demandent. Un titulaire qui perd son téléphone s'adresse
-à un administrateur, seul à pouvoir réinitialiser l'enrôlement ;
-l'opération est journalisée (voir `deploy/README.md`).
-
-Dans l'API : quand elle est imposée, toute route répond `403
-{"totp_setup_required": true}` tant que le compte n'est pas enrôlé, après
-le mot de passe provisoire ; `POST /api/me/2fa/enrol/` renvoie
-`otpauth_uri`, `qr_png_base64` et `secret`, `POST /api/me/2fa/confirm/
-{code}` valide le premier code (`ChangeLog` `totp_confirmed`). Pour un
-compte enrôlé, `POST /api/token-auth/` attend `{username, password, code}`
-et répond `400 totp_required` si le code manque ou est faux — l'échec est
-journalisé (`login_failed`, `changed_fields: ["totp"]`) ; le champ
-« Code » de l'écran de connexion reste visible et facultatif pour les
-autres. `POST /api/users/{id}/reset-2fa/` efface l'enrôlement
-(`totp_reset`) ; réservé aux administrateurs, dans le respect de la
-hiérarchie. Pour un environnement jetable (CI, démonstration), `seed_users`
-accepte une clé `totp_secret` qui enrôle et confirme d'emblée : à ne jamais
-utiliser sur un serveur réel.
+- le **nom de compte (`username`) est immuable** après création : les
+  contrôles à quatre yeux (celui qui saisit ne justifie pas) comparent sur
+  lui, et il nomme chaque entrée d'historique ;
+- un **code TOTP ne sert qu'une fois** (`totp_last_counter`) : un code
+  accepté, même encore dans sa fenêtre de validité, ne se rejoue pas ;
+- le **périmètre par équipes** d'un manager s'administre par l'API
+  (`teams`, `teams_detail` sur `/api/users/`), borné aux pays du compte, et
+  chaque changement est journalisé ;
+- un changement de **rôle ou de langue** est tracé dans `ChangeLog` quel que
+  soit le chemin — API, `seed_users` ou admin Django ;
+- `GET /api/me/` donne, pour chaque pays du périmètre (`countries[]`), son
+  `timezone` et sa `currency`, que l'interface se contente d'afficher ;
+- `/admin/` applique les mêmes verrous que l'API : mot de passe provisoire,
+  double authentification si elle est exigée.
 
 Chaque compte porte une adresse professionnelle : un domaine hors de
 `ALLOWED_EMAIL_DOMAINS` (`innovpharma.net` par défaut) est refusé à la
@@ -177,11 +178,14 @@ L'interface est bilingue, français et anglais. Le serveur répond dans la
 langue de l'en-tête `Accept-Language` ; l'interface l'envoie d'après la
 préférence enregistrée sur le profil (`UserProfile.language`, français par
 défaut), que l'utilisateur change depuis le menu de son compte. Les textes
-du serveur passent par `gettext` et les catalogues `locale/en` des six
-applications Django, notifications et e-mails compris, rendus dans la
-langue du destinataire ; les `.po` sont versionnés, les `.mo` compilés à la
-construction de l'image et au démarrage du conteneur de développement
-(`backend/entrypoint.sh`), jamais dans le dépôt. Il n'y a pas de variable
+du serveur passent par `gettext` et un catalogue unique,
+`backend/locale/en/LC_MESSAGES/django.po` (décision 42), notifications et
+e-mails compris, rendus dans la langue du destinataire ; le `.po` est
+versionné, régénéré par `manage.py makemessages -l en --ignore=tests
+--no-obsolete` et complété à la main — la CI refuse une chaîne restée vide
+ou `fuzzy` —, le `.mo` compilé à la construction de l'image et au démarrage
+du conteneur de développement (`backend/entrypoint.sh`), jamais dans le
+dépôt. Il n'y a pas de variable
 d'environnement pour la langue : la référence est le français
 (`LANGUAGE_CODE`).
 
@@ -237,117 +241,85 @@ Vite proxy les appels `/api` vers `http://localhost:8000`.
 
 ## API REST
 
-Toutes les routes exigent un jeton `Authorization: Token <token>`.
+Le contrat d'API n'est plus tenu à la main : il est **généré** depuis les
+vues et les sérialiseurs par [drf-spectacular](https://drf-spectacular.readthedocs.io/)
+(`manage.py spectacular`), et versionné.
 
-> **Pas de suppression.** Le retrait d'une entité se fait par désactivation
-> (`is_active`), jamais par `DELETE` : supprimer un pays effacerait en cascade
-> ses équipes, centres de coûts et projets. Les routes `DELETE` répondent 405 —
-> sauf pour un dossier ou une dépense **en brouillon**, que son auteur peut
-> retirer. L'obtention du jeton est limitée à 10 tentatives par minute et par
-> adresse IP ; un jeton expire après `TOKEN_MAX_AGE_DAYS`.
+| Où | Quoi |
+|---|---|
+| `GET /api/schema/` | le schéma OpenAPI 3 servi par l'API (YAML ; `?format=json`), réservé aux rôles du siège |
+| `GET /api/schema/ui/` | Swagger UI, administrateurs seulement et **en mode debug** uniquement (404 sinon) |
+| [`docs/api/schema.json`](docs/api/schema.json) | le même document, généré hors ligne, versionné |
+| `frontend/src/lib/types.generated.ts` | les types TypeScript tirés du schéma ; `frontend/src/lib/types.ts` les ré-exporte et n'ajoute que les types composés |
 
-```
-GET    /api/health/                      # état du serveur et de la base (sans jeton)
-POST   /api/token-auth/                  # obtention du jeton {username, password, code} ; 400 totp_required sans code valide
-POST   /api/logout/                      # révocation du jeton
-GET    /api/me/                          # rôle, périmètre, droits, politique 2FA (totp_required) et enrôlement (totp_confirmed)
-POST   /api/me/password/                 # changement de mot de passe
-GET    /api/permissions/                 # matrice rôle × action, telle que le serveur l'applique
-GET/PATCH /api/configuration/            # réglages de la plateforme (siège)
-GET/PATCH /api/workflow-configuration/   # politique du circuit : étape de contrôle, seuils, dépassement
-GET/POST/PATCH /api/users/               # comptes (administrateurs)
-POST   /api/users/{id}/reset-2fa/        # efface l'enrôlement TOTP (administrateurs, hiérarchie respectée)
-POST   /api/me/2fa/enrol/                # {otpauth_uri, qr_png_base64, secret} — une seule fois
-POST   /api/me/2fa/confirm/              # {code} : premier code valide, la plateforme s'ouvre
+Régénérer les deux après tout changement d'une vue ou d'un sérialiseur :
 
-GET    /api/countries/                   # liste paginée (filtres: is_active, search, ordering)
-GET    /api/countries/disponibles/       # codes ISO africains pas encore créés
-POST   /api/countries/                   # création (code africain obligatoire)
-GET    /api/countries/{id}/              # détail + entités liées
-PATCH  /api/countries/{id}/              # modification / activation / désactivation
-GET    /api/history/?country={id}        # historique des changements
-GET/POST/PATCH /api/managers/            # managers
-GET/POST/PATCH /api/teams/               # équipes
-GET/POST/PATCH /api/cost-centers/        # centres de coûts
-GET/POST/PATCH /api/projects/            # projets
-GET/POST/PATCH /api/expense-titles/      # intitulés de dépenses
-GET/POST/PATCH /api/marketing-categories/# catégories marketing
-
-GET/POST/PATCH /api/budgets/             # enveloppes annuelles et sous-enveloppes (?year=) ; écriture : super_admin
-GET    /api/budgets/summary/             # consolidation par pays, total en FCFA
-GET/POST /api/reallocations/             # demandes de transfert entre enveloppes (super_admin)
-POST   /api/reallocations/{id}/approve/  # exécute le transfert (super_admin)
-POST   /api/reallocations/{id}/reject/   # motif obligatoire (super_admin)
-GET/POST/PATCH /api/exchange-rates/      # taux de conversion vers le FCFA ; écriture : super_admin
-
-GET/POST/PATCH /api/dossiers/            # dossiers de justification (N°ORDRE)
-DELETE /api/dossiers/{id}/               # brouillon seul, par son auteur
-POST   /api/dossiers/{id}/submit/        # soumet le dossier et ses lignes (avertit s'il n'a pas de pièce)
-POST   /api/dossiers/{id}/review|justify|reject|close/  # review : DM ; justify, reject, close : DF
-POST   /api/dossiers/{id}/reopen/        # réouverture {note} : administrateurs, motif obligatoire
-GET/POST/PATCH /api/expenses/            # lignes de dépenses
-DELETE /api/expenses/{id}/               # brouillon seul, par son auteur
-POST   /api/expenses/{id}/review|justify|reject|close/
-GET    /api/expenses/register/           # registre : chaque dépense et ses preuves
-GET/POST /api/proofs/                    # justificatifs (dépôt multipart)
-GET    /api/proofs/{id}/download/        # téléchargement contrôlé et tracé
-POST   /api/proofs/{id}/review/          # contrôle documentaire
-GET/POST/PATCH /api/beneficiaries/       # prospects et bénéficiaires, par pays
-GET    /api/audit/                       # journal d'audit : RH et direction (admin, super_admin)
-
-GET    /api/dashboard/                   # consolidation, charge et alertes
-GET    /api/dashboard/breakdown/         # répartition équipe/manager/projet/mois
-GET    /api/exports/expenses.{xlsx,csv,docx}        # registre au format du fichier historique
-GET    /api/exports/reconciliation.{xlsx,csv,docx}  # rapprochement dépenses / justifiés
-GET    /api/exports/report.pdf                      # rapport de synthèse
-                                         # ?year= ?month= (1-12, facultatif) ?country= ; administrateurs seulement
-POST   /api/imports/expenses.xlsx        # import : export de la plateforme ou classeur historique (administrateurs)
-GET    /metrics                          # collecte Prometheus, jeton METRICS_TOKEN en Authorization: Bearer
-GET    /api/notifications/               # centre de notifications
-GET    /api/notifications/unread_count/
-POST   /api/notifications/{id}/read/ · /api/notifications/read-all/
+```bash
+cd frontend && npm run types:api -- --schema
+# = docker compose run --rm -e POSTGRES_DB=justi_schema -e EMAIL_BACKEND_CONSOLE=1 \
+#     --entrypoint python backend manage.py spectacular --format openapi-json --validate --fail-on-warn \
+#   > docs/api/schema.json, puis openapi-typescript → types.generated.ts
 ```
 
-`review`, `justify`, `reject`, `close` et `reopen` sont les transitions du
-circuit de justification (voir plus bas) ; `reject` et `reopen` exigent un
-motif.
+La CI refuse un schéma qui ne correspondrait plus au code (`diff` avec une
+génération fraîche) et des types qui ne correspondraient plus au schéma
+(`git diff --exit-code`). La génération échoue sur tout avertissement :
+un champ calculé (`SerializerMethodField`) porte `@extend_schema_field`,
+une action ou une vue composée à la main porte `@extend_schema`. En
+réponse, chaque champ est déclaré présent (`config/schema.py`) — DRF rend
+tous les champs d'un sérialiseur, et ceux qui pourraient manquer portent
+`allow_null` justement pour ne jamais manquer ; seul `warning`, joint à une
+transition, est facultatif.
 
-Les listes acceptent `?country__country_ref=TG-02` pour cibler un pays par
-son identifiant fonctionnel, ainsi que `?status=` et `?search=` ; `?year=`
-vaut pour les enveloppes. Le registre accepte en plus `?date__gte=` et
-`?date__lte=` pour une période. Toutes les listes sont paginées : `?page=` et
-`?page_size=` (plafonné à 200).
+Ce que le schéma ne dit pas, et qui vaut pour toutes les routes :
 
-Toutes les listes sont filtrées par le périmètre du compte — par pays, et,
-pour un `manager` rattaché à des équipes, par équipe (`team__in` sur les
-dossiers, les dépenses, les pièces via leur dossier, et les équipes
-elles-mêmes ; `CountryScopedMixin.team_lookup`). Les exports et le
-téléchargement d'une pièce sont les seules requêtes `GET` qui écrivent :
-elles laissent une entrée dans le journal d'audit (`downloaded`, avec
-`year`, `month`, `country` et `format` pour un export), parce qu'une donnée
-qui sort du système doit laisser une trace.
+- **Authentification** : jeton `Authorization: Token <token>`, obtenu sur
+  `POST /api/token-auth/` (`{username, password, code}` ; `400` avec
+  `totp_required: true` quand le second facteur manque). L'obtention est
+  limitée à 10 tentatives par minute et par adresse, 5 par nom de compte ;
+  un jeton expire après `TOKEN_MAX_AGE_DAYS`. `POST /api/logout/` le révoque.
+  Seul `/api/health/` se lit sans jeton.
+- **Erreurs** : `400` avec un objet `{champ: [messages]}` (ou
+  `non_field_errors`, `detail`) ; `401` sans jeton valable ; `403` quand le
+  rôle ne permet pas l'action ; `404` pour ce qui n'existe pas **ou** est
+  hors périmètre — un objet du voisin ne se distingue pas d'un objet
+  inexistant ; `405` sur `DELETE`, sauf brouillon ; `429` au-delà des
+  limites de débit.
+- **Pas de suppression.** Le retrait d'une entité se fait par désactivation
+  (`is_active`). Seul un dossier ou une dépense **en brouillon** se retire,
+  par son auteur.
+- **Pagination** : toute liste est paginée (`?page=`, `?page_size=` plafonné
+  à 200) et répond `{count, next, previous, results}`. Les listes acceptent
+  `?search=`, `?ordering=` et les filtres déclarés route par route ;
+  `?country__country_ref=TG-02` cible un pays par son identifiant
+  fonctionnel, `?status__in=` un état multiple, `?date__gte=` / `?date__lte=`
+  une période.
+- **Périmètre** : toute liste est filtrée par le périmètre du compte — par
+  pays et, pour un `manager` rattaché à des équipes, par équipe
+  (`CountryScopedMixin.team_lookup`). Les écritures sont revalidées : une
+  clé étrangère hors périmètre est « invalide », pas « interdite ».
+- **Langue** : les messages et les libellés `*_display` suivent
+  `Accept-Language` (`fr` par défaut, `en`).
+- **Traces** : les exports et le téléchargement d'une pièce sont les seules
+  requêtes `GET` qui écrivent — une entrée `downloaded` dans le journal
+  d'audit — parce qu'une donnée qui sort du système doit laisser une trace.
+- `GET /metrics` (hors `/api/`) est la collecte Prometheus, sous jeton
+  `METRICS_TOKEN` en `Authorization: Bearer`.
 
 ## Budgets
 
-Une enveloppe est annuelle et rattachée à un pays. Elle se décline en
-**sous-enveloppes** selon **une** dimension à la fois — un projet, une équipe
-ou un manager. En autoriser plusieurs rendrait l'imputation d'une dépense
-ambiguë ; la contrainte est posée en base autant que dans l'API.
-
-Une sous-enveloppe découpe l'enveloppe du pays : la consolidation ne
-l'additionne donc pas, sous peine de compter deux fois le même argent. Une
-dépense s'impute sur la plus précise qui la concerne — le projet l'emporte sur
-l'équipe, qui l'emporte sur le manager — et à défaut sur l'enveloppe du pays.
+Enveloppe annuelle par pays, sous-enveloppes selon **une** dimension (projet,
+équipe ou manager), imputation sur la plus précise, consolidation en FCFA,
+devise sans taux **exclue du total et signalée** : le modèle, ses contraintes
+en base et les chiffres calculés — engagé, consommé, justifié, écart,
+disponible — sont décrits dans
+[`docs/model-de-donnees.md`](docs/model-de-donnees.md) (§4.1) et calculés
+dans `backend/budget/aggregates.py`, jamais reconstitués dans l'interface.
 
 Tout mouvement budgétaire est journalisé : création, modification de montant,
 réallocation et taux de change apparaissent dans `/api/history/`, avec leur
-auteur et les champs touchés.
-
-Consommation, écart et solde disponible sont **calculés côté serveur** et
-jamais reconstitués dans l'interface. Les montants sont stockés dans la devise
-du pays ; la consolidation au siège se fait en FCFA au taux en vigueur à la
-date de l'opération. Une devise sans taux connu est **exclue du total et
-signalée**, plutôt que d'y être absorbée silencieusement.
+auteur et les champs touchés ; une réallocation demandée, approuvée ou
+refusée l'est aussi dans le journal d'audit (décision 41).
 
 ## Historique des changements
 
@@ -413,11 +385,18 @@ docker compose run --rm --entrypoint python backend manage.py test
 cd frontend && npx tsc -b && npm run lint && npm run test
 ```
 
-Ce sont les commandes de `CLAUDE.md` et de la CI. **Deux suites backend ne
-tournent pas en parallèle sur la même base** : Django crée `test_<POSTGRES_DB>`
-et la détruit à la fin ; la seconde suite détruirait celle de la première.
-Pour travailler à plusieurs, donnez à chacune sa base :
-`docker compose run --rm -e POSTGRES_DB=justi_<nom> --entrypoint python backend manage.py test`.
+Ce sont les commandes de `CLAUDE.md` et de la CI. La suite backend — neuf
+cents tests, dont les règles du circuit sans HTTP
+(`expenses/tests/test_transitions.py`, `budget/tests/test_transitions.py`),
+un test traversant du cloisonnement (`accounts/tests/test_traversee.py`) et
+un test structurel du journal (`core/tests/test_journal_unique.py`) — tourne
+en une quinzaine de secondes en série, moins de dix avec `--noinput
+--parallel auto` (cache en mémoire, hachage rapide : bloc « Réglages de
+test » de `config/settings.py`). **Deux suites backend ne tournent pas en
+parallèle sur la même base** : Django crée `test_<POSTGRES_DB>` et la
+détruit à la fin ; la seconde suite détruirait celle de la première. Donnez
+à chaque terminal ou agent sa base :
+`docker compose run --rm -e POSTGRES_DB=justi_<nom> -e EMAIL_BACKEND_CONSOLE=1 --entrypoint python backend manage.py test --noinput --parallel auto`.
 
 ## Intégration et livraison continues
 
@@ -429,7 +408,7 @@ au sein de la livraison continue, en cinq travaux indépendants :
 | Backend | migrations à jour, traductions compilées, `check --deploy`, suite Django hors mode debug |
 | Frontend | types, lint, tests unitaires, build |
 | Images Docker | les deux images se construisent |
-| Parcours complet | la pile livrable (backend en production, frontend nginx) démarre, des comptes jetables s'y connectent, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
+| Parcours complet | la pile livrable (backend en production sans code monté, frontend nginx, Caddy devant avec le Caddyfile livré) démarre, des comptes jetables entrent par `compose cp` et `seed_users`, `seed_demo --base-jetable` remplit des données, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, `/admin/` répond l'application et non le back-office, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
 | Dépendances | `pip-audit --strict` et `npm audit --audit-level=high`, **bloquants** |
 
 La livraison continue (`.github/workflows/cd.yml`) appelle la CI, puis :
@@ -458,7 +437,8 @@ Les mises à jour de dépendances arrivent en PR via Dependabot
 ## Déploiement, supervision et sauvegardes
 
 En production, nginx limite `/api/` à 20 requêtes par seconde et par
-adresse (réserve de 40) et répond `429` avec un `detail` en français ;
+adresse (réserve de 40) et répond `429` avec un `detail` en français, ou en
+anglais si `Accept-Language` commence par `en` ;
 Django garde sa propre limite, plus stricte, sur l'obtention du jeton. Le
 service Django peut tourner avec un rôle Postgres sans droit sur le schéma
 (`deploy/creer_role_applicatif.sql`), les migrations gardant le rôle
@@ -498,7 +478,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 |----------|--------|------|
 | `DJANGO_DEBUG` | `0` | `1` active le mode debug (dev uniquement) |
 | `DJANGO_SECRET_KEY` | — | **obligatoire** hors mode debug |
-| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | hôtes autorisés, séparés par des virgules |
+| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | hôtes autorisés, séparés par des virgules ; `127.0.0.1` (contrôle de santé) et `backend` (collecte Prometheus) sont ajoutés d'office |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | origines autorisées |
 | `DJANGO_SECURE_SSL_REDIRECT` | `1` | redirection HTTPS hors mode debug ; `/api/health/` en est exempté |
 | `DJANGO_HSTS_PRELOAD` | `1` | inscription HSTS sur la liste de préchargement des navigateurs (hors debug) |
@@ -523,12 +503,15 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `UNUSUAL_EXPENSE_FACTOR` | `5` | multiple de la moyenne au-delà duquel une dépense est signalée (idem) |
 | `UNJUSTIFIED_ALERT_DAYS` | `0` | jours sans pièce après soumission avant alerte ; `0` désactive (idem) |
 | `WARN_WITHOUT_PROOF_SUBMISSION` | `1` | avertir à la soumission d'un dossier sans pièce (idem) |
-| `EMAIL_HOST` | — | serveur SMTP ; sans lui, les e-mails vont dans les logs |
+| `EMAIL_HOST` | — | serveur SMTP, **obligatoire hors mode debug** : sans lui, le backend refuse de démarrer plutôt que de perdre les alertes |
+| `EMAIL_BACKEND_CONSOLE` | `0` | `1` acquitte l'absence de SMTP hors debug : les e-mails vont dans les journaux (CI, préproduction) |
 | `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | `587` / — / — / `1` | paramètres SMTP |
 | `DEFAULT_FROM_EMAIL` | `controle-budgetaire@justi-innov.local` | expéditeur des e-mails |
 | `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |
 | `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
 | `GUNICORN_WORKERS` / `GUNICORN_THREADS` / `GUNICORN_TIMEOUT` | `2` / `4` / `120` | processus, fils par processus et délai (s) du serveur d'application |
+| `PROMETHEUS_MULTIPROC_DIR` | — | dossier partagé des compteurs Prometheus entre les processus gunicorn (`/dev/shm/prometheus` en production) ; créé et vidé par `entrypoint.sh` au démarrage ; ne pas le donner à l'ordonnanceur |
+| `COMPOSE_FILE` | — | pile de production : liste de fichiers Compose (`docker-compose.prod.yml:docker-compose.override.yml`) pour une surcharge locale, lue par `deploy.sh` et `restaurer.sh` (`deploy/README.md`) |
 
 ## Capture d'écran (revue visuelle)
 
@@ -555,12 +538,7 @@ La CI les rejoue sur la pile livrable.
 
 Le but de l'application n'est pas d'autoriser des dépenses : c'est de savoir
 **ce que le pays a dépensé, quand, où, au profit de qui — et où est la
-preuve**. Le contrôleur ne valide pas un achat déjà fait ; il constate qu'une
-pièce le couvre. D'où « justifié » plutôt que « validé ».
-
-Le **N°ORDRE** est le dossier de justification : il regroupe les lignes de
-dépenses d'une opération et les preuves qui les appuient. Dossier et lignes
-suivent chacun leur circuit :
+preuve**. D'où « justifié » plutôt que « validé ».
 
 ```
 brouillon → soumis → en contrôle → justifié / non justifié → clôturé
@@ -568,56 +546,28 @@ brouillon → soumis → en contrôle → justifié / non justifié → clôtur�
     └──────────┴───────────┴──────────────┘  réouverture (administrateur, motif)
 ```
 
-Côté pays, déclarer une dépense tient en **une action** : le manager
-remplit les lignes, joint le justificatif, soumet le dossier — ses lignes
-partent avec lui. Le reste est calculé par le système et relève du siège :
-**le manager soumet, le DM met en contrôle, le DF tranche** — justifie,
-refuse ou clôture. L'étape de contrôle est facultative sauf si la politique
-du circuit l'impose (`require_review_step`).
+Les règles — déclarer tient en une action, une dépense soumise est
+irréversible, une dépense non justifiée pèse quand même sur l'enveloppe,
+un rejet exige un motif, la réouverture est l'unique exception et prévient
+les managers du pays — sont énoncées dans [`CLAUDE.md`](CLAUDE.md) et
+détaillées, transition par transition, dans
+[`docs/model-de-donnees.md`](docs/model-de-donnees.md) (§5.5 et décision
+20) ; les états et prédicats sont dans `backend/expenses/workflow.py`, les
+services de transition dans `backend/expenses/transitions.py` (décision 41).
 
-Un dossier ne se soumet pas vide : les lignes viennent d'abord. En revanche,
-l'absence de justificatif **n'empêche pas** la déclaration, elle l'accompagne
-d'un avertissement. Bloquer signifierait qu'une dépense sans reçu ne serait
-jamais déclarée : l'argent sortirait sans laisser de trace, ce qui est pire que
-l'écart.
+Ce que l'API garantit en plus, calculé côté serveur :
 
-Deux principes gouvernent ce circuit :
-
-**Une fois soumise, une dépense est irréversible.** Elle ne revient jamais au
-brouillon, ne se modifie plus, ne se supprime pas. L'argent est sorti :
-l'effacer reviendrait à en perdre la trace. Seul un brouillon — jamais
-soumis, donc sans valeur probante — peut être retiré, par son auteur, et sa
-suppression est elle-même journalisée.
-
-La **réouverture** est la seule exception, et elle est faite pour demander
-des comptes, pas pour corriger en silence : un administrateur (`admin`,
-`super_admin`) renvoie au brouillon un dossier déclaré mais pas encore
-constaté, avec un motif (`note`), conservé sur le dossier (`reopen_note`)
-et dans le journal d'audit (`reopened`, sur le dossier et sur chaque
-ligne) ; les lignes reviennent en brouillon et perdent leur imputation
-(`budget = null`), recalculée à la prochaine soumission ; les comptes qui
-suivent le pays en sont notifiés (`dossier_reopened`) et le dossier devra
-être soumis à nouveau. Elle est refusée dès
-qu'une ligne du dossier est justifiée ou clôturée : le siège a constaté, et
-un constat ne se défait pas. Ni le pays qui a déclaré ni la direction
-financière qui constate ne peuvent rouvrir.
-
-**Une dépense non justifiée pèse malgré tout sur l'enveloppe.** L'absence de
-preuve ne fait pas revenir l'argent. Elle se lit dans l'écart entre le montant
-dépensé et le montant justifié — le chiffre que l'application existe pour
-faire diminuer. Une preuve déposée après coup reste le seul chemin de
-rattrapage : le contrôleur peut alors marquer la dépense justifiée.
-
-Le statut n'est jamais modifiable par écriture de champ : seules les
-transitions déclarées le font évoluer, et chacune est journalisée. Un constat
-de non-justification exige un motif, et un dossier ne peut être justifié sans
-pièce.
-
-Une dépense soumise **engage** son enveloppe ; contrôlée, elle la **consomme**
-— qu'elle soit justifiée ou non. Le disponible retranche les deux. La
-politique de dépassement décide de la suite : bloquer, alerter, ou réserver la
-justification aux super administrateurs (la direction) — le pays pouvant dans
-tous les cas déclarer la dépense.
+- les **quatre yeux** valent pour la mise en contrôle et la clôture comme
+  pour la justification, sur la ligne et sur le dossier : celui qui a saisi
+  ne décide pas ;
+- le **pays d'un dossier est figé** dès qu'il porte une ligne ou une pièce,
+  son **équipe** tant qu'une ligne porte une autre équipe ; une ligne porte
+  l'équipe de son dossier, et un manager rattaché à des équipes choisit
+  l'une des siennes à la création ;
+- chaque objet dit ce qu'on peut en faire : `allowed_actions` sur la ligne
+  et le dossier, `allowed_reviews` sur la pièce, `can_decide` sur la
+  réallocation — l'interface les lit et ne reproduit plus la matrice des
+  rôles ; une transition de dossier renvoie le détail complet, à jour.
 
 ## Justificatifs
 

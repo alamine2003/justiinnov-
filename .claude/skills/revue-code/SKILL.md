@@ -34,7 +34,7 @@ touchés par app : un changement dans `expenses` sans test dans
 **Cloisonnement et droits**
 - Filtrage sur le queryset (`CountryScopedMixin`, `team_lookup`), 404 muet
   hors périmètre, clés étrangères de la charge utile restreintes au
-  périmètre (`ChampCloisonne`, `PerimetreMixin`).
+  périmètre (`ChampCloisonne`), une seule règle (`accounts.perimetre.filtrer`).
 - Rôles : `accounts/permissions.py` est la seule source. DM et DF n'ont
   aucun droit d'administration ; enveloppes, exports, import, réouverture,
   audit et comptes sont réservés selon la matrice.

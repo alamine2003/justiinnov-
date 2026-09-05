@@ -24,17 +24,30 @@ import).
   `write_roles`, `read_roles`, `action_write_roles` avec les ensembles de
   `accounts/permissions.py`. Un nouveau droit = un ensemble nommé, une
   capacité dans `CAPABILITIES`, un test de refus.
-- Cloisonnement : `CountryScopedMixin` (`country_lookup`, `country_via`,
-  `team_lookup`) et, pour les clés étrangères de la charge utile,
-  `ChampCloisonne` ou `PerimetreMixin`.
+- Cloisonnement : une seule primitive, `accounts.perimetre.filtrer`
+  (pays, équipes du manager) appelée par `CountryScopedMixin`
+  (`country_lookup`, `country_via`, `team_lookup`), et `ChampCloisonne`
+  (`accounts/perimetre.py`) pour les clés étrangères de la charge utile.
+  Le test `accounts/tests/test_traversee.py` parcourt toutes les routes.
 - Écritures sensibles : `transaction.atomic()` + `select_for_update()` ;
-  trace via `expenses.audit.record` ou `ChangeLog` avec avant/après ;
-  adresse via `core.requetes.client_ip`.
+  trace via la façade unique `core.journal.tracer(request, action,
+  instance, famille=…, avant=…, apres=…)` qui route vers `ChangeLog` ou
+  `AuditLog` et remplit auteur, IP et user-agent ; aucune écriture directe
+  dans un journal (un test structurel le refuse).
+- Dépendances entre apps : ordre strict `core < accounts < notifications <
+  budget < expenses < reporting`, vérifié par `core/tests/test_dependances.py` ;
+  les statuts du circuit vivent dans `core/statuts.py`, l'authentification et
+  le référentiel dans `accounts`.
 - Chiffres : `Decimal`, `Coalesce`, agrégations en SQL (`with_consumption`,
   `with_totals`), jamais de boucle Python qui additionne des lignes.
 - Chaînes visibles : `gettext_lazy as _` (modèles, choix, workflow) ou
-  `gettext as _` (vues, serializers), puis ajoutez l'entrée anglaise dans
-  `<app>/locale/en/LC_MESSAGES/django.po`.
+  `gettext as _` (vues, serializers), puis l'entrée anglaise dans le
+  **catalogue unique** `backend/locale/en/LC_MESSAGES/django.po`
+  (décision 42). Depuis `backend/`, `docker compose run --rm --entrypoint
+  python backend manage.py makemessages -l en --ignore=tests --no-obsolete
+  --no-wrap` y ramène les chaînes nouvelles avec un `msgstr` vide, à
+  traduire à la main ; aucun `msgstr` vide ni `fuzzy` ne reste, la CI le
+  refuse (`msgfmt --check`, `msgattrib --untranslated`).
 - Modèle : `PROTECT` sur les clés étrangères, `CheckConstraint` pour ce que
   la base doit refuser, index pour les filtres réels, `-pk` en fin de tri.
 
@@ -54,17 +67,39 @@ Deux suites lancées en parallèle sur la même base se détruisent. Donnez à
 chaque terminal ou agent un nom de base distinct :
 
 ```bash
-docker compose run --rm --entrypoint sh backend -c 'for d in */locale; do (cd "$(dirname "$d")" && django-admin compilemessages -l en >/dev/null); done'
-docker compose run --rm -e POSTGRES_DB=justi_dev_x --entrypoint python backend manage.py test <app> --noinput
+docker compose run --rm --entrypoint django-admin backend compilemessages -l en -v0 --ignore=.venv
+docker compose run --rm -e POSTGRES_DB=justi_dev_x -e EMAIL_BACKEND_CONSOLE=1 --entrypoint python backend manage.py test <app> --noinput
+docker compose run --rm -e POSTGRES_DB=justi_dev_x -e EMAIL_BACKEND_CONSOLE=1 --entrypoint python backend manage.py test --noinput --parallel auto
 docker compose run --rm -e POSTGRES_DB=justi_dev_x --entrypoint python backend manage.py makemigrations --check --dry-run
 ```
+
+La suite complète tourne en une quinzaine de secondes en série, moins de
+dix en parallèle : lancez-la entière, pas seulement votre app. Les tests
+utilisent un cache mémoire et un hachage rapide des mots de passe (bloc
+« Réglages de test » de settings.py, actif sous `manage.py test`) ; les
+fixtures de décor vivent dans `setUpTestData`, ce que chaque test mute
+reste dans `setUp`.
 
 Fixtures : `accounts.tests.test_scoping.make_user(username, role,
 countries, teams=(), totp_confirmed=True)` et `expenses.tests.base.ExpenseTestCase`
 (`make_expense`, `submit_dossier`). Un correctif sans le test qui l'aurait
 attrapé n'est pas fini.
 
-### Étape 5 : consigner
+### Étape 5 : régénérer le contrat d'API
+
+Après toute modification d'une vue ou d'un sérialiseur :
+
+```bash
+cd frontend && npm run types:api -- --schema
+```
+
+Cela régénère `docs/api/schema.json` (drf-spectacular, sans avertissement
+toléré) puis `frontend/src/lib/types.generated.ts` ; la CI compare les deux.
+Un `SerializerMethodField` nouveau porte `@extend_schema_field`, une action
+composée à la main porte `@extend_schema`, un champ facultatif en réponse
+s'ajoute à `CHAMPS_FACULTATIFS_EN_REPONSE` dans `config/schema.py`.
+
+### Étape 6 : consigner
 
 Une décision de conception nouvelle va dans `docs/model-de-donnees.md` §8 ;
 une règle nouvelle dans `CLAUDE.md` ; un contrat d'API nouveau dans

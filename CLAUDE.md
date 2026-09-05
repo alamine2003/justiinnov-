@@ -152,7 +152,7 @@ l'application.
   `totp_secret` de `seed_users` n'existe que pour les environnements
   jetables.
 - **L'interface est bilingue**, français et anglais : les textes passent par
-  `gettext` côté serveur (catalogues `locale/en` des six applications,
+  `gettext` côté serveur (un seul catalogue, `backend/locale/en`,
   `Accept-Language`, préférence `language` sur le profil ; notifications et
   e-mails dans la langue du destinataire) et par le dictionnaire de
   traduction côté client. Une chaîne en dur dans un composant est un défaut. Elle se sert sur le web et comme application de
@@ -170,8 +170,15 @@ l'application.
 | Sujet | Où |
 |---|---|
 | Modèle de données et décisions prises (référence, tenue à jour) | `docs/model-de-donnees.md` |
-| Circuit de justification, réouverture | `backend/expenses/workflow.py` |
-| Rôles, périmètres, équipes, double authentification | `backend/accounts/` |
+| États du circuit (`Status` et ses ensembles) | `backend/core/statuts.py` |
+| Circuit de justification, réouverture | `backend/expenses/workflow.py` (états, prédicats), `backend/expenses/transitions.py` (services) |
+| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce) | `backend/expenses/transitions.py` |
+| Services de réallocation (demander, approuver, refuser) | `backend/budget/transitions.py` |
+| Refus métier (`RegleViolee`, `PermissionRefusee`, `HorsPerimetre`) et leur traduction HTTP | `backend/core/regles.py` |
+| Rôles, périmètres, équipes, double authentification, authentification | `backend/accounts/` (`permissions.py`, `perimetre.py`, `scoping.py`, `views.py`) |
+| API du référentiel (pays, équipes, projets…) et historique | `backend/accounts/referentiel.py` |
+| Journaux `ChangeLog` et `AuditLog` : la seule porte d'écriture | `backend/core/journal.py` |
+| Ordre des applications (`core < accounts < notifications < budget < expenses < reporting`) | `backend/core/tests/test_dependances.py` |
 | Calculs budgétaires | `backend/budget/aggregates.py` |
 | Interface | `DESIGN.md` |
 | Serveur, supervision Grafana, sauvegardes | `deploy/README.md` |

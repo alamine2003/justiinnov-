@@ -1,11 +1,15 @@
 # Entrée publique : TLS automatique (Let's Encrypt), puis tout part au
 # conteneur nginx du frontend, qui sert l'interface et relaie `/api/` vers
-# Django — sauf `/grafana/`, qui va à Grafana. Caddy pose
-# `X-Forwarded-Proto: https`, que nginx transmet et que Django lit
-# (`SECURE_PROXY_SSL_HEADER`) pour ne pas rediriger en boucle.
+# Django — sauf `/grafana/`, qui va à Grafana quand la supervision est
+# activée. Caddy pose `X-Forwarded-Proto: https`, que nginx transmet et que
+# Django lit (`SECURE_PROXY_SSL_HEADER`) pour ne pas rediriger en boucle.
 #
-# Vérification, sans lancer la pile :
-#   docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL= \
+# Le même fichier sert en CI, en clair : `APP_DOMAIN=http://:8080` désactive
+# TLS (docker-compose.ci.yml). Rien d'autre ne change entre les deux.
+#
+# Vérification, sans lancer la pile, avec et sans supervision :
+#   docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
+#       -e SUPERVISION=1 \
 #       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
 #       caddy validate --config /etc/caddy/Caddyfile
 {
@@ -15,12 +19,14 @@
 {$APP_DOMAIN} {
 	encode zstd gzip
 
-	# HSTS se pose ici, au seul endroit qui termine TLS : nginx ne voit que
-	# du HTTP et Django ne couvre que `/api/`. Un an, sous-domaines compris ;
-	# le préchargement reste du ressort de Django (DJANGO_HSTS_PRELOAD).
-	# La directive `header` s'applique avant tout `handle` : Grafana en
-	# bénéficie aussi.
-	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# HSTS a une seule source : ici, au seul endroit qui termine TLS. nginx
+	# ne voit que du HTTP et Django ne couvre que `/api/` ; un second en-tête
+	# venu de Django serait au mieux redondant, au pire contradictoire. Un an,
+	# sous-domaines compris, préchargement demandé — la plateforme n'a aucune
+	# raison de répondre en clair. Django n'a donc rien à émettre derrière
+	# Caddy ; voir .env.example (« HSTS »). La directive `header` s'applique
+	# avant tout `handle` : Grafana en bénéficie aussi.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 
 	# Les justificatifs peuvent peser jusqu'à 20 Mo (MAX_PROOF_SIZE) ; un peu
 	# de marge pour l'enveloppe multipart.
@@ -28,13 +34,37 @@
 		max_size 25MB
 	}
 
-	# Supervision : Grafana sous /grafana/. `handle_path` retire le préfixe,
-	# Grafana (GF_SERVER_SERVE_FROM_SUB_PATH) sait qu'il vit sous /grafana/
-	# pour ses liens. Sans barre finale, on redirige plutôt que de laisser
-	# nginx répondre la page d'accueil de l'application.
-	redir /grafana /grafana/ permanent
-	handle_path /grafana/* {
+	# Supervision : Grafana sous /grafana/, seulement si le profil Compose
+	# `supervision` est actif (SUPERVISION=1 dans .env, transmis à Caddy par
+	# docker-compose.prod.yml). Un Caddyfile n'a pas de bloc conditionnel :
+	# la variable est substituée dans une expression CEL avant l'analyse —
+	# `"1" == "1"` ou `"0" == "1"` —, constante, donc sans coût par requête,
+	# et le fichier reste valide dans les deux cas (`caddy validate`).
+	# Sans supervision, /grafana/ répond 404 en clair plutôt que de laisser
+	# nginx servir la page d'accueil de l'application ou Caddy répondre 502
+	# sur un conteneur qui n'existe pas.
+	#
+	# Les deux matchers sont nommés : Caddy trie les `handle` par longueur
+	# de chemin quand un matcher de chemin est inscrit en ligne, ce qui
+	# ferait passer un `handle /grafana/*` avant celui-ci ; avec des matchers
+	# nommés, l'ordre est celui du fichier.
+	@supervision {
+		expression `"{$SUPERVISION:0}" == "1"`
+		path /grafana /grafana/*
+	}
+	@grafana path /grafana /grafana/*
+
+	# Le préfixe est transmis tel quel (`handle`, pas `handle_path`) :
+	# Grafana sert lui-même le sous-chemin (GF_SERVER_SERVE_FROM_SUB_PATH)
+	# et attend /grafana/login, pas /login — retirer le préfixe le faisait
+	# répondre 404 ou boucler sur sa page de connexion. Sans barre finale,
+	# on redirige plutôt que de laisser Grafana répondre à côté.
+	handle @supervision {
+		redir /grafana /grafana/ permanent
 		reverse_proxy grafana:3000
+	}
+	handle @grafana {
+		respond "Supervision désactivée sur cette instance (profil Compose « supervision », voir deploy/README.md)." 404
 	}
 
 	handle {

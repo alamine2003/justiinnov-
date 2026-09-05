@@ -3,28 +3,46 @@
 #   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
 #
 # Le backend tourne hors mode debug, comme en production ; le frontend est
-# l'image nginx finale, pas le serveur de développement Vite. C'est ainsi que
-# le proxy `/api/` de `frontend/nginx.conf` et le démarrage des images sont
-# vérifiés, et non seulement le code.
+# l'image nginx finale, pas le serveur de développement Vite ; Caddy — le
+# Caddyfile livré, en clair — est devant nginx, comme derrière TLS sur le
+# serveur. C'est ainsi que le proxy `/api/` de `frontend/nginx.conf`, la
+# route Caddy et le démarrage des images sont vérifiés, et non seulement le
+# code.
+#
+# Aucun code n'est monté : les images sont celles que la livraison publie.
+# Le fichier des comptes jetables (`backend/seed_users.ci.json`, exclu de
+# l'image par `.dockerignore`) entre par `docker compose cp`, comme un
+# fichier de comptes sur un serveur (`.github/workflows/ci.yml`).
+#
+# Le navigateur (Playwright, curl) parle à http://localhost:8080, port de
+# Caddy ; nginx n'est plus publié.
 services:
   backend:
+    volumes: !reset []
     environment:
       DJANGO_DEBUG: "0"
       # Pas un secret : la CI ne sert aucune donnée réelle.
       DJANGO_SECRET_KEY: ci-7QmX2vLp9BdTnRw4KsZjHy6FgUcAe3NoIrVtPlMqDbXhJf5Ez
       DJANGO_ALLOWED_HOSTS: "*"
-      # Le navigateur parle en clair au conteneur nginx.
+      # Le navigateur parle en clair à Caddy.
       DJANGO_SECURE_SSL_REDIRECT: "0"
-      # Un seul proxy devant Django ici : nginx, sans Caddy.
-      DJANGO_NUM_PROXIES: "1"
+      # Deux proxys devant Django, comme en production : Caddy puis nginx.
+      DJANGO_NUM_PROXIES: "2"
       CORS_ALLOWED_ORIGINS: "http://localhost:8080"
+      # Hors mode debug, un EMAIL_HOST absent est une erreur de
+      # configuration ; la CI n'a pas de SMTP et l'acquitte explicitement.
+      EMAIL_BACKEND_CONSOLE: "1"
+      # Compteurs Prometheus partagés entre workers, comme en production.
+      PROMETHEUS_MULTIPROC_DIR: /dev/shm/prometheus
 
   scheduler:
+    volumes: !reset []
     environment:
       DJANGO_DEBUG: "0"
       DJANGO_SECRET_KEY: ci-7QmX2vLp9BdTnRw4KsZjHy6FgUcAe3NoIrVtPlMqDbXhJf5Ez
       DJANGO_ALLOWED_HOSTS: "*"
       DJANGO_SECURE_SSL_REDIRECT: "0"
+      EMAIL_BACKEND_CONSOLE: "1"
 
   frontend:
     build:
@@ -33,5 +51,29 @@ services:
     command: !reset null
     environment: !reset {}
     volumes: !reset []
-    ports: !override
-      - "127.0.0.1:8080:80"
+    ports: !reset []
+
+  caddy:
+    # La même image et le même Caddyfile que deploy/docker-compose.prod.yml.
+    # `APP_DOMAIN=http://:8080` : adresse de site sans TLS, tout hôte, port
+    # 8080 — le reste du fichier (en-têtes, taille des corps, routes) est
+    # celui de la production. Sans Grafana dans cette pile, `/grafana/`
+    # répond 404 (profil de supervision inactif) ; rien ne l'appelle.
+    image: caddy:2.8-alpine
+    container_name: justi_caddy
+    environment:
+      APP_DOMAIN: "http://:8080"
+      ACME_EMAIL: ci@example.invalid
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      # À travers Caddy jusqu'à nginx : la chaîne entière répond.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      frontend:
+        condition: service_healthy

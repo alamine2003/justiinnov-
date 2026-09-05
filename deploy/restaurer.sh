@@ -1,8 +1,10 @@
 #!/bin/sh
 # Restaure une sauvegarde faite par sauvegarder.sh, depuis le volume
-# `sauvegardes` de la pile.
+# `sauvegardes` de la pile — ou depuis la copie hors machine
+# (SAUVEGARDE_DISTANT_*), rapatriée d'abord dans le volume.
 #
-#   ./restaurer.sh --lister                       # les dumps disponibles
+#   ./restaurer.sh --lister                       # les dumps du volume, puis
+#                                                 # ceux du distant
 #   ./restaurer.sh justi_innov-2026-09-04T020000Z.dump
 #                                                 # restaure la base de la pile
 #   ./restaurer.sh mensuel/justi_innov-2026-09.dump
@@ -10,8 +12,12 @@
 #   ./restaurer.sh <dump> --base test_restauration
 #                                                 # dans une base jetable, pour
 #                                                 # le test trimestriel
+#   ./restaurer.sh --depuis-distant <dump> [--base …]
+#                                                 # rapatrie le dump du distant
+#                                                 # dans le volume, puis restaure
 #   ./restaurer.sh --pieces                       # remet le miroir des
 #                                                 # justificatifs dans le bucket
+#   ./restaurer.sh --depuis-distant --pieces      # rapatrie d'abord le miroir
 #
 # Restaurer la base de la pile arrête le backend et l'ordonnanceur le temps
 # de l'opération, puis les relance. `pg_restore --clean --if-exists` supprime
@@ -22,19 +28,8 @@ set -eu
 
 cd "$(dirname "$0")"
 
-compose() {
-  docker compose -f docker-compose.prod.yml "$@"
-}
-
-# Un shell dans le service `sauvegarde` : il voit le volume et la base, et
-# porte les variables PG* de connexion. `-T` : pas de terminal, pour pouvoir
-# enchaîner dans un script.
-dans_sauvegarde() {
-  compose run --rm -T --entrypoint sh sauvegarde -c "$1"
-}
-
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 }
 
@@ -59,15 +54,75 @@ POSTGRES_MIGRATION_USER="$(valeur POSTGRES_MIGRATION_USER)"
 base_pile="${POSTGRES_DB:-justi_innov}"
 proprietaire="${POSTGRES_MIGRATION_USER:-${POSTGRES_USER:-justi}}"
 
+# Fichiers Compose : docker-compose.prod.yml seul, ou la liste COMPOSE_FILE
+# du .env quand une surcharge locale s'y ajoute (README.md, « Surcharge
+# locale ») — la même règle que deploy.sh. Compose lit lui-même COMPOSE_FILE
+# dans .env, mais un `-f` explicite la ferait taire.
+fichiers_compose="$(valeur COMPOSE_FILE)"
+compose() {
+  if [ -n "$fichiers_compose" ]; then
+    docker compose "$@"
+  else
+    docker compose -f docker-compose.prod.yml "$@"
+  fi
+}
+
+# Profil `supervision` : la même règle que deploy.sh — SUPERVISION=1 dans
+# .env fait foi, et COMPOSE_PROFILES est exporté en conséquence pour que
+# `compose up -d --wait backend scheduler`, à la fin, voie la même pile que
+# la livraison (sans quoi Compose pourrait tenir Grafana pour un orphelin).
+profils_sans="$(valeur COMPOSE_PROFILES | tr ',' '\n' | grep -vx 'supervision' | paste -sd, - || true)"
+if [ "$(valeur SUPERVISION)" = "1" ]; then
+  export COMPOSE_PROFILES="${profils_sans:+$profils_sans,}supervision"
+else
+  export COMPOSE_PROFILES="$profils_sans"
+fi
+
+# Copie hors machine : le service `sauvegarde-distante` porte rclone et la
+# configuration du distant ; sauvegarder.sh y sait lister et rapatrier.
+distant_configure() { [ -n "$(valeur SAUVEGARDE_DISTANT_ENDPOINT)" ]; }
+dans_distant() {
+  compose run --rm -T sauvegarde-distante "$@"
+}
+
+# Un shell dans le service `sauvegarde` : il voit le volume et la base, et
+# porte les variables PG* de connexion du propriétaire. `-T` : pas de
+# terminal, pour pouvoir enchaîner dans un script.
+dans_sauvegarde() {
+  compose run --rm -T --entrypoint sh sauvegarde -c "$1"
+}
+
+depuis_distant=0
+if [ "$1" = "--depuis-distant" ]; then
+  depuis_distant=1
+  shift
+  [ $# -ge 1 ] || usage
+  if ! distant_configure; then
+    echo "✘ Aucune copie hors machine configurée : SAUVEGARDE_DISTANT_ENDPOINT est vide dans .env." >&2
+    exit 1
+  fi
+fi
+
 case "$1" in
   --lister)
     echo "Dumps quotidiens (gardés SAUVEGARDE_RETENTION_JOURS jours) :"
     dans_sauvegarde 'ls -lhp /sauvegardes/base/ 2>/dev/null | grep -v "/$" || echo "(aucun)"'
     echo "Copies mensuelles (conservées sans limite), à désigner par mensuel/<nom> :"
     dans_sauvegarde 'ls -lh /sauvegardes/base/mensuel/ 2>/dev/null || echo "(aucune)"'
+    echo
+    echo "Copie hors machine (à restaurer par --depuis-distant <nom>) :"
+    if distant_configure; then
+      dans_distant --lister
+    else
+      echo "(aucune : SAUVEGARDE_DISTANT_ENDPOINT vide — obligatoire avant la mise en production)"
+    fi
     exit 0
     ;;
   --pieces)
+    if [ "$depuis_distant" -eq 1 ]; then
+      echo "→ Rapatriement du miroir des justificatifs depuis le distant…"
+      dans_distant --rapatrier-pieces
+    fi
     echo "→ Restauration des justificatifs depuis le miroir vers le bucket…"
     compose run --rm -T --entrypoint sh sauvegarde-pieces -c '
       set -eu
@@ -98,8 +153,15 @@ case "$dump" in
   */*) echo "✘ Donnez le nom du dump tel que listé par --lister (ou mensuel/<nom>), sans autre chemin." >&2; exit 1 ;;
 esac
 
+if [ "$depuis_distant" -eq 1 ]; then
+  echo "→ Rapatriement de $dump depuis le distant dans le volume…"
+  # Le nom vient de la ligne de commande : il passe en argument, jamais
+  # dans un `sh -c`.
+  dans_distant --rapatrier "$dump"
+fi
+
 if ! dans_sauvegarde "test -f '/sauvegardes/base/$dump'"; then
-  echo "✘ Dump introuvable dans le volume : $dump (voir --lister)." >&2
+  echo "✘ Dump introuvable dans le volume : $dump (voir --lister, ou --depuis-distant <nom>)." >&2
   exit 1
 fi
 
@@ -137,9 +199,25 @@ dans_sauvegarde "psql -d '$base_cible' -tAc \"SELECT '  dernière entrée du jou
 
 if [ -n "${POSTGRES_MIGRATION_USER:-}" ]; then
   echo "→ Droits du rôle applicatif « ${POSTGRES_USER:-justi_app} » sur « $base_cible »…"
-  dans_sauvegarde "psql -d '$base_cible' -v ON_ERROR_STOP=1 \
-    -v role_applicatif='${POSTGRES_USER:-justi_app}' \
-    -v mot_de_passe='${POSTGRES_PASSWORD:-}' -f /creer_role_applicatif.sql"
+  # Le mot de passe du rôle applicatif voyage par l'environnement : exporté
+  # ici, transmis au conteneur par `-e NOM` sans valeur (Compose le lit dans
+  # le nôtre), lu par le shell du conteneur. Il n'apparaît ainsi ni dans la
+  # ligne de commande — `ps`, historique du shell — ni dans le script passé
+  # à `sh -c`, qui est entre apostrophes et ne développe rien côté hôte.
+  # psql reçoit la valeur en variable et la cite lui-même (`:'mot_de_passe'`
+  # dans le SQL) : une apostrophe dans le mot de passe ne casse rien.
+  export RESTAURATION_BASE="$base_cible"
+  export RESTAURATION_ROLE="${POSTGRES_USER:-justi_app}"
+  export RESTAURATION_MOT_DE_PASSE="${POSTGRES_PASSWORD:-}"
+  compose run --rm -T \
+    -e RESTAURATION_BASE -e RESTAURATION_ROLE -e RESTAURATION_MOT_DE_PASSE \
+    --entrypoint sh sauvegarde -c '
+      psql -d "$RESTAURATION_BASE" -v ON_ERROR_STOP=1 \
+        -v role_applicatif="$RESTAURATION_ROLE" \
+        -v mot_de_passe="$RESTAURATION_MOT_DE_PASSE" \
+        -f /creer_role_applicatif.sql
+    '
+  unset RESTAURATION_BASE RESTAURATION_ROLE RESTAURATION_MOT_DE_PASSE
 fi
 
 if [ "$base_cible" = "$base_pile" ]; then

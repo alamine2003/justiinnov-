@@ -11,12 +11,33 @@
 # précédente : les migrations Django ne se défont pas seules, mais le code
 # d'une version N-1 sait lire le schéma de N tant que la migration n'a fait
 # qu'ajouter.
+#
+# Aucun service ne lit `.env` en bloc (`env_file`) : chaque variable
+# transmise est nommée sous `environment`, service par service. Le `.env`
+# porte aussi le mot de passe de Grafana, l'adresse ACME ou le jeton de
+# registre, qui n'ont rien à faire dans l'environnement d'un processus
+# Django — ni dans son `/proc/<pid>/environ`, ni dans `docker inspect`.
+# Conséquence : une variable qui n'est pas listée ici n'atteint pas le
+# service, même posée dans `.env`.
+#
+# Une surcharge locale (docker-compose.override.yml, non versionnée) se
+# déclare par `COMPOSE_FILE=docker-compose.prod.yml:docker-compose.override.yml`
+# dans `.env` ; deploy.sh et restaurer.sh la respectent (README.md,
+# « Surcharge locale »).
+#
+# La supervision (Prometheus, exporteurs, Grafana) est un profil Compose
+# optionnel, `supervision` : `SUPERVISION=1` dans `.env` l'active — deploy.sh
+# et restaurer.sh en déduisent COMPOSE_PROFILES, Caddy ouvre /grafana/, le
+# backend expose le drapeau `supervision` à l'interface. Sans lui, ces quatre
+# services n'existent pas pour Compose et /grafana/ répond 404 (README.md,
+# « Supervision »).
 
 # Les limites de mémoire (`mem_limit`) sont dimensionnées pour une machine de
-# 4 Go : la plateforme elle-même reste sous 3 Go, la supervision (Prometheus,
-# Grafana, exporteurs) ajoute 640 Mo de plafond — 8 Go sont plus confortables.
-# Un service qui dépasse sa limite est tué et relancé par `restart`, plutôt
-# que d'emporter la machine avec lui.
+# 4 Go : la plateforme elle-même reste sous 3 Go, sauvegardes comprises ; la
+# supervision (Prometheus, Grafana, exporteurs), quand elle est activée,
+# ajoute 640 Mo de plafond — 8 Go sont alors plus confortables. Un service
+# qui dépasse sa limite est tué et relancé par `restart`, plutôt que
+# d'emporter la machine avec lui.
 
 # Deux rôles Postgres : le propriétaire (POSTGRES_MIGRATION_USER, sinon
 # POSTGRES_USER) initialise la base, joue les migrations et fait les
@@ -28,20 +49,84 @@ x-proprietaire: &proprietaire
   PGUSER: ${POSTGRES_MIGRATION_USER:-${POSTGRES_USER:-justi}}
   PGPASSWORD: ${POSTGRES_MIGRATION_PASSWORD:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}}
 
+# Journaux bornés sur chaque service : 100 Mo au plus par conteneur, pour
+# qu'un service bavard ne remplisse pas le disque que partagent la base et
+# les sauvegardes.
 x-journal: &journal
   driver: json-file
   options:
     max-size: "20m"
     max-file: "5"
 
+# Environnement Django, commun au serveur et à l'ordonnanceur. Les valeurs
+# par défaut reprennent celles de `backend/config/settings.py` et de
+# `backend/entrypoint.sh` : une variable absente du `.env` arrive vide et
+# Django ne verrait pas la différence avec une valeur voulue.
+x-django: &django
+  # --- Django ---
+  DJANGO_DEBUG: "0"
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY manquant}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?DJANGO_ALLOWED_HOSTS manquant}
+  DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
+  DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-1}
+  DJANGO_HSTS_PRELOAD: ${DJANGO_HSTS_PRELOAD:-1}
+  # Caddy puis nginx : deux proxys de confiance devant Django.
+  DJANGO_NUM_PROXIES: ${DJANGO_NUM_PROXIES:-2}
+  DJANGO_HSTS_SECONDS: ${DJANGO_HSTS_SECONDS:-0}
+  DJANGO_TOTP_REQUIRED: ${DJANGO_TOTP_REQUIRED:-0}
+  DJANGO_CREATE_SUPERUSER: ${DJANGO_CREATE_SUPERUSER:-0}
+  DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
+  DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL:-}
+  DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS manquant}
+  APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL manquant}
+  ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-innovpharma.net}
+  TOKEN_MAX_AGE_DAYS: ${TOKEN_MAX_AGE_DAYS:-30}
+  # --- Base : le rôle applicatif ; le propriétaire pour les migrations ---
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-justi_innov}
+  POSTGRES_USER: ${POSTGRES_USER:-justi}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}
+  POSTGRES_MIGRATION_USER: ${POSTGRES_MIGRATION_USER:-}
+  # Le mot de passe du propriétaire n'est pas dans l'environnement : il
+  # est lu dans ce fichier, un secret Compose alimenté par
+  # POSTGRES_MIGRATION_PASSWORD du .env (voir `secrets`, en bas).
+  POSTGRES_MIGRATION_PASSWORD_FILE: /run/secrets/postgres_migration_password
+  DATABASE_URL: ${DATABASE_URL:-}
+  DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-}
+  # --- Stockage des justificatifs ---
+  AWS_S3_ENDPOINT_URL: "http://minio:9000"
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID manquant}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY manquant}
+  AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-justificatifs}
+  # --- Courrier ---
+  EMAIL_HOST: ${EMAIL_HOST:-}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+  EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-1}
+  EMAIL_BACKEND_CONSOLE: ${EMAIL_BACKEND_CONSOLE:-0}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:?DEFAULT_FROM_EMAIL manquant}
+  # --- Serveur d'application ---
+  GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+  GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+  GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  # --- Supervision ---
+  # Le même drapeau que celui qui active le profil Compose : l'API
+  # (/api/configuration/) le renvoie à l'interface, qui n'affiche l'entrée
+  # « Supervision » que s'il vaut 1 — sinon le lien mènerait à un 404.
+  SUPERVISION: ${SUPERVISION:-0}
+  # --- Ordonnanceur ---
+  SCHEDULE_ALERTS: ${SCHEDULE_ALERTS:-0 * * * *}
+  SCHEDULE_WEEKLY_REPORT: ${SCHEDULE_WEEKLY_REPORT:-0 7 * * 1}
+  SCHEDULE_MONTHLY_REPORT: ${SCHEDULE_MONTHLY_REPORT:-0 7 1 * *}
+
 x-backend: &backend
   image: ${BACKEND_IMAGE:?BACKEND_IMAGE manquant}:${IMAGE_TAG:?IMAGE_TAG manquant}
-  env_file: .env
-  environment:
-    POSTGRES_HOST: db
-    POSTGRES_PORT: "5432"
-    AWS_S3_ENDPOINT_URL: "http://minio:9000"
-    DJANGO_DEBUG: "0"
+  secrets:
+    - postgres_migration_password
   restart: unless-stopped
   logging: *journal
 
@@ -70,6 +155,7 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    logging: *journal
 
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
@@ -86,10 +172,18 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
+    logging: *journal
 
   backend:
     <<: *backend
     mem_limit: 768m
+    environment:
+      <<: *django
+      # Compteurs Prometheus partagés entre les workers gunicorn, en mémoire
+      # partagée ; l'entrypoint vide le dossier à chaque démarrage. Propre au
+      # serveur : l'ordonnanceur, processus unique, ne le reçoit pas — il
+      # écrirait ses propres compteurs au milieu de ceux du serveur.
+      PROMETHEUS_MULTIPROC_DIR: ${PROMETHEUS_MULTIPROC_DIR:-/dev/shm/prometheus}
     depends_on:
       db:
         condition: service_healthy
@@ -99,6 +193,7 @@ services:
   scheduler:
     <<: *backend
     mem_limit: 256m
+    environment: *django
     entrypoint: ["python", "manage.py", "run_scheduler"]
     # L'image hérite du contrôle de santé du backend, qui interroge l'API :
     # l'ordonnanceur n'y répond pas. Il n'expose rien ; `restart` le relance
@@ -115,6 +210,7 @@ services:
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE manquant}:${IMAGE_TAG:?IMAGE_TAG manquant}
     mem_limit: 64m
     restart: unless-stopped
+    logging: *journal
     depends_on:
       backend:
         condition: service_healthy
@@ -131,30 +227,42 @@ services:
       # Obligatoire : vide, la directive `email` du Caddyfile est mal formée
       # et Caddy refuse de démarrer — donc la plateforme entière.
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant}
+      # Route /grafana/ vers Grafana si 1, répond 404 sinon (Caddyfile).
+      SUPERVISION: ${SUPERVISION:-0}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    # Pas de dépendance sur grafana : il est dans un profil optionnel, et
+    # Caddy résout `grafana:3000` à la requête, pas au démarrage.
     depends_on:
       - frontend
-      - grafana
     restart: unless-stopped
+    logging: *journal
 
   # Sauvegardes nocturnes (sauvegarder.sh) dans le volume `sauvegardes` :
   # un `pg_dump -Fc` par nuit, gardé 30 jours, plus une copie mensuelle
-  # conservée pour toujours, et un miroir du bucket des justificatifs. Deux
-  # services parce que deux outils : pg_dump vient de l'image postgres, mc de
-  # l'image minio/mc. Le volume reste sur la machine ; la copie ailleurs est
-  # décrite dans README.md, et restaurer.sh fait le chemin inverse.
+  # conservée pour toujours, et un miroir du bucket des justificatifs. Trois
+  # services parce que trois outils : pg_dump vient de l'image postgres, mc
+  # de l'image minio/mc, et rclone de la sienne pour la copie hors machine
+  # (`sauvegarde-distante`, plus bas), sans laquelle une sauvegarde brûle
+  # avec le serveur ; restaurer.sh fait le chemin inverse. Chacun ne reçoit
+  # que ce qu'il lui faut : la base pour l'un, le stockage pour l'autre, le
+  # distant pour le troisième — pas la clé Django ni le mot de passe de
+  # Grafana. SAUVEGARDE_DISTANT_ENDPOINT est donné aux deux premiers pour
+  # une seule raison : dire dans leur journal, où l'exploitation regarde,
+  # qu'aucune copie hors machine n'est configurée.
   sauvegarde:
     image: postgres:16.4-alpine
     mem_limit: 128m
     entrypoint: ["/sauvegarder.sh", "base"]
-    env_file: .env
     environment:
       <<: *proprietaire
+      # Base hébergée hors de la pile : pg_dump accepte l'URL.
+      DATABASE_URL: ${DATABASE_URL:-}
       SAUVEGARDE_HEURE: ${SAUVEGARDE_HEURE:-02:00}
       SAUVEGARDE_RETENTION_JOURS: ${SAUVEGARDE_RETENTION_JOURS:-30}
+      SAUVEGARDE_DISTANT_ENDPOINT: ${SAUVEGARDE_DISTANT_ENDPOINT:-}
     volumes:
       - ./sauvegarder.sh:/sauvegarder.sh:ro
       - ./creer_role_applicatif.sql:/creer_role_applicatif.sql:ro
@@ -171,12 +279,15 @@ services:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
     mem_limit: 128m
     entrypoint: ["/sauvegarder.sh", "pieces"]
-    env_file: .env
     environment:
       AWS_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID manquant}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY manquant}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-justificatifs}
       # Un quart d'heure après la base, pour ne pas charger le disque deux
       # fois en même temps.
       SAUVEGARDE_HEURE: ${SAUVEGARDE_PIECES_HEURE:-02:15}
+      SAUVEGARDE_DISTANT_ENDPOINT: ${SAUVEGARDE_DISTANT_ENDPOINT:-}
     volumes:
       - ./sauvegarder.sh:/sauvegarder.sh:ro
       - sauvegardes:/sauvegardes
@@ -186,7 +297,49 @@ services:
     restart: unless-stopped
     logging: *journal
 
+  # Copie hors machine, obligatoire avant toute mise en production
+  # (docs/model-de-donnees.md, décision 36) : chaque dump réussi et le
+  # miroir des pièces partent vers un stockage objet S3 compatible
+  # (SAUVEGARDE_DISTANT_*), où ils sont vérifiés (`rclone check`). Le
+  # service guette les demandes que déposent les deux autres dans le volume
+  # après chaque sauvegarde réussie, et écrit « ✔ copie distante » ou « ✘ »
+  # dans son journal. Sans SAUVEGARDE_DISTANT_ENDPOINT, il tourne quand
+  # même — pour le dire, au démarrage et à chaque sauvegarde. Étiquette
+  # épinglée, comme les autres. Le secret du distant passe par un secret
+  # Compose, pas par l'environnement.
+  sauvegarde-distante:
+    image: rclone/rclone:1.72.0
+    # rclone : ~50 Mo au repos, plus ~32 Mo de tampons d'envoi
+    # (sauvegarder.sh borne transferts, morceaux et concurrence).
+    mem_limit: 128m
+    entrypoint: ["/sauvegarder.sh", "distant"]
+    environment:
+      SAUVEGARDE_DISTANT_ENDPOINT: ${SAUVEGARDE_DISTANT_ENDPOINT:-}
+      SAUVEGARDE_DISTANT_BUCKET: ${SAUVEGARDE_DISTANT_BUCKET:-}
+      SAUVEGARDE_DISTANT_CLE: ${SAUVEGARDE_DISTANT_CLE:-}
+      SAUVEGARDE_DISTANT_REGION: ${SAUVEGARDE_DISTANT_REGION:-}
+      SAUVEGARDE_DISTANT_FOURNISSEUR: ${SAUVEGARDE_DISTANT_FOURNISSEUR:-Other}
+      # La même rétention que sur la machine, appliquée au préfixe
+      # quotidien/ du distant ; mensuel/ n'est jamais touché.
+      SAUVEGARDE_RETENTION_JOURS: ${SAUVEGARDE_RETENTION_JOURS:-30}
+    secrets:
+      - sauvegarde_distant_secret
+    volumes:
+      - ./sauvegarder.sh:/sauvegarder.sh:ro
+      - sauvegardes:/sauvegardes
+    restart: unless-stopped
+    logging: *journal
+
   # --- Supervision : Prometheus → Grafana, sur https://<domaine>/grafana/ ---
+  #
+  # Profil Compose `supervision`, optionnel : activé par SUPERVISION=1 dans
+  # .env (deploy.sh et restaurer.sh en déduisent COMPOSE_PROFILES ; pour
+  # `docker compose` lancé à la main, `COMPOSE_PROFILES=supervision` dans
+  # .env aussi). Sans le profil, ces quatre services n'existent pas :
+  # `compose config --services` ne les liste pas, `up` ne les lance pas, et
+  # une machine de 4 Go garde ses 640 Mo. L'exploitation l'active quand
+  # elle en a besoin ; deploy.sh arrête les quatre s'il trouve le drapeau
+  # à 0 alors qu'ils tournent.
   #
   # Prometheus collecte toutes les 15 s les compteurs du backend
   # (django-prometheus, sous le jeton METRICS_TOKEN), ceux de la base
@@ -196,6 +349,7 @@ services:
   # sous-chemin /grafana/, et Grafana demande un mot de passe.
   prometheus:
     image: prom/prometheus:v2.53.5
+    profiles: ["supervision"]
     mem_limit: 256m
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -205,7 +359,10 @@ services:
       # que partagent la base et les sauvegardes.
       - --storage.tsdb.retention.time=90d
       - --storage.tsdb.retention.size=2GB
-      - --web.enable-lifecycle
+      # Pas de `--web.enable-lifecycle` : il ouvrirait, sans
+      # authentification, un point qui recharge ou arrête Prometheus à
+      # quiconque joint le réseau interne. Recharger la configuration se
+      # fait par un signal : `docker compose kill -s HUP prometheus`.
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -227,6 +384,7 @@ services:
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.17.1
+    profiles: ["supervision"]
     mem_limit: 64m
     environment:
       # Le rôle applicatif suffit : les vues pg_stat_* se lisent sans
@@ -245,6 +403,7 @@ services:
 
   node-exporter:
     image: prom/node-exporter:v1.9.1
+    profiles: ["supervision"]
     mem_limit: 64m
     # Lit /proc, /sys et les systèmes de fichiers de l'hôte, en lecture
     # seule : c'est le seul service qui regarde hors de la pile.
@@ -259,13 +418,18 @@ services:
 
   grafana:
     image: grafana/grafana:12.1.1
+    profiles: ["supervision"]
     mem_limit: 256m
     environment:
-      # Servi sous /grafana/ derrière Caddy : Grafana doit connaître son
-      # adresse publique pour construire ses liens et accepter le sous-chemin.
+      # Servi sous /grafana/ derrière Caddy, qui transmet le préfixe :
+      # Grafana doit connaître son adresse publique pour construire ses
+      # liens et servir lui-même le sous-chemin.
       GF_SERVER_ROOT_URL: "https://${APP_DOMAIN:?APP_DOMAIN manquant}/grafana/"
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      # Exigé même profil inactif : Compose interpole toute la pile avant
+      # d'appliquer les profils. Un vide ferait démarrer Grafana avec son
+      # mot de passe par défaut le jour de l'activation.
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD manquant}
       # Trois comptes, créés par l'administrateur (README.md, « Supervision ») :
       # « direction » (Viewer), « technique » (Editor) et l'administrateur
@@ -276,15 +440,15 @@ services:
       GF_USERS_EDITORS_CAN_ADMIN: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       # Le tableau de bord provisionné accueille chacun à la connexion, dans
-      # le thème de l'application ; personne n'a à le chercher.
+      # le thème et la langue de l'application ; personne n'a à le chercher.
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/justi-innov.json
       GF_USERS_DEFAULT_THEME: light
+      GF_USERS_DEFAULT_LANGUAGE: fr-FR
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_NEWS_NEWS_FEED_ENABLED: "false"
       GF_SECURITY_COOKIE_SECURE: "true"
-      GF_DEFAULT_LOCALE: "fr-FR"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -310,6 +474,15 @@ volumes:
   prometheus_data:
   grafana_data:
 
+# Secrets Compose : la valeur vient du `.env`, atterrit dans un fichier sous
+# /run/secrets du seul service qui le monte, et n'apparaît ni dans
+# `docker inspect` ni dans l'environnement des autres processus. Une
+# variable absente donne un fichier vide, ce qui est le cas attendu tant que
+# creer_role_applicatif.sql n'a pas été joué.
 secrets:
   metrics_token:
     environment: METRICS_TOKEN
+  postgres_migration_password:
+    environment: POSTGRES_MIGRATION_PASSWORD
+  sauvegarde_distant_secret:
+    environment: SAUVEGARDE_DISTANT_SECRET

@@ -73,6 +73,10 @@ jobs:
       DJANGO_SECURE_SSL_REDIRECT: "0"
       # Aucun stockage objet : les tests écrivent en mémoire.
       AWS_S3_ENDPOINT_URL: ""
+      # Hors mode debug, un EMAIL_HOST absent est une erreur de
+      # configuration (les alertes se perdraient) ; la CI n'a pas de SMTP et
+      # l'acquitte explicitement : les messages vont dans la sortie.
+      EMAIL_BACKEND_CONSOLE: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -91,13 +95,30 @@ jobs:
 
       - name: Compiler les traductions
         working-directory: backend
-        # Les `.mo` ne sont pas versionnés : sans cette étape, les tests qui
+        # Le `.mo` n'est pas versionné : sans cette étape, les tests qui
         # lisent une réponse en anglais verraient le français, et un
         # catalogue mal formé ne serait découvert qu'au build de l'image.
+        run: django-admin compilemessages -l en -v0
+
+      - name: Vérifier que le catalogue anglais est complet
+        working-directory: backend
+        # Une chaîne ajoutée au code sans traduction ne fait échouer aucun
+        # test — le français sert de repli — et sort en français à qui
+        # demande l'anglais. `makemessages` ramène d'abord dans le catalogue
+        # unique (décision 42) toute chaîne nouvelle du code, avec un
+        # `msgstr` vide ; `msgfmt --check` refuse un catalogue mal formé ;
+        # `msgattrib` isole ce qui reste vide ou douteux (fuzzy) et ne doit
+        # rien rendre.
         run: |
-          find . -type d -name locale | while read -r d; do
-            (cd "$(dirname "$d")" && django-admin compilemessages -v0) || exit 1
-          done
+          po=locale/en/LC_MESSAGES/django.po
+          python manage.py makemessages -l en --ignore=tests --no-obsolete --no-wrap -v0
+          msgfmt --check --statistics -o /dev/null "$po"
+          manquantes="$(msgattrib --untranslated --no-wrap "$po"; msgattrib --only-fuzzy --no-wrap "$po")"
+          if [ -n "$manquantes" ]; then
+            printf '%s\n' "$manquantes"
+            echo "::error::Des chaînes du serveur n'ont pas de traduction anglaise : complétez backend/$po (msgstr vides ou fuzzy ci-dessus)."
+            exit 1
+          fi
 
       - name: Vérifier qu'aucune migration ne manque
         working-directory: backend
@@ -111,12 +132,32 @@ jobs:
           DJANGO_SECURE_SSL_REDIRECT: "1"
         run: python manage.py check --deploy --fail-level WARNING
 
+      - name: Schéma d'API
+        working-directory: backend
+        # Le contrat d'API est généré depuis le code et versionné dans
+        # `docs/api/schema.json` : une vue ou un sérialiseur modifié sans
+        # régénération (`cd frontend && npm run types:api -- --schema`)
+        # laisserait le frontend typer une réponse qui n'existe plus. La
+        # génération échoue sur tout avertissement : un champ calculé sans
+        # `@extend_schema_field` serait typé `string` par défaut.
+        # Sur la sortie standard, comme `frontend/scripts/generer-types.mts` :
+        # `--file` n'écrit pas la dernière fin de ligne, et le diff échouerait
+        # sur ce seul octet.
+        run: |
+          python manage.py spectacular --format openapi-json --validate --fail-on-warn > "$RUNNER_TEMP/schema.json"
+          if ! diff -u ../docs/api/schema.json "$RUNNER_TEMP/schema.json"; then
+            echo "::error::docs/api/schema.json ne correspond plus au code : lancez « cd frontend && npm run types:api -- --schema » et commitez le résultat."
+            exit 1
+          fi
+
       - name: Tests
         working-directory: backend
         # Une seule suite à la fois sur cette base : Django crée
-        # `test_justi_innov` et la détruit à la fin, deux suites en parallèle
-        # se marcheraient dessus.
-        run: python manage.py test --verbosity=2 --noinput
+        # `test_justi_innov` (et un clone par processus sous `--parallel`)
+        # et les détruit à la fin, deux suites en parallèle se marcheraient
+        # dessus. Le cache de test est en mémoire, propre à chaque processus
+        # (voir « Réglages de test » dans config/settings.py).
+        run: python manage.py test --verbosity=2 --noinput --parallel auto
 
   frontend:
     name: Frontend — types, lint, tests, build
@@ -136,6 +177,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
+
+      - name: Schéma d'API
+        # `src/lib/types.generated.ts` est tiré de `docs/api/schema.json`
+        # (lui-même comparé au code dans le travail backend) : régénéré ici,
+        # il doit être identique au fichier versionné.
+        run: |
+          npm run types:api
+          if ! git diff --exit-code -- src/lib/types.generated.ts; then
+            echo "::error::src/lib/types.generated.ts ne correspond plus à docs/api/schema.json : lancez « npm run types:api » et commitez le résultat."
+            exit 1
+          fi
 
       - name: Types
         run: npx tsc -b --force
@@ -275,10 +327,34 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml \
             up -d --build --wait --wait-timeout 300
 
-      - name: Amorcer les comptes
+      - name: Amorcer les comptes et les données de démonstration
+        # Le fichier des comptes n'est pas dans l'image (`.dockerignore`) et
+        # aucun code n'est monté dans la pile CI : il entre par `compose cp`,
+        # comme sur un serveur (deploy/README.md, « Première mise en
+        # service »). `seed_demo` remplit ensuite dossiers, lignes et pièces
+        # pour que les captures montrent autre chose que des écrans vides.
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml \
-            exec -T backend python manage.py seed_users --file seed_users.ci.json
+            cp backend/seed_users.ci.json backend:/tmp/seed.json
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            exec -T backend python manage.py seed_users --file /tmp/seed.json
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            exec -T backend python manage.py seed_demo --base-jetable
+
+      - name: Topologie de production
+        # Le navigateur passe par Caddy (HTTP, port 8080) puis nginx, comme
+        # en production derrière TLS : le Caddyfile livré est celui qui
+        # tourne ici, et Django lit l'adresse du client à travers deux
+        # proxys (DJANGO_NUM_PROXIES=2). `/admin/` n'est pas routé vers
+        # Django : nginx sert l'application (SPA) pour tout ce qui n'est pas
+        # `/api/`, et le back-office Django n'est joignable nulle part.
+        run: |
+          curl -fsS -o /dev/null -w 'Caddy → nginx → Django : %{http_code}\n' http://localhost:8080/api/health/
+          type=$(curl -fsS -o /dev/null -w '%{content_type}' http://localhost:8080/admin/)
+          case "$type" in
+            text/html*) echo "✔ /admin/ répond l'application (SPA), pas le back-office Django." ;;
+            *) echo "::error::/admin/ répond « $type » : nginx ne devrait pas relayer ce chemin." ; exit 1 ;;
+          esac
 
       - name: Captures d'écran
         working-directory: frontend
@@ -306,6 +382,9 @@ jobs:
         # lent, soixante requêtes étalées sur deux secondes passeraient
         # toutes. L'étape vient après les captures pour ne pas les priver
         # de réserve.
+        # Derrière Caddy, nginx lit l'adresse réelle dans X-Forwarded-For
+        # (`set_real_ip_from`) : la rafale vient d'une seule adresse, celle
+        # de l'exécuteur, et doit être limitée comme telle.
         run: |
           codes=$(seq 100 | xargs -P 50 -I{} curl -s -o /dev/null \
             -w '%{http_code} %{content_type}\n' http://localhost:8080/api/health/)
