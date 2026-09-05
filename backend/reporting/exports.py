@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from io import BytesIO, StringIO
 
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from docx import Document
 from docx.enum.section import WD_ORIENT
@@ -38,6 +39,8 @@ from reportlab.platypus import (
 
 from budget.aggregates import budget_figures
 from expenses.models import Proof
+
+from .scope import fuseau_de
 
 ZERO = Decimal("0.00")
 
@@ -155,7 +158,7 @@ def _proof_summary(dossier):
             continue
         label = proof.get_kind_display()
         if not proof.is_complete:
-            label += " (justif incomplet)"
+            label += _(" (justif incomplet)")
         labels.append(label)
     return " ; ".join(labels)
 
@@ -173,36 +176,52 @@ def _total_si_devise_unique(devises, ligne):
 # --- Lignes ------------------------------------------------------------------
 
 
-def lignes_depenses(dossiers):
-    """Lignes de dépenses, groupées par dossier, au format historique."""
+def lignes_depenses(expenses):
+    """Lignes de dépenses, classées par leur propre date, au format historique.
+
+    Une ligne se classe par sa date, pas par celle du dossier qui la porte :
+    un dossier ouvert en décembre peut recevoir une ligne de janvier, et
+    cette ligne relève de l'exercice suivant — comme pour son imputation.
+    L'heure affichée est celle du pays de la ligne : c'est celle qu'on lira
+    sur la pièce.
+    """
     tableau = Tableau("BASE DE DONNEES ACTIONS", EXPENSE_COLUMNS)
-    source = dossiers.prefetch_related("expenses__team", "expenses__owner", "proofs")
+    source = (
+        expenses.select_related("dossier__country", "country", "team", "owner")
+        .prefetch_related("dossier__proofs")
+        .order_by("date", "pk")
+    )
     totals = {"amount": ZERO, "justified": ZERO}
     devises = set()
+    # Le résumé des pièces est calculé une fois par dossier, pas par ligne.
+    pieces = {}
 
-    for dossier in source:
-        proofs = _proof_summary(dossier)
-        for expense in dossier.expenses.all():
-            totals["amount"] += expense.amount
-            totals["justified"] += expense.justified_amount
-            devises.add(dossier.country.currency)
-            tableau.lignes.append([
-                dossier.number,
-                expense.date.strftime("%d/%m/%Y %H:%M"),
-                dossier.country.name,
-                expense.team.name if expense.team else "",
-                expense.owner.name if expense.owner else "",
-                expense.title,
-                expense.amount,
-                expense.original_currency or "",
-                expense.original_amount
-                if expense.original_amount is not None
-                else "",
-                expense.justified_amount,
-                expense.amount - expense.justified_amount,
-                expense.get_status_display(),
-                proofs,
-            ])
+    for expense in source:
+        dossier = expense.dossier
+        if dossier.pk not in pieces:
+            pieces[dossier.pk] = _proof_summary(dossier)
+        totals["amount"] += expense.amount
+        totals["justified"] += expense.justified_amount
+        devises.add(expense.country.currency)
+        tableau.lignes.append([
+            dossier.number,
+            timezone.localtime(expense.date, fuseau_de(expense.country)).strftime(
+                "%d/%m/%Y %H:%M"
+            ),
+            expense.country.name,
+            expense.team.name if expense.team else "",
+            expense.owner.name if expense.owner else "",
+            expense.title,
+            expense.amount,
+            expense.original_currency or "",
+            expense.original_amount
+            if expense.original_amount is not None
+            else "",
+            expense.justified_amount,
+            expense.amount - expense.justified_amount,
+            expense.get_status_display(),
+            pieces[dossier.pk],
+        ])
 
     tableau.total = _total_si_devise_unique(devises, [
         None, None, None, None, None, "TOTAL",
@@ -228,7 +247,7 @@ def tableaux_rapprochement(budgets, dossiers):
             budget.country.name,
             # ``scope_label`` distingue projet, équipe et manager : une
             # sous-enveloppe d'équipe se lisait « Enveloppe du pays ».
-            budget.scope_label or "Enveloppe du pays",
+            budget.scope_label or _("Enveloppe du pays"),
             budget.country.currency,
             budget.amount,
             figures["engaged"],
@@ -393,9 +412,9 @@ FORMATS = {
 }
 
 
-def build_expenses_workbook(dossiers):
-    """Classeur des lignes de dépenses, groupées par dossier."""
-    return classeur_xlsx([lignes_depenses(dossiers)])
+def build_expenses_workbook(expenses):
+    """Classeur des lignes de dépenses, classées par date."""
+    return classeur_xlsx([lignes_depenses(expenses)])
 
 
 def build_reconciliation_workbook(budgets, dossiers):

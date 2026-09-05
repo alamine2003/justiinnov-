@@ -1,8 +1,8 @@
 """Messages bilingues : le français est la référence, l'anglais suit
 l'en-tête ``Accept-Language``.
 
-Ces tests lisent les catalogues compilés (``locale/en/LC_MESSAGES/django.mo``,
-produits par ``django-admin compilemessages``, non versionnés) : ils échouent
+Ces tests lisent le catalogue unique compilé (``backend/locale/en/LC_MESSAGES/django.mo``,
+produit par ``django-admin compilemessages``, non versionné) : ils échouent
 si la compilation n'a pas eu lieu, ce qui est voulu — une image livrée sans
 catalogue servirait du français à qui demande l'anglais.
 """
@@ -15,9 +15,10 @@ from .base import ExpenseTestCase
 
 
 class MessagesEnAnglaisTests(ExpenseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.expense = self.make_expense()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.expense = cls.make_expense(cls)
 
     def test_une_transition_refusee_repond_en_anglais(self):
         """On ne justifie pas un brouillon : le message, construit avec les

@@ -380,6 +380,36 @@ class ProofReviewTests(ExpenseTestCase):
                     self.assertIn("status", response.data)
                     self.assertEqual(Proof.objects.get(pk=self.proof_id).status, depart)
 
+    def test_pas_de_controle_documentaire_sur_un_dossier_cloture(self):
+        """Clôturer, c'est déclarer l'affaire terminée : ses pièces ne se
+        contrôlent plus, comme il ne s'en dépose plus."""
+        Dossier.objects.filter(pk=self.dossier.pk).update(status="closed")
+        self.login(self.controller)
+
+        response = self.review("validated")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", response.data)
+        self.assertEqual(Proof.objects.get(pk=self.proof_id).status, "received")
+
+    def test_les_transitions_atteignables_sont_exposees(self):
+        """``allowed_reviews`` dit à l'interface ce qu'elle peut proposer :
+        les cibles de ``PROOF_TRANSITIONS`` pour qui contrôle, rien pour une
+        pièce figée, rien sur un dossier clôturé, rien pour le pays."""
+        url = f"/api/proofs/{self.proof_id}/"
+        pour_le_pays = self.client.get(url).data["allowed_reviews"]
+        self.login(self.controller)
+        recue = self.client.get(url).data["allowed_reviews"]
+        validee = self.review("validated").data["allowed_reviews"]
+        Dossier.objects.filter(pk=self.dossier.pk).update(status="closed")
+        Proof.objects.filter(pk=self.proof_id).update(status="received")
+        cloturee = self.client.get(url).data["allowed_reviews"]
+
+        self.assertEqual(pour_le_pays, [])
+        self.assertEqual(recue, ["incomplete", "to_review", "validated", "rejected"])
+        self.assertEqual(validee, [])
+        self.assertEqual(cloturee, [])
+
     def test_une_piece_ne_revient_pas_a_l_etat_recu(self):
         self.login(self.controller)
 

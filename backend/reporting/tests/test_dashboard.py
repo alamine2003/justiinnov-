@@ -23,14 +23,15 @@ from notifications.models import Notification
 class DashboardTestCase(ExpenseTestCase):
     """Une dépense justifiée et une soumise, sur l'enveloppe togolaise."""
 
-    def setUp(self):
-        super().setUp()
-        self.justifiee = self.make_expense(
-            amount="300000.00", justified_amount="250000.00",
-            status=Status.JUSTIFIED, budget=self.budget,
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.justifiee = cls.make_expense(
+            cls, amount="300000.00", justified_amount="250000.00",
+            status=Status.JUSTIFIED, budget=cls.budget,
         )
-        self.soumise = self.make_expense(
-            amount="200000.00", status=Status.SUBMITTED, budget=self.budget
+        cls.soumise = cls.make_expense(
+            cls, amount="200000.00", status=Status.SUBMITTED, budget=cls.budget
         )
 
 
@@ -184,6 +185,23 @@ class BreakdownTests(DashboardTestCase):
 
         total = sum(Decimal(row["amount"]) for row in response.data["by_team"])
         self.assertEqual(total, Decimal("570000.00"))
+
+    def test_les_libelles_de_repli_suivent_la_langue(self):
+        self.make_expense(team=None, owner=None, status=Status.SUBMITTED, budget=self.budget)
+        self.login(self.doo)
+
+        en = self.client.get(
+            "/api/dashboard/breakdown/", {"year": self.year, "country": self.togo.pk},
+            HTTP_ACCEPT_LANGUAGE="en",
+        )
+        fr = self.client.get(
+            "/api/dashboard/breakdown/", {"year": self.year, "country": self.togo.pk},
+            HTTP_ACCEPT_LANGUAGE="fr",
+        )
+
+        self.assertIn("No team", {row["label"] for row in en.data["by_team"]})
+        self.assertIn("Outside any project", {row["label"] for row in en.data["by_project"]})
+        self.assertIn("Sans équipe", {row["label"] for row in fr.data["by_team"]})
 
     def test_le_pays_est_obligatoire(self):
         """Sans pays, deux équipes homonymes de pays différents fusionnent."""
@@ -505,10 +523,11 @@ class NotificationTests(DashboardTestCase):
 
 @in_memory_storage
 class ExportTests(DashboardTestCase):
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
         Proof.objects.create(
-            dossier=self.dossier,
+            dossier=cls.dossier,
             file="justificatifs/test.pdf",
             original_name="facture.pdf",
             kind=Proof.Kind.INVOICE,

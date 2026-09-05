@@ -8,12 +8,13 @@ données d'un autre pays.
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime, time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.translation import gettext as _
 from rest_framework.exceptions import NotFound
 
+from accounts.perimetre import filtrer
 from accounts.permissions import get_access
 from budget.models import Budget
 from core.models import Country
@@ -47,7 +48,26 @@ class Periode:
         return _("exercice %(year)s") % {"year": self.year}
 
 
-def bornes_periode(year, month=None):
+#: Fuseau des bornes quand aucun pays ne les fixe : voir :func:`bornes_periode`.
+UTC = ZoneInfo("UTC")
+
+
+def fuseau_de(country):
+    """Fuseau IANA d'un pays, UTC si le pays est inconnu ou son fuseau illisible.
+
+    Le champ est validé à l'écriture, mais une base reprise d'ailleurs peut
+    porter un identifiant que la machine ne connaît pas : mieux vaut un
+    rapport en UTC qu'une erreur 500 sur le tableau de bord.
+    """
+    if country is None:
+        return UTC
+    try:
+        return ZoneInfo(country.timezone or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        return UTC
+
+
+def bornes_periode(year, month=None, tz=None):
     """Premier et dernier instants d'une période, pour un filtre ``range``.
 
     ``date__year`` obligeait la base à convertir chaque date dans le fuseau
@@ -58,31 +78,46 @@ def bornes_periode(year, month=None):
 
     Renvoie ``(jours, instants)`` : le premier couple sert aux champs
     ``DateField`` (dossiers), le second aux ``DateTimeField`` (dépenses),
-    exprimé dans le fuseau courant pour que le dernier jour à 23 h 59 reste
-    dans la période.
+    exprimé dans le fuseau ``tz`` — celui du pays dont on lit les lignes,
+    pour qu'une dépense faite à Djibouti le 1er janvier à 01:00, encore au
+    31 décembre en UTC, tombe bien dans le nouvel exercice. Sans fuseau,
+    UTC : c'est la seule horloge qui ne dépende ni du serveur ni de qui
+    regarde, et elle est documentée par :func:`fuseau_du_perimetre`.
     """
+    tz = tz or UTC
     if month:
         jours = (date(year, month, 1), date(year, month, monthrange(year, month)[1]))
     else:
         jours = (date(year, 1, 1), date(year, 12, 31))
     instants = (
-        timezone.make_aware(datetime.combine(jours[0], time.min)),
-        timezone.make_aware(datetime.combine(jours[1], time.max)),
+        datetime.combine(jours[0], time.min, tzinfo=tz),
+        datetime.combine(jours[1], time.max, tzinfo=tz),
     )
     return jours, instants
 
 
-def bornes_annee(year):
+def bornes_annee(year, tz=None):
     """Bornes de l'exercice entier ; voir :func:`bornes_periode`."""
-    return bornes_periode(year)
+    return bornes_periode(year, tz=tz)
 
 
-def _restrict(queryset, access, lookup):
-    if access is None:
-        return queryset.none()
-    if access.has_global_scope:
-        return queryset
-    return queryset.filter(**{f"{lookup}__in": access.country_ids})
+def fuseau_du_perimetre(access, country_id=None):
+    """Fuseau dans lequel un rapport borne ses dépenses.
+
+    Un rapport ne porte qu'une horloge. Quand il vise un seul pays — nommé
+    par ``country_id``, ou seul pays du périmètre du demandeur — c'est celle
+    de ce pays : l'exercice d'une ligne est celui de son pays, comme pour
+    son imputation (``expenses.services.exercice``). Quand plusieurs pays se
+    lisent ensemble, aucun fuseau national ne s'impose : les bornes sont en
+    UTC, et le rapport le dit dans sa documentation plutôt que de choisir
+    en silence celui du serveur. Ce cas ne concerne que le siège, qui lit
+    des consolidations ; le détail d'un pays se lit toujours à son heure.
+    """
+    if country_id is None:
+        if access is None or access.has_global_scope or len(access.country_ids) != 1:
+            return UTC
+        country_id = access.country_ids[0]
+    return fuseau_de(Country.objects.filter(pk=country_id).first())
 
 
 def _verifier_pays(access, country_id):
@@ -114,33 +149,39 @@ def querysets_pour(access, year=None, country_id=None, month=None):
     Le mois ne restreint que les dossiers et les dépenses : une enveloppe
     est annuelle, et son état — consommé, disponible — n'a de sens que sur
     l'exercice entier.
+
+    Les dépenses sont bornées dans le fuseau du pays visé — ou en UTC quand
+    plusieurs pays se lisent ensemble, voir :func:`fuseau_du_perimetre`.
     """
-    budgets = _restrict(
+    # Même règle que les vues (``accounts.perimetre``). Les enveloppes restent
+    # lisibles par pays entier : un manager cloisonné doit savoir où en est
+    # l'enveloppe de son pays, même s'il n'en voit qu'une partie des lignes.
+    budgets = filtrer(
         # Une enveloppe désactivée est retirée du suivi : elle ne doit plus
         # ni peser dans les totaux ni déclencher d'alerte.
         Budget.objects.filter(is_active=True)
         .select_related("country", "project", "team", "manager")
         .with_consumption(),
         access,
-        "country",
     )
     # Les totaux sont annotés d'emblée : les exports lisent ceux de chaque
     # dossier, et une agrégation par dossier affiché coûtait une requête par
     # ligne du rapport.
-    dossiers = _restrict(
-        Dossier.objects.select_related("country").with_totals(), access, "country"
+    dossiers = filtrer(
+        Dossier.objects.select_related("country").with_totals(), access, equipe="team"
     )
-    expenses = _restrict(
-        Expense.objects.select_related("country"), access, "country"
-    )
+    expenses = filtrer(Expense.objects.select_related("country"), access, equipe="team")
 
+    if country_id:
+        # Vérifié avant les bornes : le fuseau vient du pays, et un pays
+        # hors périmètre ne doit pas même livrer le sien.
+        _verifier_pays(access, country_id)
     if year:
-        jours, instants = bornes_periode(year, month)
+        jours, instants = bornes_periode(year, month, fuseau_du_perimetre(access, country_id))
         budgets = budgets.filter(year=year)
         dossiers = dossiers.filter(date__range=jours)
         expenses = expenses.filter(date__range=instants)
     if country_id:
-        _verifier_pays(access, country_id)
         budgets = budgets.filter(country_id=country_id)
         dossiers = dossiers.filter(country_id=country_id)
         expenses = expenses.filter(country_id=country_id)

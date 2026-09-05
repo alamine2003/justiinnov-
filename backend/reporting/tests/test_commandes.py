@@ -117,16 +117,17 @@ class NotifyAlertsTests(DashboardTestCase):
 
 @in_memory_storage
 class RapportPeriodiqueTests(DashboardTestCase):
-    def setUp(self):
-        super().setUp()
-        self.doo.email = "doo@example.org"
-        self.doo.save()
-        self.controle_togo = make_user("controle.togo", Role.DF, [self.togo])
-        self.controle_togo.email = "togo@example.org"
-        self.controle_togo.save()
-        self.abidjan = Dossier.objects.create(
-            number="CI-0001", label="Salon Abidjan", country=self.ivoire,
-            date=date(self.year, 4, 2), status=Status.SUBMITTED,
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.doo.email = "doo@example.org"
+        cls.doo.save()
+        cls.controle_togo = make_user("controle.togo", Role.DF, [cls.togo])
+        cls.controle_togo.email = "togo@example.org"
+        cls.controle_togo.save()
+        cls.abidjan = Dossier.objects.create(
+            number="CI-0001", label="Salon Abidjan", country=cls.ivoire,
+            date=date(cls.year, 4, 2), status=Status.SUBMITTED,
         )
 
     def _classeur(self, message):

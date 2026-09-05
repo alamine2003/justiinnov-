@@ -13,7 +13,6 @@ import threading
 import time
 from decimal import Decimal
 
-from django.core.cache import cache
 from django.db import connection, transaction
 from django.test import TransactionTestCase
 from rest_framework import status
@@ -28,7 +27,6 @@ from core.models import Country, Project
 
 class ApprobationConcurrenteTests(TransactionTestCase):
     def setUp(self):
-        cache.clear()
         self.togo = Country.objects.create(
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",

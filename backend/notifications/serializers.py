@@ -18,3 +18,15 @@ class NotificationSerializer(serializers.ModelSerializer):
             "read_at", "created_at",
         ]
         read_only_fields = fields
+
+
+class UnreadCountSerializer(serializers.Serializer):
+    """Forme documentaire de ``/api/notifications/unread_count/``."""
+
+    unread = serializers.IntegerField(read_only=True)
+
+
+class MarkedReadSerializer(serializers.Serializer):
+    """Forme documentaire de ``/api/notifications/read-all/``."""
+
+    marked = serializers.IntegerField(read_only=True)

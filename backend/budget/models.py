@@ -14,7 +14,10 @@ from django.db.models.functions import Coalesce
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import pgettext_lazy
 
+from accounts.perimetre import filtrer
+from accounts.permissions import get_access
 from core.models import Country, Manager, Project, Team, TimeStampedModel
+from core.statuts import CONSUMING_STATUSES, ENGAGING_STATUSES
 
 #: Devise de consolidation : le siège est au Sénégal.
 CONSOLIDATION_CURRENCY = "XOF"
@@ -31,10 +34,12 @@ class OverrunPolicy(models.TextChoices):
 def default_overrun_policy():
     """Politique utilisée par une nouvelle enveloppe sans choix explicite.
 
-    Conservée pour les appelants existants : la résolution depuis la
-    configuration du circuit se fait dans le sérialiseur, à la création par
-    l'API. Le champ, lui, porte un défaut **littéral** : un défaut calculé
-    serait figé dans les migrations et lirait la configuration à chaque
+    **Conservée pour la migration ``0003_default_overrun_policy``**, qui la
+    référence comme défaut du champ dans son état historique : la retirer
+    casserait le rejeu des migrations. Le code courant ne l'appelle plus —
+    la résolution depuis la configuration du circuit se fait dans le
+    sérialiseur, à la création par l'API — et le champ porte un défaut
+    **littéral** : un défaut calculé lirait la configuration à chaque
     instanciation, y compris hors requête.
     """
     from core.models import WorkflowConfiguration
@@ -54,14 +59,7 @@ class BudgetQuerySet(models.QuerySet):
         enveloppe hors périmètre y est simplement « invalide », sans révéler
         qu'elle existe.
         """
-        from accounts.permissions import get_access
-
-        access = get_access(user)
-        if access is None:
-            return self.none()
-        if access.has_global_scope:
-            return self
-        return self.filter(country_id__in=access.country_ids)
+        return filtrer(self, get_access(user))
 
     def with_consumption(self):
         """Annote engagé, consommé et justifié en une seule requête.
@@ -70,10 +68,6 @@ class BudgetQuerySet(models.QuerySet):
         des filtres conditionnels : pas de multiplication des lignes possible,
         `expenses` étant l'unique relation jointe.
         """
-        # Import local : `expenses` dépend de `budget`, l'inverse ne doit pas
-        # créer de cycle à l'import du module.
-        from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
-
         money = models.DecimalField(max_digits=16, decimal_places=2)
         engaging = list(ENGAGING_STATUSES)
         consuming = list(CONSUMING_STATUSES)

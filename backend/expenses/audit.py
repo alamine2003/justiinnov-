@@ -1,46 +1,53 @@
-"""Écriture du journal d'audit.
+"""Écriture du journal d'audit du circuit, des pièces et des fichiers.
 
-Chaque action sensible doit produire une trace : qui, quoi, quand, depuis
-quelle session, et l'ancienne/nouvelle valeur le cas échéant (§6).
+Couche d'adaptation de la façade ``core.journal`` (décision 38) : les vues
+et les services de transition des dépenses nomment l'action, la famille se
+déduit d'elle, et tout le reste — auteur, adresse, appareil — est rempli par
+la façade. Chaque action sensible produit une trace : qui, quoi, quand,
+depuis quelle session, et l'ancienne/nouvelle valeur le cas échéant (§6).
 """
 
-from core.requetes import client_ip
+from core import journal
 
 from .models import AuditLog
 
+#: Famille de journal de chaque action ; ``circuit`` pour toutes les autres.
+_FAMILLES = {
+    AuditLog.Action.APPROVED: "piece",
+    AuditLog.Action.REJECTED: "piece",
+    AuditLog.Action.PROOF_INCOMPLETE: "piece",
+    AuditLog.Action.PROOF_TO_REVIEW: "piece",
+    AuditLog.Action.PROOF_UPLOADED: "piece",
+    AuditLog.Action.PROOF_REPLACED: "piece",
+    AuditLog.Action.DOWNLOADED: "fichier",
+    AuditLog.Action.IMPORTED: "import",
+}
+
+
+def famille_de(action):
+    return _FAMILLES.get(action, "circuit")
+
 
 def preparer(request, action, instance, *, label="", country=None, **detail):
-    """Construit une entrée sans l'enregistrer.
-
-    Sert aux actions qui touchent beaucoup d'objets d'un coup (soumission
-    d'un dossier de vingt lignes) : les entrées sont écrites ensemble par
-    :func:`enregistrer`, en une requête, plutôt qu'une par ligne.
-    """
-    user = getattr(request, "user", None)
-    return AuditLog(
-        user=user.username if user and user.is_authenticated else "",
-        action=action,
-        object_type=instance.__class__.__name__,
-        object_id=instance.pk,
-        label=(label or str(instance))[:250],
-        country=country if country is not None else getattr(instance, "country", None),
-        detail=detail,
-        # Adresse lue derrière les mandataires de confiance : ``REMOTE_ADDR``
-        # seul ne donnerait que celle de nginx.
-        ip_address=client_ip(request),
-        user_agent=request.META.get("HTTP_USER_AGENT", "")[:250],
+    """Construit une entrée sans l'enregistrer (voir ``core.journal.preparer``)."""
+    return journal.preparer(
+        request, action, instance, famille=famille_de(action),
+        label=label, country=country, **detail,
     )
 
 
 def record(request, action, instance, *, label="", country=None, **detail):
-    """Journalise une action sur une instance."""
-    entree = preparer(
-        request, action, instance, label=label, country=country, **detail
+    """Journalise une action en déléguant à :func:`core.journal.tracer`.
+
+    ``request`` est la requête HTTP ou une :class:`core.journal.Trace`
+    (services de transition, commandes).
+    """
+    return journal.tracer(
+        request, action, instance, famille=famille_de(action),
+        label=label, country=country, **detail,
     )
-    entree.save()
-    return entree
 
 
 def enregistrer(entrees):
     """Écrit d'un coup des entrées préparées."""
-    return AuditLog.objects.bulk_create(list(entrees))
+    return journal.enregistrer(entrees)

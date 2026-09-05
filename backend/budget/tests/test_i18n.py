@@ -1,6 +1,6 @@
 """Messages bilingues des budgets : l'anglais suit ``Accept-Language``.
 
-Lit le catalogue compilé ``budget/locale/en/LC_MESSAGES/django.mo`` (produit
+Lit le catalogue unique compilé ``backend/locale/en/LC_MESSAGES/django.mo`` (produit
 par ``django-admin compilemessages``, non versionné).
 """
 
@@ -27,7 +27,7 @@ class MessagesEnAnglaisTests(BudgetTestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(str(response.data["note"]), "A refusal must state a reason.")
+        self.assertEqual(response.data["note"], ["A refusal must state a reason."])
 
     def test_la_politique_de_depassement_s_affiche_en_anglais(self):
         self.login(self.siege)

@@ -13,7 +13,7 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget
-from expenses.models import AuditLog, Dossier
+from expenses.models import AuditLog, Dossier, Expense
 from expenses.tests.base import in_memory_storage
 from expenses.workflow import Status
 from reporting import exports
@@ -314,9 +314,9 @@ class FormatsTests(DashboardTestCase):
             status=Status.SUBMITTED, budget=self.budget_ivoire,
         )
 
-        self.assertIsNone(exports.lignes_depenses(Dossier.objects.all()).total)
+        self.assertIsNone(exports.lignes_depenses(Expense.objects.all()).total)
         self.assertIsNotNone(
-            exports.lignes_depenses(Dossier.objects.filter(country=self.togo)).total
+            exports.lignes_depenses(Expense.objects.filter(country=self.togo)).total
         )
         enveloppes, dossiers = exports.tableaux_rapprochement(
             Budget.objects.with_consumption(), Dossier.objects.with_totals()
@@ -325,21 +325,28 @@ class FormatsTests(DashboardTestCase):
         self.assertIsNone(dossiers.total)
 
     def test_un_export_vide_n_a_pas_de_total(self):
-        self.assertIsNone(exports.lignes_depenses(Dossier.objects.none()).total)
+        self.assertIsNone(exports.lignes_depenses(Expense.objects.none()).total)
 
 
 class PeriodeTests(DashboardTestCase):
-    """Classement par mois : la date du dossier, unité de déclaration."""
+    """Classement par mois : la date du dossier pour le rapprochement, celle
+    de chaque ligne pour l'export des dépenses."""
 
-    def setUp(self):
-        super().setUp()
-        self.juillet = Dossier.objects.create(
-            number="N-JUIL", label="Tournée", country=self.togo,
-            date=date(self.year, 7, 10), status=Status.SUBMITTED,
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Les lignes du socle sont datées d'aujourd'hui : elles rejoignent
+        # le mois de leur dossier, mars, pour que l'export par mois les voie.
+        Expense.objects.filter(dossier=cls.dossier).update(
+            date=timezone.make_aware(datetime(cls.year, 3, 15, 10))
         )
-        self.make_expense(
-            dossier=self.juillet, status=Status.SUBMITTED, budget=self.budget,
-            date=timezone.make_aware(datetime(self.year, 7, 10, 9)),
+        cls.juillet = Dossier.objects.create(
+            number="N-JUIL", label="Tournée", country=cls.togo,
+            date=date(cls.year, 7, 10), status=Status.SUBMITTED,
+        )
+        cls.make_expense(
+            cls, dossier=cls.juillet, status=Status.SUBMITTED, budget=cls.budget,
+            date=timezone.make_aware(datetime(cls.year, 7, 10, 9)),
         )
 
     def _export(self, route, **params):
@@ -416,3 +423,37 @@ class PeriodeTests(DashboardTestCase):
         self.assertIn(
             f"Période : mars {self.year}", "\n".join(p.text for p in document.paragraphs)
         )
+
+
+class LangueDesTitresTests(DashboardTestCase):
+    def test_le_titre_du_document_word_suit_la_langue(self):
+        self.login(self.doo)
+
+        with translation.override("en"):
+            response = self.client.get(
+                "/api/exports/expenses.docx", {"year": self.year},
+                HTTP_ACCEPT_LANGUAGE="en",
+            )
+
+        document = Document(BytesIO(response.content))
+        titre = document.paragraphs[0].text
+        self.assertIn("Expense export", titre)
+        self.assertIn(f"fiscal year {self.year}", titre)
+        # Le journal, lui, reste en français : il se relit tel qu'il a été écrit.
+        self.assertTrue(
+            AuditLog.objects.filter(label__startswith="Export des dépenses").exists()
+        )
+
+    def test_la_mention_de_piece_incomplete_suit_la_langue(self):
+        from expenses.models import Proof
+
+        Proof.objects.create(
+            dossier=self.dossier, file="justificatifs/test.pdf",
+            original_name="facture.pdf", kind=Proof.Kind.INVOICE,
+            is_complete=False, sha256="a" * 64,
+        )
+
+        with translation.override("en"):
+            tableau = exports.lignes_depenses(Expense.objects.filter(country=self.togo))
+
+        self.assertIn("(incomplete proof)", tableau.lignes[0][-1])

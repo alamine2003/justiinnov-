@@ -67,9 +67,10 @@ class Command(BaseCommand):
             )
         }
 
-        # Les destinataires sont résolus une fois par (type d'alerte, pays) :
-        # cent dossiers sans preuve interrogeaient sinon cent fois la même
-        # liste.
+        # Les destinataires sont résolus une fois par (type d'alerte, pays,
+        # équipe) : cent dossiers sans preuve interrogeaient sinon cent fois
+        # la même liste. L'équipe cloisonne les managers ; une alerte
+        # d'enveloppe n'en porte pas.
         destinataires = {}
         emises = 0
 
@@ -81,9 +82,11 @@ class Command(BaseCommand):
                 self.stdout.write(f"  [{alerte['level']}] {alerte['title']}")
                 continue
 
-            cle = (alerte["kind"], country.pk)
+            cle = (alerte["kind"], country.pk, alerte.get("team"))
             if cle not in destinataires:
-                destinataires[cle] = triggers.audience_for(alerte["kind"], country)
+                destinataires[cle] = triggers.audience_for(
+                    alerte["kind"], country, alerte.get("team")
+                )
             emises += len(
                 triggers.alert_raised(alerte, country, destinataires[cle])
             )

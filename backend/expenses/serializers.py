@@ -5,15 +5,24 @@ from pathlib import Path
 
 from django.conf import settings
 from django.utils.translation import gettext as _
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
-from accounts.permissions import get_access
+from accounts.perimetre import ChampCloisonne
+from accounts.permissions import VALIDATION_ROLES, get_access
 from budget.aggregates import convert
-from core.models import Country
+from core.models import Country, Team, WorkflowConfiguration
+from core.serializers import DetailField
 
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, compute_sha256
-from .workflow import LOCKED_STATUSES, PROOF_LOCKED_STATUSES
+from .workflow import (
+    LOCKED_STATUSES,
+    PROOF_LOCKED_STATUSES,
+    PROOF_TRANSITIONS,
+    dossier_allowed_actions,
+    expense_allowed_actions,
+)
 
 #: États d'une pièce après lesquels plus rien ne se modifie.
 PROOF_FINAL_STATUSES = frozenset(
@@ -25,42 +34,19 @@ PROOF_FINAL_STATUSES = frozenset(
 )
 
 
-class ChampCloisonne(serializers.PrimaryKeyRelatedField):
-    """Clé étrangère limitée au périmètre du demandeur.
+#: Transitions qu'une dépense ou un dossier peut se voir proposer, pour le
+#: schéma (``allowed_actions``) : les noms des actions du circuit.
+TRANSITION_CHOICES = [
+    (name, name) for name in ("submit", "review", "justify", "reject", "close", "reopen")
+]
 
-    Sans cela, un responsable pays pouvait sonder l'existence des dossiers du
-    voisin : une clé inconnue répondait « invalide », une clé existante mais
-    hors périmètre répondait « pays interdit » — et le dossier était trahi.
-    Le queryset du champ est filtré comme celui des lectures : une clé hors
-    périmètre est, pour le demandeur, une clé qui n'existe pas.
 
-    ``chemin_pays`` mène du modèle visé au pays (``pk`` pour le pays
-    lui-même) ; ``chemin_equipe`` mène à l'équipe, pour les ressources qu'un
-    manager rattaché à des équipes ne voit qu'en partie — sans lui, il
-    pouvait rattacher une ligne au dossier d'une équipe voisine qu'il ne
-    peut pourtant pas lire.
-    """
+class DossierTotalsSerializer(serializers.Serializer):
+    """Totaux d'un dossier, calculés en base (``Dossier.totals``)."""
 
-    def __init__(self, *, chemin_pays, chemin_equipe=None, **kwargs):
-        self.chemin_pays = chemin_pays
-        self.chemin_equipe = chemin_equipe
-        super().__init__(**kwargs)
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        request = self.context.get("request")
-        access = get_access(getattr(request, "user", None)) if request else None
-        if access is None:
-            return queryset.none()
-        if not access.has_global_scope:
-            queryset = queryset.filter(
-                **{f"{self.chemin_pays}__in": access.country_ids}
-            )
-        if self.chemin_equipe is not None and access.team_ids is not None:
-            queryset = queryset.filter(
-                **{f"{self.chemin_equipe}__in": access.team_ids}
-            )
-        return queryset
+    amount = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
+    justified = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
+    gap = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
 
 
 def _verifier_le_manager(owner, country):
@@ -71,6 +57,59 @@ def _verifier_le_manager(owner, country):
         raise serializers.ValidationError(
             {"owner": _("Ce manager n'est pas rattaché à ce pays.")}
         )
+
+
+def _acces(serializer):
+    """Droits du demandeur, ou ``None`` hors requête."""
+    request = serializer.context.get("request")
+    return get_access(getattr(request, "user", None)) if request else None
+
+
+def _demandeur(serializer):
+    """Nom du compte qui demande, pour la règle des quatre yeux."""
+    request = serializer.context.get("request")
+    return getattr(getattr(request, "user", None), "username", "")
+
+
+def _configuration(serializer):
+    """Politique du circuit, lue une fois par requête.
+
+    ``charger`` passe par le cache de la base : la relire pour chaque ligne
+    sérialisée coûterait une requête par ligne. Le contexte est partagé par
+    le sérialiseur racine et ses sérialiseurs imbriqués, qui en profitent.
+    """
+    context = serializer.context
+    configuration = context.get("workflow_configuration")
+    if configuration is None:
+        configuration = WorkflowConfiguration.charger()
+        context["workflow_configuration"] = configuration
+    return configuration
+
+
+def _exiger_une_equipe_du_perimetre(serializer, team):
+    """Un manager rattaché à des équipes déclare toujours dans l'une d'elles.
+
+    Sans équipe, le dossier ou la ligne sortirait de sa propre vue : le
+    cloisonnement par équipe ne montre que ce qui porte une de ses équipes,
+    et il aurait créé quelque chose qu'il ne peut plus relire. Le champ
+    ``team`` ne lui propose déjà que les siennes (``ChampCloisonne``) ; il
+    reste à refuser l'absence. Les autres rôles gardent l'équipe facultative
+    en brouillon, comme l'import l'exige.
+    """
+    access = _acces(serializer)
+    if access is None or not access.team_ids:
+        return
+    if team is None or team.pk not in access.team_ids:
+        raise serializers.ValidationError(
+            {"team": _("Choisissez une de vos équipes.")}
+        )
+
+
+def _equipe_effective(serializer, attrs):
+    """Équipe après écriture : celle de la charge utile, sinon celle en place."""
+    if "team" in attrs:
+        return attrs["team"]
+    return getattr(serializer.instance, "team", None)
 
 
 class BeneficiarySerializer(serializers.ModelSerializer):
@@ -107,6 +146,7 @@ class ProofSerializer(serializers.ModelSerializer):
     kind_display = serializers.CharField(source="get_kind_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     download_url = serializers.SerializerMethodField()
+    allowed_reviews = serializers.SerializerMethodField()
 
     #: Fixés au dépôt. Une pièce est une preuve : on n'en change ni le
     #: contenu, ni le dossier, ni la filiation — on en dépose une nouvelle
@@ -119,7 +159,8 @@ class ProofSerializer(serializers.ModelSerializer):
             "id", "dossier", "file", "original_name", "kind", "kind_display",
             "status", "status_display", "is_complete", "sha256", "size",
             "content_type", "version", "replaces", "uploaded_by",
-            "rejection_reason", "download_url", "created_at", "updated_at",
+            "rejection_reason", "download_url", "allowed_reviews",
+            "created_at", "updated_at",
         ]
         # ``is_complete`` ne se modifie que par ``review`` : c'est un constat
         # de la direction financière, pas une case que le déposant coche.
@@ -129,10 +170,30 @@ class ProofSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {"file": {"write_only": True}}
 
+    @extend_schema_field(serializers.CharField())
     def get_download_url(self, proof):
         """Le fichier n'est jamais servi directement : le téléchargement passe
         par une vue qui vérifie le périmètre de l'utilisateur."""
         return f"/api/proofs/{proof.pk}/download/"
+
+    @extend_schema_field(
+        serializers.ListField(child=serializers.ChoiceField(choices=Proof.ProofStatus.choices))
+    )
+    def get_allowed_reviews(self, proof):
+        """États que le demandeur peut donner à la pièce par ``review``.
+
+        Calculés d'après ``PROOF_TRANSITIONS`` et le rôle, pour que
+        l'interface ne propose que le possible : rien pour une pièce
+        validée, rejetée ou archivée, rien sur un dossier clôturé, rien
+        pour qui ne contrôle pas. L'ordre est celui des états du modèle.
+        """
+        access = _acces(self)
+        if access is None or access.role not in VALIDATION_ROLES:
+            return []
+        if proof.dossier.status in PROOF_LOCKED_STATUSES:
+            return []
+        reachable = PROOF_TRANSITIONS.get(proof.status, frozenset())
+        return [value for value, _label in Proof.ProofStatus.choices if value in reachable]
 
     def validate_file(self, uploaded):
         if uploaded.size > settings.MAX_PROOF_SIZE:
@@ -240,6 +301,12 @@ class ExpenseSerializer(serializers.ModelSerializer):
         queryset=Dossier.objects.all(), chemin_pays="country", chemin_equipe="team"
     )
     country = ChampCloisonne(queryset=Country.objects.all(), chemin_pays="pk")
+    # Une équipe hors périmètre est, pour le demandeur, une équipe qui
+    # n'existe pas : un manager cloisonné ne voit que les siennes.
+    team = ChampCloisonne(
+        queryset=Team.objects.all(), chemin_pays="country", chemin_equipe="pk",
+        required=False, allow_null=True,
+    )
     country_name = serializers.CharField(source="country.name", read_only=True)
     currency = serializers.CharField(source="country.currency", read_only=True)
     # §6 : la date est conservée en UTC, mais doit se lire dans le fuseau du
@@ -272,6 +339,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         max_digits=16, decimal_places=2, read_only=True,
         help_text=_("Toujours calculé : dépense − montant justifié."),
     )
+    allowed_actions = serializers.SerializerMethodField()
 
     class Meta:
         model = Expense
@@ -286,7 +354,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "original_currency", "original_amount", "original_rate",
             "payment_method", "payment_method_display",
             "status", "status_display", "note", "control_note", "created_by",
-            "created_at", "updated_at",
+            "allowed_actions", "created_at", "updated_at",
         ]
         # Le statut ne se modifie que par les actions de workflow ;
         # l'imputation budgétaire et le taux appliqué sont résolus par le
@@ -303,8 +371,29 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "amount": {"required": False},
         }
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_budget_label(self, expense):
         return str(expense.budget) if expense.budget_id else None
+
+    @extend_schema_field(
+        serializers.ListField(child=serializers.ChoiceField(choices=TRANSITION_CHOICES))
+    )
+    def get_allowed_actions(self, expense):
+        """Transitions que le demandeur peut tenter sur cette ligne.
+
+        Calculées par le serveur (rôle, état, étape de contrôle, quatre
+        yeux) : l'interface les affiche, elle ne recopie pas les règles.
+        Vide hors requête. Voir ``workflow.expense_allowed_actions``.
+        """
+        access = _acces(self)
+        if access is None:
+            return []
+        return expense_allowed_actions(
+            expense,
+            role=access.role,
+            username=_demandeur(self),
+            configuration=_configuration(self),
+        )
 
     def validate(self, attrs):
         if self.instance is not None and self.instance.status in LOCKED_STATUSES:
@@ -329,6 +418,25 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {field: _("Cette entité appartient à un autre pays.")}
                 )
+        team = _equipe_effective(self, attrs)
+        if (
+            dossier is not None
+            and team is not None
+            and dossier.team_id is not None
+            and team.pk != dossier.team_id
+        ):
+            # Le dossier est lu par l'équipe qu'il porte : une ligne d'une
+            # autre équipe y serait visible par la première et invisible
+            # pour la seconde. Une ligne sans équipe reste possible en
+            # brouillon, la soumission l'exigera.
+            raise serializers.ValidationError(
+                {
+                    "team": _(
+                        "Cette ligne doit porter l'équipe de son dossier ({team})."
+                    ).format(team=dossier.team.name)
+                }
+            )
+        _exiger_une_equipe_du_perimetre(self, team)
         _verifier_le_manager(attrs.get("owner"), country)
 
         self._resoudre_la_devise(attrs, country)
@@ -471,6 +579,7 @@ class ExpenseRegisterSerializer(ExpenseSerializer):
             "proofs", "has_proof",
         ]
 
+    @extend_schema_field(serializers.BooleanField())
     def get_has_proof(self, expense):
         """Une pièce rejetée ou archivée ne prouve rien."""
         return any(
@@ -482,6 +591,10 @@ class ExpenseRegisterSerializer(ExpenseSerializer):
 
 class DossierSerializer(serializers.ModelSerializer):
     country = ChampCloisonne(queryset=Country.objects.all(), chemin_pays="pk")
+    team = ChampCloisonne(
+        queryset=Team.objects.all(), chemin_pays="country", chemin_equipe="pk",
+        required=False, allow_null=True,
+    )
     country_name = serializers.CharField(source="country.name", read_only=True)
     country_ref = serializers.CharField(
         source="country.country_ref", read_only=True, allow_null=True
@@ -500,6 +613,7 @@ class DossierSerializer(serializers.ModelSerializer):
     totals = serializers.SerializerMethodField()
     expense_count = serializers.SerializerMethodField()
     proof_count = serializers.SerializerMethodField()
+    allowed_actions = serializers.SerializerMethodField()
 
     class Meta:
         model = Dossier
@@ -508,7 +622,7 @@ class DossierSerializer(serializers.ModelSerializer):
             "currency", "country_timezone", "team", "team_name",
             "owner", "owner_name", "date",
             "status", "status_display", "note", "reopen_note", "totals",
-            "expense_count", "proof_count", "created_by",
+            "expense_count", "proof_count", "allowed_actions", "created_by",
             "created_at", "updated_at",
         ]
         # Le motif de réouverture est posé par l'action ``reopen`` seule.
@@ -525,14 +639,37 @@ class DossierSerializer(serializers.ModelSerializer):
             )
         ]
 
+    @extend_schema_field(DossierTotalsSerializer)
     def get_totals(self, dossier):
         return {key: str(value) for key, value in dossier.totals().items()}
 
+    @extend_schema_field(serializers.IntegerField())
     def get_expense_count(self, dossier):
         return dossier.counts()["expenses"]
 
+    @extend_schema_field(serializers.IntegerField())
     def get_proof_count(self, dossier):
         return dossier.counts()["proofs"]
+
+    @extend_schema_field(
+        serializers.ListField(child=serializers.ChoiceField(choices=TRANSITION_CHOICES))
+    )
+    def get_allowed_actions(self, dossier):
+        """Transitions que le demandeur peut tenter sur ce dossier.
+
+        Rôle, état, étape de contrôle, quatre yeux, lignes tranchées et
+        pièces exploitables : tout est jugé ici, sur les compteurs annotés
+        par la liste. Voir ``workflow.dossier_allowed_actions``.
+        """
+        access = _acces(self)
+        if access is None:
+            return []
+        return dossier_allowed_actions(
+            dossier,
+            role=access.role,
+            username=_demandeur(self),
+            configuration=_configuration(self),
+        )
 
     def validate(self, attrs):
         if self.instance is not None and self.instance.status in LOCKED_STATUSES:
@@ -540,13 +677,61 @@ class DossierSerializer(serializers.ModelSerializer):
                 _("Ce dossier est déclaré : il ne peut plus être modifié.")
             )
         country = attrs.get("country") or getattr(self.instance, "country", None)
-        team = attrs.get("team")
+        team = _equipe_effective(self, attrs)
         if team is not None and country is not None and team.country_id != country.pk:
             raise serializers.ValidationError(
                 {"team": _("Cette équipe appartient à un autre pays.")}
             )
+        if self.instance is not None:
+            self._verifier_le_deplacement(attrs)
+        _exiger_une_equipe_du_perimetre(self, team)
         _verifier_le_manager(attrs.get("owner"), country)
         return attrs
+
+    def _verifier_le_deplacement(self, attrs):
+        """Un dossier qui a un contenu ne change ni de pays ni d'équipe.
+
+        Ses lignes portent le pays et l'équipe en propre (décision n°1) et
+        ses pièces sont rangées par pays : déplacer le dossier les laisserait
+        derrière lui — ou ferait lire à une équipe des lignes qui ne sont
+        pas les siennes. Le choix est de **refuser**, pas de propager : une
+        propagation silencieuse réécrirait des lignes que quelqu'un d'autre
+        a saisies. On corrige les lignes d'abord, ou on ouvre un autre
+        dossier.
+        """
+        dossier = self.instance
+        country = attrs.get("country")
+        if country is not None and country.pk != dossier.country_id:
+            counts = dossier.counts()
+            if counts["expenses"] or counts["proofs"]:
+                raise serializers.ValidationError(
+                    {
+                        "country": _(
+                            "Ce dossier porte des lignes ou des pièces : il "
+                            "ne change plus de pays. Ouvrez un nouveau dossier."
+                        )
+                    }
+                )
+        if "team" not in attrs:
+            return
+        team_id = None if attrs["team"] is None else attrs["team"].pk
+        if team_id == dossier.team_id:
+            return
+        autres = dossier.expenses.filter(team__isnull=False).select_related("team")
+        if team_id is not None:
+            autres = autres.exclude(team_id=team_id)
+        premiere = autres.first()
+        if premiere is None:
+            return
+        raise serializers.ValidationError(
+            {
+                "team": _(
+                    "{count} ligne(s) de ce dossier portent une autre équipe "
+                    "({team}). Corrigez-les avant de changer l'équipe du "
+                    "dossier."
+                ).format(count=autres.count(), team=premiere.team.name)
+            }
+        )
 
 
 class DossierDetailSerializer(DossierSerializer):
@@ -562,6 +747,16 @@ class TransitionSerializer(serializers.Serializer):
     et pour une réouverture."""
 
     note = serializers.CharField(required=False, allow_blank=True)
+
+
+class TransitionWarningMixin(serializers.Serializer):
+    """Avertissement qu'une transition peut joindre à la réponse.
+
+    Dépassement d'enveloppe toléré, dossier soumis sans pièce : l'action
+    passe, le message l'accompagne. Absent quand il n'y a rien à dire.
+    """
+
+    warning = serializers.CharField(read_only=True, required=False)
 
 
 class ExpenseTransitionSerializer(TransitionSerializer):
@@ -596,6 +791,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
     country_name = serializers.CharField(
         source="country.name", read_only=True, allow_null=True
     )
+    detail = DetailField(read_only=True)
 
     class Meta:
         model = AuditLog

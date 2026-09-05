@@ -9,10 +9,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db.models import Sum
 from django.utils.translation import gettext as _
-from rest_framework.exceptions import ValidationError
 
 from accounts.permissions import BUDGET_WRITE_ROLES
 from budget.models import Budget, OverrunPolicy
+from core.regles import RegleViolee
 
 from .workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
 
@@ -103,15 +103,14 @@ def attach_budget(expense):
     """
     budget = expense.budget or resolve_budget(expense)
     if budget is None:
-        raise ValidationError(
-            {
-                "budget": _(
-                    "Aucune enveloppe active pour {country} en {year}."
-                ).format(country=expense.country.name, year=exercice(expense))
-            }
+        raise RegleViolee(
+            "budget",
+            _("Aucune enveloppe active pour {country} en {year}.").format(
+                country=expense.country.name, year=exercice(expense)
+            ),
         )
     if not budget.is_active:
-        raise ValidationError({"budget": _("L'enveloppe imputée est inactive.")})
+        raise RegleViolee("budget", _("L'enveloppe imputée est inactive."))
     if expense.budget_id != budget.pk:
         expense.budget = budget
     return budget
@@ -123,7 +122,8 @@ def check_budget_capacity(
     """Applique la politique de dépassement de l'enveloppe (§5.2, §6).
 
     Renvoie un avertissement à afficher, ou ``None`` si l'enveloppe couvre la
-    dépense. Lève une erreur lorsque la politique interdit le dépassement.
+    dépense. Lève :class:`~core.regles.RegleViolee` sur ``amount`` lorsque la
+    politique interdit le dépassement.
 
     ``at_approval`` distingue les deux moments : sous la politique « soumettre
     à approbation », le manager doit pouvoir *demander* le dépassement — c'est
@@ -155,19 +155,18 @@ def check_budget_capacity(
     if budget.overrun_policy == OverrunPolicy.BLOCK:
         if at_approval:
             return message
-        raise ValidationError(
-            {"amount": _("{message} Opération bloquée.").format(message=message)}
+        raise RegleViolee(
+            "amount", _("{message} Opération bloquée.").format(message=message)
         )
 
     if budget.overrun_policy == OverrunPolicy.APPROVAL:
         if at_approval and role not in OVERRUN_APPROVERS:
-            raise ValidationError(
-                {
-                    "amount": _(
-                        "{message} La validation d'un dépassement relève de "
-                        "la direction (super administrateur)."
-                    ).format(message=message)
-                }
+            raise RegleViolee(
+                "amount",
+                _(
+                    "{message} La validation d'un dépassement relève de "
+                    "la direction (super administrateur)."
+                ).format(message=message),
             )
         if not at_approval:
             return _(

@@ -3,54 +3,104 @@
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from accounts.perimetre import ChampCloisonne
 from accounts.permissions import get_access
-from core.models import WorkflowConfiguration
+from core.models import Country, Manager, Project, Team, WorkflowConfiguration
+from core.regles import RegleViolee
 
-from .aggregates import budget_figures, consumption, current_rates
+from .aggregates import budget_figures, current_rates
 from .models import Budget, BudgetReallocation, ExchangeRate
+from .transitions import exiger_le_disponible, peut_decider
 
 
-class PerimetreMixin:
-    """Borne les champs « clé étrangère » au périmètre du demandeur.
+def _montant(**kwargs):
+    """Montant rendu en chaîne décimale, comme partout dans l'API."""
+    return serializers.DecimalField(
+        max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True, **kwargs
+    )
 
-    Un responsable pays qui poste l'identifiant d'une enveloppe voisine doit
-    recevoir la même réponse que pour un identifiant inexistant : « invalide ».
-    Une erreur distincte (« hors périmètre ») lui confirmerait que l'objet
-    existe. Le queryset de chaque champ est donc restreint ici, avant toute
-    validation métier.
+
+def _taux(**kwargs):
+    return serializers.DecimalField(
+        max_digits=10, decimal_places=4, coerce_to_string=True, read_only=True,
+        allow_null=True, **kwargs
+    )
+
+
+class BudgetFiguresSerializer(serializers.Serializer):
+    """Indicateurs d'une enveloppe, calculés par ``aggregates.budget_figures``.
+
+    Forme documentaire : la vue rend le dictionnaire tel quel, ce sérialiseur
+    ne sert qu'au schéma.
     """
 
-    #: Champ → chemin ORM menant au pays (``None`` : filtrer par ``pk``).
-    champs_perimetre = {}
-
-    def get_fields(self):
-        fields = super().get_fields()
-        request = self.context.get("request")
-        if request is None:
-            return fields
-        access = get_access(request.user)
-        for name, lookup in self.champs_perimetre.items():
-            field = fields.get(name)
-            if field is None or getattr(field, "queryset", None) is None:
-                continue
-            if access is None:
-                field.queryset = field.queryset.none()
-            elif not access.has_global_scope:
-                field.queryset = field.queryset.filter(
-                    **{f"{lookup}__in": access.country_ids}
-                ).distinct()
-        return fields
+    engaged = _montant(help_text=gettext_lazy("Soumis ou en contrôle : sorti de l'enveloppe, pas encore constaté."))
+    consumed = _montant()
+    justified = _montant()
+    gap = _montant(help_text=gettext_lazy("Consommé sans preuve à l'appui."))
+    remaining = _montant()
+    execution_rate = _taux()
+    justification_rate = _taux()
+    amount_xof = _montant(allow_null=True)
+    remaining_xof = _montant(allow_null=True)
 
 
-class BudgetSerializer(PerimetreMixin, serializers.ModelSerializer):
-    champs_perimetre = {
-        "country": "pk",
-        "project": "country",
-        "team": "country",
-        "manager": "countries",
-    }
+class CountryBudgetRowSerializer(serializers.Serializer):
+    """Ligne de la consolidation par pays (``/api/budgets/summary/``)."""
+
+    country = serializers.IntegerField(read_only=True)
+    country_name = serializers.CharField(read_only=True)
+    country_ref = serializers.CharField(read_only=True, allow_null=True)
+    currency = serializers.CharField(read_only=True)
+    allocated = _montant()
+    sub_allocated = _montant()
+    engaged = _montant()
+    consumed = _montant()
+    justified = _montant()
+    remaining = _montant()
+    remaining_xof = _montant(allow_null=True)
+
+
+class BudgetSummarySerializer(serializers.Serializer):
+    countries = CountryBudgetRowSerializer(many=True, read_only=True)
+    total_remaining_xof = _montant()
+    unconverted_currencies = serializers.ListField(
+        child=serializers.CharField(), read_only=True,
+        help_text=gettext_lazy("Devises sans taux connu, laissées hors du total."),
+    )
+
+
+#: Dimensions qu'une sous-enveloppe peut découper (``Budget.scope_kind``).
+SCOPE_CHOICES = [(kind, kind) for kind in ("country", "project", "team", "manager")]
+
+
+@extend_schema_field(serializers.ChoiceField(choices=SCOPE_CHOICES))
+class ScopeKindField(serializers.CharField):
+    """``scope_kind`` est une propriété du modèle : un ``CharField`` en
+    lecture seule, dont le schéma dit les quatre valeurs possibles."""
+
+
+class BudgetSerializer(serializers.ModelSerializer):
+    # Clés étrangères bornées au périmètre du demandeur : une enveloppe
+    # voisine est « invalide », comme une inexistante, sans rien révéler.
+    country = ChampCloisonne(
+        queryset=Country.objects.all(), chemin_pays="pk", label=gettext_lazy("Pays")
+    )
+    project = ChampCloisonne(
+        queryset=Project.objects.all(), chemin_pays="country",
+        allow_null=True, required=False, label=gettext_lazy("Projet"),
+    )
+    team = ChampCloisonne(
+        queryset=Team.objects.all(), chemin_pays="country",
+        allow_null=True, required=False, label=gettext_lazy("Équipe"),
+    )
+    manager = ChampCloisonne(
+        queryset=Manager.objects.all(), chemin_pays="countries", distinct=True,
+        allow_null=True, required=False, label=gettext_lazy("Manager"),
+    )
     #: Champs qui deviennent intangibles dès qu'une dépense est imputée : les
     #: déplacer changerait le pays, l'année ou le découpage de dépenses déjà
     #: déclarées, et le disponible cesserait de correspondre à ce qui a été
@@ -72,7 +122,7 @@ class BudgetSerializer(PerimetreMixin, serializers.ModelSerializer):
     manager_name = serializers.CharField(
         source="manager.name", read_only=True, allow_null=True
     )
-    scope_kind = serializers.CharField(read_only=True)
+    scope_kind = ScopeKindField(read_only=True)
     scope_label = serializers.CharField(read_only=True, allow_null=True)
     overrun_policy_display = serializers.CharField(
         source="get_overrun_policy_display", read_only=True
@@ -95,6 +145,7 @@ class BudgetSerializer(PerimetreMixin, serializers.ModelSerializer):
         # restent le dernier rempart.
         validators = []
 
+    @extend_schema_field(BudgetFiguresSerializer)
     def get_figures(self, budget):
         """Consommation, écart et disponible — calculés côté serveur."""
         figures = budget_figures(budget, rates=self._rates())
@@ -217,12 +268,20 @@ def _as_str(value):
     return str(value) if value is not None else None
 
 
-class BudgetReallocationSerializer(PerimetreMixin, serializers.ModelSerializer):
-    champs_perimetre = {"source": "country", "target": "country"}
+class BudgetReallocationSerializer(serializers.ModelSerializer):
+    source = ChampCloisonne(
+        queryset=Budget.objects.all(), chemin_pays="country",
+        label=gettext_lazy("Enveloppe source"),
+    )
+    target = ChampCloisonne(
+        queryset=Budget.objects.all(), chemin_pays="country",
+        label=gettext_lazy("Enveloppe destinataire"),
+    )
 
     source_label = serializers.CharField(source="source.__str__", read_only=True)
     target_label = serializers.CharField(source="target.__str__", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    can_decide = serializers.SerializerMethodField()
 
     class Meta:
         model = BudgetReallocation
@@ -230,11 +289,25 @@ class BudgetReallocationSerializer(PerimetreMixin, serializers.ModelSerializer):
             "id", "source", "source_label", "target", "target_label",
             "amount", "reason", "status", "status_display",
             "requested_by", "decided_by", "decided_at", "decision_note",
-            "created_at", "updated_at",
+            "can_decide", "created_at", "updated_at",
         ]
         read_only_fields = [
             "status", "requested_by", "decided_by", "decided_at", "decision_note",
         ]
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_decide(self, reallocation):
+        """Le demandeur peut-il approuver ou refuser cette réallocation ?
+
+        Les mêmes conditions que ``approuver`` et ``refuser``
+        (``transitions.verifier_la_decision``), pour que l'interface n'ait
+        pas à les recopier : réallocation encore en attente, rôle décideur,
+        pas celui qui l'a demandée, destination dans le périmètre. Faux
+        hors requête.
+        """
+        request = self.context.get("request")
+        access = get_access(getattr(request, "user", None)) if request else None
+        return peut_decider(reallocation, access)
 
     def validate_reason(self, value):
         # §5.2 : une réallocation sans justification n'est pas recevable.
@@ -266,20 +339,13 @@ class BudgetReallocationSerializer(PerimetreMixin, serializers.ModelSerializer):
                 }
             )
         if source and attrs.get("amount"):
-            totals = consumption(source)
-            disponible = source.amount - totals["consumed"] - totals["engaged"]
-            if attrs["amount"] > disponible:
-                # L'argent déjà sorti ou engagé n'est plus transférable : la
-                # source doit couvrir ses dépenses après le transfert. La
-                # décision revérifie, une dépense pouvant sortir entre-temps.
-                raise serializers.ValidationError(
-                    {
-                        "amount": _(
-                            "Le montant dépasse le disponible de l'enveloppe "
-                            "source ({available})."
-                        ).format(available=disponible)
-                    }
-                )
+            # L'argent déjà sorti ou engagé n'est plus transférable : la
+            # même règle que le service, qui la rejuge sous verrou à la
+            # demande comme à la décision.
+            try:
+                exiger_le_disponible(source, attrs["amount"])
+            except RegleViolee as exc:
+                raise serializers.ValidationError({exc.champ: str(exc)}) from exc
         return attrs
 
 

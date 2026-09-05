@@ -12,11 +12,10 @@ monde.
 
 import logging
 
-from django.utils import timezone
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
-from accounts.models import Role
+from accounts.permissions import BUDGET_WRITE_ROLES, COUNTRY_ROLES, REVIEW_ROLES
 
 from .models import Notification
 from .services import notify, recipients_for
@@ -26,15 +25,16 @@ logger = logging.getLogger(__name__)
 #: Qui contrôle les dépenses — le siège, jamais le pays qui les a engagées :
 #: le DM, qui met en contrôle, le DF, qui tranche, et les administrateurs,
 #: qui peuvent l'un et l'autre. ``recipients_for`` cloisonne : un DM ou un
-#: DF restreint à des pays n'est prévenu que pour ceux-là.
-CONTROLLERS = [Role.DM, Role.DF, Role.ADMIN, Role.SUPER_ADMIN]
+#: DF restreint à des pays n'est prévenu que pour ceux-là. Ce sont ceux qui
+#: peuvent mettre en contrôle : l'ensemble est celui de ``permissions``.
+CONTROLLERS = REVIEW_ROLES
 
 #: Qui peut fournir une pièce manquante ou corriger un dossier : le manager,
 #: seul rôle du pays.
-PROVIDERS = [Role.MANAGER]
+PROVIDERS = COUNTRY_ROLES
 
-#: Qui arbitre le budget : la direction, super administratrice.
-BUDGET_OWNERS = [Role.SUPER_ADMIN]
+#: Qui arbitre le budget : ceux qui l'écrivent, la direction.
+BUDGET_OWNERS = BUDGET_WRITE_ROLES
 
 
 def _safe(action):
@@ -46,6 +46,17 @@ def _safe(action):
         return []
 
 
+def _sauf(destinataires, actor):
+    """Écarte l'auteur de l'action : on ne se prévient pas soi-même.
+
+    ``actor`` peut manquer quand l'action vient d'une commande sans compte ;
+    tout le monde est alors prévenu.
+    """
+    if actor is None:
+        return destinataires
+    return destinataires.exclude(pk=actor.pk)
+
+
 def dossier_submitted(dossier, actor):
     """Prévient le contrôle qu'un dossier complet attend son examen.
 
@@ -55,7 +66,7 @@ def dossier_submitted(dossier, actor):
     totaux = dossier.totals()
     return _safe(
         lambda: notify(
-            recipients_for(CONTROLLERS, dossier.country).exclude(pk=actor.pk),
+            _sauf(recipients_for(CONTROLLERS, dossier.country, dossier.team), actor),
             kind=Notification.Kind.EXPENSE_SUBMITTED,
             level=Notification.Level.INFO,
             title=format_lazy(
@@ -84,7 +95,7 @@ def expense_rejected(expense, actor, motive):
     author = User.objects.filter(username=expense.created_by, is_active=True)
     return _safe(
         lambda: notify(
-            author.exclude(pk=actor.pk),
+            _sauf(author, actor),
             kind=Notification.Kind.EXPENSE_REJECTED,
             level=Notification.Level.WARNING,
             title=format_lazy(_("Dépense refusée — {title}"), title=expense.title),
@@ -105,13 +116,14 @@ def dossier_reopened(dossier, actor, motive):
     savoir sans attendre d'ouvrir la liste : il faut le corriger et le
     resoumettre. Le motif figure dans le message, pas seulement sur la fiche.
 
-    La clé d'unicité porte le dossier et le jour : deux réouvertures le même
-    jour ne notifient qu'une fois, une réouverture ultérieure notifie à
-    nouveau.
+    La clé d'unicité porte le dossier et l'instant de sa dernière écriture —
+    celle de la réouverture elle-même : chaque réouverture notifie, même
+    deux le même jour. Une clé au jour taisait la seconde, alors que le
+    pays avait resoumis entre-temps et devait apprendre le nouveau motif.
     """
     return _safe(
         lambda: notify(
-            recipients_for(PROVIDERS, dossier.country).exclude(pk=actor.pk),
+            _sauf(recipients_for(PROVIDERS, dossier.country, dossier.team), actor),
             kind=Notification.Kind.DOSSIER_REOPENED,
             level=Notification.Level.WARNING,
             title=format_lazy(_("Dossier rouvert — {number}"), number=dossier.number),
@@ -125,7 +137,7 @@ def dossier_reopened(dossier, actor, motive):
             ),
             link=f"/dossiers/{dossier.pk}",
             country=dossier.country,
-            dedup_key=f"dossier_reopened:{dossier.pk}:{timezone.localdate().isoformat()}",
+            dedup_key=f"dossier_reopened:{dossier.pk}:{dossier.updated_at.isoformat()}",
         )
     )
 
@@ -144,24 +156,27 @@ ALERT_KINDS = {
 ALERT_AUDIENCE = {
     # L'enveloppe : la direction l'arbitre, le contrôle la surveille, et le
     # pays reste averti de son état même s'il ne la justifie pas lui-même.
-    "budget_overrun": CONTROLLERS + PROVIDERS,
-    "budget_threshold": CONTROLLERS + PROVIDERS,
+    "budget_overrun": CONTROLLERS | PROVIDERS,
+    "budget_threshold": CONTROLLERS | PROVIDERS,
     # Un justificatif manquant concerne d'abord ceux qui peuvent le fournir —
     # le pays — autant que ceux qui devront le contrôler.
-    "proof_missing": CONTROLLERS + PROVIDERS,
-    "proof_incomplete": CONTROLLERS + PROVIDERS,
+    "proof_missing": CONTROLLERS | PROVIDERS,
+    "proof_incomplete": CONTROLLERS | PROVIDERS,
 }
 
 
-def audience_for(alert_kind, country):
-    """Destinataires d'un type d'alerte pour un pays.
+def audience_for(alert_kind, country, team=None):
+    """Destinataires d'un type d'alerte pour un pays et, s'il y a lieu, une équipe.
 
     Exposé pour que l'appelant puisse résoudre une fois et réutiliser : cent
     dossiers sans preuve interrogeraient sinon cent fois la même liste. Un
     cache global serait pire encore — un compte créé ensuite ne recevrait
     plus jamais d'alerte.
+
+    ``team`` est celle du dossier ou de la ligne en alerte (identifiant ou
+    instance) ; une alerte d'enveloppe n'en a pas et s'adresse au pays.
     """
-    return list(recipients_for(ALERT_AUDIENCE[alert_kind], country))
+    return list(recipients_for(ALERT_AUDIENCE[alert_kind], country, team))
 
 
 def alert_raised(alert, country, recipients=None):
@@ -176,7 +191,9 @@ def alert_raised(alert, country, recipients=None):
         return []
     critical = alert["level"] == "critical"
     destinataires = (
-        recipients if recipients is not None else audience_for(alert["kind"], country)
+        recipients
+        if recipients is not None
+        else audience_for(alert["kind"], country, alert.get("team"))
     )
     return _safe(
         lambda: notify(
@@ -199,7 +216,7 @@ def reallocation_requested(reallocation, actor):
     country = reallocation.source.country
     return _safe(
         lambda: notify(
-            recipients_for(BUDGET_OWNERS, country).exclude(pk=actor.pk),
+            _sauf(recipients_for(BUDGET_OWNERS, country), actor),
             kind=Notification.Kind.REALLOCATION_REQUESTED,
             level=Notification.Level.INFO,
             title=_("Demande de réallocation budgétaire"),

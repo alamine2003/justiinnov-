@@ -24,17 +24,19 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from openpyxl import load_workbook
 
 from accounts.permissions import get_access
 from budget.aggregates import convert
+from core.journal import tracer
 from core.models import Country, Manager, Team
-from core.requetes import client_ip
 from expenses.models import AuditLog, Dossier, Expense
 from expenses.workflow import Status
+
+from .scope import fuseau_de
 
 logger = logging.getLogger(__name__)
 
@@ -168,21 +170,23 @@ def _montant(value, entete):
     return montant
 
 
-def _date(value):
-    """Date de la ligne, avec ou sans heure.
+def _date(value, fuseau):
+    """Date de la ligne, avec ou sans heure, dans le fuseau du pays.
 
     Le classeur historique ne porte que le jour : la dépense est alors datée
-    de minuit. Le fuseau est celui du serveur ; l'affichage la relit dans
-    celui du pays, comme toute autre ligne.
+    de minuit. Le classeur est écrit à l'heure du pays — c'est celle qu'on
+    lit sur les pièces et celle de l'export — et se relit dans ce même
+    fuseau : la faire passer par celui du serveur décalait une ligne du
+    1er janvier à 01:00 dans l'exercice précédent.
     """
     if isinstance(value, datetime):
-        return timezone.make_aware(value) if timezone.is_naive(value) else value
+        return value.replace(tzinfo=fuseau) if timezone.is_naive(value) else value
     if isinstance(value, date):
-        return timezone.make_aware(datetime.combine(value, datetime.min.time()))
+        return datetime.combine(value, datetime.min.time(), tzinfo=fuseau)
     texte = _texte(value)
     for format_ in FORMATS_DE_DATE:
         try:
-            return timezone.make_aware(datetime.strptime(texte, format_))
+            return datetime.strptime(texte, format_).replace(tzinfo=fuseau)
         except ValueError:
             continue
     raise ValueError(_("Date illisible : « %(value)s »") % {"value": value})
@@ -419,7 +423,7 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
                 row, avec_colonne_pays, pays, country, access
             )
 
-            date_ligne = _date(row["DATE"])
+            date_ligne = _date(row["DATE"], fuseau_de(pays_ligne))
             amount = _montant(row["DEPENSES"], "DEPENSES")
             title = _texte_borne(row, "LIBELLE DES TRANSACTIONS") or "Dépense importée"
             amount, devise, montant_origine, taux = _devise_d_origine(
@@ -463,6 +467,7 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
             empreintes_vues[empreinte] = numero_ligne
 
             valides.append({
+                "ligne": numero_ligne,
                 "cle_dossier": cle_dossier,
                 "number": number,
                 "country": pays_ligne,
@@ -492,64 +497,111 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
     if erreurs or dry_run:
         return resultat
 
-    with transaction.atomic():
-        # Le référentiel manquant d'abord : les lignes s'y rattachent.
-        # ``create`` un par un, et non ``bulk_create`` : la création doit
-        # passer par les signaux d'historisation (``ChangeLog``).
-        for cle, (pays_equipe, nom) in equipes_a_creer.items():
-            equipes[cle] = Team.objects.create(country=pays_equipe, name=nom)
-        for cle, (pays_manager, nom) in managers_a_creer.items():
-            manager = Manager.objects.create(name=nom)
-            pays_manager.managers.add(manager)
-            managers[cle] = manager
-
-        dossiers = {}
-        depenses = []
-        for ligne in valides:
-            if ligne["team"] is None and ligne["cle_equipe"] is not None:
-                ligne["team"] = equipes[ligne["cle_equipe"]]
-            if ligne["owner"] is None and ligne["cle_manager"] is not None:
-                ligne["owner"] = managers[ligne["cle_manager"]]
-            dossier = dossiers.get(ligne["cle_dossier"])
-            if dossier is None:
-                dossier = dossiers_existants[ligne["cle_dossier"]]
-                if dossier is None:
-                    dossier = Dossier.objects.create(
-                        number=ligne["number"],
-                        label=ligne["title"] or ligne["number"],
-                        country=ligne["country"],
-                        team=ligne["team"],
-                        owner=ligne["owner"],
-                        date=ligne["date"].date(),
-                        status=Status.DRAFT,
-                        created_by=user.username,
-                    )
-                dossiers[ligne["cle_dossier"]] = dossier
-            depenses.append(
-                Expense(
-                    dossier=dossier,
-                    country=ligne["country"],
-                    team=ligne["team"],
-                    owner=ligne["owner"],
-                    date=ligne["date"],
-                    title=ligne["title"],
-                    amount=ligne["amount"],
-                    # Le classeur peut porter un MONTANT JUSTIFIER : il est
-                    # ignoré. Une preuve se constate au siège, elle ne
-                    # s'importe pas.
-                    justified_amount=Decimal("0.00"),
-                    original_currency=ligne["original_currency"],
-                    original_amount=ligne["original_amount"],
-                    original_rate=ligne["original_rate"],
-                    note=ligne["note"],
-                    status=Status.DRAFT,
-                    created_by=user.username,
-                )
-            )
-        # Aucun signal n'écoute ``Expense`` : l'insertion par lots ne fait
-        # perdre aucune trace, et évite une requête par ligne.
-        Expense.objects.bulk_create(depenses, batch_size=TAILLE_LOT)
+    try:
+        with transaction.atomic():
+            _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
+                    dossiers_existants)
+    except _LigneEnErreur as exc:
+        # La transaction est défaite : rien n'a été écrit, comme pour une
+        # erreur relevée à la validation.
+        return _resultat(0, 0, [_erreur(exc.ligne, exc.motif)], dry_run)
     return resultat
+
+
+class _LigneEnErreur(Exception):
+    """Erreur relevée à l'écriture, rapportée à sa ligne du classeur."""
+
+    def __init__(self, ligne, motif):
+        super().__init__(motif)
+        self.ligne = ligne
+        self.motif = motif
+
+
+def _creer_le_dossier(ligne, user):
+    """Crée le dossier d'une ligne, ou signale qu'un autre import l'a fait.
+
+    Le dossier était absent à la validation, mais deux imports du même
+    classeur peuvent se croiser : le second heurtait la contrainte d'unicité
+    (pays, N°ORDRE) et répondait 500, en ayant perdu tout le classeur.
+    ``get_or_create`` absorbe la course ; si le dossier existe désormais, la
+    ligne est refusée avec son numéro — ses doublons n'ont pas été vérifiés
+    contre ce dossier-là — et l'import se relance.
+    """
+    motif = _(
+        "Le dossier « %(number)s » vient d'être créé par un autre import : "
+        "relancez l'import."
+    ) % {"number": ligne["number"]}
+    try:
+        with transaction.atomic():
+            dossier, cree = Dossier.objects.get_or_create(
+                country=ligne["country"],
+                number=ligne["number"],
+                defaults={
+                    "label": ligne["title"] or ligne["number"],
+                    "team": ligne["team"],
+                    "owner": ligne["owner"],
+                    "date": ligne["date"].date(),
+                    "status": Status.DRAFT,
+                    "created_by": user.username,
+                },
+            )
+    except IntegrityError:
+        raise _LigneEnErreur(ligne["ligne"], motif)
+    if not cree:
+        raise _LigneEnErreur(ligne["ligne"], motif)
+    return dossier
+
+
+def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
+            dossiers_existants):
+    """Écrit référentiel, dossiers et lignes, dans la transaction de l'appelant."""
+    # Le référentiel manquant d'abord : les lignes s'y rattachent.
+    # ``create`` un par un, et non ``bulk_create`` : la création doit
+    # passer par les signaux d'historisation (``ChangeLog``).
+    for cle, (pays_equipe, nom) in equipes_a_creer.items():
+        equipes[cle] = Team.objects.create(country=pays_equipe, name=nom)
+    for cle, (pays_manager, nom) in managers_a_creer.items():
+        manager = Manager.objects.create(name=nom)
+        pays_manager.managers.add(manager)
+        managers[cle] = manager
+
+    dossiers = {}
+    depenses = []
+    for ligne in valides:
+        if ligne["team"] is None and ligne["cle_equipe"] is not None:
+            ligne["team"] = equipes[ligne["cle_equipe"]]
+        if ligne["owner"] is None and ligne["cle_manager"] is not None:
+            ligne["owner"] = managers[ligne["cle_manager"]]
+        dossier = dossiers.get(ligne["cle_dossier"])
+        if dossier is None:
+            dossier = dossiers_existants[ligne["cle_dossier"]]
+            if dossier is None:
+                dossier = _creer_le_dossier(ligne, user)
+            dossiers[ligne["cle_dossier"]] = dossier
+        depenses.append(
+            Expense(
+                dossier=dossier,
+                country=ligne["country"],
+                team=ligne["team"],
+                owner=ligne["owner"],
+                date=ligne["date"],
+                title=ligne["title"],
+                amount=ligne["amount"],
+                # Le classeur peut porter un MONTANT JUSTIFIER : il est
+                # ignoré. Une preuve se constate au siège, elle ne
+                # s'importe pas.
+                justified_amount=Decimal("0.00"),
+                original_currency=ligne["original_currency"],
+                original_amount=ligne["original_amount"],
+                original_rate=ligne["original_rate"],
+                note=ligne["note"],
+                status=Status.DRAFT,
+                created_by=user.username,
+            )
+        )
+    # Aucun signal n'écoute ``Expense`` : l'insertion par lots ne fait
+    # perdre aucune trace, et évite une requête par ligne.
+    Expense.objects.bulk_create(depenses, batch_size=TAILLE_LOT)
 
 
 def _resultat(dossiers, lignes, erreurs, dry_run, *, equipes_creees=0, managers_crees=0):
@@ -564,16 +616,15 @@ def _resultat(dossiers, lignes, erreurs, dry_run, *, equipes_creees=0, managers_
 
 
 def audit_import(request, resultat, country=None):
-    AuditLog.objects.create(
-        user=request.user.username,
-        action=AuditLog.Action.IMPORTED,
-        object_type="ExpenseImport",
-        object_id=0,
+    """Un import verse des lignes dans le système : il laisse une trace."""
+    tracer(
+        request,
+        AuditLog.Action.IMPORTED,
+        "ExpenseImport",
+        famille="import",
         label="Import des dépenses Excel",
         # Le pays de l'import, quand il vient de la requête : le journal
         # d'un pays doit montrer ce qui y a été versé.
         country=country,
-        detail=resultat,
-        ip_address=client_ip(request),
-        user_agent=request.META.get("HTTP_USER_AGENT", "")[:250],
+        **resultat,
     )

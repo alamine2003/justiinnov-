@@ -6,7 +6,6 @@ après coup, ni rester en suspens quand il se clôture.
 
 from datetime import date, datetime
 
-from django.core.cache import cache
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -22,7 +21,6 @@ from expenses.workflow import Status
 
 class DossierCoherenceTests(APITestCase):
     def setUp(self):
-        cache.clear()
         self.pays = Country.objects.create(
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
@@ -146,3 +144,91 @@ class DossierCoherenceTests(APITestCase):
         ligne.refresh_from_db()
         self.assertEqual(ligne.status, Status.SUBMITTED)
         self.assertEqual(ligne.budget, self.budget)
+
+
+class DeplacementDossierTests(DossierCoherenceTests):
+    """Un dossier qui a un contenu ne change ni de pays ni d'équipe.
+
+    Ses lignes portent le pays et l'équipe en propre, ses pièces sont
+    rangées par pays : le déplacer les laisserait derrière lui. Le choix est
+    de refuser, jamais de propager en silence.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.ivoire = Country.objects.create(
+            name="Côte d'Ivoire", code="CI", country_ref="CT-01",
+            currency="XOF", timezone="Africa/Abidjan",
+        )
+        self.autre_equipe = Team.objects.create(country=self.pays, name="Équipe Kara")
+        self.login(self.siege)
+
+    def test_un_dossier_avec_une_ligne_ne_change_pas_de_pays(self):
+        dossier = self.dossier("N-10")
+        self.ligne(dossier)
+
+        response = self.client.patch(
+            f"/api/dossiers/{dossier.pk}/", {"country": self.ivoire.pk}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("country", response.data)
+        dossier.refresh_from_db()
+        self.assertEqual(dossier.country, self.pays)
+
+    def test_un_dossier_vide_change_encore_de_pays(self):
+        dossier = self.dossier("N-11")
+
+        response = self.client.patch(
+            f"/api/dossiers/{dossier.pk}/", {"country": self.ivoire.pk}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["country"], self.ivoire.pk)
+
+    def test_un_dossier_ne_change_pas_d_equipe_contre_ses_lignes(self):
+        """Les lignes portent l'équipe Lomé : le dossier ne passe ni à Kara
+        ni à « aucune », tant qu'elles ne sont pas corrigées."""
+        dossier = self.dossier("N-12")
+        dossier.team = self.equipe
+        dossier.save()
+        self.ligne(dossier)
+
+        vers_kara = self.client.patch(
+            f"/api/dossiers/{dossier.pk}/", {"team": self.autre_equipe.pk}
+        )
+        vers_aucune = self.client.patch(
+            f"/api/dossiers/{dossier.pk}/", {"team": None}, format="json"
+        )
+        vers_la_leur = self.client.patch(
+            f"/api/dossiers/{dossier.pk}/", {"team": self.equipe.pk}
+        )
+
+        self.assertEqual(vers_kara.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Lomé", str(vers_kara.data["team"]))
+        self.assertEqual(vers_aucune.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("team", vers_aucune.data)
+        self.assertEqual(vers_la_leur.status_code, status.HTTP_200_OK, vers_la_leur.data)
+        self.assertEqual(vers_la_leur.data["team"], self.equipe.pk)
+
+    def test_une_ligne_porte_l_equipe_de_son_dossier(self):
+        """Le dossier est lu par l'équipe qu'il porte : une ligne d'une autre
+        équipe y serait visible par la première, invisible pour la seconde."""
+        dossier = self.dossier("N-13")
+        dossier.team = self.equipe
+        dossier.save()
+
+        refusee = self.client.post(
+            "/api/expenses/", {**self.payload(dossier), "team": self.autre_equipe.pk}
+        )
+        acceptee = self.client.post(
+            "/api/expenses/", {**self.payload(dossier), "team": self.equipe.pk}
+        )
+        sans_equipe = self.client.post("/api/expenses/", self.payload(dossier))
+
+        self.assertEqual(refusee.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Lomé", str(refusee.data["team"]))
+        self.assertEqual(acceptee.status_code, status.HTTP_201_CREATED, acceptee.data)
+        # Facultative en brouillon pour le siège, comme l'import l'exige ;
+        # la soumission la réclamera.
+        self.assertEqual(sans_equipe.status_code, status.HTTP_201_CREATED, sans_equipe.data)

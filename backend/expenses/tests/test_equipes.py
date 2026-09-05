@@ -132,6 +132,53 @@ class CloisonnementParEquipeTests(ExpenseTestCase):
         self.assertEqual(self.dossier_b.expenses.count(), 1)
         self.assertFalse(self.dossier_a.expenses.filter(team=self.equipe_b).exists())
 
+    def test_le_detail_d_un_dossier_ne_montre_que_les_lignes_de_ses_equipes(self):
+        """Le détail applique le même filtre que la liste : une ligne d'une
+        autre équipe, ou sans équipe, glissée dans le dossier (import,
+        données anciennes) n'apparaît pas au manager cloisonné."""
+        self.make_expense(title="Glissée de Kara", team=self.equipe_b)
+        self.make_expense(title="Sans équipe", team=None)
+        self.login(self.manager_a)
+
+        detail = self.client.get(f"/api/dossiers/{self.dossier_a.pk}/")
+        liste = self.client.get(f"/api/expenses/?dossier={self.dossier_a.pk}")
+
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual([e["id"] for e in detail.data["expenses"]], [self.ligne_a.pk])
+        # Même primitive de périmètre des deux côtés : les deux réponses
+        # portent exactement les mêmes lignes.
+        self.assertEqual(
+            [e["id"] for e in detail.data["expenses"]],
+            [e["id"] for e in liste.data["results"]],
+        )
+
+    def test_un_manager_cloisonne_declare_dans_une_de_ses_equipes(self):
+        """Sans équipe, il créerait quelque chose qu'il ne peut plus relire :
+        le dossier et la ligne exigent une de ses équipes."""
+        self.login(self.manager_a)
+        dossier_payload = {
+            "number": "N-0100", "label": "Salon", "country": self.togo.pk,
+            "date": f"{self.year}-04-01",
+        }
+
+        dossier_sans = self.client.post("/api/dossiers/", dossier_payload)
+        ligne_sans = self.client.post("/api/expenses/", self._payload(team=None), format="json")
+        dossier_avec = self.client.post(
+            "/api/dossiers/", {**dossier_payload, "team": self.equipe_a.pk}
+        )
+        ligne_avec = self.client.post("/api/expenses/", self._payload())
+
+        self.assertEqual(dossier_sans.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Choisissez", str(dossier_sans.data["team"]))
+        self.assertEqual(ligne_sans.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Choisissez", str(ligne_sans.data["team"]))
+        self.assertEqual(dossier_avec.status_code, status.HTTP_201_CREATED, dossier_avec.data)
+        self.assertEqual(ligne_avec.status_code, status.HTTP_201_CREATED, ligne_avec.data)
+        relu_dossier = self.client.get(f"/api/dossiers/{dossier_avec.data['id']}/")
+        relue_ligne = self.client.get(f"/api/expenses/{ligne_avec.data['id']}/")
+        self.assertEqual(relu_dossier.status_code, status.HTTP_200_OK)
+        self.assertEqual(relue_ligne.status_code, status.HTTP_200_OK)
+
     def test_un_manager_sans_equipe_voit_tout_son_pays(self):
         self.login(self.manager_sans_equipe)
 

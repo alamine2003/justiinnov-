@@ -1,57 +1,29 @@
 """Mixins propres aux dépenses."""
 
-from django.utils.translation import gettext as _
 from rest_framework import status as http
-from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from accounts.permissions import get_access
+from core.journal import Trace
 from core.mixins import NoDestroyModelViewSet
+from core.regles import traduire_les_regles
 
-from .workflow import DELETABLE_STATUSES
+from .transitions import retirer_brouillon
 
 
 class DraftDeletableViewSet(NoDestroyModelViewSet):
     """CRUD où seul un brouillon peut encore être retiré, par son auteur.
 
-    Une fois la dépense déclarée, l'effacer reviendrait à perdre la trace de
-    l'argent : c'est précisément ce que l'application doit empêcher. Un
-    brouillon jamais soumis n'a en revanche aucune valeur probante — le
-    conserver encombrerait les listes sans rien documenter.
+    La règle — et ses refus — vit dans :func:`expenses.transitions.retirer_brouillon` ;
+    la vue ne fait que trouver l'objet dans le périmètre (404 sinon) et
+    traduire le refus en réponse. ``NoDestroyModelViewSet`` n'inclut pas
+    ``DestroyModelMixin``, puisque la suppression est justement l'exception.
     """
-
-    #: Champ portant le nom de l'auteur, comparé au demandeur.
-    #: ``None`` pour une ressource sans auteur : le périmètre pays fait foi.
-    author_field = "created_by"
-
-    def perform_destroy(self, instance):
-        """Effacement effectif.
-
-        Défini ici et non hérité : ``NoDestroyModelViewSet`` n'inclut pas
-        ``DestroyModelMixin``, puisque la suppression est justement
-        l'exception.
-        """
-        instance.delete()
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-
-        if instance.status not in DELETABLE_STATUSES:
-            raise ValidationError(
-                {
-                    "status": _(
-                        "Cet élément est déclaré : il ne peut plus être "
-                        "supprimé. Seul un brouillon peut l'être."
-                    )
-                }
+        with traduire_les_regles():
+            retirer_brouillon(
+                instance, get_access(request.user), Trace.depuis_requete(request)
             )
-
-        author = (
-            getattr(instance, self.author_field, "") if self.author_field else ""
-        )
-        if author and author != request.user.username:
-            raise PermissionDenied(
-                _("Seul l'auteur d'un brouillon peut le supprimer.")
-            )
-
-        self.perform_destroy(instance)
         return Response(status=http.HTTP_204_NO_CONTENT)

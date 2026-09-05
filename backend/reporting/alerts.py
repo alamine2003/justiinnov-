@@ -33,7 +33,13 @@ class Level:
     CRITICAL = "critical"
 
 
-def _alert(kind, level, title, detail, country=None, link="", key=""):
+def _alert(kind, level, title, detail, country=None, link="", key="", team_id=None):
+    """Une alerte, avec le pays et — pour un dossier ou une ligne — l'équipe.
+
+    L'équipe sert au cloisonnement des destinataires : un manager rattaché à
+    des équipes n'est prévenu que de ce qui touche les siennes. Une alerte
+    d'enveloppe n'en porte pas : l'enveloppe se lit par pays entier.
+    """
     return {
         "kind": kind,
         "level": level,
@@ -41,6 +47,7 @@ def _alert(kind, level, title, detail, country=None, link="", key=""):
         "detail": detail,
         "country": country.pk if country else None,
         "country_name": country.name if country else None,
+        "team": team_id,
         "link": link,
         "key": key,
     }
@@ -68,6 +75,9 @@ def budget_alerts(budgets):
             overrun = used - budget.amount
             taux = (
                 format_lazy(
+                    # « % e » ressemble à un format Python pour xgettext : sans
+                    # ce drapeau, msgfmt --check refuserait la traduction.
+                    # xgettext:no-python-format
                     _(" ({taux} % engagés)"), taux=_pourcentage(used, budget.amount)
                 )
                 if budget.amount else ""
@@ -161,6 +171,7 @@ def proof_alerts(dossiers):
                     country=dossier.country,
                     link=f"/dossiers/{dossier.pk}",
                     key=f"proof_missing:{dossier.pk}",
+                    team_id=dossier.team_id,
                 )
             )
         elif dossier.incomplete_proofs:
@@ -178,6 +189,7 @@ def proof_alerts(dossiers):
                     country=dossier.country,
                     link=f"/dossiers/{dossier.pk}",
                     key=f"proof_incomplete:{dossier.pk}",
+                    team_id=dossier.team_id,
                 )
             )
     return alerts
@@ -254,6 +266,7 @@ def unusual_expense_alerts(expenses):
             country=expense.country,
             link=f"/dossiers/{expense.dossier_id}",
             key=f"unusual_expense:{expense.pk}",
+            team_id=expense.team_id,
         )
         for expense in hors_norme
     ]

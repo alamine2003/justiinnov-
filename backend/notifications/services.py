@@ -11,11 +11,10 @@ import logging
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.mail import EmailMessage, get_connection
-from django.db.models import Q
 from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 
-from accounts.models import ALWAYS_GLOBAL_ROLES, HEADQUARTERS_ROLES
+from accounts.perimetre import comptes_couvrant
 
 from .models import Notification
 
@@ -41,33 +40,33 @@ def rendre(texte, langue):
         return str(texte)
 
 
-def recipients_for(roles, country=None):
-    """Comptes actifs portant l'un des rôles et couvrant le pays visé.
+def recipients_for(roles, country=None, team=None):
+    """Comptes actifs portant l'un des rôles et couvrant le pays — et l'équipe — visés.
 
     Un rôle du siège sans périmètre couvre tous les pays ; un rôle pays — ou
     un rôle du siège au périmètre restreint — n'est concerné que si le pays
     fait partie de son périmètre : la même règle que le cloisonnement des
     données. Sans ``country``, tous les comptes du rôle sont renvoyés, et
     c'est à l'appelant de cloisonner ce qu'il leur envoie.
+
+    ``team`` — l'équipe d'un dossier ou d'une ligne — applique le second
+    cloisonnement, celui des managers : rattaché à des équipes, un manager
+    n'est prévenu que de ce qui touche les siennes ; sans équipe, il couvre
+    tout son pays (``UserProfile.team_ids``). Les rôles du siège ne sont
+    jamais cloisonnés par équipe : le DM et le DF contrôlent le pays entier,
+    et une équipe posée sur leur profil ne porte aucun droit. Une alerte
+    d'enveloppe, qui se lit par pays, ne passe pas d'équipe.
+
+    La règle est celle du cloisonnement des lectures, lue depuis l'objet :
+    ``accounts.perimetre.comptes_couvrant`` (décision 39).
     """
-    roles = list(roles)
     users = User.objects.filter(
-        is_active=True, profile__role__in=roles
+        is_active=True, profile__role__in=list(roles)
     ).select_related("profile")
 
     if country is None:
         return users.distinct()
-
-    global_roles = [r for r in roles if r in ALWAYS_GLOBAL_ROLES]
-    hq_roles = [r for r in roles if r in HEADQUARTERS_ROLES]
-    return users.filter(
-        # Rattaché explicitement au pays…
-        Q(profile__countries=country)
-        # …ou rôle du siège sans périmètre restreint…
-        | Q(profile__role__in=hq_roles, profile__countries__isnull=True)
-        # …ou rôle toujours global.
-        | Q(profile__role__in=global_roles)
-    ).distinct()
+    return comptes_couvrant(users, country, team)
 
 
 def _deja_avertis(dedup_key, recipients):

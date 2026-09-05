@@ -1,22 +1,28 @@
-"""Vues des budgets, réallocations et taux de change."""
+"""Vues des budgets, réallocations et taux de change.
 
-from django.db import transaction
+Le circuit d'une réallocation — demande, approbation, refus — est dans
+``budget.transitions`` (décision 41) ; la vue trouve l'objet dans le
+périmètre, lit la charge utile, appelle le service et répond.
+"""
+
 from django.utils import timezone
-from django.utils.translation import gettext as _
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import BUDGET_WRITE_ROLES, RolePermission, get_access
 from accounts.scoping import CountryScopedMixin
+from core.journal import Trace
 from core.mixins import NoDestroyModelViewSet
-from notifications import triggers
+from core.regles import traduire_les_regles
 
-from .aggregates import consolidation_par_pays, consumption, current_rates
+from . import transitions
+from .aggregates import consolidation_par_pays, current_rates
 from .models import Budget, BudgetReallocation, ExchangeRate
 from .serializers import (
     BudgetReallocationSerializer,
     BudgetSerializer,
+    BudgetSummarySerializer,
     ExchangeRateSerializer,
     ReallocationDecisionSerializer,
 )
@@ -51,6 +57,14 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         # enveloppe affichée.
         return {**super().get_serializer_context(), "rates": current_rates()}
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "year", int, description="Exercice consolidé ; l'année en cours par défaut."
+            )
+        ],
+        responses=BudgetSummarySerializer,
+    )
     @action(detail=False, methods=["get"])
     def summary(self, request):
         """Consolidation par pays, avec total en FCFA (§5.6).
@@ -107,113 +121,39 @@ class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     country_field = None
 
     def perform_create(self, serializer):
-        serializer.save(requested_by=self.request.user.username)
-        triggers.reallocation_requested(serializer.instance, self.request.user)
+        donnees = serializer.validated_data
+        with traduire_les_regles():
+            resultat = transitions.demander(
+                donnees["source"], donnees["target"], donnees["amount"],
+                donnees["reason"], get_access(self.request.user),
+                Trace.depuis_requete(self.request),
+            )
+        serializer.instance = resultat.instance
 
+    def _decider(self, request, service):
+        """Approbation ou refus : périmètre, motif, service, réponse."""
+        visible = self.get_object()
+        serializer = ReallocationDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with traduire_les_regles():
+            resultat = service(
+                visible, get_access(request.user),
+                serializer.validated_data.get("note", ""),
+                Trace.depuis_requete(request),
+            )
+        return Response(self.get_serializer(resultat.instance).data)
+
+    @extend_schema(request=ReallocationDecisionSerializer, responses=BudgetReallocationSerializer)
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         """Approuve et exécute le transfert."""
-        serializer = ReallocationDecisionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        return self._decider(request, transitions.approuver)
 
-        with transaction.atomic():
-            reallocation = self._verrouiller(request)
-            # Les deux enveloppes sont verrouillées dans l'ordre de leurs
-            # identifiants : deux réallocations croisées (A→B et B→A)
-            # approuvées en même temps prendraient sinon les verrous en sens
-            # inverse et s'interbloqueraient.
-            budgets = {
-                budget.pk: budget
-                for budget in Budget.objects.select_for_update()
-                .filter(pk__in=[reallocation.source_id, reallocation.target_id])
-                .order_by("pk")
-            }
-            source = budgets[reallocation.source_id]
-            target = budgets[reallocation.target_id]
-            if reallocation.amount > disponible(source):
-                # L'argent déjà sorti ou engagé n'est plus transférable : la
-                # source doit pouvoir couvrir ses dépenses après le transfert.
-                raise ValidationError(
-                    {
-                        "amount": _(
-                            "Le disponible de l'enveloppe source ne couvre "
-                            "plus ce montant."
-                        )
-                    }
-                )
-            source.amount -= reallocation.amount
-            target.amount += reallocation.amount
-            source.save(update_fields=["amount", "updated_at"])
-            target.save(update_fields=["amount", "updated_at"])
-
-            reallocation.status = BudgetReallocation.Status.APPROVED
-            reallocation.decision_note = serializer.validated_data.get("note", "")
-            self._stamp_decision(reallocation, request)
-
-        return Response(self.get_serializer(reallocation).data)
-
+    @extend_schema(request=ReallocationDecisionSerializer, responses=BudgetReallocationSerializer)
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
         """Refuse le transfert. Le motif est obligatoire (§5.5)."""
-        serializer = ReallocationDecisionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        note = serializer.validated_data.get("note", "").strip()
-        if not note:
-            raise ValidationError({"note": _("Un refus doit être motivé.")})
-
-        with transaction.atomic():
-            reallocation = self._verrouiller(request)
-            reallocation.status = BudgetReallocation.Status.REJECTED
-            reallocation.decision_note = note
-            self._stamp_decision(reallocation, request)
-
-        return Response(self.get_serializer(reallocation).data)
-
-    def _verrouiller(self, request):
-        """Relit la réallocation sous verrou et vérifie qu'elle se décide.
-
-        Le statut est contrôlé **après** la prise du verrou : lu avant, deux
-        approbations simultanées le verraient toutes deux « en attente » et
-        exécuteraient le transfert deux fois. ``get_object`` reste appelé en
-        premier pour le cloisonnement (404 hors périmètre).
-        """
-        visible = self.get_object()
-        reallocation = BudgetReallocation.objects.select_for_update().get(
-            pk=visible.pk
-        )
-        if reallocation.status != BudgetReallocation.Status.PENDING:
-            raise ValidationError(
-                {"status": _("Cette réallocation a déjà été traitée.")}
-            )
-        if reallocation.requested_by == request.user.username:
-            # Demander et approuver sont deux regards : celui qui arbitre
-            # n'est pas celui qui sollicite.
-            raise PermissionDenied(
-                _(
-                    "Vous ne pouvez pas décider d'une réallocation que vous "
-                    "avez demandée."
-                )
-            )
-        access = get_access(request.user)
-        if access is not None and not access.has_global_scope:
-            # Le queryset ne filtre que par le pays de la source ; la
-            # destination doit être dans le périmètre elle aussi, et une
-            # enveloppe hors périmètre n'existe pas pour le demandeur.
-            if reallocation.target.country_id not in access.country_ids:
-                raise NotFound()
-        return reallocation
-
-    def _stamp_decision(self, reallocation, request):
-        reallocation.decided_by = request.user.username
-        reallocation.decided_at = timezone.now()
-        reallocation.save()
-
-
-def disponible(budget):
-    """Ce qu'une enveloppe peut encore céder : l'alloué moins le consommé
-    et l'engagé. Recalculé sur l'instance verrouillée, hors annotations."""
-    totals = consumption(budget)
-    return budget.amount - totals["consumed"] - totals["engaged"]
+        return self._decider(request, transitions.refuser)
 
 
 class ExchangeRateViewSet(NoDestroyModelViewSet):

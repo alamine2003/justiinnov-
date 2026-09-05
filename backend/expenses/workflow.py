@@ -14,11 +14,16 @@ Trois principes gouvernent ce circuit :
 - **Une dépense non justifiée pèse malgré tout sur l'enveloppe.** L'absence de
   preuve ne fait pas revenir l'argent : elle se lit dans l'écart entre le
   montant dépensé et le montant justifié.
-- **Personne ne justifie sa propre dépense.** Le pays (manager) déclare,
+- **Personne ne contrôle sa propre dépense.** Le pays (manager) déclare,
   le siège constate — le DM met en contrôle, le DF tranche. Et même au
-  siège, celui qui a saisi une dépense ne
-  peut pas la justifier lui-même : sans cette séparation, une seule personne
-  pourrait décaisser puis se donner quitus.
+  siège, celui qui a saisi une ligne ou ouvert un dossier n'y accomplit
+  aucun acte de contrôle : ni mise en contrôle, ni justification, ni rejet,
+  ni clôture (``FOUR_EYES_ACTIONS``). Sans cette séparation, une seule
+  personne pourrait décaisser puis se donner quitus.
+
+Les actions que le demandeur peut tenter sont calculées ici aussi
+(``expense_allowed_actions``, ``dossier_allowed_actions``) et exposées par
+l'API : l'interface les affiche, elle ne recopie pas les règles.
 
 **La réouverture est la seule exception à l'irréversibilité.** Un
 administrateur (RH ou super administrateur) peut renvoyer au brouillon un
@@ -39,17 +44,28 @@ Le dossier rouvert libère l'engagement de ses lignes sur l'enveloppe : elles
 ne sont plus déclarées, elles ne pèsent plus. Le journal, lui, garde tout.
 """
 
-from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from accounts.permissions import (
+    EXPENSE_WRITE_ROLES,
+    REOPEN_ROLES,
+    REVIEW_ROLES,
+    VALIDATION_ROLES,
+)
 
-class Status(models.TextChoices):
-    DRAFT = "draft", _("Brouillon")
-    SUBMITTED = "submitted", _("Soumis")
-    IN_REVIEW = "in_review", _("En contrôle")
-    JUSTIFIED = "justified", _("Justifié")
-    UNJUSTIFIED = "unjustified", _("Non justifié")
-    CLOSED = "closed", _("Clôturé")
+from core.regles import RegleViolee
+
+# Les états et leurs ensembles vivent dans ``core.statuts`` (décision 40) et
+# sont ré-exportés ici : le circuit reste l'endroit où on vient les chercher.
+from core.statuts import (  # noqa: F401
+    CONSUMING_STATUSES,
+    DECIDED_STATUSES,
+    DELETABLE_STATUSES,
+    ENGAGING_STATUSES,
+    LOCKED_STATUSES,
+    PROOF_LOCKED_STATUSES,
+    Status,
+)
 
 
 #: Transitions autorisées : action → (états de départ, état d'arrivée).
@@ -79,39 +95,42 @@ TRANSITIONS = {
 #: auprès de celui qui les subit.
 MOTIVATED_ACTIONS = frozenset({"reject", "reopen"})
 
-#: États verrouillés : la dépense est déclarée, plus rien ne se modifie.
-#: Le brouillon seul reste une matière de travail.
-LOCKED_STATUSES = frozenset(
-    {
-        Status.SUBMITTED,
-        Status.IN_REVIEW,
-        Status.JUSTIFIED,
-        Status.UNJUSTIFIED,
-        Status.CLOSED,
-    }
-)
+#: Rôle habilité pour chaque action du circuit. Le pays (manager) soumet ;
+#: au siège, le DM met en contrôle et le DF tranche (justifie, rejette,
+#: clôt), les administrateurs pouvant faire l'un et l'autre ; les
+#: administrateurs seuls rouvrent — ni le pays, qui se corrigerait lui-même,
+#: ni la direction financière, dont le constat ne se défait pas.
+ACTION_ROLES = {
+    "submit": EXPENSE_WRITE_ROLES,
+    "review": REVIEW_ROLES,
+    "justify": VALIDATION_ROLES,
+    "reject": VALIDATION_ROLES,
+    "close": VALIDATION_ROLES,
+    "reopen": REOPEN_ROLES,
+}
+
+#: Actions soumises à la règle des quatre yeux : tout acte de contrôle, de
+#: la mise en contrôle à la clôture. Celui qui a saisi une ligne ou ouvert
+#: un dossier ne le prend pas en contrôle, ne le tranche pas et ne le clôt
+#: pas — la clôture aussi est un constat, elle déclare l'affaire terminée.
+#: Soumettre et rouvrir n'en relèvent pas : ce sont la déclaration et sa
+#: remise en cause, pas son contrôle.
+FOUR_EYES_ACTIONS = frozenset({"review", "justify", "reject", "close"})
 
 #: États d'une ligne qui interdisent de rouvrir son dossier : le siège a
 #: constaté, et un constat ne se défait pas. Une ligne non justifiée, elle,
 #: n'a pas été constatée — l'absence de preuve a été relevée, rien de plus.
 REOPEN_BLOCKING_STATUSES = frozenset({Status.JUSTIFIED, Status.CLOSED})
 
-#: Un justificatif reste déposable tant que le dossier n'est pas clôturé :
-#: rassembler la preuve est précisément l'objet de l'application, et une
-#: dépense non justifiée doit pouvoir être couverte après coup.
-PROOF_LOCKED_STATUSES = frozenset({Status.CLOSED})
-
-#: Seul un brouillon peut encore être retiré, par son auteur.
-DELETABLE_STATUSES = frozenset({Status.DRAFT})
-
-#: Déclarée mais pas encore contrôlée.
-ENGAGING_STATUSES = frozenset({Status.SUBMITTED, Status.IN_REVIEW})
-
-#: Décaissements constatés. La non-justification en fait partie : l'argent est
-#: sorti, la preuve manque — c'est précisément ce que l'écart doit montrer.
-CONSUMING_STATUSES = frozenset(
-    {Status.JUSTIFIED, Status.UNJUSTIFIED, Status.CLOSED}
-)
+#: États exigés des lignes pour trancher le dossier. Le dossier ne dit pas
+#: autre chose que ses lignes : « justifié » exige que chacune le soit ;
+#: « non justifié » et « clôturé » exigent seulement qu'aucune ne reste en
+#: suspens.
+LINES_REQUIRED = {
+    "justify": REOPEN_BLOCKING_STATUSES,
+    "reject": DECIDED_STATUSES,
+    "close": DECIDED_STATUSES,
+}
 
 
 #: Contrôle documentaire d'une pièce : état courant → états atteignables.
@@ -133,8 +152,15 @@ PROOF_TRANSITIONS = {
 }
 
 
-class TransitionError(Exception):
-    """Transition demandée depuis un état qui ne l'autorise pas."""
+class TransitionError(RegleViolee):
+    """Transition demandée depuis un état qui ne l'autorise pas.
+
+    Une règle violée sur le champ ``status`` : la vue la traduit comme les
+    autres refus (``core.regles``), en 400 sur ``status``.
+    """
+
+    def __init__(self, message):
+        super().__init__("status", message)
 
 
 def next_proof_status(current, target, labels):
@@ -175,3 +201,95 @@ def next_status(action, current, configuration=None):
             ).format(current=Status(current).label, expected=labels)
         )
     return target
+
+
+def can_transition(action, current, *, role, configuration=None):
+    """Le rôle et l'état permettent-ils l'action ? Ni plus, ni moins."""
+    if role not in ACTION_ROLES[action]:
+        return False
+    try:
+        next_status(action, current, configuration)
+    except TransitionError:
+        return False
+    return True
+
+
+def breaks_four_eyes(action, author, username):
+    """L'action est-elle un acte de contrôle tenté par l'auteur de l'objet ?
+
+    Seul prédicat des quatre yeux : ``allowed_actions`` (l'interface) et les
+    services de transition (le refus) le partagent, pour ne jamais diverger.
+    Sans auteur connu, la règle ne peut pas jouer — le service refuse alors
+    tout contrôle sur la ligne (``transitions.exiger_un_auteur``).
+    """
+    return action in FOUR_EYES_ACTIONS and bool(author) and author == username
+
+
+#: Actions d'une ligne, dans l'ordre où l'interface les propose.
+EXPENSE_ACTIONS = ("review", "justify", "reject", "close")
+
+#: Actions d'un dossier, dans le même ordre que le circuit.
+DOSSIER_ACTIONS = ("submit", "review", "justify", "reject", "close", "reopen")
+
+
+def expense_allowed_actions(expense, *, role, username, configuration=None):
+    """Actions qu'un demandeur peut tenter sur une ligne (``allowed_actions``).
+
+    Calculées côté serveur pour que l'interface n'ait pas à recopier les
+    règles : rôle, état courant, étape de contrôle obligatoire et quatre
+    yeux. Une ligne sans auteur connu n'admet aucune action de contrôle,
+    puisque la règle des quatre yeux ne peut pas y être vérifiée.
+
+    La politique de dépassement n'entre pas dans ce calcul : elle se juge
+    sous verrou, sur l'enveloppe, au moment de justifier — ``justify`` peut
+    donc figurer ici et répondre 400 pour dépassement.
+    """
+    if not expense.created_by:
+        return []
+    return [
+        action
+        for action in EXPENSE_ACTIONS
+        if can_transition(action, expense.status, role=role, configuration=configuration)
+        and not breaks_four_eyes(action, expense.created_by, username)
+    ]
+
+
+def dossier_allowed_actions(dossier, *, role, username, configuration=None):
+    """Actions qu'un demandeur peut tenter sur un dossier (``allowed_actions``).
+
+    Mêmes règles que pour la ligne, plus celles qui lient le dossier à ses
+    lignes et à ses pièces : un dossier vide ne se soumet pas, ne se justifie
+    pas sans pièce exploitable ni sans que chaque ligne le soit, ne se
+    rejette ni ne se clôt sur une ligne en suspens, et ne se rouvre pas dès
+    qu'une ligne a été constatée. Les compteurs viennent du dossier
+    (:meth:`Dossier.line_counts`), annotés par ``with_totals`` sur une
+    liste pour ne pas coûter une requête par dossier.
+
+    Une action proposée peut encore être refusée à l'exécution (400) par
+    les règles que le service seul vérifie, parce qu'elles demandent des
+    lectures que cette liste ne fait pas : ``submit`` exige une équipe et
+    un manager sur le dossier, et une enveloppe active pour chaque ligne à
+    imputer ; la politique de dépassement se juge au montant consommé. La
+    liste dit ce que le demandeur *peut tenter*, pas ce qui aboutira.
+    """
+    actions = []
+    lines = None
+    for action in DOSSIER_ACTIONS:
+        if not can_transition(action, dossier.status, role=role, configuration=configuration):
+            continue
+        if breaks_four_eyes(action, dossier.created_by, username):
+            continue
+        if lines is None:
+            lines = dossier.line_counts()
+        if action == "submit" and lines["total"] == 0:
+            continue
+        if action == "justify" and (
+            lines["pending"] or lines["unjustified"] or dossier.usable_proof_count() == 0
+        ):
+            continue
+        if action in ("reject", "close") and lines["pending"]:
+            continue
+        if action == "reopen" and lines["settled"]:
+            continue
+        actions.append(action)
+    return actions

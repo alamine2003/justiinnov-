@@ -8,7 +8,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from budget.models import Budget
-from core.models import Project
+from core.models import Project, WorkflowConfiguration
 from expenses.models import Beneficiary, Dossier, Expense
 
 from .base import ExpenseTestCase, in_memory_storage
@@ -19,6 +19,12 @@ class QueryCountTests(ExpenseTestCase):
     def setUp(self):
         super().setUp()
         self.login(self.doo)
+        # ``allowed_actions`` lit la politique du circuit, une fois par
+        # requête, via le cache — vidé avant chaque test : la première
+        # lecture la crée et la met en cache, ce qui coûte quelques requêtes
+        # de plus — un amorçage, pas un N+1. Les mesures comparent des
+        # requêtes en régime établi.
+        WorkflowConfiguration.charger()
 
     def _make_dossiers(self, count, offset=0):
         for index in range(offset, offset + count):

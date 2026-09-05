@@ -2,33 +2,29 @@
 
 from decimal import Decimal
 from pathlib import Path
-from unittest import mock, skipUnless
+from unittest import mock
+
+from datetime import date
 
 from django.contrib.auth.models import User
 from django.core import mail
-from django.core.exceptions import FieldDoesNotExist
+from django.db.models import ProtectedError
 from django.core.management import call_command
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy
 from rest_framework import status
 
-from accounts.models import Role, UserProfile
+from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget, BudgetReallocation
 from core.management.commands.run_scheduler import JOBS
+from core.models import Team
+from expenses.models import Dossier
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
 from notifications import services, triggers
 from notifications.models import Notification
 from notifications.services import notify, recipients_for
-
-
-def _le_profil_a_une_langue():
-    try:
-        UserProfile._meta.get_field("language")
-    except FieldDoesNotExist:
-        return False
-    return True
 
 
 class NotificationTestCase(ExpenseTestCase):
@@ -135,12 +131,13 @@ class DedoublonnageTests(NotificationTestCase):
 
 
 class EmailTests(NotificationTestCase):
-    def setUp(self):
-        super().setUp()
-        self.controller.email = "dina@example.org"
-        self.controller.save()
-        self.doo.email = "doo@example.org"
-        self.doo.save()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.controller.email = "dina@example.org"
+        cls.controller.save()
+        cls.doo.email = "doo@example.org"
+        cls.doo.save()
 
     def test_un_message_par_destinataire(self):
         """Un envoi groupé exposait à chacun l'adresse des autres."""
@@ -255,10 +252,11 @@ class LangueTests(NotificationTestCase):
     TITRE = format_lazy(gettext_lazy("Justificatif manquant — {number}"), number="N-0001")
     CORPS = gettext_lazy("Aucune donnée sur la période.")
 
-    def setUp(self):
-        super().setUp()
-        self.controller.email = "dina@example.org"
-        self.controller.save()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.controller.email = "dina@example.org"
+        cls.controller.save()
 
     def test_a_defaut_la_langue_est_le_francais(self):
         sans_profil = User.objects.create_user("sans.profil")
@@ -266,11 +264,16 @@ class LangueTests(NotificationTestCase):
         self.assertEqual(services.langue_de(self.controller), "fr")
         self.assertEqual(services.langue_de(sans_profil), "fr")
 
+    def anglophone(self, user):
+        user.profile.language = "en"
+        user.profile.save()
+
     def test_le_message_est_rendu_dans_la_langue_du_destinataire(self):
-        with mock.patch.object(services, "langue_de", return_value="en"):
-            (notification,) = self.notifier(
-                [self.controller], title=self.TITRE, body=self.CORPS
-            )
+        self.anglophone(self.controller)
+
+        (notification,) = self.notifier(
+            [self.controller], title=self.TITRE, body=self.CORPS
+        )
 
         self.assertEqual(notification.title, "Missing supporting document — N-0001")
         self.assertEqual(notification.body, "No data for the period.")
@@ -284,11 +287,9 @@ class LangueTests(NotificationTestCase):
     def test_deux_destinataires_deux_langues(self):
         self.doo.email = "doo@example.org"
         self.doo.save()
-        with mock.patch.object(
-            services, "langue_de",
-            side_effect=lambda user: "en" if user.pk == self.controller.pk else "fr",
-        ):
-            self.notifier([self.controller, self.doo], title=self.TITRE)
+        self.anglophone(self.controller)
+
+        self.notifier([self.controller, self.doo], title=self.TITRE)
 
         titres = dict(
             Notification.objects.values_list("recipient__username", "title")
@@ -304,9 +305,9 @@ class LangueTests(NotificationTestCase):
         anglais chez un destinataire anglophone."""
         self.dossier.status = Status.SUBMITTED
         self.dossier.save()
+        self.anglophone(self.controller)
 
-        with mock.patch.object(services, "langue_de", return_value="en"):
-            call_command("notify_alerts", year=self.year, verbosity=0)
+        call_command("notify_alerts", year=self.year, verbosity=0)
 
         notification = Notification.objects.get(
             recipient=self.controller, kind=Notification.Kind.PROOF_MISSING
@@ -314,7 +315,6 @@ class LangueTests(NotificationTestCase):
         self.assertEqual(notification.title, "Missing supporting document — N-0001")
         self.assertIn("without any proof", notification.body)
 
-    @skipUnless(_le_profil_a_une_langue(), "le profil n'a pas encore de champ « language »")
     def test_la_langue_vient_du_profil(self):
         self.controller.profile.language = "en"
         self.controller.profile.save()
@@ -358,22 +358,22 @@ class ConservationTests(NotificationTestCase):
                 self.assertNotIn(".delete(", source.read_text(encoding="utf-8"))
 
 
-@skipUnless(_le_profil_a_une_langue(), "le profil n'a pas encore de champ « language »")
 class DeclencheursBilinguesTests(NotificationTestCase):
     """Les déclencheurs passent des chaînes paresseuses : un destinataire
     anglophone lit un titre anglais, son voisin francophone un titre
     français, pour le même événement."""
 
-    def setUp(self):
-        super().setUp()
-        self.controller.profile.language = "en"
-        self.controller.profile.save()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.controller.profile.language = "en"
+        cls.controller.profile.save()
         # Un second manager du Togo, anglophone : la réouverture revient au
         # pays, et chacun de ses managers la lit dans sa langue.
-        self.manager_en = make_user("kojo.togo", Role.MANAGER, [self.togo])
-        self.manager_en.profile.language = "en"
-        self.manager_en.profile.save()
-        self.make_expense(amount="1000.00")
+        cls.manager_en = make_user("kojo.togo", Role.MANAGER, [cls.togo])
+        cls.manager_en.profile.language = "en"
+        cls.manager_en.profile.save()
+        cls.make_expense(cls, amount="1000.00")
 
     def test_la_soumission_arrive_en_anglais(self):
         self.submit_dossier()
@@ -396,3 +396,108 @@ class DeclencheursBilinguesTests(NotificationTestCase):
         self.assertIn("Reason: Facture illisible", anglais.body)
         self.assertEqual(francais.title, "Dossier rouvert — N-0001")
         self.assertIn("Motif : Facture illisible", francais.body)
+
+
+class EquipesTests(NotificationTestCase):
+    """Un manager rattaché à des équipes n'est prévenu que de ce qui touche
+    les siennes ; le siège, jamais cloisonné par équipe, reçoit tout."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.kara = Team.objects.create(country=cls.togo, name="Équipe Kara")
+        cls.manager_lome = make_user(
+            "lome.togo", Role.MANAGER, [cls.togo], teams=[cls.team]
+        )
+        cls.dossier_kara = Dossier.objects.create(
+            number="N-KARA", label="Tournée de Kara", country=cls.togo,
+            team=cls.kara, owner=cls.manager, date=date(cls.year, 4, 1),
+            status=Status.SUBMITTED, created_by=cls.owner.username,
+        )
+
+    def test_recipients_for_cloisonne_les_managers_par_equipe(self):
+        lome = set(recipients_for([Role.MANAGER], self.togo, self.team))
+        kara = set(recipients_for([Role.MANAGER], self.togo, self.kara))
+        pays = set(recipients_for([Role.MANAGER], self.togo))
+
+        self.assertIn(self.manager_lome, lome)
+        self.assertNotIn(self.manager_lome, kara)
+        # Sans équipe rattachée, le manager couvre tout son pays.
+        self.assertIn(self.owner, kara)
+        # Sans équipe demandée — une alerte d'enveloppe — tout le pays.
+        self.assertEqual(pays, {self.owner, self.manager_lome})
+
+    def test_le_siege_ignore_les_equipes(self):
+        """Une équipe posée sur le profil d'un DF ne porte aucun droit."""
+        df_lome = make_user("df.lome", Role.DF, [self.togo], teams=[self.team])
+
+        self.assertIn(df_lome, set(recipients_for([Role.DF], self.togo, self.kara)))
+        self.assertIn(self.controller, set(recipients_for([Role.DF], self.togo, self.kara)))
+
+    def test_une_reouverture_a_kara_ne_previent_pas_le_manager_de_lome(self):
+        triggers.dossier_reopened(self.dossier_kara, self.doo, "Pièce manquante")
+
+        self.assertFalse(Notification.objects.filter(recipient=self.manager_lome).exists())
+        self.assertTrue(Notification.objects.filter(recipient=self.owner).exists())
+
+    def test_une_reouverture_a_lome_le_previent(self):
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+
+        triggers.dossier_reopened(self.dossier, self.doo, "Pièce manquante")
+
+        self.assertTrue(Notification.objects.filter(recipient=self.manager_lome).exists())
+
+    def test_une_soumission_ne_depend_pas_de_l_equipe_pour_le_siege(self):
+        dm_togo = make_user("dm.togo", Role.DM, [self.togo])
+
+        triggers.dossier_submitted(self.dossier_kara, self.owner)
+
+        self.assertTrue(Notification.objects.filter(recipient=dm_togo).exists())
+        self.assertTrue(Notification.objects.filter(recipient=self.controller).exists())
+
+
+class ReouvertureTests(NotificationTestCase):
+    def test_deux_reouvertures_le_meme_jour_notifient_deux_fois(self):
+        """La clé porte l'instant de la réouverture, pas le jour : le pays
+        apprend chaque motif, y compris le second."""
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+        triggers.dossier_reopened(self.dossier, self.doo, "Première demande")
+
+        # Resoumis puis rouvert de nouveau : ``updated_at`` a bougé.
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+        triggers.dossier_reopened(self.dossier, self.doo, "Seconde demande")
+
+        motifs = [
+            n.body for n in Notification.objects.filter(
+                recipient=self.owner, kind=Notification.Kind.DOSSIER_REOPENED
+            )
+        ]
+        self.assertEqual(len(motifs), 2)
+        self.assertTrue(any("Seconde" in motif for motif in motifs))
+
+    def test_rejouer_la_meme_reouverture_ne_notifie_qu_une_fois(self):
+        self.dossier.status = Status.SUBMITTED
+        self.dossier.save()
+
+        triggers.dossier_reopened(self.dossier, self.doo, "Même demande")
+        triggers.dossier_reopened(self.dossier, self.doo, "Même demande")
+
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=self.owner, kind=Notification.Kind.DOSSIER_REOPENED
+            ).count(),
+            1,
+        )
+
+
+class PaysProtegeTests(NotificationTestCase):
+    def test_un_pays_notifie_ne_se_supprime_pas(self):
+        """La notification atteste pour quel pays quelqu'un a été prévenu :
+        le pays se désactive, il ne disparaît pas sous elle."""
+        self.notifier([self.controller])
+
+        with self.assertRaises(ProtectedError):
+            self.togo.delete()

@@ -28,8 +28,7 @@ from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 
-from accounts.models import Role
-from accounts.permissions import EXPORT_ROLES, get_access
+from accounts.permissions import EXPORT_ROLES, HEADQUARTERS_ROLES, get_access
 from budget.aggregates import consolidation_par_pays, current_rates
 from expenses.models import Expense
 from notifications.services import langue_de, recipients_for
@@ -44,7 +43,7 @@ PERIOD_LABELS = {"weekly": gettext_lazy("hebdomadaire"), "monthly": gettext_lazy
 
 #: Destinataires du rapport : le siège — ceux qui pilotent (direction, RH)
 #: et ceux qui contrôlent (DF, DM), chacun sur son périmètre.
-AUDIENCE = [Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM]
+AUDIENCE = HEADQUARTERS_ROLES
 
 
 def _groupes_par_perimetre(users):

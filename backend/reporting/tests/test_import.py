@@ -6,7 +6,7 @@ from io import BytesIO
 from unittest import mock
 from urllib.parse import urlencode
 
-from django.db import connection
+from django.db import IntegrityError, connection
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from openpyxl import Workbook
@@ -25,11 +25,12 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class ImportTests(ExpenseTestCase):
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
         # Un manager se résout dans son pays : celui du socle n'y était pas
         # rattaché.
-        self.togo.managers.add(self.manager)
+        cls.togo.managers.add(cls.manager)
 
     def _classeur(self, lignes, entetes=None):
         workbook = Workbook()
@@ -652,3 +653,50 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
 
         self.assertEqual(response.data["erreurs"][0]["ligne"], 1)
         self.assertIn("introuvable", response.data["erreurs"][0]["motif"])
+
+
+class ImportsConcurrentsTests(ImportTests):
+    """Deux imports du même classeur peuvent se croiser : le second ne
+    répond jamais 500, il refuse la ligne en la nommant, sans rien écrire."""
+
+    def _autre_import_cree_le_dossier(self):
+        """Simule l'autre import, validé en même temps et écrit juste avant."""
+        original = Dossier.objects.get_or_create
+
+        def concurrent(**kwargs):
+            Dossier.objects.create(
+                country=kwargs["country"], number=kwargs["number"],
+                label="Créé par l'autre import", date=date(self.year, 1, 1),
+                created_by="autre.import",
+            )
+            return original(**kwargs)
+
+        return mock.patch.object(Dossier.objects, "get_or_create", side_effect=concurrent)
+
+    def test_un_dossier_cree_entre_temps_est_une_erreur_de_ligne(self):
+        with self._autre_import_cree_le_dossier():
+            response = self._importer(self._classeur([self._ligne()]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["lignes_creees"], 0)
+        self.assertEqual(response.data["erreurs"][0]["ligne"], 2)
+        self.assertIn("N-IMPORT-01", response.data["erreurs"][0]["motif"])
+        self.assertIn("autre import", response.data["erreurs"][0]["motif"])
+        # Rien de cet import n'est écrit. (L'autre import est simulé dans la
+        # même transaction : son dossier disparaît avec le point de reprise,
+        # alors qu'en réalité il est déjà validé — c'est tout l'objet du test.)
+        self.assertEqual(Expense.objects.count(), 0)
+        self.assertTrue(
+            AuditLog.objects.filter(action=AuditLog.Action.IMPORTED).exists()
+        )
+
+    def test_une_violation_d_unicite_est_une_erreur_de_ligne(self):
+        with mock.patch.object(
+            Dossier.objects, "get_or_create", side_effect=IntegrityError("doublon")
+        ):
+            response = self._importer(self._classeur([self._ligne()]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["erreurs"][0]["ligne"], 2)
+        self.assertEqual(Dossier.objects.count(), 1)
+        self.assertEqual(Expense.objects.count(), 0)

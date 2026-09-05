@@ -3,7 +3,6 @@
 from datetime import date
 from decimal import Decimal
 
-from django.core.cache import cache
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
@@ -29,7 +28,14 @@ in_memory_storage = override_settings(
 
 
 class ExpenseTestCase(APITestCase):
-    """Deux pays, une enveloppe par pays, un dossier au Togo."""
+    """Deux pays, une enveloppe par pays, un dossier au Togo.
+
+    Le décor est planté une fois par classe (``setUpTestData``) : Django en
+    rend à chaque test une copie, et annule la transaction derrière lui. Ce
+    qu'un test mute — enveloppe, ligne, compte — reste dans sa copie. Une
+    sous-classe qui doit ajouter au décor le fait dans son propre
+    ``setUpTestData`` ; ce qui passe par ``self.client`` reste dans ``setUp``.
+    """
 
     #: État du dossier au démarrage. Les tests du circuit d'une ligne partent
     #: d'un dossier déjà déclaré : côté pays, déclarer tient en une action, et
@@ -37,42 +43,42 @@ class ExpenseTestCase(APITestCase):
     #: le dossier lui-même gardent le brouillon.
     dossier_status = Status.DRAFT
 
-    def setUp(self):
-        cache.clear()
-        self.ivoire = Country.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.ivoire = Country.objects.create(
             name="Côte d'Ivoire", code="CI", country_ref="CT-01",
             currency="XOF", timezone="Africa/Abidjan",
         )
-        self.togo = Country.objects.create(
+        cls.togo = Country.objects.create(
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
         )
-        self.team = Team.objects.create(country=self.togo, name="Équipe Lomé")
-        self.manager = Manager.objects.create(name="Kodjo Mensah")
+        cls.team = Team.objects.create(country=cls.togo, name="Équipe Lomé")
+        cls.manager = Manager.objects.create(name="Kodjo Mensah")
 
-        self.year = timezone.now().year
-        self.budget = Budget.objects.create(
-            country=self.togo, year=self.year, amount=Decimal("1000000.00")
+        cls.year = timezone.now().year
+        cls.budget = Budget.objects.create(
+            country=cls.togo, year=cls.year, amount=Decimal("1000000.00")
         )
-        self.budget_ivoire = Budget.objects.create(
-            country=self.ivoire, year=self.year, amount=Decimal("500000.00")
+        cls.budget_ivoire = Budget.objects.create(
+            country=cls.ivoire, year=cls.year, amount=Decimal("500000.00")
         )
 
         # Le pays : un manager par pays. Le siège : le DF qui tranche et la
         # direction. Le DM, qui met en contrôle, est créé par les tests qui
         # en ont besoin — un destinataire de plus changerait les décomptes
         # de notifications et d'e-mails des autres.
-        self.owner = make_user("owner.togo", Role.MANAGER, [self.togo])
-        self.controller = make_user("rh.innov", Role.DF)
-        self.doo = make_user("do.innov", Role.SUPER_ADMIN)
-        self.rep_ivoire = make_user("cote-ivoire.innov", Role.MANAGER, [self.ivoire])
+        cls.owner = make_user("owner.togo", Role.MANAGER, [cls.togo])
+        cls.controller = make_user("rh.innov", Role.DF)
+        cls.doo = make_user("do.innov", Role.SUPER_ADMIN)
+        cls.rep_ivoire = make_user("cote-ivoire.innov", Role.MANAGER, [cls.ivoire])
 
-        self.manager.countries.add(self.togo)
+        cls.manager.countries.add(cls.togo)
 
-        self.dossier = Dossier.objects.create(
-            number="N-0001", label="Mission Lomé", country=self.togo,
-            team=self.team, owner=self.manager, date=date(self.year, 3, 15),
-            status=self.dossier_status, created_by=self.owner.username,
+        cls.dossier = Dossier.objects.create(
+            number="N-0001", label="Mission Lomé", country=cls.togo,
+            team=cls.team, owner=cls.manager, date=date(cls.year, 3, 15),
+            status=cls.dossier_status, created_by=cls.owner.username,
         )
 
     def login(self, user):
@@ -85,6 +91,11 @@ class ExpenseTestCase(APITestCase):
         Elle porte un auteur : sans lui, la règle des quatre yeux ne peut pas
         être vérifiée et la ligne ne se contrôle pas. Une ligne créée dans un
         état déclaré est imputée sur son enveloppe, comme l'exige la base.
+
+        Depuis ``setUpTestData``, s'appelle avec la classe pour ``self`` :
+        ``cls.make_expense(cls, ...)``. Ce n'est pas une ``classmethod`` à
+        dessein — appelée depuis un test, elle doit lire les copies du test
+        (``self.dossier``), jamais les objets partagés de la classe.
         """
         defaults = {
             "dossier": self.dossier,

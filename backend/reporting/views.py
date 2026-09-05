@@ -9,14 +9,17 @@ from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, MultiPartParser
 
 from budget.aggregates import consolidation_par_pays, current_rates, to_xof
+from core.journal import tracer
 from core.models import Country
-from core.requetes import client_ip
 from expenses.models import AuditLog
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 
@@ -28,9 +31,27 @@ from .exports import (
     lignes_depenses,
     tableaux_rapprochement,
 )
-from .scope import Periode, scoped_querysets
+from .scope import Periode, fuseau_de, scoped_querysets
 from accounts.permissions import EXPORT_ROLES, RolePermission, get_access
 from .imports import audit_import, importer_depenses
+from .serializers import (
+    BreakdownSerializer,
+    DashboardSerializer,
+    ImportSerializer,
+    ImportResultSerializer,
+)
+
+#: Paramètres communs du pilotage et des exports, pour le schéma.
+PARAMETRE_ANNEE = OpenApiParameter(
+    "year", int, description="Exercice ; l'année en cours par défaut."
+)
+PARAMETRE_MOIS = OpenApiParameter(
+    "month", int, description="Mois (1-12) ; sans lui, l'exercice entier."
+)
+PARAMETRE_PAYS = OpenApiParameter(
+    "country", int,
+    description="Pays ; un pays inconnu ou hors périmètre répond 404.",
+)
 
 ZERO = Decimal("0.00")
 
@@ -81,6 +102,7 @@ def _as_str(value):
 class DashboardView(APIView):
     """Vue de pilotage : consolidation, répartition par pays et alertes."""
 
+    @extend_schema(parameters=[PARAMETRE_ANNEE, PARAMETRE_PAYS], responses=DashboardSerializer)
     def get(self, request):
         year = _as_int(request.query_params.get("year"), "year") or timezone.now().year
         country_id = _as_int(request.query_params.get("country"), "country")
@@ -220,6 +242,7 @@ class DashboardView(APIView):
 class BreakdownView(APIView):
     """Répartition d'un pays par équipe, propriétaire, projet, catégorie et mois."""
 
+    @extend_schema(parameters=[PARAMETRE_ANNEE, PARAMETRE_PAYS], responses=BreakdownSerializer)
     def get(self, request):
         year = _as_int(request.query_params.get("year"), "year") or timezone.now().year
         country_id = _as_int(request.query_params.get("country"), "country")
@@ -232,6 +255,10 @@ class BreakdownView(APIView):
         if not country_id:
             raise ValidationError({"country": _("Le pays est obligatoire.")})
         expenses = scoped_querysets(request, year, country_id)[2]
+        # Le pays est obligatoire, donc son fuseau est connu : les lignes
+        # sont bornées et réparties par mois à l'heure du pays, pas à celle
+        # du serveur. ``scoped_querysets`` a déjà refusé un pays inconnu.
+        fuseau = fuseau_de(Country.objects.get(pk=country_id))
 
         # Brouillons et refus ne représentent aucune consommation réelle.
         counted = expenses.filter(
@@ -240,16 +267,16 @@ class BreakdownView(APIView):
         return Response(
             {
                 "year": year,
-                "by_team": self._group(counted, "team__name", "Sans équipe"),
-                "by_owner": self._group(counted, "owner__name", "Sans propriétaire"),
-                "by_project": self._group(counted, "project__name", "Hors projet"),
+                "by_team": self._group(counted, "team__name", _("Sans équipe")),
+                "by_owner": self._group(counted, "owner__name", _("Sans propriétaire")),
+                "by_project": self._group(counted, "project__name", _("Hors projet")),
                 "by_category": self._group(
-                    counted, "marketing_category__name", "Sans catégorie"
+                    counted, "marketing_category__name", _("Sans catégorie")
                 ),
                 "by_expense_title": self._group(
-                    counted, "expense_title__label", "Sans intitulé"
+                    counted, "expense_title__label", _("Sans intitulé")
                 ),
-                "by_month": self._by_month(counted),
+                "by_month": self._by_month(counted, fuseau),
             }
         )
 
@@ -274,9 +301,9 @@ class BreakdownView(APIView):
             for row in rows
         ]
 
-    def _by_month(self, expenses):
+    def _by_month(self, expenses, fuseau):
         rows = (
-            expenses.annotate(month=TruncMonth("date"))
+            expenses.annotate(month=TruncMonth("date", tzinfo=fuseau))
             .values("month")
             .annotate(
                 amount=Sum("amount"),
@@ -314,15 +341,23 @@ class ExportView(APIView):
     permission_classes = [RolePermission]
     read_roles = EXPORT_ROLES
 
-    #: Radical du nom de fichier et libellé d'audit, par vue.
+    #: Radical du nom de fichier et libellé d'audit, par vue. Le libellé
+    #: d'audit reste en français : le journal se relit tel qu'il a été
+    #: écrit, quelle que soit la langue de qui le consulte.
     prefix = "export"
     audit_label = "Export"
+    #: Titre du document produit, dans la langue de l'utilisateur.
+    titre = gettext_lazy("Export")
     #: « xlsx », « csv », « docx » ou « pdf », posé par la route.
     export_format = "xlsx"
 
     def build(self, budgets, dossiers, expenses, periode, country_id):  # pragma: no cover
         raise NotImplementedError
 
+    @extend_schema(
+        parameters=[PARAMETRE_ANNEE, PARAMETRE_MOIS, PARAMETRE_PAYS],
+        responses={(200, "application/octet-stream"): OpenApiTypes.BINARY},
+    )
     def get(self, request):
         year = _as_int(request.query_params.get("year"), "year") or timezone.now().year
         month = _mois(request.query_params.get("month"))
@@ -346,7 +381,7 @@ class ExportView(APIView):
         """En-tête du document Word : pays, exercice, période."""
         pays = Country.objects.filter(pk=country_id).first() if country_id else None
         return {
-            "titre": f"{self.audit_label} — {periode.libelle}",
+            "titre": f"{self.titre} — {periode.libelle}",
             "pays": pays.name if pays else _("Tous les pays du périmètre"),
             "exercice": periode.year,
             "periode": periode.libelle,
@@ -359,21 +394,19 @@ class ExportView(APIView):
 
     def _audit(self, request, periode, country_id, filename):
         """Un export sort des données du système : il laisse une trace."""
-        AuditLog.objects.create(
-            user=request.user.username,
-            action=AuditLog.Action.DOWNLOADED,
-            object_type="Export",
-            object_id=0,
+        tracer(
+            request,
+            AuditLog.Action.DOWNLOADED,
+            "Export",
+            famille="export",
             label=f"{self.audit_label} — {filename}",
-            country_id=country_id,
+            country=country_id,
             detail={
                 "year": periode.year,
                 "month": periode.month,
                 "country": country_id,
                 "format": self.export_format,
             },
-            ip_address=client_ip(request),
-            user_agent=request.META.get("HTTP_USER_AGENT", "")[:250],
         )
 
 
@@ -382,9 +415,12 @@ class ExpensesExportView(ExportView):
 
     prefix = "depenses"
     audit_label = "Export des dépenses"
+    titre = gettext_lazy("Export des dépenses")
 
     def build(self, budgets, dossiers, expenses, periode, country_id):
-        return self._tabulaire([lignes_depenses(dossiers)], periode, country_id)
+        # Les lignes, pas les dossiers : une ligne se classe par sa propre
+        # date, bornée dans le fuseau de son pays par ``scoped_querysets``.
+        return self._tabulaire([lignes_depenses(expenses)], periode, country_id)
 
 
 class ReconciliationExportView(ExportView):
@@ -392,6 +428,7 @@ class ReconciliationExportView(ExportView):
 
     prefix = "rapprochement"
     audit_label = "Rapport de rapprochement"
+    titre = gettext_lazy("Rapport de rapprochement")
 
     def build(self, budgets, dossiers, expenses, periode, country_id):
         return self._tabulaire(
@@ -404,6 +441,7 @@ class CountryReportView(ExportView):
 
     prefix = "rapport"
     audit_label = "Rapport PDF"
+    titre = gettext_lazy("Rapport PDF")
     export_format = "pdf"
 
     def build(self, budgets, dossiers, expenses, periode, country_id):
@@ -427,6 +465,17 @@ class ExpensesImportView(APIView):
     permission_classes = [RolePermission]
     write_roles = EXPORT_ROLES
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "dry_run", bool,
+                description="Valide le classeur sans rien écrire.",
+            ),
+            PARAMETRE_PAYS,
+        ],
+        request={"multipart/form-data": ImportSerializer},
+        responses=ImportResultSerializer,
+    )
     def post(self, request):
         self.check_permissions(request)
         uploaded = request.FILES.get("file")

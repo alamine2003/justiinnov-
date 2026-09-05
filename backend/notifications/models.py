@@ -50,8 +50,10 @@ class Notification(models.Model):
         "Lien", max_length=250, blank=True,
         help_text="Chemin relatif dans l'application, ex. /dossiers/12.",
     )
+    # PROTECT : une notification atteste que quelqu'un a été prévenu, pour
+    # quel pays ; un pays tracé ne se supprime pas, il se désactive.
     country = models.ForeignKey(
-        Country, null=True, blank=True, on_delete=models.SET_NULL,
+        Country, null=True, blank=True, on_delete=models.PROTECT,
         related_name="notifications", verbose_name="Pays",
     )
     dedup_key = models.CharField(

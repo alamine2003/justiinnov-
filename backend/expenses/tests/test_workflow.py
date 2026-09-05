@@ -32,9 +32,10 @@ def configurer(**valeurs):
 
 
 class TransitionTests(ExpenseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.expense = self.make_expense()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.expense = cls.make_expense(cls)
 
     def test_parcours_nominal(self):
         submitted = self.submit_dossier()
@@ -654,6 +655,30 @@ class DossierWorkflowTests(ExpenseTestCase):
         self.assertEqual(refuse.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(accepte.status_code, status.HTTP_200_OK)
 
+    def test_celui_qui_a_ouvert_le_dossier_ne_le_met_pas_en_controle_ni_ne_le_clot(self):
+        """La mise en contrôle et la clôture sont des actes de contrôle
+        comme les autres : la règle des quatre yeux vaut du début à la fin."""
+        self.dossier.created_by = self.controller.username
+        self.dossier.save()
+        self.make_expense()
+        self._piece()
+        self.submit_dossier()
+
+        self.login(self.controller)
+        review = self.client.post(f"/api/dossiers/{self.dossier.pk}/review/")
+        self.login(self.doo)
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/review/")
+        self._justifier_les_lignes()
+        self.login(self.doo)
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+        self.login(self.controller)
+        close = self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
+
+        self.assertEqual(review.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(close.status_code, status.HTTP_403_FORBIDDEN)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.JUSTIFIED)
+
     def test_le_dossier_porte_son_auteur(self):
         self.login(self.owner)
 
@@ -913,20 +938,23 @@ class JustificationRegisterTests(ExpenseTestCase):
 
     dossier_status = Status.SUBMITTED
 
-    def setUp(self):
-        super().setUp()
-        self.depense = self.make_expense(
-            amount="120000.00", justified_amount="80000.00",
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.depense = cls.make_expense(
+            cls, amount="120000.00", justified_amount="80000.00",
             place="Lomé", title="Hébergement mission",
         )
         Proof.objects.create(
-            dossier=self.dossier,
+            dossier=cls.dossier,
             file="justificatifs/f.pdf",
             original_name="facture.pdf",
             kind=Proof.Kind.INVOICE,
             is_complete=False,
             sha256="b" * 64,
         )
+
+    def setUp(self):
         self.login(self.controller)
 
     def test_le_registre_joint_la_depense_et_ses_preuves(self):
@@ -1187,6 +1215,21 @@ class SeparationOfDutiesTests(ExpenseTestCase):
         response = self.client.post(f"/api/expenses/{propre.pk}/review/")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_nul_ne_clot_la_depense_qu_il_a_saisie(self):
+        """Clore est un constat : l'affaire est terminée. Celui qui a
+        décaissé ne le prononce pas, même une fois la ligne justifiée par
+        quelqu'un d'autre."""
+        propre = self._declarer(self.controller.username)
+        self.login(self.doo)
+        self.client.post(f"/api/expenses/{propre.pk}/justify/")
+
+        self.login(self.controller)
+        response = self.client.post(f"/api/expenses/{propre.pk}/close/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        propre.refresh_from_db()
+        self.assertEqual(propre.status, Status.JUSTIFIED)
 
     def test_une_ligne_sans_auteur_connu_ne_se_controle_pas(self):
         """Sans auteur, la règle des quatre yeux est invérifiable : on ne

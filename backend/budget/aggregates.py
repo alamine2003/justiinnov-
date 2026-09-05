@@ -10,7 +10,7 @@ from decimal import Decimal
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
+from core.statuts import CONSUMING_STATUSES, ENGAGING_STATUSES
 
 from .models import CONSOLIDATION_CURRENCY, ExchangeRate
 

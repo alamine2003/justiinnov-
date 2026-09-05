@@ -12,13 +12,14 @@ from .base import ExpenseTestCase
 
 
 class BeneficiaireScopeTests(ExpenseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.fournisseur_togo = Beneficiary.objects.create(
-            country=self.togo, name="Station Lomé", kind=Beneficiary.Kind.SUPPLIER
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.fournisseur_togo = Beneficiary.objects.create(
+            country=cls.togo, name="Station Lomé", kind=Beneficiary.Kind.SUPPLIER
         )
-        self.prospect_ivoire = Beneficiary.objects.create(
-            country=self.ivoire, name="Groupe Abidjan", kind=Beneficiary.Kind.PROSPECT
+        cls.prospect_ivoire = Beneficiary.objects.create(
+            country=cls.ivoire, name="Groupe Abidjan", kind=Beneficiary.Kind.PROSPECT
         )
 
     def test_un_pays_ne_voit_que_ses_beneficiaires(self):

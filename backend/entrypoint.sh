@@ -7,6 +7,20 @@ set -e
 # commandes — et elles seules — tournent avec le rôle propriétaire ; le
 # serveur, lui, garde POSTGRES_USER. Avec une base désignée par DATABASE_URL,
 # c'est DATABASE_MIGRATION_URL qui joue ce rôle.
+#
+# Le mot de passe du propriétaire arrive de préférence par un secret Compose
+# (POSTGRES_MIGRATION_PASSWORD_FILE, monté sous /run/secrets par
+# deploy/docker-compose.prod.yml) : il n'est alors ni dans l'environnement
+# du serveur ni dans `docker inspect`. POSTGRES_MIGRATION_PASSWORD reste
+# accepté pour un lancement à la main.
+mot_de_passe_proprietaire() {
+  if [ -n "${POSTGRES_MIGRATION_PASSWORD_FILE:-}" ] && [ -s "$POSTGRES_MIGRATION_PASSWORD_FILE" ]; then
+    cat "$POSTGRES_MIGRATION_PASSWORD_FILE"
+  else
+    printf '%s' "${POSTGRES_MIGRATION_PASSWORD:-}"
+  fi
+}
+
 en_tant_que_proprietaire() {
   if [ -n "${DATABASE_MIGRATION_URL:-}" ]; then
     env DATABASE_URL="$DATABASE_MIGRATION_URL" "$@"
@@ -15,20 +29,20 @@ en_tant_que_proprietaire() {
       echo "⚠ POSTGRES_MIGRATION_USER est ignoré : DATABASE_URL prime. Définissez DATABASE_MIGRATION_URL."
     fi
     env POSTGRES_USER="$POSTGRES_MIGRATION_USER" \
-      POSTGRES_PASSWORD="${POSTGRES_MIGRATION_PASSWORD:-}" "$@"
+      POSTGRES_PASSWORD="$(mot_de_passe_proprietaire)" "$@"
   else
     "$@"
   fi
 }
 
-# En développement, le code est monté en volume : les `.mo` compilés dans
-# l'image sont masqués, et un `.po` modifié doit se recompiler. Quelques
-# dizaines de millisecondes par catalogue ; sans `locale/`, rien à faire.
-# `django-admin` sans réglages du projet : aucune base à joindre.
+# En développement, le code est monté en volume : le `.mo` compilé dans
+# l'image est masqué, et un `.po` modifié doit se recompiler. Un seul
+# catalogue, `locale/` à la racine du projet (décision 42) : quelques
+# dizaines de millisecondes. `django-admin` sans réglages du projet : aucune
+# base à joindre. Un `.venv` du poste, monté avec le code, porterait les
+# catalogues de Django lui-même : il est ignoré.
 echo "→ Compilation des traductions…"
-find . -type d -name locale -not -path './.venv/*' | while read -r d; do
-  (cd "$(dirname "$d")" && django-admin compilemessages -v0) || exit 1
-done
+django-admin compilemessages -l en -v0 --ignore=.venv
 
 echo "→ Application des migrations…"
 en_tant_que_proprietaire python manage.py migrate --noinput
@@ -72,6 +86,19 @@ if created:
   fi
 fi
 
+# Compteurs Prometheus partagés entre les workers gunicorn : chaque
+# processus écrit les siens dans PROMETHEUS_MULTIPROC_DIR (mémoire partagée,
+# /dev/shm/prometheus en production, voir deploy/.env.example) et le
+# collecteur les agrège. Le dossier est créé puis vidé à chaque démarrage :
+# les fichiers d'un processus mort — les commandes ci-dessus, le conteneur
+# précédent — fausseraient les compteurs. Sans la variable, rien à faire :
+# django-prometheus reste en mode simple, comme en développement.
+if [ -n "${PROMETHEUS_MULTIPROC_DIR:-}" ]; then
+  echo "→ Compteurs Prometheus dans ${PROMETHEUS_MULTIPROC_DIR}…"
+  mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
+  find "$PROMETHEUS_MULTIPROC_DIR" -mindepth 1 -delete
+fi
+
 echo "→ Démarrage du serveur…"
 # Réglable par l'environnement, sans reconstruire l'image (voir
 # deploy/.env.example). Workers gthread : chaque worker sert plusieurs
@@ -82,7 +109,9 @@ echo "→ Démarrage du serveur…"
 # de battement vont en mémoire partagée, pas sur disque. Les en-têtes
 # X-Forwarded-* sont acceptés de tout proxy : c'est Django qui les lit
 # (SECURE_PROXY_SSL_HEADER, DJANGO_NUM_PROXIES), derrière Caddy et nginx.
-exec gunicorn config.wsgi:application \
+# Ce qui ne tient pas sur une ligne de commande — les crochets Prometheus —
+# est dans gunicorn.conf.py, à côté de manage.py.
+exec gunicorn -c gunicorn.conf.py config.wsgi:application \
   --bind 0.0.0.0:8000 \
   --worker-class gthread \
   --workers "${GUNICORN_WORKERS:-2}" \

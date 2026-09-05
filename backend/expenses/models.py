@@ -28,7 +28,7 @@ from core.models import (
     TimeStampedModel,
 )
 
-from .workflow import Status
+from .workflow import DECIDED_STATUSES, REOPEN_BLOCKING_STATUSES, Status
 
 ZERO = Decimal("0.00")
 
@@ -104,9 +104,21 @@ class DossierQuerySet(models.QuerySet):
                 amount=Sum("amount"),
                 justified=Sum("justified_amount"),
                 lines=Count("id"),
+                # Avancement du contrôle, pour dire quelles décisions le
+                # dossier admet (``line_counts``) sans requête par dossier.
+                pending=Count("id", filter=~Q(status__in=DECIDED_STATUSES)),
+                unjustified=Count("id", filter=Q(status=Status.UNJUSTIFIED)),
+                settled=Count("id", filter=Q(status__in=REOPEN_BLOCKING_STATUSES)),
             )
         )
         money = models.DecimalField(max_digits=16, decimal_places=2)
+        entier = models.IntegerField()
+
+        def compteur(nom):
+            return Coalesce(
+                Subquery(lines.values(nom)[:1], output_field=entier), Value(0)
+            )
+
         # Le comptage des preuves introduit un GROUP BY, qui fait perdre à
         # Django l'ordre par défaut du modèle : sans tri explicite, deux pages
         # successives pourraient se recouvrir.
@@ -121,14 +133,19 @@ class DossierQuerySet(models.QuerySet):
                 Value(ZERO),
                 output_field=money,
             ),
-            total_lines=Coalesce(
-                Subquery(
-                    lines.values("lines")[:1],
-                    output_field=models.IntegerField(),
-                ),
-                Value(0),
-            ),
+            total_lines=compteur("lines"),
+            lines_pending=compteur("pending"),
+            lines_unjustified=compteur("unjustified"),
+            lines_settled=compteur("settled"),
             total_proofs=Count("proofs", distinct=True),
+            # Une pièce rejetée ou archivée ne prouve rien.
+            usable_proofs=Count(
+                "proofs",
+                filter=~Q(proofs__status__in=[
+                    Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED,
+                ]),
+                distinct=True,
+            ),
         )
 
 
@@ -217,6 +234,50 @@ class Dossier(TimeStampedModel):
             "expenses": self.expenses.count() if lines is None else lines,
             "proofs": self.proofs.count() if proofs is None else proofs,
         }
+
+    def line_counts(self):
+        """Lignes par avancement du contrôle : ce que le dossier admet.
+
+        ``pending`` : pas encore tranchées (brouillon, soumises, en
+        contrôle) ; ``unjustified`` : constatées sans preuve ; ``settled`` :
+        justifiées ou clôturées, ce qui interdit la réouverture. Lues dans
+        les annotations de :meth:`DossierQuerySet.with_totals` quand elles
+        sont là, sinon en une seule agrégation.
+        """
+        pending = getattr(self, "lines_pending", None)
+        if pending is None:
+            aggregate = self.expenses.aggregate(
+                total=Count("id"),
+                pending=Count("id", filter=~Q(status__in=DECIDED_STATUSES)),
+                unjustified=Count("id", filter=Q(status=Status.UNJUSTIFIED)),
+                settled=Count("id", filter=Q(status__in=REOPEN_BLOCKING_STATUSES)),
+            )
+            return aggregate
+        return {
+            "total": self.total_lines,
+            "pending": pending,
+            "unjustified": self.lines_unjustified,
+            "settled": self.lines_settled,
+        }
+
+    def usable_proof_count(self):
+        """Pièces qui prouvent encore quelque chose : ni rejetées ni archivées."""
+        usable = getattr(self, "usable_proofs", None)
+        if usable is None:
+            return self.proofs.exclude(
+                status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED]
+            ).count()
+        return usable
+
+
+#: Relations chargées avec chaque ligne : tout ce que le sérialiseur affiche.
+#: Sans elles, chaque ligne d'une liste — ou relue après une transition —
+#: rouvrirait une requête par relation.
+EXPENSE_RELATIONS = (
+    "dossier", "country", "team", "owner", "project",
+    "expense_title", "marketing_category", "beneficiary",
+    "budget__country", "budget__project", "budget__team", "budget__manager",
+)
 
 
 class Expense(TimeStampedModel):
