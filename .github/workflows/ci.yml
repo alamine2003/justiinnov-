@@ -215,7 +215,7 @@ jobs:
       # vérification, pas seulement les tests. Le cache est partagé avec la
       # livraison continue, qui reconstruit les mêmes couches.
       - name: Construire l'image backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: backend
           push: false
@@ -223,7 +223,7 @@ jobs:
           cache-to: type=gha,scope=backend,mode=max
 
       - name: Construire l'image frontend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: frontend
           target: runtime
