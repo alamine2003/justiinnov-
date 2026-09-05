@@ -1,26 +1,26 @@
 # Versions épinglées ; `pip-audit` (job `audit` de la CI) bloque sur toute
 # vulnérabilité connue. Django 5.2 est une version LTS (corrigée jusqu'en
 # avril 2028) ; DRF 3.17 corrige les avis portés sur 3.15.
-Django==5.2.17
-djangorestframework==3.17.2
-django-filter==25.2
+Django==6.1
+djangorestframework==3.18.0
+django-filter==26.1
 django-cors-headers==4.9.0
-psycopg[binary]==3.2.13
-gunicorn==23.0.0
+psycopg[binary]==3.3.5
+gunicorn==26.2.0
 django-storages[s3]==1.14.6
 openpyxl==3.1.5
-reportlab==4.4.10
+reportlab==5.0.1
 apscheduler==3.11.3
 # Analyse XML durcie (openpyxl et reportlab s'en servent si elle est présente).
 defusedxml==0.7.1
 
 # Double authentification (TOTP) et QR d'enrôlement
-pyotp==2.9.0
-qrcode[pil]==8.0
+pyotp==2.10.0
+qrcode[pil]==8.2
 # Export Word
-python-docx==1.1.2
+python-docx==1.2.0
 # Métriques pour Prometheus / Grafana
-django-prometheus==2.3.1
+django-prometheus==2.5.0
 # Contrat d'API : schéma OpenAPI généré depuis les vues et sérialiseurs
 # (``manage.py spectacular``), dont le frontend tire ses types.
 drf-spectacular==0.30.0
