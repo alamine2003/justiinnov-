@@ -82,7 +82,7 @@ jobs:
       frontend: ${{ steps.noms.outputs.frontend }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Noms des images
         id: noms
@@ -178,7 +178,7 @@ jobs:
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '~/justi-innov' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Vérifier les valeurs transmises au serveur
         # Ces valeurs finissent dans une ligne de commande distante : chacune
