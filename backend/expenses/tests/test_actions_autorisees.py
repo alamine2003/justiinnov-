@@ -259,10 +259,26 @@ class ActionsDeSaisieTests(ExpenseTestCase):
         ligne = self.make_expense()
 
         self.assertEqual(self._ligne(self.owner, ligne), ["edit", "delete"])
-        # L'administrateur peut le corriger, pas retirer le brouillon d'un autre.
+        # Le siège corrige un brouillon à découvert, mais ne retire pas
+        # celui d'un autre.
         self.assertEqual(self._ligne(self.admin, ligne), ["edit"])
         # Le DF ne saisit pas.
         self.assertEqual(self._ligne(self.controller, ligne), [])
+
+    def test_le_brouillon_d_un_autre_ne_se_modifie_pas(self):
+        """Un collègue du même pays changerait le montant d'une ligne que
+        l'auteur soumettrait ensuite sous son nom."""
+        ligne = self.make_expense()
+        collegue = make_user("collegue.togo", Role.MANAGER, [self.togo])
+        self.login(collegue)
+
+        ligne_modifiee = self.client.patch(f"/api/expenses/{ligne.pk}/", {"amount": "999.00"})
+        dossier_modifie = self.client.patch(f"/api/dossiers/{self.dossier.pk}/", {"label": "Autre"})
+
+        self.assertEqual(ligne_modifiee.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(dossier_modifie.status_code, status.HTTP_403_FORBIDDEN)
+        ligne.refresh_from_db()
+        self.assertEqual(str(ligne.amount), "100000.00")
 
     def test_une_ligne_sans_auteur_se_retire_par_qui_saisit(self):
         """Import, compte disparu : personne ne peut se plaindre du retrait."""

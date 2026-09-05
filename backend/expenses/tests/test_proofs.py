@@ -4,6 +4,9 @@ import hashlib
 from datetime import date
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+
+#: Un fichier n'est une pièce que si son contenu confirme son extension.
+PDF = b"%PDF-1.4 "
 from rest_framework import status
 
 from expenses.models import AuditLog, Dossier, Proof
@@ -14,6 +17,10 @@ CONTENT = b"%PDF-1.4 recu de mission"
 
 
 def pdf(name="recu.pdf", content=CONTENT):
+    """Une pièce dont le contenu confirme l'extension : l'en-tête PDF est
+    ajouté quand le test ne l'a pas mis lui-même."""
+    if not content.startswith(b"%PDF"):
+        content = PDF + content
     return SimpleUploadedFile(name, content, content_type="application/pdf")
 
 
@@ -262,7 +269,7 @@ class ProofVersionTests(ExpenseTestCase):
         trace = AuditLog.objects.get(action=AuditLog.Action.PROOF_REPLACED)
         self.assertEqual(trace.detail["before"]["sha256"], self.first["sha256"])
         self.assertEqual(
-            trace.detail["after"]["sha256"], hashlib.sha256(b"autre contenu").hexdigest()
+            trace.detail["after"]["sha256"], hashlib.sha256(PDF + b"autre contenu").hexdigest()
         )
         self.assertEqual(trace.detail["before"]["version"], 1)
         self.assertEqual(trace.detail["after"]["version"], 2)

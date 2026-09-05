@@ -20,6 +20,7 @@ erreur.
 
 import logging
 import re
+import zipfile
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -197,6 +198,20 @@ def _ouvrir(uploaded):
     if taille is not None and taille > settings.MAX_PROOF_SIZE:
         limite = settings.MAX_PROOF_SIZE // (1024 * 1024)
         raise ValueError(_("Classeur trop volumineux (maximum %(limite)s Mo).") % {"limite": limite})
+    # Un xlsx est une archive : quelques Mo compressés peuvent en cacher
+    # des Go de chaînes partagées, qu'openpyxl chargerait en mémoire.
+    limite = 5 * settings.MAX_PROOF_SIZE
+    try:
+        with zipfile.ZipFile(uploaded) as archive:
+            decompresse = sum(info.file_size for info in archive.infolist())
+    except zipfile.BadZipFile as exc:
+        raise ValueError(_("Classeur illisible : ce n'est pas un fichier xlsx.")) from exc
+    uploaded.seek(0)
+    if decompresse > limite:
+        raise ValueError(
+            _("Classeur trop volumineux une fois décompressé (maximum %(limite)s Mo).")
+            % {"limite": limite // (1024 * 1024)}
+        )
     try:
         return load_workbook(uploaded, read_only=True, data_only=True)
     except Exception as exc:
@@ -345,16 +360,24 @@ def _note(row):
     return f"Pièce : {piece}" if piece else ""
 
 
-def _empreinte(number, date, title, amount):
-    return (number, date, title, amount)
+def _empreinte(number, jour, title, amount):
+    """Ce qui fait qu'une ligne « existe déjà » : dossier, jour, libellé, montant.
+
+    Le jour, pas l'instant : le classeur ne porte que la date, alors qu'une
+    ligne saisie dans l'application porte l'heure. Comparer les instants
+    faisait recréer, à chaque réimport d'un export, toute ligne saisie
+    ailleurs qu'à minuit.
+    """
+    return (number, jour, title, amount)
 
 
 def _lignes_en_base(dossier, cache):
     """Empreintes des lignes déjà présentes dans un dossier, lues une fois."""
     if dossier.pk not in cache:
+        fuseau = fuseau_de(dossier.country)
         cache[dossier.pk] = {
-            _empreinte(dossier.number, *valeurs)
-            for valeurs in dossier.expenses.values_list("date", "title", "amount")
+            _empreinte(dossier.number, timezone.localtime(instant, fuseau).date(), title, amount)
+            for instant, title, amount in dossier.expenses.values_list("date", "title", "amount")
         }
     return cache[dossier.pk]
 
@@ -451,12 +474,12 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
             if dossier is not None and dossier.status != Status.DRAFT:
                 raise ValueError(_("Le dossier « %(number)s » est déjà déclaré") % {"number": number})
 
-            empreinte = _empreinte(cle_dossier, date_ligne, title, amount)
+            empreinte = _empreinte(cle_dossier, date_ligne.date(), title, amount)
             deja = empreintes_vues.get(empreinte)
             if deja is not None:
                 raise ValueError(_("Ligne identique à la ligne %(ligne)s du classeur") % {"ligne": deja})
             if dossier is not None and _empreinte(
-                number, date_ligne, title, amount
+                number, date_ligne.date(), title, amount
             ) in _lignes_en_base(dossier, lignes_en_base):
                 raise ValueError(
                     _(

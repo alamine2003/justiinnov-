@@ -504,6 +504,17 @@ class Proof(TimeStampedModel):
         indexes = [
             models.Index(fields=["dossier", "status"], name="piece_dossier_statut"),
         ]
+        constraints = [
+            # Deux dépôts simultanés du même fichier sur le même dossier : la
+            # vérification du sérialiseur ne voit pas l'autre transaction, la
+            # base, si. Un remplacement explicite garde le droit de redéposer
+            # le même contenu (§5.4).
+            models.UniqueConstraint(
+                fields=["dossier", "sha256"],
+                condition=Q(replaces__isnull=True),
+                name="piece_unique_par_dossier",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.get_kind_display()} — {self.original_name or self.file.name}"

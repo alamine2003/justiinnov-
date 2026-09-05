@@ -7,13 +7,15 @@ utile, l'appel du service et la réponse. Les règles du circuit — verrous,
 ``expenses.transitions`` (décision 41).
 """
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.utils.translation import gettext as _
 from django.db.models import Prefetch
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import RolePermission, get_access
@@ -237,6 +239,10 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
     def perform_update(self, serializer):
+        with traduire_les_regles():
+            transitions.exiger_l_auteur_du_brouillon(
+                serializer.instance, get_access(self.request.user)
+            )
         super().perform_update(serializer)
         record(self.request, AuditLog.Action.UPDATED, serializer.instance)
 
@@ -322,6 +328,9 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         # Déplacer un brouillon vers un dossier déjà déclaré l'y perdrait,
         # exactement comme l'y créer.
         with traduire_les_regles():
+            transitions.exiger_l_auteur_du_brouillon(
+                serializer.instance, get_access(self.request.user)
+            )
             transitions.exiger_un_dossier_ouvert(serializer.validated_data.get("dossier"))
         stored = serializer.instance
         previous = {
@@ -378,10 +387,16 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
             # d'état, elle doit relever du même dossier que la nouvelle.
             ProofSerializer.verifier_le_remplacement(replaced, dossier)
             replaced = Proof.objects.select_for_update().get(pk=replaced.pk)
-        serializer.save(
-            uploaded_by=self.request.user.username,
-            version=replaced.version + 1 if replaced else 1,
-        )
+        try:
+            serializer.save(
+                uploaded_by=self.request.user.username,
+                version=replaced.version + 1 if replaced else 1,
+            )
+        except IntegrityError as exc:
+            # Deux dépôts simultanés du même fichier : la base a tranché.
+            raise ValidationError(
+                {"file": [_("Ce fichier est déjà rattaché à ce dossier (doublon).")]}
+            ) from exc
         proof = serializer.instance
         if replaced is not None:
             replaced.status = Proof.ProofStatus.ARCHIVED

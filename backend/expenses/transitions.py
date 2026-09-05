@@ -33,7 +33,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 
-from accounts.permissions import exiger_la_capacite
+from accounts.permissions import COUNTRY_ROLES, exiger_la_capacite
 from budget.models import Budget
 from core.models import WorkflowConfiguration
 from core.regles import PermissionRefusee, RegleViolee
@@ -108,6 +108,21 @@ class Resultat:
 
 
 # --- Prédicats partagés -----------------------------------------------------
+
+
+def exiger_l_auteur_du_brouillon(objet, acteur):
+    """Un brouillon ne se modifie que par qui l'a saisi, ou par le siège.
+
+    Un collègue du même pays qui changerait le montant laisserait l'auteur
+    soumettre une ligne qu'il n'a pas écrite, sous son nom. Le siège, lui,
+    corrige à découvert : chaque modification est journalisée avec avant
+    et après. Sans auteur connu — import, compte disparu — la correction
+    reste ouverte.
+    """
+    if acteur.role not in COUNTRY_ROLES:
+        return
+    if objet.created_by and objet.created_by != acteur.username:
+        raise PermissionRefusee(_("Seul l'auteur d'un brouillon peut le modifier."))
 
 
 def exiger_les_quatre_yeux(objet, action, acteur):

@@ -12,7 +12,15 @@ from rest_framework.validators import UniqueTogetherValidator
 from accounts.perimetre import ChampCloisonne
 from accounts.permissions import get_access, roles_pour
 from budget.aggregates import convert
-from core.models import Country, Team, WorkflowConfiguration
+from core.models import (
+    Country,
+    ExpenseTitle,
+    Manager,
+    MarketingCategory,
+    Project,
+    Team,
+    WorkflowConfiguration,
+)
 from core.serializers import DetailField
 
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, compute_sha256
@@ -23,6 +31,46 @@ from .workflow import (
     dossier_allowed_actions,
     expense_allowed_actions,
 )
+
+#: Octets d'en-tête attendus pour chaque extension acceptée, et type MIME
+#: que le serveur enregistre — jamais celui que le client déclare. Un
+#: fichier HTML nommé ``recu.pdf`` serait sinon rejoué tel quel dans
+#: l'aperçu du siège, dans l'origine de l'application.
+SIGNATURES = {
+    ".pdf": ((b"%PDF",), "application/pdf"),
+    ".jpg": ((b"\xff\xd8\xff",), "image/jpeg"),
+    ".jpeg": ((b"\xff\xd8\xff",), "image/jpeg"),
+    ".png": ((b"\x89PNG\r\n\x1a\n",), "image/png"),
+    ".webp": ((b"RIFF",), "image/webp"),
+    ".heic": ((), "image/heic"),
+    ".doc": ((b"\xd0\xcf\x11\xe0",), "application/msword"),
+    ".xls": ((b"\xd0\xcf\x11\xe0",), "application/vnd.ms-excel"),
+    ".docx": ((b"PK\x03\x04",), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ".xlsx": ((b"PK\x03\x04",), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ".csv": ((), "text/csv"),
+    ".txt": ((), "text/plain"),
+}
+_TEXTE = {".csv", ".txt"}
+_DEBUTS_HTML = (b"<!doctype", b"<html", b"<script", b"<svg")
+
+
+def type_verifie(uploaded, extension):
+    """Type MIME d'une pièce dont les premiers octets confirment l'extension.
+
+    ``None`` quand le contenu ne correspond pas : un HTML déguisé en PDF, un
+    texte qui commence par une balise, un binaire dans un ``.csv``.
+    """
+    debuts, mime = SIGNATURES[extension]
+    tete = uploaded.read(4096)
+    uploaded.seek(0)
+    if extension in _TEXTE:
+        return mime if b"\x00" not in tete and not tete.lstrip().lower().startswith(_DEBUTS_HTML) else None
+    if extension == ".webp":
+        return mime if tete[:4] == b"RIFF" and tete[8:12] == b"WEBP" else None
+    if extension == ".heic":
+        return mime if tete[4:8] == b"ftyp" else None
+    return mime if any(tete.startswith(debut) for debut in debuts) else None
+
 
 #: États d'une pièce après lesquels plus rien ne se modifie.
 PROOF_FINAL_STATUSES = frozenset(
@@ -219,6 +267,13 @@ class ProofSerializer(serializers.ModelSerializer):
                     extension=extension or _("sans extension"), accepted=accepted
                 )
             )
+        self._content_type = type_verifie(uploaded, extension)
+        if self._content_type is None:
+            raise serializers.ValidationError(
+                _("Le contenu du fichier ne correspond pas à son extension ({extension}).").format(
+                    extension=extension
+                )
+            )
         return uploaded
 
     def validate(self, attrs):
@@ -243,7 +298,8 @@ class ProofSerializer(serializers.ModelSerializer):
             attrs["sha256"] = compute_sha256(uploaded)
             attrs["size"] = uploaded.size
             attrs["original_name"] = uploaded.name[:255]
-            attrs["content_type"] = getattr(uploaded, "content_type", "") or ""
+            # Le type vient du contenu vérifié, pas de l'en-tête du client.
+            attrs["content_type"] = self._content_type
             self._check_duplicate(dossier, attrs["sha256"], replaces)
         return attrs
 
@@ -314,6 +370,17 @@ class ExpenseSerializer(serializers.ModelSerializer):
         queryset=Team.objects.all(), chemin_pays="country", chemin_equipe="pk",
         required=False, allow_null=True,
     )
+    # Le référentiel du pays voisin n'existe pas pour le demandeur : un
+    # identifiant d'un autre pays répond comme un identifiant inconnu, sans
+    # révéler qu'il existe.
+    owner = ChampCloisonne(
+        queryset=Manager.objects.all(), chemin_pays="countries", distinct=True,
+        required=False, allow_null=True,
+    )
+    project = ChampCloisonne(queryset=Project.objects.all(), chemin_pays="country", required=False, allow_null=True)
+    expense_title = ChampCloisonne(queryset=ExpenseTitle.objects.all(), chemin_pays="country", required=False, allow_null=True)
+    marketing_category = ChampCloisonne(queryset=MarketingCategory.objects.all(), chemin_pays="country", required=False, allow_null=True)
+    beneficiary = ChampCloisonne(queryset=Beneficiary.objects.all(), chemin_pays="country", required=False, allow_null=True)
     country_name = serializers.CharField(source="country.name", read_only=True)
     currency = serializers.CharField(source="country.currency", read_only=True)
     # §6 : la date est conservée en UTC, mais doit se lire dans le fuseau du
@@ -600,6 +667,10 @@ class DossierSerializer(serializers.ModelSerializer):
     country = ChampCloisonne(queryset=Country.objects.all(), chemin_pays="pk")
     team = ChampCloisonne(
         queryset=Team.objects.all(), chemin_pays="country", chemin_equipe="pk",
+        required=False, allow_null=True,
+    )
+    owner = ChampCloisonne(
+        queryset=Manager.objects.all(), chemin_pays="countries", distinct=True,
         required=False, allow_null=True,
     )
     country_name = serializers.CharField(source="country.name", read_only=True)

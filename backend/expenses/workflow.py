@@ -46,7 +46,7 @@ ne sont plus déclarées, elles ne pèsent plus. Le journal, lui, garde tout.
 
 from django.utils.translation import gettext_lazy as _
 
-from accounts.permissions import roles_pour
+from accounts.permissions import COUNTRY_ROLES, roles_pour
 
 from core.regles import RegleViolee
 
@@ -249,7 +249,8 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
 
     Une dépense déclarée ne se modifie plus ni ne se supprime ; une pièce se
     dépose jusqu'à la clôture ; un brouillon ne se retire que par son auteur
-    (``transitions.retirer_brouillon``). Sans auteur connu — import, compte
+    et ne se modifie que par lui ou par le siège
+    (``transitions.exiger_l_auteur_du_brouillon``, ``retirer_brouillon``). Sans auteur connu — import, compte
     disparu — le retrait reste ouvert à qui a la capacité. Comme pour
     ``justify``, la liste dit ce qui peut être *tenté* : le retrait d'un
     dossier qui porte la ligne d'un autre auteur est proposé ici et refusé
@@ -257,9 +258,13 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
     """
     if role not in roles_pour(SAISIE_CAPACITES[action], configuration):
         return False
+    auteur_ou_anonyme = not objet.created_by or objet.created_by == username
     if action == "delete":
-        return objet.status in DELETABLE_STATUSES and (
-            not objet.created_by or objet.created_by == username
+        return objet.status in DELETABLE_STATUSES and auteur_ou_anonyme
+    if action == "edit":
+        # Le siège corrige à découvert ; un collègue du pays, non.
+        return objet.status not in LOCKED_STATUSES and (
+            auteur_ou_anonyme or role not in COUNTRY_ROLES
         )
     if action == "upload":
         return objet.status not in PROOF_LOCKED_STATUSES

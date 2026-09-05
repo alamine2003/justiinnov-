@@ -4,6 +4,9 @@ from datetime import date
 
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
+
+#: Un fichier n'est une pièce que si son contenu confirme son extension.
+PDF = b"%PDF-1.4 "
 from rest_framework import status
 
 from expenses.models import AuditLog, Dossier, Expense, Proof
@@ -23,7 +26,7 @@ class SuppressionDossierTests(ExpenseTestCase):
             "/api/proofs/",
             {
                 "dossier": self.dossier.pk,
-                "file": SimpleUploadedFile(nom, contenu, content_type="application/pdf"),
+                "file": SimpleUploadedFile(nom, contenu if contenu.startswith(b"%PDF") else PDF + contenu, content_type="application/pdf"),
             },
             format="multipart",
         )
@@ -68,7 +71,7 @@ class SuppressionDossierTests(ExpenseTestCase):
             "/api/proofs/",
             {
                 "dossier": self.dossier.pk,
-                "file": SimpleUploadedFile("v2.pdf", b"v2", content_type="application/pdf"),
+                "file": SimpleUploadedFile("v2.pdf", PDF + b"v2", content_type="application/pdf"),
                 "replaces": premiere.pk,
             },
             format="multipart",

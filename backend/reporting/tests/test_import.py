@@ -9,7 +9,9 @@ from urllib.parse import urlencode
 from django.db import IntegrityError, connection
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
+from django.core.files.uploadedfile import SimpleUploadedFile
 from openpyxl import Workbook
+from rest_framework import status
 
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
@@ -700,3 +702,56 @@ class ImportsConcurrentsTests(ImportTests):
         self.assertEqual(response.data["erreurs"][0]["ligne"], 2)
         self.assertEqual(Dossier.objects.count(), 1)
         self.assertEqual(Expense.objects.count(), 0)
+
+
+class ClasseurGonfleTests(ExpenseTestCase):
+    """Un xlsx est une archive : quelques Ko compressés peuvent en cacher
+    des centaines de Mo, qu'openpyxl chargerait en mémoire."""
+
+    def test_un_classeur_trop_gros_une_fois_decompresse_est_refuse(self):
+        import io
+        import zipfile
+
+        from django.conf import settings
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from rest_framework import status
+
+        tampon = io.BytesIO()
+        with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("[Content_Types].xml", "<Types/>")
+            archive.writestr("xl/sharedStrings.xml", b"\x00" * (5 * settings.MAX_PROOF_SIZE + 1))
+        self.assertLess(tampon.tell(), 1024 * 1024)
+        self.login(self.doo)
+
+        response = self.client.post(
+            "/api/imports/expenses.xlsx",
+            {"file": SimpleUploadedFile("bombe.xlsx", tampon.getvalue(), content_type=XLSX)},
+            format="multipart",
+        )
+
+        # Comme tout classeur illisible : rien n'est écrit, le motif est rendu.
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["lignes_creees"], 0)
+        self.assertIn("décompressé", response.data["erreurs"][0]["motif"])
+
+
+class ReimportDUnExportTests(ExpenseTestCase):
+    """Un classeur exporté se réimporte sans rien créer, même quand les
+    lignes portent une heure : le classeur ne connaît que le jour."""
+
+    def test_une_ligne_saisie_a_neuf_heures_n_est_pas_recreee(self):
+        from datetime import datetime, timezone as tz
+
+        self.make_expense(amount="1200.00", date=datetime(self.year, 3, 15, 9, 0, tzinfo=tz.utc), title="Carburant")
+        self.login(self.doo)
+        classeur = self.client.get(f"/api/exports/expenses.xlsx?year={self.year}&country={self.togo.pk}").content
+
+        response = self.client.post(
+            "/api/imports/expenses.xlsx",
+            {"file": SimpleUploadedFile("export.xlsx", classeur, content_type=XLSX), "country": self.togo.pk},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["lignes_creees"], 0, response.data)
+        self.assertEqual(self.dossier.expenses.count(), 1)
