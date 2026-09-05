@@ -4,6 +4,7 @@ import { defineConfig, loadEnv } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { VitePWA } from "vite-plugin-pwa"
+import { NAVIGATE_FALLBACK_DENYLIST } from "./src/lib/service-worker.ts"
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -47,9 +48,10 @@ export default defineConfig(({ mode }) => {
           // Une police variable pèse plus que la limite par défaut (2 Mo).
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           // Navigation hors ligne : le shell de l'application, sauf pour
-          // l'API, qui n'est jamais servie depuis le cache.
+          // l'API, la supervision, le back-office et les métriques, servis
+          // par le serveur (liste testée dans `src/lib/service-worker.ts`).
           navigateFallback: "/index.html",
-          navigateFallbackDenylist: [/^\/api\//],
+          navigateFallbackDenylist: NAVIGATE_FALLBACK_DENYLIST,
           // L'application est temps réel : aucune donnée métier en cache.
           runtimeCaching: [
             {

@@ -147,6 +147,32 @@ describe("intercepteur de réponse", () => {
     off()
   })
 
+  it("lit le message d'un refus reçu en Blob, comme sur un téléchargement", async () => {
+    // Une pièce se télécharge en `responseType: "blob"` : le 403 du serveur
+    // arrivait lui aussi en Blob, et l'interface affichait « Request failed
+    // with status code 403 » au lieu de son message.
+    repondre(
+      403,
+      new Blob([JSON.stringify({ detail: "Pièce hors de votre périmètre." })], {
+        type: "application/json",
+      }),
+    )
+
+    await expect(api.get("/proofs/1/download/", { responseType: "blob" })).rejects.toMatchObject({
+      status: 403,
+      message: "Pièce hors de votre périmètre.",
+    })
+  })
+
+  it("lit aussi un Blob en texte brut", async () => {
+    repondre(502, new Blob(["Bad gateway"], { type: "text/plain" }))
+
+    await expect(api.get("/exports/report.pdf", { responseType: "blob" })).rejects.toMatchObject({
+      status: 502,
+      message: "Bad gateway",
+    })
+  })
+
   it("dit que le serveur est injoignable plutôt que « Network Error »", async () => {
     couperLeReseau()
 

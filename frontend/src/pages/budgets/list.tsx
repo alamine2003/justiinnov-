@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { NativeSelect } from "@/components/ui/native-select"
 import { StatCard } from "@/components/ui/stat-card"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import {
@@ -28,23 +29,29 @@ import {
   fetchBudgets,
   updateBudget,
 } from "@/lib/budgets"
-import { fetchCountries, fetchManagers, fetchProjects, fetchTeams } from "@/lib/countries"
+import { fetchCountries, fetchProjects, fetchTeams } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import type { Budget } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatRate } from "@/lib/utils"
 
+const CURRENT_YEAR = new Date().getFullYear()
+const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2]
+
 export function BudgetsPage() {
   const { t } = useTranslation()
   const { can } = useAuth()
   const canManage = can("manage_budgets")
+  // Un seul exercice pour le résumé par pays et la liste des enveloppes :
+  // les deux onglets parlent des mêmes chiffres.
+  const [year, setYear] = useState(CURRENT_YEAR)
 
   const query = useQuery(
-    "budgets",
+    `budgets:${year}`,
     async (signal) => {
       const [budgets, summary] = await Promise.all([
-        fetchBudgets({ page_size: REFERENTIEL_PAGE_SIZE }, signal),
-        fetchBudgetSummary(),
+        fetchBudgets({ page_size: REFERENTIEL_PAGE_SIZE, year }, signal),
+        fetchBudgetSummary({ year }),
       ])
       return { budgets, summary }
     },
@@ -66,11 +73,6 @@ export function BudgetsPage() {
   const teams = useReferentiel(
     "teams",
     () => fetchTeams({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
-    { enabled: canManage },
-  )
-  const managers = useReferentiel(
-    "managers",
-    () => fetchManagers({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
     { enabled: canManage },
   )
   const configuration = useReferentiel("configuration", fetchConfiguration, {
@@ -95,7 +97,7 @@ export function BudgetsPage() {
     query.reload()
   }
 
-  const referentielError = countries.error ?? projects.error ?? teams.error ?? managers.error
+  const referentielError = countries.error ?? projects.error ?? teams.error
 
   return (
     <div className="space-y-6">
@@ -103,17 +105,31 @@ export function BudgetsPage() {
         title={t("budgets.titre")}
         description={t("budgets.description")}
       >
-        {canManage && (
-          <Button
-            onClick={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
+        <div className="flex flex-wrap items-center gap-2">
+          <NativeSelect
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            aria-label={t("commun.annee")}
+            className="w-28"
           >
-            <Plus className="mr-2 h-4 w-4" aria-hidden />
-            {t("budgets.attribuer")}
-          </Button>
-        )}
+            {YEARS.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </NativeSelect>
+          {canManage && (
+            <Button
+              onClick={() => {
+                setEditing(null)
+                setFormOpen(true)
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" aria-hidden />
+              {t("budgets.attribuer")}
+            </Button>
+          )}
+        </div>
       </PageHeader>
 
       {(query.error || referentielError) && (
@@ -361,8 +377,8 @@ export function BudgetsPage() {
         countries={countries.data?.results ?? []}
         projects={projects.data?.results ?? []}
         teams={teams.data?.results ?? []}
-        managers={managers.data?.results ?? []}
         editing={editing}
+        defaultYear={year}
         defaultPolicy={configuration.data?.workflow.default_overrun_policy}
       />
     </div>

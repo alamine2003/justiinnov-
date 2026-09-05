@@ -148,7 +148,9 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {canDecide && row.status === "pending" && (
+                    {/* Le serveur dit qui tranche (`can_decide`) : demande
+                        encore en attente, rôle décideur, pas son auteur. */}
+                    {row.can_decide && (
                       <>
                         <Button
                           variant="ghost"

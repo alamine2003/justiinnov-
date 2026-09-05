@@ -52,6 +52,8 @@ export function CountriesPage() {
   const handleSave = async (values: CountryFormValues) => {
     if (editing) {
       await updateCountry(editing.id, values)
+      // La fiche du pays (devise, fuseau, équipes) est en cache pour la saisie.
+      invalidateReferentiel(`country:${editing.id}`)
     } else {
       await createCountry(values)
     }
@@ -64,6 +66,7 @@ export function CountriesPage() {
     setActionError(null)
     try {
       await updateCountry(country.id, { is_active: !country.is_active })
+      invalidateReferentiel(`country:${country.id}`)
       afterWrite()
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t("pays.liste.statut_impossible"))

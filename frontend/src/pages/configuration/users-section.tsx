@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { AlertTriangle, Loader2, Pencil, Plus, ShieldOff, Users } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -37,7 +37,7 @@ import {
   updateUser,
 } from "@/lib/accounts"
 import { useAuth } from "@/context/use-auth"
-import { fetchCountries } from "@/lib/countries"
+import { fetchCountries, fetchCountry } from "@/lib/countries"
 import { ROLES, roleLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import { STATUS_TONES } from "@/lib/status-styles"
@@ -46,6 +46,7 @@ import {
   type CountrySummary,
   type PermissionMatrix,
   type Role,
+  type Team,
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { cn } from "@/lib/utils"
@@ -176,6 +177,11 @@ export function UsersSection() {
                             : user.role
                               ? t("commun.siege_tous_pays")
                               : t("commun.aucun")}
+                          {user.teams_detail && user.teams_detail.length > 0 && (
+                            <p className="text-xs">
+                              {user.teams_detail.map((team) => team.name).join(", ")}
+                            </p>
+                          )}
                         </TableCell>
                         <TableCell>
                           {user.is_active ? (
@@ -287,6 +293,7 @@ export function UsersSection() {
       {resetting && (
         <ResetTwoFactorDialog
           user={resetting}
+          self={resetting.id === me?.id}
           onOpenChange={(open) => {
             if (!open) setResetting(null)
           }}
@@ -300,18 +307,22 @@ export function UsersSection() {
 /**
  * Confirmation avant de réinitialiser l'enrôlement : le titulaire perdra
  * l'accès jusqu'à ce qu'il ait lié à nouveau son application, et l'action
- * est inscrite au journal.
+ * est inscrite au journal. Sur son propre compte, l'administrateur est
+ * prévenu qu'il sera déconnecté — et il l'est, proprement, une fois fait.
  */
 function ResetTwoFactorDialog({
   user,
+  self,
   onOpenChange,
   onDone,
 }: {
   user: AccountUser
+  self: boolean
   onOpenChange: (open: boolean) => void
   onDone: () => void
 }) {
   const { t } = useTranslation()
+  const { logout } = useAuth()
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -320,6 +331,12 @@ function ResetTwoFactorDialog({
     setError(null)
     try {
       await resetTwoFactor(user.id)
+      if (self) {
+        // Le serveur fermera la plateforme à la prochaine requête : autant
+        // fermer la session soi-même, sans attendre un 403 sur une page.
+        await logout()
+        return
+      }
       onDone()
       onOpenChange(false)
     } catch (e) {
@@ -337,7 +354,9 @@ function ResetTwoFactorDialog({
             {t("configuration.utilisateurs.totp_reinit_titre", { nom: user.username })}
           </DialogTitle>
           <DialogDescription>
-            {t("configuration.utilisateurs.totp_reinit_description")}
+            {self
+              ? t("configuration.utilisateurs.totp_reinit_soi")
+              : t("configuration.utilisateurs.totp_reinit_description")}
           </DialogDescription>
         </DialogHeader>
         <FormError>{error}</FormError>
@@ -381,7 +400,14 @@ function UserForm({
   onSaved: () => Promise<void>
 }) {
   const { t } = useTranslation()
-  const roles = matrix?.roles ?? []
+  const { me } = useAuth()
+  // La matrice ne dit pas qui peut conférer un rôle : seul un super
+  // administrateur en nomme un autre, et le serveur le vérifie. Le proposer
+  // à un administrateur ne mènerait qu'à un refus.
+  const roles = (matrix?.roles ?? []).filter(
+    (r) =>
+      r.value !== "super_admin" || me?.role === "super_admin" || editing?.role === "super_admin",
+  )
   const [username, setUsername] = useState(editing?.username ?? "")
   const [firstName, setFirstName] = useState(editing?.first_name ?? "")
   const [lastName, setLastName] = useState(editing?.last_name ?? "")
@@ -392,6 +418,10 @@ function UserForm({
   // Le périmètre n'est envoyé que s'il a été touché : un PATCH qui renvoie
   // la liste telle quelle réécrit une trace de changement pour rien.
   const [countriesTouched, setCountriesTouched] = useState(false)
+  const [teamIds, setTeamIds] = useState<number[]>(editing?.teams ?? [])
+  const [teamsTouched, setTeamsTouched] = useState(false)
+  // Équipes de chaque pays coché, lues sur sa fiche à mesure des coches.
+  const [teamsByCountry, setTeamsByCountry] = useState<Record<number, Team[]>>({})
   const [password, setPassword] = useState("")
   const [active, setActive] = useState(editing?.is_active ?? true)
   const [error, setError] = useState<string | null>(null)
@@ -402,14 +432,60 @@ function UserForm({
   // annoncer leur périmètre et laisse le serveur trancher, plutôt que de
   // recopier ici une table de rôles qui divergerait. Un compte du siège
   // sans pays voit tous les pays ; des pays cochés restreignent un DM ou
-  // un DF — le serveur refuse une restriction à un rôle toujours global.
+  // un DF ; un rôle toujours global n'a rien à cocher.
   const roleInfo = roles.find((r) => r.value === role)
   const isHeadquarters = Boolean(roleInfo?.siege)
+  const alwaysGlobal = Boolean(roleInfo?.always_global)
+  // Les équipes ne concernent qu'un compte de pays, et seulement celles des
+  // pays cochés.
+  const teamsApply = Boolean(roleInfo) && !isHeadquarters
+
+  useEffect(() => {
+    if (!teamsApply) return
+    const missing = countryIds.filter((id) => !(id in teamsByCountry))
+    if (missing.length === 0) return
+    let active = true
+    for (const id of missing) {
+      fetchCountry(id)
+        .then((country) => {
+          if (!active) return
+          setTeamsByCountry((current) => ({
+            ...current,
+            [id]: country.teams.filter((team) => team.is_active),
+          }))
+        })
+        .catch(() => {
+          // Sans la fiche, aucune équipe à proposer pour ce pays : le
+          // serveur revalidera de toute façon.
+          if (active) setTeamsByCountry((current) => ({ ...current, [id]: [] }))
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [teamsApply, countryIds, teamsByCountry])
+
+  const eligibleTeams = countryIds.flatMap((id) => teamsByCountry[id] ?? [])
 
   const toggleCountry = (id: number, checked: boolean) => {
     setCountriesTouched(true)
     setCountryIds((current) =>
       checked ? [...new Set([...current, id])] : current.filter((c) => c !== id),
+    )
+    if (!checked) {
+      // Les équipes d'un pays retiré partent avec lui.
+      const retirees = (teamsByCountry[id] ?? []).map((team) => team.id)
+      if (retirees.length > 0) {
+        setTeamsTouched(true)
+        setTeamIds((current) => current.filter((teamId) => !retirees.includes(teamId)))
+      }
+    }
+  }
+
+  const toggleTeam = (id: number, checked: boolean) => {
+    setTeamsTouched(true)
+    setTeamIds((current) =>
+      checked ? [...new Set([...current, id])] : current.filter((teamId) => teamId !== id),
     )
   }
 
@@ -437,18 +513,29 @@ function UserForm({
     setError(null)
     try {
       const payload: Record<string, unknown> = {
-        username,
         first_name: firstName,
         last_name: lastName,
         email,
         role,
         is_active: active,
       }
-      // Vide, le périmètre d'un compte du siège vaut tous les pays. Un
-      // changement de rôle renvoie le périmètre tel qu'affiché, pour que
-      // le serveur le revalide contre le nouveau rôle.
-      if (!editing || countriesTouched || role !== editing.role) {
+      // L'identifiant ne se change pas : il signe les traces du journal.
+      if (!editing) payload.username = username
+      const roleChanged = Boolean(editing) && role !== editing?.role
+      if (alwaysGlobal) {
+        // Aucun périmètre pour un rôle toujours global : la liste est vidée
+        // si le compte en avait un, ou si le rôle vient de changer.
+        if (!editing || roleChanged || editing.countries.length > 0) payload.countries = []
+      } else if (!editing || countriesTouched || roleChanged) {
+        // Vide, le périmètre d'un compte du siège vaut tous les pays. Un
+        // changement de rôle renvoie le périmètre tel qu'affiché, pour que
+        // le serveur le revalide contre le nouveau rôle.
         payload.countries = countryIds
+      }
+      if (teamsApply && (!editing || teamsTouched || countriesTouched || roleChanged)) {
+        payload.teams = teamIds
+      } else if (!teamsApply && editing?.teams && editing.teams.length > 0) {
+        payload.teams = []
       }
       if (password) payload.password = password
 
@@ -490,8 +577,15 @@ function UserForm({
               onChange={(e) => setUsername(e.target.value)}
               placeholder={t("configuration.utilisateurs.form.identifiant_exemple")}
               autoComplete="off"
+              readOnly={Boolean(editing)}
+              aria-describedby={editing ? "user-username-aide" : undefined}
               required
             />
+            {editing && (
+              <p id="user-username-aide" className="text-xs text-muted-foreground">
+                {t("configuration.utilisateurs.form.identifiant_immuable")}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -545,49 +639,92 @@ function UserForm({
                         : t("configuration.utilisateurs.form.role_pays", { role: r.label })}
                     </option>
                   ))
-                : ROLES.map((value) => (
-                    <option key={value} value={value}>
-                      {roleLabel(t, value)}
-                    </option>
-                  ))}
+                : ROLES.filter((value) => value !== "super_admin" || me?.role === "super_admin").map(
+                    (value) => (
+                      <option key={value} value={value}>
+                        {roleLabel(t, value)}
+                      </option>
+                    ),
+                  )}
             </NativeSelect>
             <p className="text-xs text-muted-foreground">
               {t("configuration.utilisateurs.form.role_aide")}
             </p>
           </div>
 
-          <fieldset className="grid gap-2">
-            <legend className="text-sm font-medium">
-              {t("configuration.utilisateurs.form.perimetre_legend")}
-            </legend>
+          {alwaysGlobal ? (
             <p className="text-xs text-muted-foreground">
-              {isHeadquarters
-                ? t("configuration.utilisateurs.form.perimetre_aide_siege")
-                : t("configuration.utilisateurs.form.perimetre_aide_pays")}
+              {t("configuration.utilisateurs.form.perimetre_aide_global")}
             </p>
-            <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-2">
-              {countries.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t("configuration.utilisateurs.form.aucun_pays")}
-                </p>
-              )}
-              {countries.map((c) => (
-                <label
-                  key={c.id}
-                  className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent"
-                >
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-primary"
-                    checked={countryIds.includes(c.id)}
-                    onChange={(e) => toggleCountry(c.id, e.target.checked)}
-                  />
-                  {c.country_ref ? `${c.country_ref} — ` : ""}
-                  {c.name}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          ) : (
+            <fieldset className="grid gap-2">
+              <legend className="text-sm font-medium">
+                {t("configuration.utilisateurs.form.perimetre_legend")}
+              </legend>
+              <p className="text-xs text-muted-foreground">
+                {isHeadquarters
+                  ? t("configuration.utilisateurs.form.perimetre_aide_siege")
+                  : t("configuration.utilisateurs.form.perimetre_aide_pays")}
+              </p>
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-2">
+                {countries.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("configuration.utilisateurs.form.aucun_pays")}
+                  </p>
+                )}
+                {countries.map((c) => (
+                  <label
+                    key={c.id}
+                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={countryIds.includes(c.id)}
+                      onChange={(e) => toggleCountry(c.id, e.target.checked)}
+                    />
+                    {c.country_ref ? `${c.country_ref} — ` : ""}
+                    {c.name}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          {teamsApply && countryIds.length > 0 && (
+            <fieldset className="grid gap-2">
+              <legend className="text-sm font-medium">
+                {t("configuration.utilisateurs.form.equipes_legend")}
+              </legend>
+              <p className="text-xs text-muted-foreground">
+                {t("configuration.utilisateurs.form.equipes_aide")}
+              </p>
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-2">
+                {eligibleTeams.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("configuration.utilisateurs.form.aucune_equipe")}
+                  </p>
+                )}
+                {eligibleTeams.map((team) => (
+                  <label
+                    key={team.id}
+                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={teamIds.includes(team.id)}
+                      onChange={(e) => toggleTeam(team.id, e.target.checked)}
+                    />
+                    {team.name}
+                    {countryIds.length > 1 && (
+                      <span className="text-xs text-muted-foreground">{team.country_name}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
 
           <div className="grid gap-2">
             <Label htmlFor="user-password">

@@ -17,6 +17,23 @@ export function fetchBreakdown(params?: Record<string, unknown>, signal?: AbortS
   return apiGet<Breakdown>("/dashboard/breakdown/", params, signal)
 }
 
+/**
+ * Taux d'exécution à partir duquel la barre du tableau de bord passe en
+ * teinte d'attente. Repli quand la configuration n'est pas lisible (elle est
+ * réservée aux administrateurs) : 80 %, le seuil d'alerte le plus haut sous
+ * le plafond dans la configuration livrée.
+ */
+export const EXECUTION_WARNING_RATE = 0.8
+
+/**
+ * Seuil d'avertissement lu dans les seuils d'alerte de la configuration : le
+ * plus haut sous 100 %. Sans seuil exploitable, le repli.
+ */
+export function executionWarningRate(thresholds: number[] | undefined): number {
+  const candidats = (thresholds ?? []).filter((s) => s > 0 && s < 100)
+  return candidats.length > 0 ? Math.max(...candidats) / 100 : EXECUTION_WARNING_RATE
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -106,6 +123,8 @@ export interface ImportError {
 }
 
 export interface ImportResult {
+  /** Absent sur un serveur qui ne le compte pas encore. */
+  dossiers_crees?: number
   lignes_creees: number
   equipes_creees: number
   managers_crees: number

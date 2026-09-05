@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { DiffList } from "@/components/countries/history"
 import { fetchAudit } from "@/lib/expenses"
 import { AUDIT_ACTIONS, auditActionLabel } from "@/lib/labels"
 import { ACTION_STYLE } from "@/lib/status-styles"
@@ -48,6 +49,16 @@ function summarize(t: TFunction, entry: AuditEntry): string {
     parts.push(t("audit.detail_empreinte", { empreinte: detail.sha256.slice(0, 12) }))
   }
   return parts.join(" · ")
+}
+
+/** Ancienne et nouvelle valeur par champ, quand le serveur les a jointes au détail. */
+function readDiff(entry: AuditEntry): Record<string, [unknown, unknown]> | null {
+  const diff = entry.detail?.diff
+  if (!diff || typeof diff !== "object" || Array.isArray(diff)) return null
+  const entries = Object.entries(diff as Record<string, unknown>).filter(
+    (pair): pair is [string, [unknown, unknown]] => Array.isArray(pair[1]) && pair[1].length === 2,
+  )
+  return entries.length > 0 ? Object.fromEntries(entries) : null
 }
 
 export function AuditPage() {
@@ -162,12 +173,14 @@ export function AuditPage() {
                       <TableCell>
                         <p className="text-sm">{entry.label}</p>
                         <p className="text-xs text-muted-foreground">
-                          {entry.object_type} #{entry.object_id}
+                          {entry.object_type}
+                          {entry.object_id !== null && ` #${entry.object_id}`}
                           {entry.country_name && ` · ${entry.country_name}`}
                         </p>
                       </TableCell>
                       <TableCell className="max-w-sm text-xs text-muted-foreground">
                         {summarize(t, entry)}
+                        {readDiff(entry) && <DiffList diff={readDiff(entry)!} />}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {entry.ip_address ?? t("commun.aucun")}

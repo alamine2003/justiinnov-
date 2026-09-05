@@ -19,7 +19,6 @@ import { OVERRUN_POLICIES, overrunPolicyLabel } from "@/lib/labels"
 import type {
   Budget,
   CountrySummary,
-  Manager,
   OverrunPolicy,
   Project,
   Team,
@@ -49,14 +48,15 @@ interface BudgetFormProps {
   countries: CountrySummary[]
   projects: Project[]
   teams: Team[]
-  managers: Manager[]
   editing: Budget | null
   /** Politique de dépassement de la configuration, proposée par défaut. */
   defaultPolicy?: OverrunPolicy
+  /** Exercice affiché par la page, proposé par défaut. */
+  defaultYear?: number
 }
 
 const CURRENT_YEAR = new Date().getFullYear()
-const YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1, CURRENT_YEAR + 2]
+const YEARS = [CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1, CURRENT_YEAR + 2]
 
 export function BudgetForm({ open, onOpenChange, editing, ...rest }: BudgetFormProps) {
   return (
@@ -81,13 +81,13 @@ function BudgetFormBody({
   countries,
   projects,
   teams,
-  managers,
   editing,
   defaultPolicy = "block",
+  defaultYear = CURRENT_YEAR,
 }: Omit<BudgetFormProps, "open">) {
   const { t } = useTranslation()
   const [country, setCountry] = useState<number | "">(editing?.country ?? countries[0]?.id ?? "")
-  const [year, setYear] = useState(editing?.year ?? CURRENT_YEAR)
+  const [year, setYear] = useState(editing?.year ?? defaultYear)
   const [scope, setScope] = useState<Scope>(editing?.scope_kind ?? "country")
   const [project, setProject] = useState<number | "">(editing?.project ?? "")
   const [team, setTeam] = useState<number | "">(editing?.team ?? "")
@@ -98,9 +98,14 @@ function BudgetFormBody({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  // Une sous-enveloppe ne porte que sur une entité du pays choisi.
+  const selectedCountry = countries.find((c) => c.id === country)
+  // Une sous-enveloppe ne porte que sur une entité du pays choisi ; les
+  // managers sont ceux rattachés à ce pays, lus sur sa fiche.
   const eligibleProjects = projects.filter((p) => p.country === country)
   const eligibleTeams = teams.filter((equipe) => equipe.country === country)
+  const eligibleManagers = (selectedCountry?.managers ?? []).filter(
+    (m) => m.is_active || m.id === editing?.manager,
+  )
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -136,8 +141,6 @@ function BudgetFormBody({
     }
   }
 
-  const selectedCountry = countries.find((c) => c.id === country)
-
   return (
     <>
       <DialogHeader>
@@ -158,6 +161,7 @@ function BudgetFormBody({
               setCountry(Number(e.target.value))
               setProject("")
               setTeam("")
+              setManager("")
             }}
             disabled={Boolean(editing)}
           >
@@ -277,7 +281,7 @@ function BudgetFormBody({
               required
             >
               <option value="">{t("commun.aucun")}</option>
-              {managers.map((m) => (
+              {eligibleManagers.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
                 </option>

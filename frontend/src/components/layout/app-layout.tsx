@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
+  Activity,
   Download,
   FolderOpen,
   Globe,
@@ -11,6 +12,7 @@ import {
   Menu,
   ScrollText,
   Settings,
+  ShieldCheck,
   Wallet,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -28,9 +30,9 @@ import { BrandMark } from "@/components/layout/brand-mark"
 import { LanguageToggle } from "@/components/layout/language-toggle"
 import { NotificationBell } from "@/components/layout/notification-bell"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
-import { UserMenu } from "@/components/layout/user-menu"
+import { SUPERVISION_PATH, UserMenu } from "@/components/layout/user-menu"
 import { useAuth } from "@/context/use-auth"
-import { platformClosed } from "@/lib/accounts"
+import { TOTP_PATH, platformClosed } from "@/lib/accounts"
 import { BRAND } from "@/lib/brand"
 import { useInstallPrompt } from "@/lib/install-prompt"
 import { cn } from "@/lib/utils"
@@ -172,13 +174,43 @@ export function AppLayout() {
           <SheetHeader>
             <SheetTitle>{BRAND.name}</SheetTitle>
             <SheetDescription>
-              {me ? `${me.username} · ${me.role_display}` : scope}
+              {me ? [me.username, me.role_display].filter(Boolean).join(" · ") : scope}
             </SheetDescription>
           </SheetHeader>
           <nav aria-label={t("nav.principale")} className="flex flex-col gap-1 px-4">
             {navigation}
           </nav>
+          {/* Les entrées du menu du compte, que le menu replié remplace sous `md`. */}
           <div className="mt-auto space-y-2 px-4 pb-6">
+            {!closed && me?.totp_confirmed === false && (
+              <Button
+                variant="ghost"
+                className="w-full"
+                nativeButton={false}
+                render={<Link to={TOTP_PATH} onClick={() => setMenuOpen(false)} />}
+              >
+                <ShieldCheck className="mr-2 h-4 w-4" aria-hidden />
+                {t("nav.activer_2fa")}
+              </Button>
+            )}
+            {!closed && can("manage_users") && me?.supervision === true && (
+              <Button
+                variant="ghost"
+                className="w-full"
+                nativeButton={false}
+                render={
+                  <a
+                    href={SUPERVISION_PATH}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={t("nav.supervision")}
+                  />
+                }
+              >
+                <Activity className="mr-2 h-4 w-4" aria-hidden />
+                {t("nav.supervision")}
+              </Button>
+            )}
             {installable && (
               <Button variant="ghost" className="w-full" onClick={() => void install()}>
                 <Download className="mr-2 h-4 w-4" aria-hidden />

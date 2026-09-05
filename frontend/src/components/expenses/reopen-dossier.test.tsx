@@ -2,68 +2,39 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { ReopenDossier } from "@/components/expenses/reopen-dossier"
 import { ApiError } from "@/lib/api"
-import type { DossierDetail, Expense, Permissions, WorkflowStatus } from "@/lib/types"
+import type { DossierDetail } from "@/lib/types"
 
-let droits: Partial<Permissions> = { reopen_dossiers: true }
-
-vi.mock("@/context/use-auth", () => ({
-  useAuth: () => ({
-    can: (permission: keyof Permissions) => Boolean(droits[permission]),
-  }),
-}))
-
-function ligne(status: WorkflowStatus): Expense {
-  return { id: 1, status, status_display: status } as unknown as Expense
-}
-
-function dossier(status: WorkflowStatus, expenses: Expense[] = [ligne("submitted")]): DossierDetail {
+/**
+ * Le serveur dit s'il accepterait la réouverture (`allowed_actions`) : droit,
+ * état du dossier, lignes déjà justifiées. Le composant ne lit rien d'autre.
+ */
+function dossier(allowedActions: DossierDetail["allowed_actions"]): DossierDetail {
   return {
     id: 12,
     number: "N-2026-012",
-    status,
-    status_display: status,
-    expenses,
+    status: "submitted",
+    status_display: "Soumis",
+    allowed_actions: allowedActions,
+    expenses: [],
     proofs: [],
   } as unknown as DossierDetail
 }
 
 describe("ReopenDossier — visibilité", () => {
-  it("s'affiche au siège sur un dossier soumis", () => {
-    droits = { reopen_dossiers: true }
-    render(<ReopenDossier dossier={dossier("submitted")} onReopen={vi.fn()} />)
+  it("s'affiche quand le serveur ouvre la réouverture", () => {
+    render(<ReopenDossier dossier={dossier(["reopen", "review"])} onReopen={vi.fn()} />)
 
     expect(screen.getByRole("button", { name: "Rouvrir" })).toBeInTheDocument()
   })
 
-  it.each<WorkflowStatus>(["in_review", "unjustified"])("s'affiche aussi depuis « %s »", (status) => {
-    droits = { reopen_dossiers: true }
-    render(<ReopenDossier dossier={dossier(status)} onReopen={vi.fn()} />)
-
-    expect(screen.getByRole("button", { name: "Rouvrir" })).toBeInTheDocument()
-  })
-
-  it("reste absent sans le droit", () => {
-    droits = { reopen_dossiers: false }
-    render(<ReopenDossier dossier={dossier("submitted")} onReopen={vi.fn()} />)
+  it("reste absent quand le serveur ne l'ouvre pas", () => {
+    render(<ReopenDossier dossier={dossier(["review", "reject"])} onReopen={vi.fn()} />)
 
     expect(screen.queryByRole("button", { name: "Rouvrir" })).toBeNull()
   })
 
-  it.each<WorkflowStatus>(["draft", "justified", "closed"])("reste absent depuis « %s »", (status) => {
-    droits = { reopen_dossiers: true }
-    render(<ReopenDossier dossier={dossier(status)} onReopen={vi.fn()} />)
-
-    expect(screen.queryByRole("button", { name: "Rouvrir" })).toBeNull()
-  })
-
-  it("reste absent quand une ligne est déjà justifiée : le serveur refuserait", () => {
-    droits = { reopen_dossiers: true }
-    render(
-      <ReopenDossier
-        dossier={dossier("submitted", [ligne("submitted"), ligne("justified")])}
-        onReopen={vi.fn()}
-      />,
-    )
+  it("reste absent quand le serveur n'ouvre rien", () => {
+    render(<ReopenDossier dossier={dossier([])} onReopen={vi.fn()} />)
 
     expect(screen.queryByRole("button", { name: "Rouvrir" })).toBeNull()
   })
@@ -71,9 +42,8 @@ describe("ReopenDossier — visibilité", () => {
 
 describe("ReopenDossier — dialogue", () => {
   it("exige un motif sans appeler le serveur", () => {
-    droits = { reopen_dossiers: true }
     const onReopen = vi.fn()
-    render(<ReopenDossier dossier={dossier("submitted")} onReopen={onReopen} />)
+    render(<ReopenDossier dossier={dossier(["reopen"])} onReopen={onReopen} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Rouvrir" }))
     const dialogue = screen.getByRole("dialog")
@@ -85,9 +55,8 @@ describe("ReopenDossier — dialogue", () => {
   })
 
   it("transmet le motif et se referme", async () => {
-    droits = { reopen_dossiers: true }
     const onReopen = vi.fn().mockResolvedValue(undefined)
-    render(<ReopenDossier dossier={dossier("submitted")} onReopen={onReopen} />)
+    render(<ReopenDossier dossier={dossier(["reopen"])} onReopen={onReopen} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Rouvrir" }))
     fireEvent.change(screen.getByLabelText("Motif"), {
@@ -100,14 +69,13 @@ describe("ReopenDossier — dialogue", () => {
   })
 
   it("affiche les refus du serveur par champ et reste ouvert", async () => {
-    droits = { reopen_dossiers: true }
     const onReopen = vi.fn().mockRejectedValue(
       new ApiError(400, "expenses : Ligne 4 justifiee.", {
         expenses: ["Ligne 4 justifiee."],
         status: ["Statut incompatible."],
       }),
     )
-    render(<ReopenDossier dossier={dossier("submitted")} onReopen={onReopen} />)
+    render(<ReopenDossier dossier={dossier(["reopen"])} onReopen={onReopen} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Rouvrir" }))
     fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Motif" } })
@@ -121,11 +89,10 @@ describe("ReopenDossier — dialogue", () => {
   })
 
   it("rattache un refus du motif au champ", async () => {
-    droits = { reopen_dossiers: true }
     const onReopen = vi.fn().mockRejectedValue(
       new ApiError(400, "Motif : trop court.", { note: ["Trop court."] }),
     )
-    render(<ReopenDossier dossier={dossier("submitted")} onReopen={onReopen} />)
+    render(<ReopenDossier dossier={dossier(["reopen"])} onReopen={onReopen} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Rouvrir" }))
     fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "x" } })

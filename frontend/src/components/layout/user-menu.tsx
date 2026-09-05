@@ -21,7 +21,7 @@ import { STATUS_TONES } from "@/lib/status-styles"
  * Supervision (Grafana), servie par Caddy sous le même domaine : le chemin
  * est relatif à l'origine, quel que soit l'environnement.
  */
-const SUPERVISION_PATH = "/grafana/"
+export const SUPERVISION_PATH = "/grafana/"
 
 /**
  * Menu du compte : identité, double authentification, supervision,
@@ -54,7 +54,7 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
           <DropdownMenuGroup>
             <DropdownMenuLabel className="flex items-center gap-2">
               <span className="truncate">
-                {me.username} · {me.role_display}
+                {[me.username, me.role_display].filter(Boolean).join(" · ")}
               </span>
               {me.totp_confirmed === true && (
                 <Badge className={STATUS_TONES.SUCCES}>{t("nav.totp_active")}</Badge>
@@ -91,8 +91,10 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
             }
           />
         )}
-        {/* Nouvel onglet : Grafana a sa propre session, l'application garde la sienne. */}
-        {can("manage_users") && (
+        {/* Nouvel onglet : Grafana a sa propre session, l'application garde
+            la sienne. Ce n'est pas un droit mais un réglage de déploiement :
+            sans Grafana derrière Caddy, le lien mènerait à un 404. */}
+        {can("manage_users") && me?.supervision === true && (
           <DropdownMenuItem
             render={
               <a href={SUPERVISION_PATH} target="_blank" rel="noopener noreferrer">

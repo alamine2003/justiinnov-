@@ -21,6 +21,7 @@ import type {
   ExpenseTitle,
   Manager,
   MarketingCategory,
+  PaymentMethod,
   Project,
   Team,
 } from "@/lib/types"
@@ -47,6 +48,13 @@ interface ExpenseFormProps {
   currency: string
   /** Fuseau du pays : la date saisie est une heure de là-bas. */
   timezone: string
+  /** Manager rattaché à des équipes : le serveur exige l'une d'elles. */
+  teamRequired?: boolean
+  /**
+   * Équipe du dossier : une ligne porte celle de son dossier, elle est
+   * présélectionnée et verrouillée. `null` ou absente, le choix est libre.
+   */
+  lockedTeam?: number | null
 }
 
 /**
@@ -87,6 +95,8 @@ function ExpenseFormBody({
   managers,
   currency,
   timezone,
+  teamRequired = false,
+  lockedTeam = null,
 }: Omit<ExpenseFormProps, "open">) {
   const { t } = useTranslation()
   const [title, setTitle] = useState(editing?.title ?? "")
@@ -99,13 +109,13 @@ function ExpenseFormBody({
   // devise du pays, cas de très loin le plus fréquent.
   const [devise, setDevise] = useState(editing?.original_currency ?? "")
   const [montantDevise, setMontantDevise] = useState(editing?.original_amount ?? "")
-  const [team, setTeam] = useState<number | "">(editing?.team ?? "")
+  const [team, setTeam] = useState<number | "">(lockedTeam ?? editing?.team ?? "")
   const [project, setProject] = useState<number | "">(editing?.project ?? "")
   const [owner, setOwner] = useState<number | "">(editing?.owner ?? "")
   const [expenseTitle, setExpenseTitle] = useState<number | "">(editing?.expense_title ?? "")
   const [category, setCategory] = useState<number | "">(editing?.marketing_category ?? "")
   const [beneficiary, setBeneficiary] = useState<number | "">(editing?.beneficiary ?? "")
-  const [payment, setPayment] = useState(editing?.payment_method ?? "cash")
+  const [payment, setPayment] = useState<PaymentMethod>(editing?.payment_method ?? "cash")
   const [description, setDescription] = useState(editing?.description ?? "")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -122,15 +132,21 @@ function ExpenseFormBody({
       setError(t("depenses.formulaire.date_requise"))
       return
     }
-    const enDeviseEtrangere = devisePresente && montantDevise.trim() !== ""
-    const montant = enDeviseEtrangere ? null : normalizeDecimal(amount)
-    if (!enDeviseEtrangere && montant === null) {
-      setError(t("depenses.formulaire.montant_requis"))
+    if (teamRequired && team === "") {
+      setError(t("depenses.formulaire.equipe_requise"))
       return
     }
+    // Une devise saisie appelle son montant : sans lui, le champ du pays
+    // est désactivé et « montant requis » ne dirait pas lequel.
+    const enDeviseEtrangere = devisePresente
     const montantEtranger = enDeviseEtrangere ? normalizeDecimal(montantDevise) : null
     if (enDeviseEtrangere && montantEtranger === null) {
       setError(t("depenses.formulaire.montant_decaisse_requis"))
+      return
+    }
+    const montant = enDeviseEtrangere ? null : normalizeDecimal(amount)
+    if (!enDeviseEtrangere && montant === null) {
+      setError(t("depenses.formulaire.montant_requis"))
       return
     }
     setSaving(true)
@@ -233,7 +249,7 @@ function ExpenseFormBody({
             <NativeSelect
               id="exp-payment"
               value={payment}
-              onChange={(e) => setPayment(e.target.value)}
+              onChange={(e) => setPayment(e.target.value as PaymentMethod)}
             >
               {PAYMENT_METHODS.map((value) => (
                 <option key={value} value={value}>
@@ -321,13 +337,19 @@ function ExpenseFormBody({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="exp-team">{t("champs.team")}</Label>
+            <Label htmlFor="exp-team">
+              {lockedTeam !== null
+                ? t("depenses.formulaire.equipe_du_dossier")
+                : t("champs.team")}
+            </Label>
             <NativeSelect
               id="exp-team"
               value={team}
               onChange={(e) =>
                 setTeam(e.target.value === "" ? "" : Number(e.target.value))
               }
+              required={teamRequired}
+              disabled={lockedTeam !== null}
             >
               <option value="">{t("commun.aucun")}</option>
               {teams.map((equipe) => (

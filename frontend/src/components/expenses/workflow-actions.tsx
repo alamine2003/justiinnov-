@@ -15,20 +15,14 @@ import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { useAuth } from "@/context/use-auth"
-import type { TransitionName, WorkflowStatus } from "@/lib/types"
+import type { ExpenseTransitionName, Schema, TransitionName } from "@/lib/types"
 import { formatAmount, normalizeDecimal } from "@/lib/utils"
 
-/** Transitions possibles depuis chaque état — reflète `expenses.workflow`. */
-const AVAILABLE: Record<WorkflowStatus, TransitionName[]> = {
-  draft: ["submit"],
-  submitted: ["review", "justify", "reject"],
-  in_review: ["justify", "reject"],
-  // Une dépense non justifiée ne revient pas au brouillon : seule une preuve
-  // déposée après coup peut encore la justifier.
-  unjustified: ["justify"],
-  justified: ["close"],
-  closed: [],
+/** Transitions que ce composant sait proposer ; « rouvrir » a son propre bouton. */
+const TRANSITIONS: TransitionName[] = ["submit", "review", "justify", "reject", "close"]
+
+function isTransition(value: string): value is TransitionName {
+  return (TRANSITIONS as string[]).includes(value)
 }
 
 function transitionLabel(t: TFunction, action: TransitionName): string {
@@ -60,65 +54,78 @@ export interface TransitionPayload {
   justified_amount?: string
 }
 
-interface WorkflowActionsProps {
-  status: WorkflowStatus
-  onTransition: (action: TransitionName, payload?: TransitionPayload) => Promise<void>
+interface CommonProps {
   size?: "sm" | "default"
-  /**
-   * Masque « Soumettre » sur une ligne dont le dossier est encore un
-   * brouillon. Le serveur le refuse — une ligne ne devance pas son dossier —
-   * et le bouton ne menait qu'à un message d'erreur.
-   */
-  hideSubmit?: boolean
   /** Montant de la dépense, proposé par défaut comme montant justifié. */
   amount?: string
   currency?: string
-  /** « la dépense » ou « le dossier » : les dialogues nomment ce qu'ils touchent. */
-  subject?: "expense" | "dossier"
+  /**
+   * Transitions calculées par le serveur pour le demandeur (`allowed_actions`
+   * de la ligne ou du dossier) : rôle, état, quatre yeux, politique du
+   * circuit. L'interface n'en recopie aucune règle ; elle propose ce que le
+   * serveur accepterait.
+   */
+  allowedActions: Schema<"TransitionEnum">[]
+  /**
+   * Reçoit l'échec d'une action directe (mise en contrôle, clôture…), pour
+   * l'afficher dans l'alerte de la page ; sans lui, l'erreur s'affiche ici.
+   * Les dialogues affichent eux-mêmes leur refus, sans passer par là.
+   */
+  onError?: (message: string) => void
 }
 
-export function WorkflowActions({
-  status,
-  onTransition,
-  size = "sm",
-  hideSubmit = false,
-  amount,
-  currency,
-  subject = "expense",
-}: WorkflowActionsProps) {
+/** « la dépense » ou « le dossier » : les dialogues nomment ce qu'ils touchent, et une ligne ne se soumet jamais seule. */
+type WorkflowActionsProps = CommonProps &
+  (
+    | {
+        subject?: "expense"
+        onTransition: (action: ExpenseTransitionName, payload?: TransitionPayload) => Promise<void>
+      }
+    | {
+        subject: "dossier"
+        onTransition: (action: TransitionName, payload?: TransitionPayload) => Promise<void>
+      }
+  )
+
+export function WorkflowActions(props: WorkflowActionsProps) {
+  const { size = "sm", amount, currency, allowedActions, onError } = props
+  const subject = props.subject ?? "expense"
   const { t } = useTranslation()
-  const { can, me } = useAuth()
   const [busy, setBusy] = useState<TransitionName | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState(false)
   const [justifying, setJustifying] = useState(false)
 
-  // Quand la politique impose le contrôle, une dépense soumise passe d'abord
-  // « En contrôle » : proposer « Marquer justifié » mènerait à un refus.
-  const requireReview = Boolean(me?.workflow?.require_review_step)
-
-  // Soumettre relève de la saisie (le manager), la mise en contrôle du DM,
-  // le constat — justifier, refuser, clôturer — du DF. Un serveur qui ne
-  // distingue pas encore la mise en contrôle la range avec le constat.
-  const canReview = me?.permissions?.review_expenses ?? can("validate_expenses")
-  const permitted = (action: TransitionName): boolean => {
-    if (action === "submit") return can("record_expenses")
-    if (action === "review") return canReview
-    return can("validate_expenses")
-  }
-  const allowed = (AVAILABLE[status] ?? [])
-    .filter((action) => !(hideSubmit && action === "submit"))
-    .filter((action) => !(requireReview && status === "submitted" && action === "justify"))
-    .filter(permitted)
+  // Le dossier emporte ses lignes : c'est lui qu'on soumet, jamais une ligne
+  // seule. Une action inconnue de l'interface est ignorée.
+  const allowed = allowedActions
+    .filter(isTransition)
+    .filter((action) => subject === "dossier" || action !== "submit")
 
   if (allowed.length === 0) return null
 
+  /** Lance une transition ; l'appelant décide de l'affichage de l'échec. */
   const run = async (action: TransitionName, payload?: TransitionPayload) => {
     setBusy(action)
     try {
-      await onTransition(action, payload)
+      if (props.subject === "dossier") {
+        await props.onTransition(action, payload)
+      } else if (action !== "submit") {
+        await props.onTransition(action, payload)
+      }
     } finally {
       setBusy(null)
     }
+  }
+
+  /** Action sans dialogue : l'échec est affiché une fois, ici ou dans la page. */
+  const runDirect = (action: TransitionName) => {
+    setError(null)
+    run(action).catch((e: unknown) => {
+      const message = e instanceof Error ? e.message : t("erreurs.action_impossible")
+      if (onError) onError(message)
+      else setError(message)
+    })
   }
 
   return (
@@ -137,7 +144,7 @@ export function WorkflowActions({
             onClick={() => {
               if (isReject) setRejecting(true)
               else if (isJustify) setJustifying(true)
-              else void run(action)
+              else runDirect(action)
             }}
           >
             {busy === action ? (
@@ -149,6 +156,7 @@ export function WorkflowActions({
           </Button>
         )
       })}
+      {!onError && <FormError>{error}</FormError>}
 
       {rejecting && (
         <RejectDialog

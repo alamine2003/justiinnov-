@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { scopedTeams } from "@/lib/teams"
+import { scopedTeams, teamRequired } from "@/lib/teams"
 import type { Me } from "@/lib/types"
 
 const EQUIPES = [
@@ -8,7 +8,8 @@ const EQUIPES = [
   { id: 3, name: "Logistique" },
 ]
 
-function profil(teams: Me["teams"]): Me {
+// `undefined` : un serveur qui ne connaîtrait pas encore les équipes.
+function profil(teams: Me["teams"] | undefined): Me {
   return { teams } as unknown as Me
 }
 
@@ -29,5 +30,18 @@ describe("scopedTeams", () => {
     ])
 
     expect(scopedTeams(EQUIPES, me)).toEqual([{ id: 2, name: "Marketing" }])
+  })
+})
+
+describe("teamRequired", () => {
+  it("exige une équipe d'un manager rattaché à des équipes", () => {
+    // Le serveur répond 400 « Choisissez une de vos équipes. » sinon.
+    expect(teamRequired(profil([{ id: 2, name: "Marketing", country: 1 }]))).toBe(true)
+  })
+
+  it("n'exige rien des autres", () => {
+    expect(teamRequired(null)).toBe(false)
+    expect(teamRequired(profil([]))).toBe(false)
+    expect(teamRequired(profil(undefined))).toBe(false)
   })
 })

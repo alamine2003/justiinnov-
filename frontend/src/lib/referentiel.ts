@@ -16,12 +16,17 @@ const cache = new Map<string, Entry>()
 const listeners = new Set<() => void>()
 
 /**
- * Vide le cache — tout, ou une seule clé — après une écriture qui rend la
- * liste obsolète : création d'un pays, d'une équipe…
+ * Vide le cache — tout, une seule clé, ou celles qu'un prédicat retient
+ * (`(clé) => clé.startsWith("country:")`) — après une écriture qui rend la
+ * liste obsolète : création d'un pays, d'une équipe, import d'un classeur…
  */
-export function invalidateReferentiel(key?: string) {
+export function invalidateReferentiel(key?: string | ((key: string) => boolean)) {
   if (key === undefined) cache.clear()
-  else cache.delete(key)
+  else if (typeof key === "function") {
+    for (const existing of [...cache.keys()]) {
+      if (key(existing)) cache.delete(existing)
+    }
+  } else cache.delete(key)
   listeners.forEach((listener) => listener())
 }
 

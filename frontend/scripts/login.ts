@@ -32,6 +32,26 @@ export function credentials(prefix: string): Credentials {
 
 const HORS_CONNEXION = (url: URL) => !url.pathname.startsWith("/login")
 
+/** Fenêtre TOTP (RFC 6238) : trente secondes. */
+const PAS_TOTP_MS = 30_000
+/** Dernier pas de temps consommé par secret : un code accepté ne se rejoue pas. */
+const codesConsommes = new Map<string, number>()
+
+/**
+ * Calcule le code courant en évitant de rejouer celui d'une connexion
+ * précédente : le serveur refuse un code déjà accepté (anti-rejeu). Si le
+ * même secret a servi dans la fenêtre courante, on attend la suivante.
+ */
+async function codeFrais(secret: string) {
+  const pas = Math.floor(Date.now() / PAS_TOTP_MS)
+  if (codesConsommes.get(secret) === pas) {
+    const attente = (pas + 1) * PAS_TOTP_MS - Date.now() + 500
+    await new Promise((resolve) => setTimeout(resolve, attente))
+  }
+  codesConsommes.set(secret, Math.floor(Date.now() / PAS_TOTP_MS))
+  return generate({ secret })
+}
+
 /** Remplit le formulaire, code de double authentification compris. */
 export async function signIn(page: Page, base: string, account: Credentials) {
   await page.goto(`${base}/login`, { waitUntil: "networkidle" })
@@ -40,7 +60,7 @@ export async function signIn(page: Page, base: string, account: Credentials) {
   // Le champ du code est toujours présent : un compte enrôlé se connecte en
   // une seule fois, sans le détour par un refus du serveur.
   if (account.totpSecret) {
-    await page.fill("#totp-code", await generate({ secret: account.totpSecret }))
+    await page.fill("#totp-code", await codeFrais(account.totpSecret))
   }
   await page.click("button[type=submit]")
 
@@ -59,7 +79,7 @@ export async function signIn(page: Page, base: string, account: Credentials) {
   }
   const bouton = page.locator("button[type=submit]")
   await bouton.waitFor({ state: "visible" })
-  await page.fill("#totp-code", await generate({ secret: account.totpSecret }))
+  await page.fill("#totp-code", await codeFrais(account.totpSecret))
   await bouton.click()
   await page.waitForURL(HORS_CONNEXION, { timeout: 15000 })
 }

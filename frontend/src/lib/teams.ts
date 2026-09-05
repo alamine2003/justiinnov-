@@ -12,3 +12,12 @@ export function scopedTeams<T extends { id: number }>(teams: T[], me: Me | null)
   if (ids.length === 0) return teams
   return teams.filter((team) => ids.includes(team.id))
 }
+
+/**
+ * Vrai pour un manager rattaché à des équipes : le serveur refuse un dossier
+ * ou une ligne sans équipe (« Choisissez une de vos équipes. »), le
+ * formulaire l'exige donc avant d'envoyer.
+ */
+export function teamRequired(me: Me | null): boolean {
+  return Boolean(me?.teams && me.teams.length > 0)
+}

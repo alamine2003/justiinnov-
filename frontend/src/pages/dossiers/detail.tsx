@@ -45,11 +45,13 @@ import {
 } from "@/lib/expenses"
 import { fetchCountry } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import { scopedTeams } from "@/lib/teams"
+import { scopedTeams, teamRequired } from "@/lib/teams"
 import {
   DELETABLE_STATUSES,
   LOCKED_STATUSES,
+  PROOF_LOCKED_STATUSES,
   type Expense,
+  type ExpenseTransitionName,
   type TransitionName,
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
@@ -89,45 +91,41 @@ export function DossierDetailPage() {
   const [editing, setEditing] = useState<Expense | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
+  // Un refus est relancé aux boutons d'action : le dialogue l'affiche sans
+  // se fermer, et une action directe le remet à la page (`onError`). Il
+  // n'est donc jamais montré deux fois.
   const runExpenseTransition = async (
     expense: Expense,
-    action: TransitionName,
+    action: ExpenseTransitionName,
     payload?: TransitionPayload,
   ) => {
     setActionError(null)
     setNotice(null)
-    try {
-      const result = await transitionExpense(expense.id, action, payload)
-      if (result.warning) setNotice(result.warning)
-      // La ligne est remplacée sur place ; le dossier (totaux, statut) est
-      // relu en arrière-plan, sans repasser par l'écran de chargement.
-      query.setData((current) =>
-        current
-          ? {
-              ...current,
-              expenses: current.expenses.map((e) => (e.id === expense.id ? { ...e, ...result } : e)),
-            }
-          : current,
-      )
-      query.reload()
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : t("erreurs.action_impossible"))
-      throw e
-    }
+    const result = await transitionExpense(expense.id, action, payload)
+    if (result.warning) setNotice(result.warning)
+    // La ligne est remplacée sur place ; le dossier (totaux, statut) est
+    // relu en arrière-plan, sans repasser par l'écran de chargement.
+    query.setData((current) =>
+      current
+        ? {
+            ...current,
+            expenses: current.expenses.map((e) => (e.id === expense.id ? { ...e, ...result } : e)),
+          }
+        : current,
+    )
+    query.reload()
   }
 
   const runDossierTransition = async (action: TransitionName, payload?: TransitionPayload) => {
     if (!dossier) return
     setActionError(null)
     setNotice(null)
-    try {
-      const result = await transitionDossier(dossier.id, action, payload)
-      if (result.warning) setNotice(result.warning)
-      query.reload()
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : t("erreurs.action_impossible"))
-      throw e
-    }
+    const { warning, ...result } = await transitionDossier(dossier.id, action, payload)
+    if (warning) setNotice(warning)
+    // La transition renvoie le détail complet : il remplace l'écran sans
+    // attendre la relecture, qui confirme en arrière-plan.
+    query.setData(result)
+    query.reload()
   }
 
   // La réouverture n'est pas une transition du circuit : elle a sa propre
@@ -184,11 +182,16 @@ export function DossierDetailPage() {
   }
 
   const locked = LOCKED_STATUSES.includes(dossier.status)
+  // Une pièce se dépose jusqu'à la clôture : une preuve arrivée après coup
+  // peut encore justifier ce qui ne l'était pas.
+  const closed = PROOF_LOCKED_STATUSES.includes(dossier.status)
   const currencySymbol = country.data?.currency_symbol || dossier.currency
-  // Un manager rattaché à des équipes ne saisit que pour elles.
-  const teams = scopedTeams(
-    (country.data?.teams ?? []).filter((equipe) => equipe.is_active),
-    me,
+  // Un manager rattaché à des équipes ne saisit que pour elles ; l'équipe du
+  // dossier, elle, figure toujours, puisque chaque ligne la porte.
+  const teams = (country.data?.teams ?? []).filter(
+    (equipe) =>
+      equipe.id === dossier.team ||
+      (equipe.is_active && scopedTeams([equipe], me).length > 0),
   )
   const projects = (country.data?.projects ?? []).filter((p) => p.is_active)
   const expenseTitles = (country.data?.expense_titles ?? []).filter((titre) => titre.is_active)
@@ -275,9 +278,10 @@ export function DossierDetailPage() {
         }
       >
         <WorkflowActions
-          status={dossier.status}
           subject="dossier"
+          allowedActions={dossier.allowed_actions}
           onTransition={runDossierTransition}
+          onError={setActionError}
         />
         <ReopenDossier dossier={dossier} onReopen={reopen} />
       </PageHeader>
@@ -429,15 +433,13 @@ export function DossierDetailPage() {
                             </Button>
                           )}
                           <WorkflowActions
-                            status={expense.status}
                             amount={expense.amount}
                             currency={currencySymbol}
-                            // Le dossier emporte ses lignes : tant qu'il est
-                            // en brouillon, c'est lui qu'on soumet.
-                            hideSubmit={dossier.status === "draft"}
+                            allowedActions={expense.allowed_actions}
                             onTransition={(action, payload) =>
                               runExpenseTransition(expense, action, payload)
                             }
+                            onError={setActionError}
                           />
                         </div>
                       </TableCell>
@@ -455,7 +457,8 @@ export function DossierDetailPage() {
           <ProofPanel
             dossierId={dossier.id}
             proofs={dossier.proofs}
-            canUpload={canWrite && !locked}
+            canUpload={canWrite && !closed}
+            closed={closed}
             onChanged={async () => {
               query.reload()
             }}
@@ -479,6 +482,10 @@ export function DossierDetailPage() {
         managers={managers}
         currency={currencySymbol}
         timezone={dossier.country_timezone}
+        teamRequired={teamRequired(me)}
+        // Une ligne porte l'équipe de son dossier : le serveur refuse une
+        // autre équipe.
+        lockedTeam={dossier.team}
       />
     </div>
   )

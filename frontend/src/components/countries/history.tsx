@@ -18,10 +18,12 @@ function describe(t: TFunction, entry: ChangeLogEntry): string {
     if (entry.from_value) parts.push(t("pays.historique.de", { valeur: entry.from_value }))
     if (entry.to_value) parts.push(t("pays.historique.vers", { valeur: entry.to_value }))
   } else if (entry.action === "updated") {
-    if (entry.changed_fields.length > 0) {
+    // Le détail champ par champ (`diff`) est rendu à part ; ici, seulement
+    // ce qu'un serveur sans `diff` fournit.
+    if (!hasDiff(entry) && entry.changed_fields.length > 0) {
       parts.push(t("pays.historique.champs", { liste: entry.changed_fields.join(", ") }))
     }
-    if (entry.from_value || entry.to_value) {
+    if (!hasDiff(entry) && (entry.from_value || entry.to_value)) {
       const avant = entry.from_value || t("commun.aucun")
       const apres = entry.to_value || t("commun.aucun")
       parts.push(`${avant} → ${apres}`)
@@ -30,6 +32,37 @@ function describe(t: TFunction, entry: ChangeLogEntry): string {
     parts.push(entry.to_value)
   }
   return parts.join(" · ")
+}
+
+function hasDiff(entry: ChangeLogEntry): boolean {
+  return Boolean(entry.diff && Object.keys(entry.diff).length > 0)
+}
+
+/** Une valeur du journal, lisible : « — » pour le vide, JSON pour un objet. */
+function formatDiffValue(t: TFunction, value: unknown): string {
+  if (value === null || value === undefined || value === "") return t("commun.aucun")
+  if (typeof value === "boolean") return value ? t("commun.oui") : t("commun.non")
+  if (typeof value === "object") return JSON.stringify(value)
+  return String(value)
+}
+
+/** Ancienne et nouvelle valeur, champ par champ. */
+export function DiffList({ diff }: { diff: Record<string, [unknown, unknown]> }) {
+  const { t } = useTranslation()
+  return (
+    <dl className="mt-1 grid gap-0.5 text-xs text-muted-foreground">
+      {Object.entries(diff).map(([champ, [avant, apres]]) => (
+        <div key={champ} className="flex flex-wrap gap-x-1">
+          <dt className="font-medium">{champ}{t("commun.separateur_libelle")}</dt>
+          <dd>
+            <span className="line-through">{formatDiffValue(t, avant)}</span>
+            {" → "}
+            <span className="text-foreground">{formatDiffValue(t, apres)}</span>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 export function CaretHistory({ countryId }: { countryId: number }) {
@@ -83,12 +116,14 @@ export function CaretHistory({ countryId }: { countryId: number }) {
             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
               {describe(t, entry)}
             </p>
+            {hasDiff(entry) && <DiffList diff={entry.diff!} />}
           </div>
           <div className="shrink-0 text-right text-xs text-muted-foreground">
             <p>{formatDate(entry.created_at)}</p>
             {entry.performed_by && (
               <p className="font-medium">{t("pays.historique.par", { nom: entry.performed_by })}</p>
             )}
+            {entry.ip_address && <p className="font-mono">{entry.ip_address}</p>}
           </div>
         </div>
       ))}

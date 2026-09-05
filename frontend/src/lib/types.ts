@@ -1,116 +1,41 @@
-export interface Manager {
-  id: number
-  name: string
-  email: string
-  title: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
+/**
+ * Types du contrat d'API.
+ *
+ * Les formes des réponses viennent du schéma OpenAPI du backend
+ * (`docs/api/schema.json` → `types.generated.ts`, régénérés par
+ * `npm run types:api`). Ce fichier n'en garde que des alias, sous les noms
+ * que l'interface emploie, et les quelques types composés ou utilitaires que
+ * le schéma ne peut pas dire (générique de pagination, constantes du
+ * circuit). Un champ nouveau se déclare dans le sérialiseur, jamais ici.
+ */
+import type { components } from "@/lib/types.generated"
 
-export interface Team {
-  id: number
-  country: number
-  country_name: string
-  name: string
-  description: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
+type Schemas = components["schemas"]
 
-export interface CostCenter {
-  id: number
-  country: number
-  country_name: string
-  code: string
-  name: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
+/** Composant du schéma, par son nom OpenAPI. */
+export type Schema<K extends keyof Schemas> = Schemas[K]
 
-export type ProjectStatus = "planned" | "active" | "on_hold" | "completed"
+// ---------------------------------------------------------------------------
+// Référentiel
+// ---------------------------------------------------------------------------
 
-export interface Project {
-  id: number
-  country: number
-  country_name: string
-  name: string
-  description: string
-  status: ProjectStatus
-  budget: string | null
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
+export type Manager = Schema<"Manager">
+export type Team = Schema<"Team">
+export type CostCenter = Schema<"CostCenter">
+export type ProjectStatus = Schema<"ProjectStatusEnum">
+export type Project = Schema<"Project">
+export type ExpenseTitle = Schema<"ExpenseTitle">
+export type MarketingCategory = Schema<"MarketingCategory">
+export type CountrySummary = Schema<"CountryList">
+export type CountryDetail = Schema<"CountryDetail">
+export type ChangeLogEntry = Schema<"ChangeLog">
+/** Pays africain proposé à la création, non encore suivi. */
+export type AvailableCountry = Schema<"AvailableCountry">
 
-export interface ExpenseTitle {
-  id: number
-  country: number
-  country_name: string
-  label: string
-  description: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface MarketingCategory {
-  id: number
-  country: number
-  country_name: string
-  name: string
-  description: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface CountrySummary {
-  id: number
-  name: string
-  code: string
-  country_ref: string | null
-  currency: string
-  currency_symbol: string
-  timezone: string
-  is_active: boolean
-  managers: Manager[]
-  team_count: number
-  cost_center_count: number
-  project_count: number
-  created_at: string
-  updated_at: string
-}
-
-export interface CountryDetail extends CountrySummary {
-  teams: Team[]
-  cost_centers: CostCenter[]
-  projects: Project[]
-  expense_titles: ExpenseTitle[]
-  marketing_categories: MarketingCategory[]
-  expense_title_count: number
-  marketing_category_count: number
-}
-
-export interface ChangeLogEntry {
-  id: number
-  model_name: string
-  model_name_display: string
-  object_id: number
-  label: string
-  action: string
-  action_display: string
-  country: number | null
-  country_name: string | null
-  from_value: string
-  to_value: string
-  changed_fields: string[]
-  performed_by: string
-  created_at: string
-}
-
+/**
+ * Réponse d'une liste. Le schéma en décrit une par ressource
+ * (`PaginatedExpenseList`…) ; l'interface n'a besoin que de la forme.
+ */
 export interface Paginated<T> {
   count: number
   next: string | null
@@ -123,219 +48,40 @@ export interface Paginated<T> {
 // ---------------------------------------------------------------------------
 
 /** Les libellés des rôles, comme ceux des statuts, vivent dans `lib/labels.ts`. */
-export type Role =
-  | "super_admin"
-  | "admin"
-  | "df"
-  | "dm"
-  | "manager"
-
-export interface ScopeCountry {
-  id: number
-  name: string
-  code: string
-  country_ref: string | null
-}
-
+export type Role = Schema<"RoleEnum">
+export type ScopeCountry = Schema<"ScopeCountry">
+export type ScopeTeam = Schema<"ScopeTeam">
 /**
  * Droits calculés par le serveur à partir du rôle. L'interface ne redéfinit
  * jamais la matrice : elle s'en sert seulement pour masquer l'inutile.
  */
-export interface Permissions {
-  manage_users: boolean
-  manage_countries: boolean
-  manage_subentities: boolean
-  manage_budgets: boolean
-  record_expenses: boolean
-  /**
-   * Mise en contrôle d'une dépense soumise : le DM, au siège. Absente sur un
-   * serveur qui ne la connaît pas encore — `validate_expenses` fait alors foi.
-   */
-  review_expenses?: boolean
-  /** Justifier, constater l'absence de preuve, clôturer : le DF, au siège. */
-  validate_expenses: boolean
-  view_audit: boolean
-  /** Exports et import de classeurs : administrateurs seulement. */
-  export_data: boolean
-  /** Réouverture d'un dossier déclaré : administrateurs seulement. */
-  reopen_dossiers: boolean
-}
-
-/** Équipe du périmètre d'un manager, en représentation compacte. */
-export interface ScopeTeam {
-  id: number
-  name: string
-  country: number
-}
-
-export interface Me {
-  id: number
-  username: string
-  first_name: string
-  last_name: string
-  email: string
-  /** `null` pour un compte technique hérité, sans profil. */
-  role: Role | null
-  role_display: string
-  countries: ScopeCountry[]
-  /** Équipes auxquelles un manager est rattaché ; vide pour les autres rôles. */
-  teams?: ScopeTeam[]
-  has_global_scope: boolean
-  must_change_password: boolean
-  /**
-   * Politique du serveur (`DJANGO_TOTP_REQUIRED`) : vrai, la plateforme
-   * reste fermée à un compte non enrôlé ; faux (défaut) ou absent, la
-   * double authentification est proposée, jamais imposée.
-   */
-  totp_required?: boolean
-  /**
-   * Double authentification enrôlée. `false` ferme la plateforme jusqu'à
-   * l'enrôlement si `totp_required` ; absent sur un serveur qui ne la
-   * connaît pas encore.
-   */
-  totp_confirmed?: boolean
-  /** Langue de l'interface enregistrée sur le profil ; absente sur un serveur qui ne la connaît pas encore. */
-  language?: "fr" | "en"
-  permissions: Permissions
-  /** Politique du workflow, lue par l'interface pour ne proposer que les transitions permises. */
-  workflow: { require_review_step: boolean }
-}
-
-export interface AccountUser {
-  id: number
-  username: string
-  first_name: string
-  last_name: string
-  email: string
-  is_active: boolean
-  /** `null` pour un compte technique hérité, sans profil. */
-  role: Role | null
-  countries: number[]
-  countries_detail: ScopeCountry[]
-  must_change_password: boolean
-  /** Lecture seule : seul le titulaire enrôle, seul un administrateur réinitialise. */
-  totp_confirmed?: boolean
-}
-
+export type Permissions = Schema<"Permissions">
+export type Me = Schema<"Me">
+export type AccountUser = Schema<"User">
 /** Secret d'enrôlement, remis une seule fois par `POST /me/2fa/enrol/`. */
-export interface TotpEnrolment {
-  otpauth_uri: string
-  qr_png_base64: string
-  secret: string
-}
+export type TotpEnrolment = Schema<"TotpEnrolment">
 
 // ---------------------------------------------------------------------------
 // Budgets
 // ---------------------------------------------------------------------------
 
-export type OverrunPolicy = "block" | "warn" | "approval"
-
+export type OverrunPolicy = Schema<"OverrunPolicyEnum">
 /** Indicateurs calculés côté serveur — jamais recalculés dans l'interface. */
-export interface BudgetFigures {
-  /** Soumis ou en contrôle : sorti de l'enveloppe, pas encore constaté. */
-  engaged: string
-  consumed: string
-  justified: string
-  gap: string
-  remaining: string
-  execution_rate: string | null
-  justification_rate: string | null
-  amount_xof: string | null
-  remaining_xof: string | null
-}
-
-/** Dimension découpée par une sous-enveloppe. */
+export type BudgetFigures = Schema<"BudgetFigures">
+/** Dimension découpée par une sous-enveloppe (`Budget.scope_kind`). */
 export type BudgetScope = "country" | "project" | "team" | "manager"
-
-export interface Budget {
-  id: number
-  country: number
-  country_name: string
-  country_ref: string | null
-  currency: string
-  year: number
-  project: number | null
-  project_name: string | null
-  team: number | null
-  team_name: string | null
-  manager: number | null
-  manager_name: string | null
-  scope_kind: BudgetScope
-  scope_label: string | null
-  amount: string
-  overrun_policy: OverrunPolicy
-  overrun_policy_display: string
-  is_active: boolean
-  figures: BudgetFigures
-  created_at: string
-  updated_at: string
-}
-
-export interface CountryBudgetRow {
-  country: number
-  country_name: string
-  country_ref: string | null
-  currency: string
-  allocated: string
-  sub_allocated: string
-  engaged: string
-  consumed: string
-  justified: string
-  remaining: string
-  remaining_xof: string | null
-}
-
-export interface BudgetSummary {
-  countries: CountryBudgetRow[]
-  total_remaining_xof: string
-  unconverted_currencies: string[]
-}
-
-export type ReallocationStatus = "pending" | "approved" | "rejected"
-
-export interface Reallocation {
-  id: number
-  source: number
-  source_label: string
-  target: number
-  target_label: string
-  amount: string
-  reason: string
-  status: ReallocationStatus
-  status_display: string
-  requested_by: string
-  decided_by: string
-  decided_at: string | null
-  decision_note: string
-  created_at: string
-  updated_at: string
-}
-
-export interface ExchangeRate {
-  id: number
-  currency: string
-  rate_to_xof: string
-  valid_from: string
-  created_at: string
-}
-
-/** Pays africain proposé à la création, non encore suivi. */
-export interface AvailableCountry {
-  code: string
-  name: string
-}
+export type Budget = Schema<"Budget">
+export type CountryBudgetRow = Schema<"CountryBudgetRow">
+export type BudgetSummary = Schema<"BudgetSummary">
+export type ReallocationStatus = Schema<"ReallocationStatusEnum">
+export type Reallocation = Schema<"BudgetReallocation">
+export type ExchangeRate = Schema<"ExchangeRate">
 
 // ---------------------------------------------------------------------------
 // Dossiers, dépenses et justificatifs
 // ---------------------------------------------------------------------------
 
-export type WorkflowStatus =
-  | "draft"
-  | "submitted"
-  | "in_review"
-  | "justified"
-  | "unjustified"
-  | "closed"
+export type WorkflowStatus = Schema<"WorkflowStatusEnum">
 
 /**
  * Une dépense déclarée est irréversible : elle ne se modifie plus.
@@ -352,296 +98,54 @@ export const LOCKED_STATUSES: WorkflowStatus[] = [
 /** Seul un brouillon peut encore être retiré, par son auteur. */
 export const DELETABLE_STATUSES: WorkflowStatus[] = ["draft"]
 
-export type TransitionName = "submit" | "review" | "justify" | "reject" | "close"
+/**
+ * Une pièce se dépose jusqu'à la clôture : une dépense non justifiée peut
+ * encore l'être par une preuve arrivée après coup.
+ */
+export const PROOF_LOCKED_STATUSES: WorkflowStatus[] = ["closed"]
 
-export interface DossierTotals {
-  amount: string
-  justified: string
-  gap: string
-}
+/** Transitions d'un dossier ; ses lignes partent avec lui à la soumission. */
+export type TransitionName = Exclude<Schema<"TransitionEnum">, "reopen">
 
-export interface Dossier {
-  id: number
-  number: string
-  label: string
-  country: number
-  country_name: string
-  country_ref: string | null
-  currency: string
-  /** Fuseau du pays : l'heure d'une dépense se lit sur place. */
-  country_timezone: string
-  team: number | null
-  team_name: string | null
-  owner: number | null
-  owner_name: string | null
-  date: string
-  status: WorkflowStatus
-  status_display: string
-  note: string
-  /** Motif de la dernière réouverture par le siège ; vide sinon. */
-  reopen_note?: string
-  totals: DossierTotals
-  expense_count: number
-  proof_count: number
-  /** Vide pour un dossier importé ou créé par un compte supprimé. */
-  created_by: string
-  created_at: string
-  updated_at: string
-}
+/** Une ligne ne se soumet jamais seule : c'est le dossier qu'on soumet. */
+export type ExpenseTransitionName = Exclude<TransitionName, "submit">
 
-export interface Expense {
-  id: number
-  dossier: number
-  dossier_number: string
-  country: number
-  country_name: string
-  currency: string
-  country_timezone: string
-  team: number | null
-  team_name: string | null
-  owner: number | null
-  owner_name: string | null
-  date: string
-  place: string
-  title: string
-  description: string
-  project: number | null
-  project_name: string | null
-  expense_title: number | null
-  marketing_category: number | null
-  beneficiary: number | null
-  beneficiary_name: string | null
-  /** Devise du décaissement ; vide si la dépense est dans celle du pays. */
-  original_currency: string
-  original_amount: string | null
-  original_rate: string | null
-  budget: number | null
-  budget_label: string | null
-  amount: string
-  justified_amount: string
-  gap: string
-  payment_method: string
-  payment_method_display: string
-  status: WorkflowStatus
-  status_display: string
-  note: string
-  /** Motif du contrôleur (justification partielle, rejet). Lecture seule. */
-  control_note: string
-  /** Vide pour une dépense importée ou saisie par un compte supprimé. */
-  created_by: string
-  created_at: string
-  updated_at: string
-}
-
-export type ProofStatus =
-  | "received"
-  | "incomplete"
-  | "to_review"
-  | "validated"
-  | "rejected"
-  | "archived"
-
-export interface Proof {
-  id: number
-  dossier: number
-  original_name: string
-  kind: string
-  kind_display: string
-  status: ProofStatus
-  status_display: string
-  is_complete: boolean
-  sha256: string
-  size: number
-  content_type: string
-  version: number
-  replaces: number | null
-  uploaded_by: string
-  rejection_reason: string
-  created_at: string
-  updated_at: string
-}
-
+export type DossierTotals = Schema<"DossierTotals">
+export type Dossier = Schema<"Dossier">
+export type DossierDetail = Schema<"DossierDetail">
+export type Expense = Schema<"Expense">
+export type PaymentMethod = Schema<"PaymentMethodEnum">
+export type ProofStatus = Schema<"ProofStatusEnum">
+export type Proof = Schema<"Proof">
 /** Pièce vue depuis une dépense, dans le registre de justification. */
-export interface ExpenseProof {
-  id: number
-  original_name: string
-  kind: string
-  kind_display: string
-  status: ProofStatus
-  status_display: string
-  is_complete: boolean
-  sha256: string
-  version: number
-}
+export type ExpenseProof = Schema<"ExpenseProof">
+export type RegisterEntry = Schema<"ExpenseRegister">
+export type Beneficiary = Schema<"Beneficiary">
 
-export interface RegisterEntry extends Expense {
-  dossier_label: string
-  expense_title_label: string | null
-  marketing_category_name: string | null
-  proofs: ExpenseProof[]
-  has_proof: boolean
-}
-
-export interface DossierDetail extends Dossier {
-  expenses: Expense[]
-  proofs: Proof[]
-}
-
-export interface Beneficiary {
-  id: number
-  country: number
-  country_name: string | null
-  name: string
-  kind: string
-  kind_display: string
-  contact: string
-  is_active: boolean
-}
+/** Réponse d'une transition : l'objet, et l'avertissement s'il y a lieu. */
+export type DossierTransitionResponse = Schema<"DossierTransitionResponse">
+export type ExpenseTransitionResponse = Schema<"ExpenseTransitionResponse">
 
 // ---------------------------------------------------------------------------
 // Pilotage, alertes et notifications
 // ---------------------------------------------------------------------------
 
-export type AlertLevel = "info" | "warning" | "critical"
+export type AlertLevel = Schema<"NotificationLevelEnum">
+export type Alert = Schema<"Alert">
+export type DashboardTotals = Schema<"DashboardTotals">
+export type DashboardCountryRow = Schema<"DashboardCountryRow">
+export type Dashboard = Schema<"Dashboard">
+export type BreakdownRow = Schema<"BreakdownRow">
+export type Breakdown = Schema<"Breakdown">
+export type AppNotification = Schema<"Notification">
+export type AuditEntry = Schema<"AuditLog">
+export type ImportResult = Schema<"ImportResult">
 
-export interface Alert {
-  kind: string
-  level: AlertLevel
-  title: string
-  detail: string
-  country: number | null
-  country_name: string | null
-  link: string
-  key: string
-}
-
-export interface DashboardTotals {
-  allocated: string
-  engaged: string
-  consumed: string
-  justified: string
-  /** Dépensé sans preuve à l'appui. */
-  gap: string
-  remaining: string
-  execution_rate: string | null
-  justification_rate: string | null
-}
-
-export interface DashboardCountryRow extends DashboardTotals {
-  country: number
-  country_name: string
-  country_ref: string | null
-  currency: string
-  sub_allocated: string
-  remaining_xof: string | null
-}
-
-export interface Dashboard {
-  year: number
-  totals: DashboardTotals
-  consolidated_xof: {
-    allocated: string
-    remaining: string
-    unconverted_currencies: string[]
-  }
-  countries: DashboardCountryRow[]
-  workload: {
-    expenses_to_review: number
-    expenses_draft: number
-    expenses_unjustified: number
-    dossiers_open: number
-  }
-  /** Les plus graves seulement ; `alerts_total` donne le compte réel. */
-  alerts: Alert[]
-  alerts_total: number
-}
-
-export interface BreakdownRow {
-  label: string
-  amount: string
-  justified: string
-  gap: string
-  lines: number
-}
-
-export interface Breakdown {
-  year: number
-  by_team: BreakdownRow[]
-  by_owner: BreakdownRow[]
-  by_project: BreakdownRow[]
-  by_category: BreakdownRow[]
-  by_expense_title: BreakdownRow[]
-  by_month: BreakdownRow[]
-}
-
-export interface AppNotification {
-  id: number
-  kind: string
-  kind_display: string
-  level: AlertLevel
-  level_display: string
-  title: string
-  body: string
-  link: string
-  country: number | null
-  country_name: string | null
-  read_at: string | null
-  created_at: string
-}
-
-export interface AuditEntry {
-  id: number
-  user: string
-  action: string
-  action_display: string
-  object_type: string
-  object_id: number
-  label: string
-  country: number | null
-  country_name: string | null
-  detail: Record<string, unknown>
-  ip_address: string | null
-  user_agent: string
-  created_at: string
-}
 // ---------------------------------------------------------------------------
 // Back-office
 // ---------------------------------------------------------------------------
 
-export interface Configuration {
-  alertes: { seuils: number[]; facteur_depense_inhabituelle: number }
-  justificatifs: {
-    taille_max_mo: number
-    formats_acceptes: string[]
-    stockage: string
-  }
-  budget: { devise_de_consolidation: string }
-  notifications: { email_configure: boolean; expediteur: string }
-  systeme: { fuseau: string; mode_debug: boolean }
-  workflow: WorkflowConfiguration
-}
-
-export interface WorkflowConfiguration {
-  require_review_step: boolean
-  unjustified_alert_days: number
-  alert_thresholds: number[]
-  unusual_expense_factor: string
-  default_overrun_policy: OverrunPolicy
-  default_overrun_policy_display: string
-  warn_without_proof_submission: boolean
-}
-
-export interface Capability {
-  key: keyof Permissions
-  label: string
-  description: string
-  roles: Role[]
-}
-
-export interface PermissionMatrix {
-  roles: { value: Role; label: string; siege: boolean }[]
-  capabilities: Capability[]
-  /** Faux : les droits sont fixés dans le code, cf. `note`. */
-  editable: boolean
-  note: string
-}
+export type Configuration = Schema<"Configuration">
+export type WorkflowConfiguration = Schema<"WorkflowConfiguration">
+export type Capability = Schema<"PermissionMatrixCapability">
+export type PermissionMatrix = Schema<"PermissionMatrix">

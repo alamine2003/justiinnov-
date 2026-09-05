@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
+import i18next from "i18next"
 import { Check, Copy, Loader2, ShieldCheck } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -42,6 +43,10 @@ export function TotpNotice() {
   const aEnroler = me?.totp_confirmed === false
   const imposee = totpEnrolmentRequired(me)
 
+  // Un seul enrôlement par écran : chaque appel régénère le secret, et un
+  // QR remplacé sous les yeux de la personne — à un changement de langue,
+  // par exemple — n'aurait plus rien à voir avec ce que son application a
+  // scanné. `t` reste donc hors des dépendances.
   useEffect(() => {
     if (!aEnroler) return
     let active = true
@@ -50,12 +55,16 @@ export function TotpNotice() {
         if (active) setEnrolment(data)
       })
       .catch((e: unknown) => {
-        if (active) setLoadError(e instanceof Error ? e.message : t("auth.totp.enrolement_impossible"))
+        if (active) {
+          setLoadError(
+            e instanceof Error ? e.message : i18next.t("auth.totp.enrolement_impossible"),
+          )
+        }
       })
     return () => {
       active = false
     }
-  }, [aEnroler, t])
+  }, [aEnroler])
 
   if (!aEnroler) {
     return null

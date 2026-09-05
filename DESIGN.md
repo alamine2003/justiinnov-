@@ -303,10 +303,12 @@ un bouton `outline` « Exporter » (icône `Download`) dans les actions de
 
 Le fichier se télécharge par la vue authentifiée (`/api/exports/…`), jamais
 par une URL construite à la main ; pendant la génération, le bouton montre
-`<Loader2 className="animate-spin" />`. L'import (`Upload`) vit sur l'écran
-des dossiers, dans le même menu, et propose la prévisualisation
-(`dry_run`) avant l'écriture. Pour tous les autres rôles, ni bouton, ni
-lien : ils travaillent dans l'application.
+`<Loader2 className="animate-spin" />`. Le registre porte le même menu, qui
+reprend le pays de son filtre. L'import (`Upload`) vit dans l'onglet
+« Import » de la Configuration (`?onglet=import`), réservé lui aussi à
+`can("export_data")`, et propose la simulation (`dry_run`) avant
+l'écriture. Pour tous les autres rôles, ni bouton, ni lien : ils
+travaillent dans l'application.
 
 ---
 

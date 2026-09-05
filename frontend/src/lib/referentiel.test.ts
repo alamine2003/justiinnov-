@@ -56,6 +56,24 @@ describe("useReferentiel", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
   })
 
+  it("invalide toutes les clés retenues par un prédicat", async () => {
+    // Après un import, les fiches de tous les pays (`country:<id>`) ont
+    // gagné des équipes : elles sont invalidées d'un coup.
+    const togo = vi.fn(async () => ["Togo"])
+    const benin = vi.fn(async () => ["Bénin"])
+    const pays = vi.fn(async () => ["liste"])
+    renderHook(() => useReferentiel("country:1", togo))
+    renderHook(() => useReferentiel("country:2", benin))
+    renderHook(() => useReferentiel("countries", pays))
+    await waitFor(() => expect(benin).toHaveBeenCalledOnce())
+
+    act(() => invalidateReferentiel((key) => key.startsWith("country:")))
+
+    await waitFor(() => expect(togo).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(benin).toHaveBeenCalledTimes(2))
+    expect(pays).toHaveBeenCalledOnce()
+  })
+
   it("ne met pas un échec en cache", async () => {
     const fetcher = vi
       .fn()

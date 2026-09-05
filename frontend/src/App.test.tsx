@@ -13,11 +13,16 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
     email: "",
     role: "manager",
     role_display: "Manager (pays)",
-    countries: [{ id: 1, name: "Togo", code: "TG", country_ref: "TG" }],
+    countries: [
+      { id: 1, name: "Togo", code: "TG", country_ref: "TG", timezone: "Africa/Lome", currency: "XOF" },
+    ],
     teams: [],
     has_global_scope: false,
     must_change_password: false,
+    totp_required: false,
     totp_confirmed: true,
+    language: "fr",
+    supervision: false,
     workflow: { require_review_step: false },
     ...overrides,
     permissions: {

@@ -11,7 +11,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { fetchCountries } from "@/lib/countries"
-import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
+import { REFERENTIEL_PAGE_SIZE, invalidateReferentiel, useReferentiel } from "@/lib/referentiel"
 import { importExpenses, type ImportError, type ImportResult } from "@/lib/reporting"
 
 /** Rend une erreur de ligne, quelle que soit la forme que le serveur lui donne. */
@@ -59,6 +59,15 @@ export function ImportSection() {
       if (!resultat.dry_run) {
         setFile(null)
         setFileKey((k) => k + 1)
+        // Le classeur crée des équipes, des managers et des dossiers : les
+        // listes en cache ne les connaissent pas.
+        invalidateReferentiel(
+          (key) =>
+            key === "teams" ||
+            key === "managers" ||
+            key === "dossiers" ||
+            key.startsWith("country:"),
+        )
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("configuration.import.impossible"))
@@ -180,7 +189,8 @@ function ImportResultCard({ result }: { result: ImportResult }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <dl className="grid gap-2 sm:grid-cols-3">
+        <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Compteur label={t("configuration.import.dossiers_crees")} valeur={result.dossiers_crees ?? 0} />
           <Compteur label={t("configuration.import.lignes_creees")} valeur={result.lignes_creees ?? 0} />
           <Compteur label={t("configuration.import.equipes_creees")} valeur={result.equipes_creees ?? 0} />
           <Compteur label={t("configuration.import.managers_crees")} valeur={result.managers_crees ?? 0} />

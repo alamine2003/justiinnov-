@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
+import i18n from "@/i18n"
 
 import {
   formatAmount,
@@ -154,15 +155,42 @@ describe("conversion datetime-local ↔ fuseau du pays", () => {
 })
 
 describe("normalizeDecimal", () => {
+  afterEach(async () => {
+    await i18n.changeLanguage("fr")
+  })
+
   it("accepte la virgule et les espaces de milliers", () => {
     expect(normalizeDecimal("1 234,56")).toBe("1234.56")
+    expect(normalizeDecimal("12 500,50")).toBe("12500.50")
     expect(normalizeDecimal("12.5")).toBe("12.5")
     expect(normalizeDecimal("1000")).toBe("1000")
+  })
+
+  it("lit les deux séparateurs quand ils sont tous deux présents, quelle que soit la langue", () => {
+    expect(normalizeDecimal("12,500.00")).toBe("12500.00")
+    expect(normalizeDecimal("1.234,56")).toBe("1234.56")
+    expect(normalizeDecimal("1,234,567.89")).toBe("1234567.89")
+  })
+
+  it("tranche un séparateur seul selon la langue de l'interface", async () => {
+    // En français, la virgule est décimale ; le point devant trois chiffres
+    // groupe les milliers.
+    expect(normalizeDecimal("12,500")).toBe("12.500")
+    expect(normalizeDecimal("12.500")).toBe("12500")
+
+    await i18n.changeLanguage("en")
+    // En anglais, c'est l'inverse : « 12,500 » vaut douze mille cinq cents.
+    expect(normalizeDecimal("12,500")).toBe("12500")
+    expect(normalizeDecimal("12,500.00")).toBe("12500.00")
+    expect(normalizeDecimal("12.500")).toBe("12.500")
+    expect(normalizeDecimal("12.5")).toBe("12.5")
+    expect(normalizeDecimal("1,234,567")).toBe("1234567")
   })
 
   it("refuse ce qui n'est pas un nombre", () => {
     expect(normalizeDecimal("")).toBeNull()
     expect(normalizeDecimal("12,3,4")).toBeNull()
+    expect(normalizeDecimal("1,23.4")).toBeNull()
     expect(normalizeDecimal("abc")).toBeNull()
   })
 })

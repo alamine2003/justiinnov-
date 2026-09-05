@@ -60,3 +60,20 @@ describe("exportParams", () => {
     expect(exportParams({ year: 2026, month: null, country: "" })).toEqual({ year: 2026 })
   })
 })
+
+describe("executionWarningRate", () => {
+  it("retient le seuil d'alerte le plus haut sous le plafond", async () => {
+    const { EXECUTION_WARNING_RATE, executionWarningRate } = await import("@/lib/reporting")
+    expect(executionWarningRate([50, 80, 100])).toBe(0.8)
+    expect(executionWarningRate([90, 110])).toBe(0.9)
+    expect(EXECUTION_WARNING_RATE).toBe(0.8)
+  })
+
+  it("retombe sur la constante quand la configuration n'est pas lisible", async () => {
+    // Un compte pays ne lit pas la configuration : la barre garde son repli.
+    const { EXECUTION_WARNING_RATE, executionWarningRate } = await import("@/lib/reporting")
+    expect(executionWarningRate(undefined)).toBe(EXECUTION_WARNING_RATE)
+    expect(executionWarningRate([])).toBe(EXECUTION_WARNING_RATE)
+    expect(executionWarningRate([100, 120])).toBe(EXECUTION_WARNING_RATE)
+  })
+})

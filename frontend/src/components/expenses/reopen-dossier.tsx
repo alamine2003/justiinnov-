@@ -13,9 +13,7 @@ import {
 import { FormError } from "@/components/ui/form-error"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { useAuth } from "@/context/use-auth"
 import { ApiError } from "@/lib/api"
-import { REOPEN_BLOCKING_STATUSES, REOPENABLE_STATUSES } from "@/lib/expenses"
 import type { DossierDetail } from "@/lib/types"
 
 interface ReopenDossierProps {
@@ -28,20 +26,14 @@ interface ReopenDossierProps {
  *
  * Le siège seul rouvre un dossier déclaré ; le pays est prévenu et devra le
  * soumettre à nouveau. Le bouton n'apparaît que lorsque le serveur
- * accepterait : droit `reopen_dossiers`, dossier soumis, en contrôle ou non
- * justifié, et aucune ligne déjà justifiée ou clôturée.
+ * accepterait : il le dit dans `allowed_actions` (droit, état du dossier,
+ * lignes déjà justifiées ou clôturées).
  */
 export function ReopenDossier({ dossier, onReopen }: ReopenDossierProps) {
   const { t } = useTranslation()
-  const { can } = useAuth()
   const [open, setOpen] = useState(false)
 
-  const permis =
-    can("reopen_dossiers") &&
-    REOPENABLE_STATUSES.includes(dossier.status) &&
-    !dossier.expenses.some((expense) => REOPEN_BLOCKING_STATUSES.includes(expense.status))
-
-  if (!permis) return null
+  if (!dossier.allowed_actions.includes("reopen")) return null
 
   return (
     <>

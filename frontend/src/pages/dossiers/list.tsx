@@ -36,7 +36,7 @@ import { createDossier, fetchDossiers } from "@/lib/expenses"
 import { fetchCountries, fetchCountry } from "@/lib/countries"
 import { WORKFLOW_STATUSES, workflowLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import { scopedTeams } from "@/lib/teams"
+import { scopedTeams, teamRequired } from "@/lib/teams"
 import type { CountrySummary, WorkflowStatus } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
@@ -281,6 +281,10 @@ function DossierForm({
       setError(t("dossiers.formulaire.choisir_pays"))
       return
     }
+    if (teamRequired(me) && team === "") {
+      setError(t("dossiers.formulaire.equipe_requise"))
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -375,6 +379,7 @@ function DossierForm({
                   setTeam(e.target.value === "" ? "" : Number(e.target.value))
                 }
                 disabled={detail.loading}
+                required={teamRequired(me)}
               >
                 <option value="">{t("commun.aucun")}</option>
                 {teams.map((equipe) => (

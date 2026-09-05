@@ -37,7 +37,7 @@ import {
 } from "@/lib/expenses"
 import { PROOF_KINDS, proofKindLabel } from "@/lib/labels"
 import { useReferentiel } from "@/lib/referentiel"
-import type { Proof, ProofStatus } from "@/lib/types"
+import type { Proof } from "@/lib/types"
 import { formatDate } from "@/lib/utils"
 
 function formatSize(t: TFunction, bytes: number) {
@@ -56,19 +56,35 @@ interface UploadRules {
 interface ProofPanelProps {
   dossierId: number
   proofs: Proof[]
+  /** Faux une fois le dossier clôturé : une preuve arrivée après coup se dépose jusque-là. */
   canUpload: boolean
+  /** Le dossier est clôturé : l'état vide le dit, plutôt que d'inviter à déposer. */
+  closed?: boolean
   onChanged: () => Promise<void>
+}
+
+/**
+ * Décisions que le dialogue de contrôle sait proposer, dans cet ordre. Le
+ * serveur dit lesquelles sont ouvertes (`allowed_reviews`) selon le rôle et
+ * l'état ; l'archivage n'en fait jamais partie, il accompagne un remplacement.
+ */
+const REVIEW_CHOICES = ["validated", "to_review", "incomplete", "rejected"] as const
+
+type ReviewChoice = (typeof REVIEW_CHOICES)[number]
+
+function reviewChoices(proof: Proof): ReviewChoice[] {
+  return REVIEW_CHOICES.filter((choice) => proof.allowed_reviews.includes(choice))
 }
 
 export function ProofPanel({
   dossierId,
   proofs,
   canUpload,
+  closed = false,
   onChanged,
 }: ProofPanelProps) {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const canReview = can("validate_expenses")
 
   // Les formats et la taille acceptés vivent dans la configuration du
   // serveur, réservée au siège. Un compte pays dépose sans ces garde-fous :
@@ -138,7 +154,13 @@ export function ProofPanel({
                 colSpan={5}
                 icon={FileCheck2}
                 title={t("pieces.vide.titre")}
-                hint={canUpload ? t("pieces.vide.aide_deposer") : t("pieces.vide.aide_sans_piece")}
+                hint={
+                  canUpload
+                    ? t("pieces.vide.aide_deposer")
+                    : closed
+                      ? t("pieces.vide.aide_cloture")
+                      : t("pieces.vide.aide_sans_piece")
+                }
               />
             ) : (
               proofs.map((proof) => (
@@ -190,7 +212,7 @@ export function ProofPanel({
                         <Download className="h-4 w-4" />
                       )}
                     </Button>
-                    {canReview && proof.status !== "archived" && (
+                    {reviewChoices(proof).length > 0 && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -381,9 +403,6 @@ function UploadDialog({
   )
 }
 
-/** Décisions possibles sur une pièce, dans l'ordre proposé au contrôleur. */
-const REVIEW_CHOICES = ["validated", "to_review", "incomplete", "rejected", "archived"] as const
-
 function ReviewDialog({
   proof,
   onClose,
@@ -394,7 +413,8 @@ function ReviewDialog({
   onReviewed: () => Promise<void>
 }) {
   const { t } = useTranslation()
-  const [status, setStatus] = useState<ProofStatus>("validated")
+  const choices = reviewChoices(proof)
+  const [status, setStatus] = useState<ReviewChoice>(choices[0] ?? "validated")
   const [reason, setReason] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -434,9 +454,9 @@ function ReviewDialog({
             <NativeSelect
               id="review-status"
               value={status}
-              onChange={(e) => setStatus(e.target.value as ProofStatus)}
+              onChange={(e) => setStatus(e.target.value as ReviewChoice)}
             >
-              {REVIEW_CHOICES.map((choice) => (
+              {choices.map((choice) => (
                 <option key={choice} value={choice}>
                   {t(`pieces.controle.choix.${choice}`)}
                 </option>

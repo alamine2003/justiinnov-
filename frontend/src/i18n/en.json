@@ -121,7 +121,16 @@
     "unjustified_alert_days": "Alert delay",
     "unusual_expense_factor": "Unusual expense factor",
     "default_overrun_policy": "Overrun policy",
-    "language": "Language"
+    "language": "Language",
+    "expenses": "Lines",
+    "proofs": "Documents",
+    "status": "Status",
+    "dossier": "File",
+    "replaces": "Replaces",
+    "budget": "Budget",
+    "created_by": "Entered by",
+    "is_active": "Active",
+    "teams": "Teams"
   },
   "libelles": {
     "roles": {
@@ -184,7 +193,10 @@
       "approved": "Proof validated",
       "rejected": "Proof rejected",
       "downloaded": "Download",
-      "reopened": "Reopening"
+      "reopened": "Reopening",
+      "proof_incomplete": "Incomplete document",
+      "proof_to_review": "Document to review",
+      "imported": "Import"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",
@@ -325,7 +337,8 @@
       "numero_placeholder": "N-2026-001",
       "libelle_placeholder": "Sales mission in Lomé",
       "aucun_pays": "No country available",
-      "manager_responsable": "Responsible manager"
+      "manager_responsable": "Responsible manager",
+      "equipe_requise": "Choose one of your teams."
     },
     "detail": {
       "chargement_impossible": "Unable to load the file",
@@ -407,7 +420,9 @@
       "intitule": "Expense title",
       "categorie": "Marketing category",
       "manager_responsable": "Responsible manager",
-      "beneficiaire": "Prospect / beneficiary"
+      "beneficiaire": "Prospect / beneficiary",
+      "equipe_requise": "Choose one of your teams.",
+      "equipe_du_dossier": "Team (the file's)"
     },
     "circuit": {
       "soumettre": "Submit",
@@ -426,7 +441,7 @@
     },
     "justification": {
       "description_depense": "The justified amount is the one the supporting documents attest. The server computes the gap with the expense.",
-      "description_dossier": "All the lines of the file will be marked as justified.",
+      "description_dossier": "All the lines must already be justified: the file records their justification and the documents that attest it.",
       "montant_requis": "Enter the justified amount, in figures.",
       "impossible": "Unable to justify",
       "montant": "Justified amount",
@@ -448,7 +463,8 @@
     "vide": {
       "titre": "No supporting document",
       "aide_deposer": "Upload the invoice, receipt or discharge that attests the expense.",
-      "aide_sans_piece": "The file was declared without a supporting document."
+      "aide_sans_piece": "The file was declared without a supporting document.",
+      "aide_cloture": "The file is closed: no further document can be uploaded."
     },
     "par": "by {{nom}}",
     "previsualiser_aria": "Preview {{nom}}",
@@ -483,8 +499,7 @@
         "validated": "Validate the document",
         "to_review": "To review",
         "incomplete": "Mark as incomplete",
-        "rejected": "Reject",
-        "archived": "Archive"
+        "rejected": "Reject"
       }
     },
     "apercu": {
@@ -523,7 +538,8 @@
     "pieces_one": "{{count}} proof",
     "pieces_other": "{{count}} proofs",
     "incomplet": "incomplete",
-    "aucune": "none"
+    "aucune": "none",
+    "a_controler": "To review (submitted or under review)"
   },
   "budgets": {
     "titre": "Budgets",
@@ -909,7 +925,12 @@
         "email_exemple": "first.last@innovpharma.net",
         "role_aide": "DM and DF are headquarters accounts that can be restricted to countries; the manager is a country account. The administrator (HR) and the super administrator see everything.",
         "perimetre_aide_siege": "Optional for a headquarters account: with no country ticked, it sees every country. Tick countries to restrict a DM or a DF.",
-        "perimetre_aide_pays": "A manager is attached to at least one country."
+        "perimetre_aide_pays": "A manager is attached to at least one country.",
+        "identifiant_immuable": "The username cannot be changed: it signs the audit trail.",
+        "perimetre_aide_global": "This role always sees every country: there is no scope to tick.",
+        "equipes_legend": "Teams",
+        "equipes_aide": "Optional: attached to teams, the manager only records for them.",
+        "aucune_equipe": "No active team in the ticked countries."
       },
       "totp_active": "2FA active",
       "totp_a_enroler": "2FA to set up",
@@ -917,7 +938,8 @@
       "totp_reinitialiser_aria": "Reset two-factor authentication for {{nom}}",
       "totp_reinit_titre": "Reset two-factor authentication for {{nom}}",
       "totp_reinit_description": "The account will lose access to the platform until its holder links an authenticator app again. The action is recorded in the audit log.",
-      "totp_reinit_impossible": "Unable to reset"
+      "totp_reinit_impossible": "Unable to reset",
+      "totp_reinit_soi": "This is your own account: you will be signed out and will have to link your authenticator app again before coming back. The action is recorded in the audit log."
     },
     "pays": {
       "titre": "Countries",
@@ -969,7 +991,8 @@
       "equipes_creees": "Teams created",
       "managers_crees": "Managers created",
       "rien_ecrit": "A workbook with errors is not imported: fix the reported lines, then try again.",
-      "ligne": "Line {{numero}}"
+      "ligne": "Line {{numero}}",
+      "dossiers_crees": "Files created"
     }
   },
   "audit": {

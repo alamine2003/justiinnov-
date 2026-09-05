@@ -101,6 +101,7 @@ export function ConfigurationPage() {
 
 function GeneralSection() {
   const { t } = useTranslation()
+  const { refreshProfile } = useAuth()
   const query = useQuery("configuration:page", () => fetchConfiguration())
   const config = query.data
 
@@ -189,14 +190,18 @@ function GeneralSection() {
         </Bloc>
       </div>
 
+      {/* Pas de `key` sur la politique : un remontage à l'enregistrement
+          effaçait la confirmation « Politique enregistrée » aussitôt affichée. */}
       <WorkflowForm
-        key={JSON.stringify(config.workflow)}
         workflow={config.workflow}
-        onSaved={(workflow) => {
+        onSaved={async (workflow) => {
           query.setData((current) => (current ? { ...current, workflow } : current))
           // Les autres écrans (formulaire d'enveloppe, dépôt de pièce) lisent
           // la configuration en cache.
           invalidateReferentiel("configuration")
+          // Le profil porte la politique du circuit (`me.workflow`) : les
+          // boutons d'action la lisent, elle doit suivre sans rechargement.
+          await refreshProfile()
         }}
       />
 
@@ -268,7 +273,7 @@ function WorkflowForm({
   onSaved,
 }: {
   workflow: WorkflowConfiguration
-  onSaved: (workflow: WorkflowConfiguration) => void
+  onSaved: (workflow: WorkflowConfiguration) => Promise<void>
 }) {
   const { t } = useTranslation()
   const [draft, setDraft] = useState<WorkflowDraft>({
@@ -301,8 +306,9 @@ function WorkflowForm({
     setSaving(true)
     try {
       const result = await updateWorkflowConfiguration(values)
-      onSaved(result)
       setSaved(true)
+      // Un profil illisible après coup ne remet pas en cause l'enregistrement.
+      await onSaved(result).catch(() => undefined)
     } catch (e) {
       if (e instanceof ApiError) setFieldErrors(e.fields)
       setError(e instanceof Error ? e.message : t("erreurs.enregistrement_impossible"))

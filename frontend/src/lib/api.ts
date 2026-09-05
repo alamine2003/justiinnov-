@@ -97,12 +97,14 @@ api.interceptors.request.use((config) => {
 const KNOWN_FIELDS = new Set([
   "amount", "justified_amount", "original_amount", "original_currency", "date",
   "title", "label", "place", "note", "reason", "number", "country", "countries",
-  "team", "project", "owner", "manager", "beneficiary", "expense_title",
+  "team", "teams", "project", "owner", "manager", "beneficiary", "expense_title",
   "marketing_category", "payment_method", "username", "password",
   "current_password", "new_password", "email", "role", "year", "currency",
   "timezone", "code", "name", "file", "kind", "source", "target", "rate_to_xof",
   "valid_from", "alert_thresholds", "unjustified_alert_days",
   "unusual_expense_factor", "default_overrun_policy", "language",
+  "expenses", "proofs", "status", "dossier", "replaces", "budget", "created_by",
+  "is_active",
 ])
 
 const GENERIC_KEYS = new Set(["detail", "message", "non_field_errors"])
@@ -170,9 +172,39 @@ export function readErrorMessage(data: unknown): string | null {
   return errors.length > 0 ? errors.join(" ") : null
 }
 
+/**
+ * Corps d'une réponse d'erreur, lisible même quand la requête attendait un
+ * fichier.
+ *
+ * Un téléchargement (`responseType: "blob"`) reçoit aussi ses erreurs en
+ * `Blob` : sans cette lecture, un refus du serveur s'affichait « Request
+ * failed with status code 403 » au lieu de son message.
+ */
+async function readErrorBody(data: unknown): Promise<unknown> {
+  if (typeof Blob === "undefined" || !(data instanceof Blob)) return data
+  try {
+    const texte = await readBlobText(data)
+    if (data.type.includes("json")) return JSON.parse(texte) as unknown
+    return texte
+  } catch {
+    return null
+  }
+}
+
+/** Texte d'un Blob ; `FileReader` en secours pour les environnements sans `Blob.text()`. */
+function readBlobText(blob: Blob): Promise<string> {
+  if (typeof blob.text === "function") return blob.text()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ""))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(blob)
+  })
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (axios.isCancel(error)) {
       return Promise.reject(error)
     }
@@ -182,6 +214,7 @@ api.interceptors.response.use(
       // message d'axios (« Network Error ») ne dit rien à l'utilisateur.
       return Promise.reject(new ApiError(0, i18next.t("erreurs.injoignable")))
     }
+    response.data = await readErrorBody(response.data)
     if (response.status === 401) {
       clearToken()
       unauthorizedListeners.forEach((listener) => listener())

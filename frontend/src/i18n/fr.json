@@ -121,7 +121,16 @@
     "unjustified_alert_days": "Délai d'alerte",
     "unusual_expense_factor": "Facteur de dépense inhabituelle",
     "default_overrun_policy": "Politique de dépassement",
-    "language": "Langue"
+    "language": "Langue",
+    "expenses": "Lignes",
+    "proofs": "Pièces",
+    "status": "Statut",
+    "dossier": "Dossier",
+    "replaces": "Remplace",
+    "budget": "Enveloppe",
+    "created_by": "Saisi par",
+    "is_active": "Actif",
+    "teams": "Équipes"
   },
   "libelles": {
     "roles": {
@@ -184,7 +193,10 @@
       "approved": "Validation d'un justificatif",
       "rejected": "Rejet d'un justificatif",
       "downloaded": "Téléchargement",
-      "reopened": "Réouverture"
+      "reopened": "Réouverture",
+      "proof_incomplete": "Justificatif incomplet",
+      "proof_to_review": "Justificatif à contrôler",
+      "imported": "Import"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",
@@ -325,7 +337,8 @@
       "numero_placeholder": "N-2026-001",
       "libelle_placeholder": "Mission commerciale Lomé",
       "aucun_pays": "Aucun pays disponible",
-      "manager_responsable": "Manager responsable"
+      "manager_responsable": "Manager responsable",
+      "equipe_requise": "Choisissez une de vos équipes."
     },
     "detail": {
       "chargement_impossible": "Impossible de charger le dossier",
@@ -407,7 +420,9 @@
       "intitule": "Intitulé de dépense",
       "categorie": "Catégorie marketing",
       "manager_responsable": "Manager responsable",
-      "beneficiaire": "Prospect / bénéficiaire"
+      "beneficiaire": "Prospect / bénéficiaire",
+      "equipe_requise": "Choisissez une de vos équipes.",
+      "equipe_du_dossier": "Équipe (celle du dossier)"
     },
     "circuit": {
       "soumettre": "Soumettre",
@@ -426,7 +441,7 @@
     },
     "justification": {
       "description_depense": "Le montant justifié est celui que les pièces attestent. Le serveur calcule l'écart avec la dépense.",
-      "description_dossier": "Toutes les lignes du dossier seront marquées justifiées.",
+      "description_dossier": "Toutes les lignes doivent déjà être justifiées : le dossier constate leur justification et les pièces qui l'attestent.",
       "montant_requis": "Indiquez le montant justifié, en chiffres.",
       "impossible": "Justification impossible",
       "montant": "Montant justifié",
@@ -448,7 +463,8 @@
     "vide": {
       "titre": "Aucun justificatif",
       "aide_deposer": "Déposez la facture, le reçu ou la décharge qui atteste la dépense.",
-      "aide_sans_piece": "Le dossier a été déclaré sans pièce."
+      "aide_sans_piece": "Le dossier a été déclaré sans pièce.",
+      "aide_cloture": "Le dossier est clôturé : plus aucune pièce ne s'y dépose."
     },
     "par": "par {{nom}}",
     "previsualiser_aria": "Prévisualiser {{nom}}",
@@ -483,8 +499,7 @@
         "validated": "Valider la pièce",
         "to_review": "À contrôler",
         "incomplete": "Marquer incomplet",
-        "rejected": "Rejeter",
-        "archived": "Archiver"
+        "rejected": "Rejeter"
       }
     },
     "apercu": {
@@ -523,7 +538,8 @@
     "pieces_one": "{{count}} pièce",
     "pieces_other": "{{count}} pièces",
     "incomplet": "incomplet",
-    "aucune": "aucune"
+    "aucune": "aucune",
+    "a_controler": "À contrôler (soumis ou en contrôle)"
   },
   "budgets": {
     "titre": "Budgets",
@@ -909,7 +925,12 @@
         "email_exemple": "prenom.nom@innovpharma.net",
         "role_aide": "DM et DF sont des comptes du siège, restrictibles à des pays ; le manager est un compte de pays. L'administrateur (RH) et le super administrateur voient tout.",
         "perimetre_aide_siege": "Facultatif pour un compte du siège : sans pays coché, il voit tous les pays. Cochez des pays pour restreindre un DM ou un DF.",
-        "perimetre_aide_pays": "Un manager est rattaché à au moins un pays."
+        "perimetre_aide_pays": "Un manager est rattaché à au moins un pays.",
+        "identifiant_immuable": "L'identifiant ne se change pas : il signe les traces du journal.",
+        "perimetre_aide_global": "Ce rôle voit toujours tous les pays : aucun périmètre à cocher.",
+        "equipes_legend": "Équipes",
+        "equipes_aide": "Facultatif : rattaché à des équipes, le manager ne saisit que pour elles.",
+        "aucune_equipe": "Aucune équipe active dans les pays cochés."
       },
       "totp_active": "2FA active",
       "totp_a_enroler": "2FA à enrôler",
@@ -917,7 +938,8 @@
       "totp_reinitialiser_aria": "Réinitialiser la double authentification de {{nom}}",
       "totp_reinit_titre": "Réinitialiser la double authentification de {{nom}}",
       "totp_reinit_description": "Le compte perdra l'accès à la plateforme jusqu'à ce que son titulaire ait lié à nouveau son application d'authentification. L'action est inscrite au journal d'audit.",
-      "totp_reinit_impossible": "Réinitialisation impossible"
+      "totp_reinit_impossible": "Réinitialisation impossible",
+      "totp_reinit_soi": "C'est votre propre compte : vous serez déconnecté et devrez lier à nouveau votre application d'authentification avant de revenir. L'action est inscrite au journal d'audit."
     },
     "pays": {
       "titre": "Pays",
@@ -969,7 +991,8 @@
       "equipes_creees": "Équipes créées",
       "managers_crees": "Managers créés",
       "rien_ecrit": "Un classeur en erreur n'est pas importé : corrigez les lignes signalées, puis recommencez.",
-      "ligne": "Ligne {{numero}}"
+      "ligne": "Ligne {{numero}}",
+      "dossiers_crees": "Dossiers créés"
     }
   },
   "audit": {

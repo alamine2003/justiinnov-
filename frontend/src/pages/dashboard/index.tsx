@@ -21,9 +21,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
+import { fetchConfiguration } from "@/lib/accounts"
 import { fetchCountries } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import { fetchBreakdown, fetchDashboard } from "@/lib/reporting"
+import { executionWarningRate, fetchBreakdown, fetchDashboard } from "@/lib/reporting"
 import { alertLevelLabel } from "@/lib/labels"
 import { ALERT_LEVEL_STYLE } from "@/lib/status-styles"
 import type { BreakdownRow } from "@/lib/types"
@@ -33,12 +34,13 @@ import { cn, formatAmount, formatRate } from "@/lib/utils"
 /** Alertes montrées d'emblée ; le reste est signalé par un compte. */
 const VISIBLE_ALERTS = 12
 
+
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2]
 
 export function DashboardPage() {
   const { t } = useTranslation()
-  const { me } = useAuth()
+  const { me, can } = useAuth()
   const [year, setYear] = useState(CURRENT_YEAR)
   const [countryId, setCountryId] = useState<number | "">("")
   const [exportError, setExportError] = useState<string | null>(null)
@@ -48,6 +50,12 @@ export function DashboardPage() {
     () => fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
     { enabled: Boolean(me?.has_global_scope) },
   )
+  // Les seuils d'alerte de la configuration colorent la barre d'exécution ;
+  // la configuration n'est lisible que par les administrateurs.
+  const configuration = useReferentiel("configuration", fetchConfiguration, {
+    enabled: can("manage_users"),
+  })
+  const warningRate = executionWarningRate(configuration.data?.alertes.seuils)
   const query = useQuery(
     JSON.stringify({ year, countryId }),
     async (signal) => {
@@ -201,7 +209,7 @@ export function DashboardPage() {
         <Workload
           label={t("pilotage.charge.a_controler")}
           value={data?.workload.expenses_to_review ?? 0}
-          to="/registre?status=submitted"
+          to="/registre?status__in=submitted,in_review"
         />
         <Workload
           label={t("pilotage.charge.brouillon")}
@@ -315,7 +323,7 @@ export function DashboardPage() {
                         {formatAmount(row.remaining)}
                       </TableCell>
                       <TableCell>
-                        <ExecutionBar rate={row.execution_rate} />
+                        <ExecutionBar rate={row.execution_rate} warningRate={warningRate} />
                       </TableCell>
                     </TableRow>
                   ))
@@ -387,10 +395,10 @@ function Workload({
   )
 }
 
-function ExecutionBar({ rate }: { rate: string | null }) {
+function ExecutionBar({ rate, warningRate }: { rate: string | null; warningRate: number }) {
   const value = rate ? Math.min(Number(rate) * 100, 100) : 0
   const over = rate ? Number(rate) > 1 : false
-  const near = rate ? Number(rate) >= 0.8 : false
+  const near = rate ? Number(rate) >= warningRate : false
   return (
     <div className="flex items-center gap-2">
       <div aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">

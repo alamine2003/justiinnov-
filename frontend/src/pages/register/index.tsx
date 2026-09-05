@@ -22,6 +22,7 @@ import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
+import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
 import { fetchCountries } from "@/lib/countries"
 import { fetchRegister } from "@/lib/expenses"
@@ -32,15 +33,27 @@ import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatDateIn, fromCountryLocalInput } from "@/lib/utils"
 
+/**
+ * Filtre « à contrôler » : les lignes soumises ou en contrôle, en une seule
+ * valeur pour le sélecteur, transmise au serveur en `status__in`. C'est la
+ * tuile du tableau de bord qui y mène.
+ */
+const TO_REVIEW_FILTER = "submitted,in_review"
+
+/** Filtre de statut lu dans l'URL : un statut, ou le groupe « à contrôler ». */
+function readStatusFilter(params: URLSearchParams): WorkflowStatus | typeof TO_REVIEW_FILTER | "" {
+  const statusIn = params.get("status__in")
+  if (statusIn === TO_REVIEW_FILTER) return TO_REVIEW_FILTER
+  const status = params.get("status") ?? ""
+  return (WORKFLOW_STATUSES as string[]).includes(status) ? (status as WorkflowStatus) : ""
+}
+
 export function RegisterPage() {
   const { t } = useTranslation()
   const { me } = useAuth()
   const [params, setParams] = useSearchParams()
 
-  const statusParam = params.get("status") ?? ""
-  const statusFilter = (WORKFLOW_STATUSES as string[]).includes(statusParam)
-    ? (statusParam as WorkflowStatus)
-    : ""
+  const statusFilter = readStatusFilter(params)
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
@@ -48,6 +61,7 @@ export function RegisterPage() {
   const [countryId, setCountryId] = useState<number | "">("")
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const countries = useReferentiel(
     "countries",
@@ -56,9 +70,11 @@ export function RegisterPage() {
   )
   const selectedCountry = countries.data?.results.find((c) => c.id === countryId)
   // Les bornes de période sont des jours du pays filtré : « du 1er au 3 »
-  // à Nairobi ne commence pas à la même seconde qu'à Paris. Sans pays, ce
-  // sont des jours locaux du lecteur.
-  const timezone = selectedCountry?.timezone ?? null
+  // à Nairobi ne commence pas à la même seconde qu'à Paris. Un compte pays
+  // lit dans le fuseau de son pays ; le siège sans pays choisi, dans le sien.
+  const timezone =
+    selectedCountry?.timezone ??
+    (me?.has_global_scope ? null : (me?.countries[0]?.timezone ?? null))
 
   const query = useQuery(
     JSON.stringify({ page, debouncedSearch, statusFilter, countryId, from, to, timezone }),
@@ -69,7 +85,8 @@ export function RegisterPage() {
         ordering: "-date",
       }
       if (debouncedSearch) requestParams.search = debouncedSearch
-      if (statusFilter) requestParams.status = statusFilter
+      if (statusFilter === TO_REVIEW_FILTER) requestParams.status__in = statusFilter
+      else if (statusFilter) requestParams.status = statusFilter
       if (countryId !== "") requestParams.country = countryId
       const debut = from ? fromCountryLocalInput(`${from}T00:00`, timezone) : null
       const fin = to ? fromCountryLocalInput(`${to}T23:59:59`, timezone) : null
@@ -89,8 +106,10 @@ export function RegisterPage() {
     setParams(
       (current) => {
         const next = new URLSearchParams(current)
-        if (value) next.set("status", value)
-        else next.delete("status")
+        next.delete("status")
+        next.delete("status__in")
+        if (value === TO_REVIEW_FILTER) next.set("status__in", value)
+        else if (value) next.set("status", value)
         return next
       },
       { replace: true },
@@ -99,13 +118,16 @@ export function RegisterPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("registre.titre")} description={t("registre.description")} />
+      <PageHeader title={t("registre.titre")} description={t("registre.description")}>
+        {/* Le menu reprend le pays du filtre ; il n'ajoute que l'exercice et le mois. */}
+        <ExportMenu country={countryId} onError={setExportError} />
+      </PageHeader>
 
-      {query.error && (
+      {(query.error || exportError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>{t("commun.erreur")}</AlertTitle>
-          <AlertDescription>{query.error}</AlertDescription>
+          <AlertDescription>{exportError ?? query.error}</AlertDescription>
         </Alert>
       )}
       <TruncatedNotice page={countries.data} noun={t("dossiers.noms_pays")} />
@@ -152,6 +174,7 @@ export function RegisterPage() {
                 onChange={(e) => changeStatus(e.target.value)}
               >
                 <option value="">{t("commun.tous")}</option>
+                <option value={TO_REVIEW_FILTER}>{t("registre.a_controler")}</option>
                 {WORKFLOW_STATUSES.map((value) => (
                   <option key={value} value={value}>
                     {workflowLabel(t, value)}

@@ -6,12 +6,12 @@ import type {
   Dossier,
   DossierDetail,
   Expense,
+  ExpenseTransitionName,
   Paginated,
   Proof,
   ProofStatus,
   RegisterEntry,
   TransitionName,
-  WorkflowStatus,
 } from "@/lib/types"
 
 // ---------------------------------------------------------------------------
@@ -39,6 +39,7 @@ export interface TransitionData {
   justified_amount?: string
 }
 
+/** Les transitions de dossier renvoient le détail complet, lignes et pièces comprises. */
 export function transitionDossier(
   id: number,
   action: TransitionName,
@@ -48,12 +49,6 @@ export function transitionDossier(
     note: data.note ?? "",
   })
 }
-
-/** Statuts depuis lesquels le siège peut rouvrir un dossier — reflète `expenses.workflow`. */
-export const REOPENABLE_STATUSES: WorkflowStatus[] = ["submitted", "in_review", "unjustified"]
-
-/** Un dossier dont une ligne est déjà justifiée ou clôturée ne se rouvre pas : le serveur refuserait. */
-export const REOPEN_BLOCKING_STATUSES: WorkflowStatus[] = ["justified", "closed"]
 
 /**
  * Ramène un dossier déclaré au brouillon, avec le motif qui sera conservé
@@ -100,7 +95,7 @@ export function deleteExpenseDraft(id: number) {
 
 export function transitionExpense(
   id: number,
-  action: TransitionName,
+  action: ExpenseTransitionName,
   data: TransitionData = {},
 ) {
   const payload: Record<string, string> = { note: data.note ?? "" }

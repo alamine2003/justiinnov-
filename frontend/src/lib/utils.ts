@@ -226,17 +226,59 @@ export function fromCountryLocalInput(
   }
 }
 
+/** Séparateur décimal de la langue de l'interface : « , » en français, « . » en anglais. */
+function decimalSeparator(): string {
+  return (
+    numberFormat({})
+      .formatToParts(1.5)
+      .find((part) => part.type === "decimal")?.value ?? "."
+  )
+}
+
+/** Vrai si `texte` se lit comme des milliers groupés par ce séparateur (« 12,500,000 »). */
+function groupedThousands(texte: string, separator: string): boolean {
+  const sep = separator === "." ? "\\." : separator
+  return new RegExp(`^-?\\d{1,3}(${sep}\\d{3})+$`).test(texte)
+}
+
 /**
- * Normalise une saisie décimale « à la française » (« 1 234,56 ») ou anglaise
- * (« 1,234.56 ») en chaîne
- * acceptée par le serveur (« 1234.56»). Renvoie `null` si la saisie n'est
- * pas un nombre.
+ * Normalise une saisie décimale en chaîne acceptée par le serveur
+ * (« 1234.56 »). Renvoie `null` si la saisie n'est pas un nombre.
+ *
+ * Les espaces de milliers sont toujours ignorés. Quand la virgule et le
+ * point sont tous deux présents, le dernier est la décimale (« 12,500.00 »,
+ * « 1.234,56 »). Quand un seul l'est, la langue de l'interface tranche
+ * l'ambiguïté : « 12,500 » vaut douze mille cinq cents en anglais et douze
+ * et demi en français ; « 12.500 » l'inverse. Un séparateur qui ne peut
+ * être que décimal (« 12.5 » en français) est accepté tel quel.
  */
 export function normalizeDecimal(input: string): string | null {
-  const compact = input.replace(/[\s  ]/g, "").replace(",", ".")
+  const compact = input.replace(/[\s  ]/g, "")
   if (compact === "") return null
-  if (!/^-?\d+(\.\d+)?$/.test(compact)) return null
-  return compact
+  const lastComma = compact.lastIndexOf(",")
+  const lastDot = compact.lastIndexOf(".")
+  let normalized: string
+  if (lastComma !== -1 && lastDot !== -1) {
+    const decimal = lastComma > lastDot ? "," : "."
+    const group = decimal === "," ? "." : ","
+    if (!groupedThousands(compact.slice(0, Math.max(lastComma, lastDot)), group)) return null
+    normalized = compact.split(group).join("").replace(decimal, ".")
+  } else if (lastComma !== -1 || lastDot !== -1) {
+    const used = lastComma !== -1 ? "," : "."
+    const occurrences = compact.split(used).length - 1
+    if (occurrences > 1 || (used !== decimalSeparator() && groupedThousands(compact, used))) {
+      // Plusieurs occurrences, ou le séparateur de milliers de la langue
+      // devant trois chiffres : ce sont des milliers.
+      if (!groupedThousands(compact, used)) return null
+      normalized = compact.split(used).join("")
+    } else {
+      normalized = compact.replace(used, ".")
+    }
+  } else {
+    normalized = compact
+  }
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) return null
+  return normalized
 }
 
 /**

@@ -90,10 +90,13 @@ export const AUDIT_ACTIONS = [
   "closed",
   "proof_uploaded",
   "proof_replaced",
+  "proof_incomplete",
+  "proof_to_review",
   "approved",
   "rejected",
   "downloaded",
   "reopened",
+  "imported",
 ] as const
 
 export function auditActionLabel(t: TFunction, action: string): string {
