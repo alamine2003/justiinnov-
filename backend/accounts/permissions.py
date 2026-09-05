@@ -129,6 +129,11 @@ class Capacite:
     #: Rôles qui l'ont toujours : le super administrateur, partout — sinon
     #: une configuration malheureuse n'aurait plus personne pour la défaire.
     fixes: frozenset = _DIRECTION
+    #: Rôles qui peuvent modifier cette ligne de la matrice. La RH règle
+    #: tout, sauf ce qui touche à l'argent : attribuer, arbitrer, tenir les
+    #: taux se règlent par la direction seule (« la RH tient les comptes,
+    #: pas l'argent »).
+    reglable_par: frozenset = _ADMINISTRATEURS
 
     def roles_effectifs(self, choix):
         """Rôles retenus pour ``choix`` (configuration), verrous appliqués.
@@ -235,7 +240,7 @@ CAPACITES = (
         "budgets.create", GROUPE_ENVELOPPES,
         _("Attribuer une enveloppe"),
         _("Créer une enveloppe annuelle ou une sous-enveloppe."),
-        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS,
+        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS, reglable_par=_DIRECTION,
     ),
     Capacite(
         "budgets.update", GROUPE_ENVELOPPES,
@@ -244,25 +249,25 @@ CAPACITES = (
             "Changer le montant, la politique de dépassement, désactiver ; "
             "valider une dépense qui dépasse son enveloppe."
         ),
-        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS,
+        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS, reglable_par=_DIRECTION,
     ),
     Capacite(
         "reallocations.request", GROUPE_ENVELOPPES,
         _("Demander une réallocation"),
         _("Proposer un transfert entre deux enveloppes."),
-        _DIRECTION,
+        _DIRECTION, reglable_par=_DIRECTION,
     ),
     Capacite(
         "reallocations.decide", GROUPE_ENVELOPPES,
         _("Arbitrer une réallocation"),
         _("Approuver ou refuser un transfert. Jamais le sien."),
-        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS,
+        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS, reglable_par=_DIRECTION,
     ),
     Capacite(
         "rates.manage", GROUPE_ENVELOPPES,
         _("Tenir les taux de change"),
         _("Ajouter ou corriger un taux vers la devise de consolidation."),
-        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS,
+        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS, reglable_par=_DIRECTION,
     ),
     Capacite(
         "expenses.create", GROUPE_DECLARATION,

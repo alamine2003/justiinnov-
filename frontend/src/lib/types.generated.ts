@@ -1405,10 +1405,26 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Transferts entre enveloppes, soumis à approbation. */
+        /**
+         * @description Transferts entre enveloppes, soumis à approbation.
+         *
+         *     Une réallocation ne se réécrit pas : elle se demande, puis s'approuve
+         *     ou se refuse. Un ``PATCH`` qui changerait le montant ou la cible après
+         *     la demande — ou après la décision — ferait mentir le journal et le
+         *     mouvement réellement exécuté sur les enveloppes ; ``PUT`` et ``PATCH``
+         *     répondent donc 405, comme ``DELETE``.
+         */
         get: operations["reallocations_list"]
         put?: never
-        /** @description Transferts entre enveloppes, soumis à approbation. */
+        /**
+         * @description Transferts entre enveloppes, soumis à approbation.
+         *
+         *     Une réallocation ne se réécrit pas : elle se demande, puis s'approuve
+         *     ou se refuse. Un ``PATCH`` qui changerait le montant ou la cible après
+         *     la demande — ou après la décision — ferait mentir le journal et le
+         *     mouvement réellement exécuté sur les enveloppes ; ``PUT`` et ``PATCH``
+         *     répondent donc 405, comme ``DELETE``.
+         */
         post: operations["reallocations_create"]
         delete?: never
         options?: never
@@ -1423,16 +1439,22 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Transferts entre enveloppes, soumis à approbation. */
+        /**
+         * @description Transferts entre enveloppes, soumis à approbation.
+         *
+         *     Une réallocation ne se réécrit pas : elle se demande, puis s'approuve
+         *     ou se refuse. Un ``PATCH`` qui changerait le montant ou la cible après
+         *     la demande — ou après la décision — ferait mentir le journal et le
+         *     mouvement réellement exécuté sur les enveloppes ; ``PUT`` et ``PATCH``
+         *     répondent donc 405, comme ``DELETE``.
+         */
         get: operations["reallocations_retrieve"]
-        /** @description Transferts entre enveloppes, soumis à approbation. */
-        put: operations["reallocations_update"]
+        put?: never
         post?: never
         delete?: never
         options?: never
         head?: never
-        /** @description Transferts entre enveloppes, soumis à approbation. */
-        patch: operations["reallocations_partial_update"]
+        patch?: never
         trace?: never
     }
     "/api/reallocations/{id}/approve/": {
@@ -2331,7 +2353,6 @@ export interface components {
             readonly country_timezone: string
             team: number | null
             readonly team_name: string | null
-            /** Propriétaire */
             owner: number | null
             readonly owner_name: string | null
             /** Format: date */
@@ -2373,7 +2394,6 @@ export interface components {
             readonly country_timezone: string
             team: number | null
             readonly team_name: string | null
-            /** Propriétaire */
             owner: number | null
             readonly owner_name: string | null
             /** Format: date */
@@ -2411,7 +2431,6 @@ export interface components {
             label: string
             country: number
             team?: number | null
-            /** Propriétaire */
             owner?: number | null
             /** Format: date */
             date: string
@@ -2446,7 +2465,6 @@ export interface components {
             readonly country_timezone: string
             team: number | null
             readonly team_name: string | null
-            /** Propriétaire */
             owner: number | null
             readonly owner_name: string | null
             /** Format: date */
@@ -2530,7 +2548,6 @@ export interface components {
             readonly country_timezone: string
             team: number | null
             readonly team_name: string | null
-            /** Propriétaire */
             owner: number | null
             readonly owner_name: string | null
             /**
@@ -2543,14 +2560,10 @@ export interface components {
             /** Libellé de la transaction */
             title: string
             description: string
-            /** Projet */
             project: number | null
             readonly project_name: string | null
-            /** Intitulé de dépenses */
             expense_title: number | null
-            /** Catégorie marketing */
             marketing_category: number | null
-            /** Prospect / bénéficiaire */
             beneficiary: number | null
             readonly beneficiary_name: string | null
             /**
@@ -2656,7 +2669,6 @@ export interface components {
             readonly country_timezone: string
             team: number | null
             readonly team_name: string | null
-            /** Propriétaire */
             owner: number | null
             readonly owner_name: string | null
             /**
@@ -2669,14 +2681,10 @@ export interface components {
             /** Libellé de la transaction */
             title: string
             description: string
-            /** Projet */
             project: number | null
             readonly project_name: string | null
-            /** Intitulé de dépenses */
             expense_title: number | null
-            /** Catégorie marketing */
             marketing_category: number | null
-            /** Prospect / bénéficiaire */
             beneficiary: number | null
             readonly beneficiary_name: string | null
             /**
@@ -2751,7 +2759,6 @@ export interface components {
             dossier: number
             country: number
             team?: number | null
-            /** Propriétaire */
             owner?: number | null
             /**
              * Date et heure
@@ -2763,13 +2770,9 @@ export interface components {
             /** Libellé de la transaction */
             title: string
             description?: string
-            /** Projet */
             project?: number | null
-            /** Intitulé de dépenses */
             expense_title?: number | null
-            /** Catégorie marketing */
             marketing_category?: number | null
-            /** Prospect / bénéficiaire */
             beneficiary?: number | null
             /**
              * Dépense
@@ -2846,7 +2849,6 @@ export interface components {
             readonly country_timezone: string
             team: number | null
             readonly team_name: string | null
-            /** Propriétaire */
             owner: number | null
             readonly owner_name: string | null
             /**
@@ -2859,14 +2861,10 @@ export interface components {
             /** Libellé de la transaction */
             title: string
             description: string
-            /** Projet */
             project: number | null
             readonly project_name: string | null
-            /** Intitulé de dépenses */
             expense_title: number | null
-            /** Catégorie marketing */
             marketing_category: number | null
-            /** Prospect / bénéficiaire */
             beneficiary: number | null
             readonly beneficiary_name: string | null
             /**
@@ -3424,19 +3422,6 @@ export interface components {
             /** Actif */
             is_active?: boolean
         }
-        PatchedBudgetReallocationRequest: {
-            /** Enveloppe source */
-            source?: number
-            /** Enveloppe destinataire */
-            target?: number
-            /**
-             * Montant
-             * Format: decimal
-             */
-            amount?: string
-            /** Justification */
-            reason?: string
-        }
         PatchedBudgetRequest: {
             /** Pays */
             country?: number
@@ -3502,7 +3487,6 @@ export interface components {
             label?: string
             country?: number
             team?: number | null
-            /** Propriétaire */
             owner?: number | null
             /** Format: date */
             date?: string
@@ -3531,7 +3515,6 @@ export interface components {
             dossier?: number
             country?: number
             team?: number | null
-            /** Propriétaire */
             owner?: number | null
             /**
              * Date et heure
@@ -3543,13 +3526,9 @@ export interface components {
             /** Libellé de la transaction */
             title?: string
             description?: string
-            /** Projet */
             project?: number | null
-            /** Intitulé de dépenses */
             expense_title?: number | null
-            /** Catégorie marketing */
             marketing_category?: number | null
-            /** Prospect / bénéficiaire */
             beneficiary?: number | null
             /**
              * Dépense
@@ -3743,6 +3722,7 @@ export interface components {
             readonly default_roles: components["schemas"]["RoleEnum"][]
             readonly fixed_roles: components["schemas"]["RoleEnum"][]
             readonly locked_roles: components["schemas"]["RoleEnum"][]
+            readonly settable_by_roles: components["schemas"]["RoleEnum"][]
         }
         PermissionMatrixRole: {
             readonly value: components["schemas"]["RoleEnum"]
@@ -7245,62 +7225,6 @@ export interface operations {
             cookie?: never
         }
         requestBody?: never
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown
-                }
-                content: {
-                    "application/json": components["schemas"]["BudgetReallocation"]
-                }
-            }
-        }
-    }
-    reallocations_update: {
-        parameters: {
-            query?: never
-            header?: never
-            path: {
-                /** @description Un(une) valeur entière unique identifiant ce(cette) Réallocation budgétaire. */
-                id: number
-            }
-            cookie?: never
-        }
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BudgetReallocationRequest"]
-                "application/x-www-form-urlencoded": components["schemas"]["BudgetReallocationRequest"]
-                "multipart/form-data": components["schemas"]["BudgetReallocationRequest"]
-            }
-        }
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown
-                }
-                content: {
-                    "application/json": components["schemas"]["BudgetReallocation"]
-                }
-            }
-        }
-    }
-    reallocations_partial_update: {
-        parameters: {
-            query?: never
-            header?: never
-            path: {
-                /** @description Un(une) valeur entière unique identifiant ce(cette) Réallocation budgétaire. */
-                id: number
-            }
-            cookie?: never
-        }
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["PatchedBudgetReallocationRequest"]
-                "application/x-www-form-urlencoded": components["schemas"]["PatchedBudgetReallocationRequest"]
-                "multipart/form-data": components["schemas"]["PatchedBudgetReallocationRequest"]
-            }
-        }
         responses: {
             200: {
                 headers: {

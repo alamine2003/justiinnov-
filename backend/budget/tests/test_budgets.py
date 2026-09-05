@@ -580,6 +580,22 @@ class ReallocationTests(BudgetTestCase):
 
         self.assertEqual(len(trois_lignes), len(une_ligne))
 
+    def test_une_reallocation_ne_se_reecrit_pas(self):
+        """Elle se demande puis s'approuve ou se refuse : un montant changé
+        après coup ferait mentir le journal et le mouvement exécuté."""
+        realloc_id = self._demander(amount="1000.00").data["id"]
+        self.login(self.siege)
+
+        en_attente = self.client.patch(f"/api/reallocations/{realloc_id}/", {"amount": "999999.00"})
+        self.login(self.doo)
+        self.client.post(f"/api/reallocations/{realloc_id}/approve/")
+        approuvee = self.client.patch(f"/api/reallocations/{realloc_id}/", {"amount": "999999.00"})
+        remplacee = self.client.put(f"/api/reallocations/{realloc_id}/", {"amount": "999999.00"})
+
+        for reponse in (en_attente, approuvee, remplacee):
+            self.assertEqual(reponse.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(str(BudgetReallocation.objects.get(pk=realloc_id).amount), "1000.00")
+
     def test_justification_obligatoire(self):
         response = self._demander(reason="   ")
 

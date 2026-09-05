@@ -7,6 +7,8 @@ pas à la main, et le journal d'audit se lit sans jamais s'écrire.
 
 from django.contrib import admin
 
+from core.statuts import LOCKED_STATUSES, Status
+
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof
 
 
@@ -19,6 +21,22 @@ class SansSuppressionMixin:
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+class BrouillonSeulementMixin(SansSuppressionMixin):
+    """Une fois déclaré, rien ne se retouche à la main.
+
+    L'API refuse de modifier une ligne ou un dossier soumis ; l'admin
+    laissait changer la date, l'équipe ou le dossier d'une ligne déjà
+    contrôlée, sans trace d'audit. Le brouillon reste corrigeable, la liste
+    reste consultable.
+    """
+
+    def _brouillon(self, obj):
+        return obj.status == Status.DRAFT
+
+    def has_change_permission(self, request, obj=None):
+        return obj is None or self._brouillon(obj)
 
 
 class ExpenseInline(admin.TabularInline):
@@ -39,7 +57,7 @@ class ProofInline(admin.TabularInline):
 
 
 @admin.register(Dossier)
-class DossierAdmin(SansSuppressionMixin, admin.ModelAdmin):
+class DossierAdmin(BrouillonSeulementMixin, admin.ModelAdmin):
     list_display = ("number", "label", "country", "date", "status")
     list_filter = ("status", "country")
     search_fields = ("number", "label")
@@ -50,7 +68,7 @@ class DossierAdmin(SansSuppressionMixin, admin.ModelAdmin):
 
 
 @admin.register(Expense)
-class ExpenseAdmin(SansSuppressionMixin, admin.ModelAdmin):
+class ExpenseAdmin(BrouillonSeulementMixin, admin.ModelAdmin):
     list_display = ("title", "dossier", "country", "date", "amount", "status")
     list_filter = ("status", "country", "payment_method")
     search_fields = ("title", "dossier__number")
@@ -64,17 +82,23 @@ class ExpenseAdmin(SansSuppressionMixin, admin.ModelAdmin):
 
 
 @admin.register(Proof)
-class ProofAdmin(SansSuppressionMixin, admin.ModelAdmin):
+class ProofAdmin(BrouillonSeulementMixin, admin.ModelAdmin):
     list_display = ("original_name", "dossier", "kind", "status", "version")
     list_filter = ("kind", "status", "is_complete")
+    # Le fichier et son empreinte vont ensemble : remplacer l'un sans
+    # l'autre ferait servir un contenu que personne n'a contrôlé.
     readonly_fields = (
-        "status", "sha256", "size", "content_type", "version", "uploaded_by",
-        "replaces", "is_complete", "rejection_reason",
+        "file", "dossier", "original_name", "status", "sha256", "size",
+        "content_type", "version", "uploaded_by", "replaces", "is_complete",
+        "rejection_reason",
     )
+
+    def _brouillon(self, obj):
+        return obj.dossier.status not in LOCKED_STATUSES
 
 
 @admin.register(Beneficiary)
-class BeneficiaryAdmin(admin.ModelAdmin):
+class BeneficiaryAdmin(SansSuppressionMixin, admin.ModelAdmin):
     list_display = ("name", "kind", "contact", "is_active")
     list_filter = ("kind", "is_active")
     search_fields = ("name", "contact")

@@ -88,7 +88,9 @@ l'application.
   enveloppes ; les comptes et la configuration ne s'ouvrent qu'aux
   administrateurs, jamais au DM ni au DF, qui pourraient sinon se créer un
   administrateur. Le référentiel d'un pays et la demande de réallocation,
-  eux, restent ouvrables au pays par choix d'organisation. Les verrous
+  eux, restent ouvrables au pays par choix d'organisation. Les lignes qui
+  touchent à l'argent (`budgets.*`, `reallocations.*`, `rates.manage`) ne
+  se règlent que par un `super_admin` (`reglable_par`). Les verrous
   s'appliquent à la lecture de la matrice, pas seulement à
   l'enregistrement.
 - **Par défaut, le DM et le DF n'ont aucun droit d'administration.**
@@ -124,6 +126,14 @@ l'application.
   à corriger en silence. Les lignes reviennent en brouillon sans
   imputation. Un dossier dont une ligne est justifiée ou clôturée ne se
   rouvre pas : le siège a constaté.
+- **Un brouillon appartient à son auteur.** Il ne se retire que par lui,
+  et ne se modifie que par lui ou par le siège, jamais par un collègue du
+  pays (`transitions.exiger_l_auteur_du_brouillon`, décision 46).
+- **Une pièce est ce qu'elle prétend être.** Les premiers octets d'un
+  justificatif doivent confirmer son extension, le type MIME enregistré
+  vient du serveur, et le doublon est tranché par une contrainte en base
+  (décision 45). L'admin Django n'est monté qu'en développement et ne
+  touche pas à ce qui est déclaré (décision 44).
 - **Une dépense non justifiée pèse quand même sur l'enveloppe.** L'absence de
   preuve ne fait pas revenir l'argent ; elle se lit dans l'écart entre dépensé
   et justifié.

@@ -132,6 +132,23 @@ class MatriceDesDroitsTests(ScopingTestCase):
         self.login(self.siege)
         self.assertEqual(self.client.get("/api/permissions/").status_code, status.HTTP_200_OK)
 
+    def test_l_argent_se_regle_par_la_direction_seule(self):
+        """La RH règle la matrice, sauf les enveloppes, les réallocations et
+        les taux : « la RH tient les comptes, pas l'argent ». La matrice le
+        dit (``settable_by_roles``) et le refuse."""
+        for cle in ("budgets.create", "budgets.update", "reallocations.request",
+                    "reallocations.decide", "rates.manage"):
+            with self.subTest(cle=cle):
+                refus = self._regler(self.rh, **{cle: ["super_admin", "admin"]})
+                self.assertEqual(refus.status_code, status.HTTP_400_BAD_REQUEST, refus.data)
+                self.assertNotIn(Role.ADMIN, roles_pour(cle))
+                self.assertEqual(self._matrice()[cle]["settable_by_roles"], ["super_admin"])
+        # La direction, elle, peut ouvrir l'attribution à la RH — et cela se voit.
+        accord = self._regler(self.siege, **{"budgets.create": ["super_admin", "admin"]})
+        self.assertEqual(accord.status_code, status.HTTP_200_OK, accord.data)
+        self.assertIn(Role.ADMIN, roles_pour("budgets.create"))
+        self.assertEqual(self._matrice()["data.export"]["settable_by_roles"], ["admin", "super_admin"])
+
     def test_le_super_administrateur_garde_tout(self):
         response = self._regler(self.siege, **{"data.export": ["admin"]})
 

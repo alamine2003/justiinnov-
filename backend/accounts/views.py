@@ -17,7 +17,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, SimpleRateThrottle
 from rest_framework.views import APIView
 
 from core.journal import tracer
@@ -328,6 +328,11 @@ class ChangePasswordView(APIView):
     survivre au nouveau. Le client reçoit le jeton de remplacement.
     """
 
+    # Le mot de passe courant s\'y vérifie : une limite dédiée empêche le
+    # porteur d\'un jeton volé de le deviner à la volée.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password"
+
     @extend_schema(request=ChangePasswordSerializer, responses=TokenSerializer)
     @transaction.atomic
     def post(self, request):
@@ -614,6 +619,7 @@ class PermissionMatrixView(APIView):
                     "default_roles": sorted(capacite.defaut),
                     "fixed_roles": sorted(capacite.fixes),
                     "locked_roles": sorted(capacite.verrouillees - capacite.fixes),
+                    "settable_by_roles": sorted(capacite.reglable_par),
                 }
                 for capacite in CAPACITES
             ],
@@ -631,7 +637,9 @@ class PermissionMatrixView(APIView):
     @extend_schema(request=PermissionMatrixUpdateSerializer, responses=PermissionMatrixSerializer)
     @transaction.atomic
     def patch(self, request):
-        serializer = PermissionMatrixUpdateSerializer(data=request.data)
+        serializer = PermissionMatrixUpdateSerializer(
+            data=request.data, context={"role": get_access(request.user).role}
+        )
         serializer.is_valid(raise_exception=True)
         choix = serializer.validated_data["capabilities"]
         # Lue en base et verrouillée, pas depuis le cache : deux

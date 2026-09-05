@@ -7,6 +7,7 @@ périmètre, lit la charge utile, appelle le service et répond.
 
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -107,8 +108,21 @@ def _as_str(value):
     return str(value) if value is not None else None
 
 
-class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
-    """Transferts entre enveloppes, soumis à approbation."""
+class BudgetReallocationViewSet(
+    CountryScopedMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Transferts entre enveloppes, soumis à approbation.
+
+    Une réallocation ne se réécrit pas : elle se demande, puis s'approuve
+    ou se refuse. Un ``PATCH`` qui changerait le montant ou la cible après
+    la demande — ou après la décision — ferait mentir le journal et le
+    mouvement réellement exécuté sur les enveloppes ; ``PUT`` et ``PATCH``
+    répondent donc 405, comme ``DELETE``.
+    """
 
     # Le libellé d'une enveloppe nomme son pays et sa dimension (projet,
     # équipe, manager) : tout se lit en une requête, pas une par ligne.

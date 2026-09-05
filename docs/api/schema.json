@@ -6156,7 +6156,7 @@
         "/api/reallocations/": {
             "get": {
                 "operationId": "reallocations_list",
-                "description": "Transferts entre enveloppes, soumis à approbation.",
+                "description": "Transferts entre enveloppes, soumis à approbation.\n\nUne réallocation ne se réécrit pas : elle se demande, puis s'approuve\nou se refuse. Un ``PATCH`` qui changerait le montant ou la cible après\nla demande — ou après la décision — ferait mentir le journal et le\nmouvement réellement exécuté sur les enveloppes ; ``PUT`` et ``PATCH``\nrépondent donc 405, comme ``DELETE``.",
                 "parameters": [
                     {
                         "name": "ordering",
@@ -6249,7 +6249,7 @@
             },
             "post": {
                 "operationId": "reallocations_create",
-                "description": "Transferts entre enveloppes, soumis à approbation.",
+                "description": "Transferts entre enveloppes, soumis à approbation.\n\nUne réallocation ne se réécrit pas : elle se demande, puis s'approuve\nou se refuse. Un ``PATCH`` qui changerait le montant ou la cible après\nla demande — ou après la décision — ferait mentir le journal et le\nmouvement réellement exécuté sur les enveloppes ; ``PUT`` et ``PATCH``\nrépondent donc 405, comme ``DELETE``.",
                 "tags": [
                     "reallocations"
                 ],
@@ -6298,7 +6298,7 @@
         "/api/reallocations/{id}/": {
             "get": {
                 "operationId": "reallocations_retrieve",
-                "description": "Transferts entre enveloppes, soumis à approbation.",
+                "description": "Transferts entre enveloppes, soumis à approbation.\n\nUne réallocation ne se réécrit pas : elle se demande, puis s'approuve\nou se refuse. Un ``PATCH`` qui changerait le montant ou la cible après\nla demande — ou après la décision — ferait mentir le journal et le\nmouvement réellement exécuté sur les enveloppes ; ``PUT`` et ``PATCH``\nrépondent donc 405, comme ``DELETE``.",
                 "parameters": [
                     {
                         "in": "path",
@@ -6313,121 +6313,6 @@
                 "tags": [
                     "reallocations"
                 ],
-                "security": [
-                    {
-                        "tokenAuth": []
-                    },
-                    {
-                        "cookieAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/BudgetReallocation"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            },
-            "put": {
-                "operationId": "reallocations_update",
-                "description": "Transferts entre enveloppes, soumis à approbation.",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id",
-                        "schema": {
-                            "type": "integer"
-                        },
-                        "description": "Un(une) valeur entière unique identifiant ce(cette) Réallocation budgétaire.",
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "reallocations"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/BudgetReallocationRequest"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/BudgetReallocationRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/BudgetReallocationRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "tokenAuth": []
-                    },
-                    {
-                        "cookieAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/BudgetReallocation"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            },
-            "patch": {
-                "operationId": "reallocations_partial_update",
-                "description": "Transferts entre enveloppes, soumis à approbation.",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id",
-                        "schema": {
-                            "type": "integer"
-                        },
-                        "description": "Un(une) valeur entière unique identifiant ce(cette) Réallocation budgétaire.",
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "reallocations"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PatchedBudgetReallocationRequest"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PatchedBudgetReallocationRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PatchedBudgetReallocationRequest"
-                            }
-                        }
-                    }
-                },
                 "security": [
                     {
                         "tokenAuth": []
@@ -9330,8 +9215,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "owner_name": {
                         "type": "string",
@@ -9480,8 +9364,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "owner_name": {
                         "type": "string",
@@ -9622,8 +9505,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "date": {
                         "type": "string",
@@ -9719,8 +9601,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "owner_name": {
                         "type": "string",
@@ -9950,8 +9831,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "owner_name": {
                         "type": "string",
@@ -9978,8 +9858,7 @@
                     },
                     "project": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Projet"
+                        "nullable": true
                     },
                     "project_name": {
                         "type": "string",
@@ -9988,18 +9867,15 @@
                     },
                     "expense_title": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Intitulé de dépenses"
+                        "nullable": true
                     },
                     "marketing_category": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Catégorie marketing"
+                        "nullable": true
                     },
                     "beneficiary": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Prospect / bénéficiaire"
+                        "nullable": true
                     },
                     "beneficiary_name": {
                         "type": "string",
@@ -10270,8 +10146,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "owner_name": {
                         "type": "string",
@@ -10298,8 +10173,7 @@
                     },
                     "project": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Projet"
+                        "nullable": true
                     },
                     "project_name": {
                         "type": "string",
@@ -10308,18 +10182,15 @@
                     },
                     "expense_title": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Intitulé de dépenses"
+                        "nullable": true
                     },
                     "marketing_category": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Catégorie marketing"
+                        "nullable": true
                     },
                     "beneficiary": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Prospect / bénéficiaire"
+                        "nullable": true
                     },
                     "beneficiary_name": {
                         "type": "string",
@@ -10528,8 +10399,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "date": {
                         "type": "string",
@@ -10552,23 +10422,19 @@
                     },
                     "project": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Projet"
+                        "nullable": true
                     },
                     "expense_title": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Intitulé de dépenses"
+                        "nullable": true
                     },
                     "marketing_category": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Catégorie marketing"
+                        "nullable": true
                     },
                     "beneficiary": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Prospect / bénéficiaire"
+                        "nullable": true
                     },
                     "amount": {
                         "type": "string",
@@ -10743,8 +10609,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "owner_name": {
                         "type": "string",
@@ -10771,8 +10636,7 @@
                     },
                     "project": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Projet"
+                        "nullable": true
                     },
                     "project_name": {
                         "type": "string",
@@ -10781,18 +10645,15 @@
                     },
                     "expense_title": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Intitulé de dépenses"
+                        "nullable": true
                     },
                     "marketing_category": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Catégorie marketing"
+                        "nullable": true
                     },
                     "beneficiary": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Prospect / bénéficiaire"
+                        "nullable": true
                     },
                     "beneficiary_name": {
                         "type": "string",
@@ -12192,30 +12053,6 @@
                     }
                 }
             },
-            "PatchedBudgetReallocationRequest": {
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "integer",
-                        "title": "Enveloppe source"
-                    },
-                    "target": {
-                        "type": "integer",
-                        "title": "Enveloppe destinataire"
-                    },
-                    "amount": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
-                        "title": "Montant"
-                    },
-                    "reason": {
-                        "type": "string",
-                        "minLength": 1,
-                        "title": "Justification"
-                    }
-                }
-            },
             "PatchedBudgetRequest": {
                 "type": "object",
                 "properties": {
@@ -12365,8 +12202,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "date": {
                         "type": "string",
@@ -12417,8 +12253,7 @@
                     },
                     "owner": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Propriétaire"
+                        "nullable": true
                     },
                     "date": {
                         "type": "string",
@@ -12441,23 +12276,19 @@
                     },
                     "project": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Projet"
+                        "nullable": true
                     },
                     "expense_title": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Intitulé de dépenses"
+                        "nullable": true
                     },
                     "marketing_category": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Catégorie marketing"
+                        "nullable": true
                     },
                     "beneficiary": {
                         "type": "integer",
-                        "nullable": true,
-                        "title": "Prospect / bénéficiaire"
+                        "nullable": true
                     },
                     "amount": {
                         "type": "string",
@@ -12865,6 +12696,13 @@
                             "$ref": "#/components/schemas/RoleEnum"
                         },
                         "readOnly": true
+                    },
+                    "settable_by_roles": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RoleEnum"
+                        },
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -12875,7 +12713,8 @@
                     "roles",
                     "default_roles",
                     "fixed_roles",
-                    "locked_roles"
+                    "locked_roles",
+                    "settable_by_roles"
                 ]
             },
             "PermissionMatrixRole": {

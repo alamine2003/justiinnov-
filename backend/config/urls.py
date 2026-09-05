@@ -1,5 +1,6 @@
 """URL racine du projet."""
 
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
@@ -7,7 +8,7 @@ from .metriques import metriques
 from .schema import SchemaUiView, SchemaView
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    *([path("admin/", admin.site.urls)] if settings.ADMIN_ENABLED else []),
     # Supervision (Prometheus → Grafana), sous jeton : voir config/metriques.py.
     path("metrics", metriques, name="metriques"),
     # Contrat d'API : le schéma pour le siège, son interface pour les

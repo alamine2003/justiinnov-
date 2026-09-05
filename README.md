@@ -64,7 +64,7 @@ docker compose up -d          # db, minio, backend, scheduler, frontend
 
 - Frontend : http://localhost:5173
 - API : http://localhost:8000/api/
-- Admin Django : http://localhost:8000/admin/ — soumis aux mêmes verrous
+- Admin Django : http://localhost:8000/admin/ — en développement seulement (décision 44), soumis aux mêmes verrous
   que l'API (mot de passe provisoire, double authentification si elle est
   exigée) ; en production, nginx ne relaie que `/api/` et `/admin/` n'est
   pas joignable de l'extérieur
@@ -96,7 +96,7 @@ Cinq rôles, calqués sur l'organisation du groupe :
 | `dm` | DM — directeur manager (siège) | au siège | tous pays, **restrictible** à certains | **mettre en contrôle** une dépense soumise (`expenses.review`) ; lire l'historique du référentiel de son périmètre |
 | `df` | DF — directeur financier (siège) | au siège | tous pays, **restrictible** à certains | mettre en contrôle, contrôler les pièces (`proofs.review`), **justifier ou non** (`expenses.validate`), clôturer (`expenses.close`) ; lire l'historique du référentiel de son périmètre |
 | `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | tout le circuit, comptes et rôles, pays et référentiel de tous les pays, **journal d'audit**, **imports et exports**, **réouverture** d'un dossier, réinitialisation de la double authentification |
-| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, et seul à écrire **les enveloppes, les réallocations et les taux de change** ; le back-office Django |
+| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, et seul à écrire **les enveloppes, les réallocations et les taux de change** ; seul à régler ces lignes de la matrice des droits |
 
 Il n'y a ni « direction des opérations » ni « auditeur » distincts : la DO
 est super administratrice, l'audit revient à la RH.

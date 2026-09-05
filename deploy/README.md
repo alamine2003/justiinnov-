@@ -148,7 +148,7 @@ Le fichier accepte aussi, pour un environnement jetable seulement,
 lignes et pièces de démonstration — c'est ce que fait la CI pour ses
 captures. Ni l'un ni l'autre sur un serveur réel.
 
-Le back-office Django (`/admin/`) n'est pas joignable depuis l'extérieur :
+Le back-office Django (`/admin/`) n'est monté qu'en développement (décision 44) et n'est de toute façon pas joignable depuis l'extérieur :
 Caddy n'envoie à nginx que ce qui n'est pas `/grafana/`, et nginx ne relaie
 à Django que `/api/` — `https://<domaine>/admin/` affiche l'application,
 pas le back-office. Il reste accessible depuis le serveur, soumis aux mêmes

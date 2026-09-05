@@ -14,6 +14,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Le mode debug doit être un choix explicite : par défaut, on est en production.
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
+# L'admin Django n'est monté qu'en développement (décision 44) : en
+# production nginx ne le relaie pas, et une session ouverte sur
+# ``/admin/login/`` avec le seul mot de passe contournerait le second
+# facteur que l'API exige.
+ADMIN_ENABLED = DEBUG
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
@@ -229,6 +234,7 @@ REST_FRAMEWORK = {
         "user": "2000/hour",
         "login": "10/min",
         "login_user": "5/min",
+        "password": "10/min",
     },
     # Nombre de mandataires de confiance devant Django (nginx, Caddy…) : sert
     # à lire l'adresse réelle du client dans X-Forwarded-For, pour le journal
@@ -555,6 +561,7 @@ import sys  # noqa: E402 — réservé à ce bloc
 
 EN_TEST = os.environ.get("DJANGO_TEST") == "1" or sys.argv[1:2] == ["test"]
 if EN_TEST:
+    ADMIN_ENABLED = True
     CACHES = {
         "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
     }

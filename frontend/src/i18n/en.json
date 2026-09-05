@@ -889,7 +889,8 @@
       "modifications_other": "{{count}} unsaved changes",
       "annuler": "Discard changes",
       "enregistre": "Rights saved: they apply from now on.",
-      "erreur": "Could not save"
+      "erreur": "Could not save",
+      "direction_seule": "Set by management only"
     },
     "utilisateurs": {
       "titre": "Accounts",

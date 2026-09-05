@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pyotp
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.db.models import Max
 from django.test import override_settings
 from django.utils import timezone
@@ -448,3 +449,23 @@ class CompteSansProfilTests(ScopingTestCase):
         )
 
         self.assertEqual(self.client.get("/api/countries/").status_code, status.HTTP_200_OK)
+
+
+class LimiteDuMotDePasseTests(ScopingTestCase):
+    """Le porteur d'un jeton volé ne devine pas le mot de passe à la volée."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
+    def test_dix_essais_par_minute(self):
+        self.login(self.rep_togo)
+        charge = {"current_password": "faux", "new_password": "Nouveau-mot-de-passe-2026"}
+
+        codes = [
+            self.client.post("/api/me/password/", charge, format="json").status_code
+            for _ in range(11)
+        ]
+
+        self.assertEqual(codes[:10], [status.HTTP_400_BAD_REQUEST] * 10)
+        self.assertEqual(codes[10], status.HTTP_429_TOO_MANY_REQUESTS)

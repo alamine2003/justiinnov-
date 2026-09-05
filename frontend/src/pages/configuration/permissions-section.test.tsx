@@ -11,7 +11,7 @@ if (typeof window.PointerEvent === "undefined") {
 
 const refreshProfile = vi.fn(async () => {})
 vi.mock("@/context/use-auth", () => ({
-  useAuth: () => ({ can: () => true, me: null, refreshProfile }),
+  useAuth: () => ({ can: () => true, me: { role: "admin" }, refreshProfile }),
 }))
 
 const updatePermissionMatrix = vi.fn()
@@ -41,6 +41,7 @@ function matrice(overrides: Partial<PermissionMatrix> = {}): PermissionMatrix {
         default_roles: ["admin", "super_admin"],
         fixed_roles: ["super_admin"],
         locked_roles: [],
+        settable_by_roles: ["admin", "super_admin"],
       },
       {
         key: "expenses.validate",
@@ -51,6 +52,7 @@ function matrice(overrides: Partial<PermissionMatrix> = {}): PermissionMatrix {
         default_roles: ["admin", "df", "super_admin"],
         fixed_roles: ["super_admin"],
         locked_roles: ["manager"],
+        settable_by_roles: ["admin", "super_admin"],
       },
     ],
     note: "Le super administrateur garde tout.",

@@ -130,6 +130,8 @@ class PermissionMatrixCapabilitySerializer(serializers.Serializer):
     #: Rôles qui l'ont toujours et rôles qui ne l'auront jamais : cases figées.
     fixed_roles = _liste_de_roles(read_only=True)
     locked_roles = _liste_de_roles(read_only=True)
+    #: Rôles qui peuvent régler cette ligne : la RH, sauf pour l'argent.
+    settable_by_roles = _liste_de_roles(read_only=True)
 
 
 class PermissionMatrixSerializer(serializers.Serializer):
@@ -160,7 +162,9 @@ class PermissionMatrixUpdateSerializer(serializers.Serializer):
             roles = set(roles)
             manquants = capacite.fixes - roles
             interdits = roles & (capacite.verrouillees - capacite.fixes)
-            if manquants:
+            if self.context.get("role") not in capacite.reglable_par:
+                erreurs[cle] = _("Ce droit se règle par la direction seule.")
+            elif manquants:
                 erreurs[cle] = _("Ce droit ne se retire pas à : {roles}.").format(
                     roles=", ".join(str(Role(r).label) for r in sorted(manquants))
                 )

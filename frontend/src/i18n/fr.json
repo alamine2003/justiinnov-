@@ -889,7 +889,8 @@
       "modifications_other": "{{count}} modifications non enregistrées",
       "annuler": "Annuler les modifications",
       "enregistre": "Droits enregistrés : ils s'appliquent dès maintenant.",
-      "erreur": "Enregistrement impossible"
+      "erreur": "Enregistrement impossible",
+      "direction_seule": "Se règle par la direction seule"
     },
     "utilisateurs": {
       "titre": "Comptes",

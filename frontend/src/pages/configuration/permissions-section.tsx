@@ -55,7 +55,7 @@ export function MatriceDesDroits({
   onSaved: (matrix: PermissionMatrix) => void
 }) {
   const { t } = useTranslation()
-  const { refreshProfile } = useAuth()
+  const { me, refreshProfile } = useAuth()
   const [choix, setChoix] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(matrix.capabilities.map((c) => [c.key, c.roles])),
   )
@@ -203,6 +203,9 @@ export function MatriceDesDroits({
                             {matrix.roles.map((role) => {
                               const toujours = capability.fixed_roles.includes(role.value)
                               const jamais = capability.locked_roles.includes(role.value)
+                              // L'argent se règle par la direction seule : la RH voit la
+                              // ligne, ne la change pas.
+                              const reglable = me?.role != null && capability.settable_by_roles.includes(me.role)
                               const accorde = choix[capability.key].includes(role.value)
                               const aria = t("configuration.permissions.case_aria", {
                                 droit: capability.label,
@@ -238,6 +241,8 @@ export function MatriceDesDroits({
                                     <Switch
                                       size="sm"
                                       checked={accorde}
+                                      disabled={!reglable}
+                                      title={reglable ? undefined : t("configuration.permissions.direction_seule")}
                                       aria-label={aria}
                                       onCheckedChange={(valeur) =>
                                         basculer(capability.key, role.value, valeur)
