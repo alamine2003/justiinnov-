@@ -6,13 +6,23 @@ vont dans ``ChangeLog`` (entité ``user``), sans pays : elles ne relèvent
 d'aucun périmètre.
 """
 
+from core.journal import serialisable, tracer
 from core.models import ChangeLog
-from core.signals import journaliser, serialisable
 
-#: Champs du compte et du profil dont l'évolution est journalisée.
+#: Champs du compte et du profil dont l'évolution est journalisée ici.
+#:
+#: ``username`` n'y est pas : le nom de compte est immuable (cf.
+#: ``UserSerializer``), il sert de libellé à chaque entrée. ``role`` et
+#: ``language`` non plus : ils sont journalisés par ``accounts.signals`` au
+#: moment où le profil s'enregistre, quel que soit le chemin — API, admin
+#: Django ou ``seed_users``.
+ACTIONS_DE_SESSION = frozenset(
+    {ChangeLog.Actions.LOGIN, ChangeLog.Actions.LOGIN_FAILED, ChangeLog.Actions.LOGOUT}
+)
+
 CHAMPS_SUIVIS = (
-    "username", "first_name", "last_name", "email", "is_active",
-    "is_staff", "is_superuser", "role", "must_change_password",
+    "first_name", "last_name", "email", "is_active",
+    "is_staff", "is_superuser", "must_change_password",
     "totp_confirmed",
 )
 
@@ -20,8 +30,9 @@ CHAMPS_SUIVIS = (
 def etat_compte(user):
     """Photographie sérialisable d'un compte, profil compris.
 
-    Le périmètre (``countries``) n'y figure pas : sa modification est
-    journalisée à part par ``accounts.signals``, avant/après compris.
+    Le périmètre (``countries``, ``teams``), le rôle et la langue n'y
+    figurent pas : leur modification est journalisée à part par
+    ``accounts.signals``, avant/après compris.
     """
     profile = getattr(user, "profile", None)
     etat = {
@@ -29,7 +40,6 @@ def etat_compte(user):
         for champ in CHAMPS_SUIVIS
         if hasattr(user, champ)
     }
-    etat["role"] = profile.role if profile is not None else None
     etat["must_change_password"] = (
         profile.must_change_password if profile is not None else None
     )
@@ -43,27 +53,26 @@ def journaliser_compte(request, user, action, *, avant=None, apres=None,
                        changed_fields=None, diff=None):
     """Écrit une entrée pour ``user``, signée par l'auteur de ``request``.
 
-    ``diff`` se calcule d'``avant``/``apres`` quand ils sont fournis ; sinon
-    l'appelant peut le donner tel quel (un seul champ qui bascule).
+    Couche d'adaptation de :func:`core.journal.tracer` : ``diff`` se calcule
+    d'``avant``/``apres`` quand ils sont fournis, restreint aux champs
+    suivis ; sinon l'appelant peut le donner tel quel (un seul champ qui
+    bascule).
     """
-    diff = diff or {}
     if avant is not None and apres is not None:
-        diff = {
-            champ: [avant.get(champ), apres.get(champ)]
-            for champ in CHAMPS_SUIVIS
-            if avant.get(champ) != apres.get(champ)
-        }
-        changed_fields = changed_fields or list(diff)
-    return journaliser(
-        user,
+        avant = {champ: avant.get(champ) for champ in CHAMPS_SUIVIS}
+        apres = {champ: apres.get(champ) for champ in CHAMPS_SUIVIS}
+    return tracer(
+        request,
         action,
-        ChangeLog.Models.USER,
+        user,
+        famille="session" if action in ACTIONS_DE_SESSION else "compte",
+        avant=avant,
+        apres=apres,
         label=user.username,
         to_value=user.username,
         from_value=user.username if avant is not None else "",
         changed_fields=changed_fields,
-        diff=diff,
-        request=request,
+        diff=diff or None,
     )
 
 

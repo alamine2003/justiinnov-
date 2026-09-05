@@ -54,6 +54,8 @@ INSTALLED_APPS = [
     "corsheaders",
     # Métriques HTTP et base pour Prometheus (tableau de bord Grafana).
     "django_prometheus",
+    # Schéma OpenAPI (``/api/schema/``, ``manage.py spectacular``).
+    "drf_spectacular",
     # apps
     "core",
     "accounts",
@@ -222,7 +224,7 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ],
     # ``login`` (par adresse) et ``login_user`` (par nom de compte) protègent
-    # l'obtention du jeton (cf. core.views).
+    # l'obtention du jeton (cf. accounts.views).
     "DEFAULT_THROTTLE_RATES": {
         "user": "2000/hour",
         "login": "10/min",
@@ -232,6 +234,77 @@ REST_FRAMEWORK = {
     # à lire l'adresse réelle du client dans X-Forwarded-For, pour le journal
     # et la limitation de débit. Zéro : seule REMOTE_ADDR fait foi.
     "NUM_PROXIES": int(os.environ.get("DJANGO_NUM_PROXIES", "0")),
+    # Le contrat d'API est déduit des vues et des sérialiseurs, jamais écrit
+    # à la main : ``docs/api/schema.json`` et les types du frontend en
+    # dérivent (voir README, « API REST »).
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# ---------------------------------------------------------------------------
+# Schéma OpenAPI
+# ---------------------------------------------------------------------------
+# Servi sur ``/api/schema/`` aux rôles du siège (config/schema.py) ; généré
+# hors ligne par ``manage.py spectacular`` pour ``docs/api/schema.json``,
+# dont ``frontend/scripts/generer-types.mts`` tire les types TypeScript. Les
+# réglages figent la forme du document : la CI compare une génération
+# fraîche au fichier versionné, deux générations doivent être identiques.
+SPECTACULAR_SETTINGS = {
+    "TITLE": "JUSTI INNOV",
+    "DESCRIPTION": (
+        "Plateforme de contrôle budgétaire : suivi des dépenses de pays "
+        "africains et de leurs justificatifs. Le pays déclare, le siège "
+        "constate ; une dépense soumise est irréversible ; rien ne se "
+        "supprime hors brouillon ; les chiffres se calculent côté serveur.\n\n"
+        "Authentification par jeton (`Authorization: Token <jeton>`), obtenu "
+        "sur `/api/token-auth/`. Toute liste est paginée (`page`, "
+        "`page_size`) et filtrée par le périmètre du compte : un objet hors "
+        "périmètre répond 404. Les messages suivent `Accept-Language` "
+        "(`fr` par défaut, `en`)."
+    ),
+    "VERSION": "1.0.0",
+    # Le document n'est pas servi par la vue livrée avec drf-spectacular :
+    # ``config.schema`` l'expose avec ses propres droits (siège seulement).
+    "SERVE_INCLUDE_SCHEMA": False,
+    # Les composants de requête et de réponse divergent (champs en lecture
+    # seule, fichiers en écriture seule) : un seul composant mentirait dans
+    # un sens ou dans l'autre. Les composants de requête portent le suffixe
+    # ``Request``, ceux d'un ``PATCH`` le préfixe ``Patched``.
+    "COMPONENT_SPLIT_REQUEST": True,
+    # Plusieurs champs ``status`` ou ``kind`` n'ont pas les mêmes valeurs :
+    # sans nom explicite, drf-spectacular en fabriquerait un par collision,
+    # au nom instable.
+    "ENUM_NAME_OVERRIDES": {
+        "WorkflowStatusEnum": "expenses.workflow.Status",
+        "ProofStatusEnum": "expenses.models.Proof.ProofStatus",
+        "ProofKindEnum": "expenses.models.Proof.Kind",
+        "BeneficiaryKindEnum": "expenses.models.Beneficiary.Kind",
+        "PaymentMethodEnum": "expenses.models.Expense.PaymentMethod",
+        "NotificationKindEnum": "notifications.models.Notification.Kind",
+        "NotificationLevelEnum": "notifications.models.Notification.Level",
+        "ReallocationStatusEnum": "budget.models.BudgetReallocation.Status",
+        "OverrunPolicyEnum": "budget.models.OverrunPolicy",
+        "ProjectStatusEnum": "core.models.Project.STATUS_CHOICES",
+        "ChangeLogActionEnum": "core.models.ChangeLog.Actions",
+        "ChangeLogModelEnum": "core.models.ChangeLog.Models",
+        "AuditActionEnum": "expenses.models.AuditLog.Action",
+        "RoleEnum": "accounts.models.Role",
+        "TransitionEnum": "expenses.serializers.TRANSITION_CHOICES",
+        "BudgetScopeEnum": "budget.serializers.SCOPE_CHOICES",
+    },
+    # Voir config/schema.py : en réponse, tout champ est présent.
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "config.schema.reponses_completes",
+    ],
+    # Ordre stable des opérations et de leurs paramètres : la CI compare le
+    # document généré au fichier versionné.
+    "SORT_OPERATIONS": True,
+    "SORT_OPERATION_PARAMETERS": True,
+    # Interface Swagger sans dépendance embarquée : chargée depuis un CDN,
+    # elle n'existe qu'en mode debug (config/schema.py).
+    "SWAGGER_UI_DIST": "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5",
+    "SWAGGER_UI_FAVICON_HREF": "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/favicon-32x32.png",
+    "SWAGGER_UI_SETTINGS": {"persistAuthorization": True, "displayRequestDuration": True},
 }
 
 # Double authentification (TOTP). Le mécanisme est toujours disponible :
@@ -273,9 +346,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # porte son propre fuseau dans `Country.timezone` pour l'affichage local.
 LANGUAGE_CODE = "fr"
 # Plateforme bilingue : le français est la langue de référence des messages,
-# l'anglais vient des catalogues ``locale/`` de chaque application. La langue
-# d'une réponse suit l'en-tête ``Accept-Language`` envoyé par l'interface.
+# l'anglais vient d'un catalogue unique, ``locale/en`` à la racine du projet
+# (décision 42) : une seule commande ``makemessages`` le régénère, une seule
+# étape le compile, et la CI refuse une chaîne restée vide. La langue d'une
+# réponse suit l'en-tête ``Accept-Language`` envoyé par l'interface.
 LANGUAGES = [("fr", "Français"), ("en", "English")]
+LOCALE_PATHS = [BASE_DIR / "locale"]
 TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "UTC")
 USE_I18N = True
 USE_TZ = True
@@ -351,20 +427,42 @@ WARN_WITHOUT_PROOF_SUBMISSION = os.environ.get(
     "WARN_WITHOUT_PROOF_SUBMISSION", "1"
 ) == "1"
 
+
+
+def choisir_email_backend(email_host, *, debug, console):
+    """Transport des e-mails, ou refus de démarrer.
+
+    Un serveur SMTP dès qu'il est nommé. Sinon, la console — les messages
+    vont dans les journaux — mais seulement en développement ou sur demande
+    explicite (``EMAIL_BACKEND_CONSOLE=1``) : en production, un ``EMAIL_HOST``
+    oublié ferait disparaître les alertes budgétaires dans les logs sans
+    que personne ne s'en aperçoive. Fonction pure, pour être testable sans
+    recharger les réglages.
+    """
+    if email_host:
+        return "django.core.mail.backends.smtp.EmailBackend"
+    if debug or console:
+        return "django.core.mail.backends.console.EmailBackend"
+    raise ImproperlyConfigured(
+        "EMAIL_HOST est obligatoire hors mode debug : sans lui, aucune alerte "
+        "ne part. Pour écrire les messages dans les journaux à la place, "
+        "posez explicitement EMAIL_BACKEND_CONSOLE=1."
+    )
+
+
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_BACKEND_CONSOLE = os.environ.get("EMAIL_BACKEND_CONSOLE", "0") == "1"
 # Un serveur SMTP injoignable ne doit pas bloquer une requête ou une tâche
 # planifiée indéfiniment.
 EMAIL_TIMEOUT = 10
+EMAIL_BACKEND = choisir_email_backend(
+    EMAIL_HOST, debug=DEBUG, console=EMAIL_BACKEND_CONSOLE
+)
 if EMAIL_HOST:
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
     EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
     EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
     EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
-else:
-    # Sans serveur SMTP configuré, les messages sont écrits dans les logs
-    # plutôt que perdus silencieusement.
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", "controle-budgetaire@justi-innov.local"
@@ -402,18 +500,63 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # Derrière Caddy, qui termine TLS et émet déjà HSTS pour tout le domaine,
+    # Django n'a rien à ajouter : DJANGO_HSTS_SECONDS=0 (deploy/.env.example).
+    # La valeur par défaut protège un déploiement où Django serait exposé seul.
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
     # Le préchargement n'est pas un réglage anodin : inscrite sur la liste des
     # navigateurs, la plateforme devient inaccessible en clair, sous-domaines
     # compris, et l'inscription ne se retire pas rapidement. Il est donc
     # activable par l'environnement, et actif par défaut : le back-office et
     # les justificatifs n'ont aucune raison de transiter en clair.
-    SECURE_HSTS_PRELOAD = os.environ.get("DJANGO_HSTS_PRELOAD", "1") == "1"
+    SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0 and os.environ.get("DJANGO_HSTS_PRELOAD", "1") == "1"
 
 # ---------------------------------------------------------------------------
 # Supervision (§ tableau de bord Grafana)
 # ---------------------------------------------------------------------------
+# Une pile déploie ou non Prometheus et Grafana (deploy/) : l'interface ne
+# propose « Supervision » que là où le tableau de bord existe. Le drapeau est
+# exposé par ``/api/me/`` et ``/api/configuration/`` ; absent (CI,
+# développement), il vaut faux.
+SUPERVISION = os.environ.get("SUPERVISION", "0") == "1"
 # Jeton présenté par le collecteur Prometheus sur ``/metrics``. Vide : le
 # point de collecte n'est pas exposé.
 METRICS_TOKEN = os.environ.get("METRICS_TOKEN", "")
+# Répertoire partagé des compteurs quand gunicorn fait tourner plusieurs
+# workers : chaque processus a sinon ses propres compteurs, et ``/metrics``
+# ne montre que ceux du worker qui répond. ``prometheus_client`` et
+# ``django_prometheus`` basculent d'eux-mêmes en mode multi-processus dès
+# que la variable d'environnement existe — au chargement, d'où l'obligation
+# de la poser avant le démarrage et non ici. Elle est lue pour créer le
+# répertoire s'il manque ; ``gunicorn.conf.py`` retire les fichiers d'un
+# worker mort.
+PROMETHEUS_MULTIPROC_DIR = os.environ.get("PROMETHEUS_MULTIPROC_DIR", "")
+if PROMETHEUS_MULTIPROC_DIR:
+    Path(PROMETHEUS_MULTIPROC_DIR).mkdir(parents=True, exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# Réglages de test
+# ---------------------------------------------------------------------------
+# Actifs quand la suite tourne (``manage.py test``, ou ``DJANGO_TEST=1`` pour
+# un lanceur qui ne passe pas par ``manage.py``), jamais en service. Ils
+# échangent de la fidélité contre de la vitesse là où la couverture n'y perd
+# rien :
+# - le cache passe en mémoire : le cache partagé n'a de sens qu'entre les
+#   workers gunicorn ; en test, chaque compteur de débit et chaque lecture de
+#   la configuration du circuit coûtait une requête, et ``--parallel`` aurait
+#   exigé une table ``django_cache`` par base clonée. Ce cache n'est plus
+#   annulé avec la transaction du test : ``core.tests.runner`` le vide avant
+#   chaque test ;
+# - les mots de passe sont hachés en MD5 : PBKDF2, avec ses centaines de
+#   milliers d'itérations, rendait la création de chaque compte de test plus
+#   longue que le test lui-même. Aucun test ne porte sur l'algorithme.
+import sys  # noqa: E402 — réservé à ce bloc
+
+EN_TEST = os.environ.get("DJANGO_TEST") == "1" or sys.argv[1:2] == ["test"]
+if EN_TEST:
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
+    }
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+    TEST_RUNNER = "core.tests.runner.LanceurDeTests"

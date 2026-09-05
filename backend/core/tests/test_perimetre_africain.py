@@ -1,7 +1,6 @@
 """Périmètre géographique : la plateforme ne suit que des pays africains."""
 
 from django.contrib.auth.models import User
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import status
@@ -37,7 +36,6 @@ class ValidateurTests(APITestCase):
 
 class CreationParApiTests(APITestCase):
     def setUp(self):
-        cache.clear()
         user = User.objects.create_user(username="ceo.innov", password="Motdepasse-2026-test")
         UserProfile.objects.create(
             user=user, role=Role.SUPER_ADMIN, must_change_password=False,

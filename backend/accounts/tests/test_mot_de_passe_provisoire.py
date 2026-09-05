@@ -2,7 +2,6 @@
 
 import pyotp
 from django.contrib.auth.models import User
-from django.core.cache import cache
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -14,7 +13,6 @@ from core.models import Country
 
 class MotDePasseProvisoireTests(APITestCase):
     def setUp(self):
-        cache.clear()
         self.pays = Country.objects.create(
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",

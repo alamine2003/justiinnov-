@@ -16,6 +16,12 @@ Chaque compte doit porter une adresse e-mail professionnelle (domaines de
 ``ALLOWED_EMAIL_DOMAINS``) : la même règle que l'API, appliquée ici parce
 que la commande est un chemin d'écriture comme un autre.
 
+Trois clés facultatives complètent le profil et ne sont touchées que si
+elles figurent dans le fichier : ``teams`` (noms d'équipes, cherchées dans
+les pays du compte), ``manager`` (nom du manager du référentiel que le
+compte incarne, ``null`` pour le détacher) et ``language`` (``fr`` ou
+``en``).
+
 Une clé ``totp_secret`` (base32) enrôle et confirme d'emblée la double
 authentification avec ce secret — que la politique l'exige ou non
 (``settings.TOTP_REQUIRED``). Elle n'existe que pour les environnements
@@ -30,16 +36,17 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import Role, UserProfile
+from accounts.models import Role, UserProfile, aligner_drapeaux
 from accounts.validators import valider_email_professionnel
-from core.models import Country
-from core.signals import reset_current_request, set_current_request
+from core.models import Country, Manager, Team
+from core.requetes import reset_current_request, set_current_request
 
 DEFAULT_FILE = "seed_users.local.json"
 
@@ -177,8 +184,7 @@ class Command(BaseCommand):
         user.last_name = payload.get("last_name", user.last_name)
         user.email = email
         # Le back-office Django est réservé au siège.
-        user.is_staff = role in (Role.SUPER_ADMIN, Role.ADMIN)
-        user.is_superuser = role == Role.SUPER_ADMIN
+        aligner_drapeaux(user, role)
         user.is_active = payload.get("is_active", True)
 
         # Le mot de passe du fichier n'est posé qu'à la création, ou sur
@@ -200,8 +206,10 @@ class Command(BaseCommand):
             profile.must_change_password = payload.get("must_change_password", True)
         if "totp_secret" in payload:
             self._enroler(profile, username, payload["totp_secret"])
-        profile.save()
+        if "language" in payload:
+            profile.language = self._langue(username, payload["language"])
 
+        countries = []
         if refs:
             countries = list(Country.objects.filter(country_ref__in=refs))
             missing = set(refs) - {c.country_ref for c in countries}
@@ -209,9 +217,16 @@ class Command(BaseCommand):
                 raise CommandError(
                     f"Pays inconnus pour {username} : {', '.join(sorted(missing))}"
                 )
+        if "manager" in payload:
+            profile.manager = self._manager(username, payload["manager"], countries)
+        profile.save()
+
+        if countries:
             profile.countries.set(countries)
         else:
             profile.countries.clear()
+        if "teams" in payload:
+            profile.teams.set(self._equipes(username, payload["teams"], countries))
 
         scope = ", ".join(refs) if refs else "siège (tous pays)"
         verb = "créé" if created else "mis à jour"
@@ -219,6 +234,58 @@ class Command(BaseCommand):
         if "totp_secret" in payload:
             detail += " (2FA enrôlée par le fichier)"
         self.stdout.write(f"Compte {username:<22} {role:<16} {scope:<22} {verb}{detail}")
+
+    def _langue(self, username, langue):
+        codes = [code for code, _ in settings.LANGUAGES]
+        if langue not in codes:
+            raise CommandError(
+                f"Compte {username} : langue inconnue {langue!r}. "
+                f"Valeurs possibles : {', '.join(codes)}"
+            )
+        return langue
+
+    def _equipes(self, username, noms, countries):
+        """Équipes du compte, cherchées par nom dans ses pays.
+
+        Le nom d'une équipe n'est unique que dans son pays : hors des pays du
+        compte, il ne désigne rien — et une équipe d'un autre pays serait
+        de toute façon refusée par l'API.
+        """
+        noms = list(noms or [])
+        if noms and not countries:
+            raise CommandError(
+                f"Compte {username} : des équipes sans pays n'ont pas de sens."
+            )
+        equipes = list(Team.objects.filter(country__in=countries, name__in=noms))
+        manquantes = set(noms) - {t.name for t in equipes}
+        if manquantes:
+            raise CommandError(
+                f"Équipes inconnues dans les pays de {username} : "
+                f"{', '.join(sorted(manquantes))}"
+            )
+        return equipes
+
+    def _manager(self, username, nom, countries):
+        """Manager du référentiel que le compte incarne, ou ``None``.
+
+        Le nom d'un manager n'est pas unique : la recherche se limite aux
+        managers rattachés aux pays du compte, et une ambiguïté restante
+        est une erreur — le fichier doit être corrigé, pas deviné.
+        """
+        if nom in (None, ""):
+            return None
+        candidats = Manager.objects.filter(name=nom)
+        if countries:
+            candidats = candidats.filter(countries__in=countries).distinct()
+        candidats = list(candidats)
+        if not candidats:
+            raise CommandError(f"Manager inconnu pour {username} : {nom!r}")
+        if len(candidats) > 1:
+            raise CommandError(
+                f"Plusieurs managers portent le nom {nom!r} pour {username} : "
+                "précisez-le dans le référentiel avant de relancer."
+            )
+        return candidats[0]
 
     def _enroler(self, profile, username, secret):
         """Pose un secret TOTP venu du fichier et le tient pour confirmé.
@@ -239,6 +306,8 @@ class Command(BaseCommand):
         if profile.totp_secret != secret or profile.totp_confirmed_at is None:
             profile.totp_secret = secret
             profile.totp_confirmed_at = timezone.now()
+            # Nouveau secret : la mémoire anti-rejeu repart.
+            profile.totp_last_counter = None
 
 
 class _Rollback(Exception):

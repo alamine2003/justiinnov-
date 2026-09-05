@@ -6,21 +6,28 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from core.models import Country, Team, WorkflowConfiguration
 
-from .models import DEFAULT_LANGUAGE, Role, UserProfile
-from .permissions import capabilities_for
+from .models import DEFAULT_LANGUAGE, Role, UserProfile, aligner_drapeaux
+from .permissions import CAPABILITIES, capabilities_for
 from .validators import valider_email_professionnel
 
 
 class ScopeCountrySerializer(serializers.ModelSerializer):
-    """Pays du périmètre, en représentation compacte."""
+    """Pays du périmètre, en représentation compacte.
+
+    Le fuseau et la devise y sont : un compte pays borne ses périodes dans
+    l'heure de son pays et lit ses montants dans sa devise, et l'interface
+    n'a pas à charger le référentiel entier pour le savoir.
+    """
 
     class Meta:
         model = Country
-        fields = ["id", "name", "code", "country_ref"]
+        fields = ["id", "name", "code", "country_ref", "timezone", "currency"]
 
 
 class ScopeTeamSerializer(serializers.ModelSerializer):
@@ -33,6 +40,98 @@ class ScopeTeamSerializer(serializers.ModelSerializer):
 
 def _password_field(**kwargs):
     return serializers.CharField(write_only=True, style={"input_type": "password"}, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Formes documentaires (schéma OpenAPI)
+# ---------------------------------------------------------------------------
+# Ces sérialiseurs ne lisent ni n'écrivent rien : ils décrivent, pour le
+# schéma et les types du frontend, des réponses composées à la main par les
+# vues. Ils portent ``read_only`` pour ne figurer qu'en réponse.
+
+#: Droits par capacité, tirés de la matrice : un droit ajouté à
+#: ``CAPABILITIES`` apparaît dans le schéma sans rien recopier.
+PermissionsSerializer = type(
+    "PermissionsSerializer",
+    (serializers.Serializer,),
+    {
+        capability["key"]: serializers.BooleanField(
+            read_only=True, help_text=capability["description"]
+        )
+        for capability in CAPABILITIES
+    },
+)
+
+
+class MeWorkflowSerializer(serializers.Serializer):
+    """Politique du circuit que l'interface doit connaître."""
+
+    require_review_step = serializers.BooleanField(read_only=True)
+
+
+class TokenAuthSerializer(serializers.Serializer):
+    """Identifiants présentés à ``/api/token-auth/``."""
+
+    username = serializers.CharField()
+    password = serializers.CharField(style={"input_type": "password"})
+    code = serializers.CharField(
+        required=False,
+        help_text=gettext_lazy(
+            "Code de double authentification, exigé dès que le compte est "
+            "enrôlé (réponse 400 avec ``totp_required`` sinon)."
+        ),
+    )
+
+
+class TokenAuthErrorSerializer(serializers.Serializer):
+    """Refus de ``/api/token-auth/`` quand le second facteur manque ou est faux."""
+
+    code = serializers.ListField(child=serializers.CharField(), read_only=True)
+    totp_required = serializers.BooleanField(read_only=True)
+
+
+
+class TokenSerializer(serializers.Serializer):
+    """Jeton d'API remis à la connexion et au changement de mot de passe."""
+
+    token = serializers.CharField(read_only=True)
+
+
+class TotpEnrolmentSerializer(serializers.Serializer):
+    """Secret d'enrôlement, remis une seule fois."""
+
+    otpauth_uri = serializers.CharField(read_only=True)
+    qr_png_base64 = serializers.CharField(read_only=True)
+    secret = serializers.CharField(read_only=True)
+
+
+class TotpConfirmedSerializer(serializers.Serializer):
+    totp_confirmed = serializers.BooleanField(read_only=True)
+
+
+class PermissionMatrixRoleSerializer(serializers.Serializer):
+    value = serializers.ChoiceField(choices=Role.choices, read_only=True)
+    label = serializers.CharField(read_only=True)
+    siege = serializers.BooleanField(read_only=True)
+    always_global = serializers.BooleanField(read_only=True)
+
+
+class PermissionMatrixCapabilitySerializer(serializers.Serializer):
+    key = serializers.CharField(read_only=True)
+    label = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+    roles = serializers.ListField(
+        child=serializers.ChoiceField(choices=Role.choices), read_only=True
+    )
+
+
+class PermissionMatrixSerializer(serializers.Serializer):
+    """Matrice rôle × capacité, telle que ``RolePermission`` l'applique."""
+
+    roles = PermissionMatrixRoleSerializer(many=True, read_only=True)
+    capabilities = PermissionMatrixCapabilitySerializer(many=True, read_only=True)
+    editable = serializers.BooleanField(read_only=True)
+    note = serializers.CharField(read_only=True)
 
 
 def _validate_password(password, user=None):
@@ -69,6 +168,7 @@ class MeSerializer(serializers.ModelSerializer):
     language = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
     workflow = serializers.SerializerMethodField()
+    supervision = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -76,7 +176,7 @@ class MeSerializer(serializers.ModelSerializer):
             "id", "username", "first_name", "last_name", "email",
             "role", "role_display", "countries", "teams", "has_global_scope",
             "must_change_password", "totp_required", "totp_confirmed", "language",
-            "permissions", "workflow",
+            "permissions", "workflow", "supervision",
         ]
 
     def _role(self, user):
@@ -85,21 +185,25 @@ class MeSerializer(serializers.ModelSerializer):
         profile = getattr(user, "profile", None)
         return profile.role if profile is not None else None
 
+    @extend_schema_field(serializers.ChoiceField(choices=Role.choices, allow_null=True))
     def get_role(self, user):
         return self._role(user)
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_role_display(self, user):
         role = self._role(user)
         # Résolu maintenant, langue de la requête active : un objet paresseux
         # dans ``response.data`` se traduirait à sa lecture, pas à l'envoi.
         return str(Role(role).label) if role else None
 
+    @extend_schema_field(ScopeCountrySerializer(many=True))
     def get_countries(self, user):
         profile = getattr(user, "profile", None)
         if profile is None:
             return []
         return ScopeCountrySerializer(profile.countries.all(), many=True).data
 
+    @extend_schema_field(ScopeTeamSerializer(many=True))
     def get_teams(self, user):
         """Équipes rattachées au profil.
 
@@ -111,10 +215,12 @@ class MeSerializer(serializers.ModelSerializer):
             return []
         return ScopeTeamSerializer(profile.teams.all(), many=True).data
 
+    @extend_schema_field(serializers.BooleanField())
     def get_must_change_password(self, user):
         profile = getattr(user, "profile", None)
         return bool(profile and profile.must_change_password)
 
+    @extend_schema_field(serializers.BooleanField())
     def get_totp_required(self, user):
         """La politique de la plateforme, pas l'état du compte.
 
@@ -124,18 +230,22 @@ class MeSerializer(serializers.ModelSerializer):
         """
         return bool(settings.TOTP_REQUIRED)
 
+    @extend_schema_field(serializers.BooleanField())
     def get_totp_confirmed(self, user):
         profile = getattr(user, "profile", None)
         return bool(profile and profile.totp_confirmed)
 
+    @extend_schema_field(serializers.ChoiceField(choices=settings.LANGUAGES))
     def get_language(self, user):
         profile = getattr(user, "profile", None)
         return profile.language if profile is not None else DEFAULT_LANGUAGE
 
+    @extend_schema_field(serializers.BooleanField())
     def get_has_global_scope(self, user):
         profile = getattr(user, "profile", None)
         return profile is not None and profile.has_global_scope
 
+    @extend_schema_field(PermissionsSerializer)
     def get_permissions(self, user):
         """Droits dérivés du rôle.
 
@@ -144,6 +254,7 @@ class MeSerializer(serializers.ModelSerializer):
         """
         return capabilities_for(self._role(user))
 
+    @extend_schema_field(MeWorkflowSerializer)
     def get_workflow(self, user):
         """Réglages du circuit qui décident de ce que l'interface propose.
 
@@ -152,6 +263,15 @@ class MeSerializer(serializers.ModelSerializer):
         """
         configuration = WorkflowConfiguration.charger()
         return {"require_review_step": configuration.require_review_step}
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_supervision(self, user):
+        """La pile expose-t-elle un tableau de bord de supervision ?
+
+        Réglage de déploiement (``SUPERVISION=1``), pas un droit : le menu du
+        compte ne propose « Supervision » que là où Grafana existe.
+        """
+        return bool(settings.SUPERVISION)
 
 
 class MePreferencesSerializer(serializers.Serializer):
@@ -188,25 +308,27 @@ class TotpCodeSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=16)
 
 
-def aligner_drapeaux(user, role):
-    """Aligne l'accès à l'admin Django sur le rôle du profil.
-
-    Le back-office Django est réservé au siège. Sans cet alignement, un super
-    administrateur rétrogradé garderait ``is_superuser`` — et donc tous les
-    droits sur l'admin — alors que l'API ne lui reconnaît plus rien.
-    """
-    user.is_staff = role in (Role.SUPER_ADMIN, Role.ADMIN)
-    user.is_superuser = role == Role.SUPER_ADMIN
-
-
 class UserSerializer(serializers.ModelSerializer):
     """Création et mise à jour d'un compte par le siège.
+
+    ``username`` se choisit à la création et ne change plus. Toutes les
+    identités de la plateforme sont stockées en texte sous ce nom — auteur
+    d'une dépense, déposant d'une pièce, signataire d'une entrée de journal —
+    et la règle des quatre yeux compare ce nom à celui de qui justifie.
+    Renommer un compte romprait ces traces et permettrait, en changeant de
+    nom entre la saisie et le constat, de justifier sa propre dépense. Le
+    prénom et le nom, eux, restent libres : ils n'identifient rien.
 
     ``must_change_password`` n'est pas modifiable : il est vrai dès qu'un
     mot de passe a été posé par un tiers, et seul son titulaire l'efface, en
     le remplaçant. Le siège ne peut pas déclarer personnel un mot de passe
     qu'il connaît. ``totp_confirmed`` non plus : seul le titulaire enrôle
     son application, le siège ne peut que réinitialiser (``reset-2fa``).
+
+    ``teams`` restreint la vue d'un manager à ces équipes (cf.
+    ``UserProfile.team_ids``) ; chacune doit appartenir à un pays de
+    ``countries``, sans quoi le compte verrait une équipe d'un pays qu'il
+    n'a pas — ou n'en verrait aucune, sans que rien ne le dise.
 
     L'adresse e-mail est obligatoire et professionnelle : c'est elle qui
     nomme le compte dans l'application d'authentification, et un compte
@@ -222,6 +344,13 @@ class UserSerializer(serializers.ModelSerializer):
     countries_detail = ScopeCountrySerializer(
         source="profile.countries", many=True, read_only=True
     )
+    teams = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Team.objects.all(), source="profile.teams",
+        required=False,
+    )
+    teams_detail = ScopeTeamSerializer(
+        source="profile.teams", many=True, read_only=True
+    )
     must_change_password = serializers.BooleanField(
         source="profile.must_change_password", read_only=True
     )
@@ -234,8 +363,8 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "username", "first_name", "last_name", "email", "is_active",
-            "role", "countries", "countries_detail", "must_change_password",
-            "totp_confirmed", "password",
+            "role", "countries", "countries_detail", "teams", "teams_detail",
+            "must_change_password", "totp_confirmed", "password",
         ]
 
     def validate_email(self, value):
@@ -244,12 +373,51 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_password(self, value):
         return _validate_password(value)
 
+    def validate_username(self, value):
+        if self.instance is not None and value != self.instance.username:
+            raise serializers.ValidationError(
+                _(
+                    "Le nom de compte ne se modifie pas : les traces et la "
+                    "règle des quatre yeux reposent sur lui. Créez un autre "
+                    "compte et désactivez celui-ci."
+                )
+            )
+        return value
+
     def validate(self, attrs):
         if self.instance is None and not attrs.get("password"):
             raise serializers.ValidationError(
                 {"password": _("Un mot de passe est requis à la création.")}
             )
+        self._verifier_equipes(attrs)
         return attrs
+
+    def _verifier_equipes(self, attrs):
+        """Chaque équipe doit appartenir à un pays du périmètre — tel qu'il
+        sera après cette écriture, que les pays ou les équipes viennent de
+        la charge utile ou soient déjà en base."""
+        profile_data = attrs.get("profile", {})
+        profil = getattr(self.instance, "profile", None) if self.instance else None
+        if "teams" in profile_data:
+            teams = profile_data["teams"]
+        else:
+            teams = list(profil.teams.all()) if profil is not None else []
+        if not teams:
+            return
+        if "countries" in profile_data:
+            pays = {c.pk for c in profile_data["countries"]}
+        else:
+            pays = set(profil.countries.values_list("pk", flat=True)) if profil else set()
+        etrangeres = sorted(t.name for t in teams if t.country_id not in pays)
+        if etrangeres:
+            raise serializers.ValidationError(
+                {
+                    "teams": _(
+                        "Une équipe doit appartenir à un pays du périmètre du "
+                        "compte : %(equipes)s."
+                    ) % {"equipes": ", ".join(etrangeres)}
+                }
+            )
 
     def to_representation(self, instance):
         """Garantit une forme de réponse stable.
@@ -264,6 +432,8 @@ class UserSerializer(serializers.ModelSerializer):
         for key, fallback in (
             ("countries", []),
             ("countries_detail", []),
+            ("teams", []),
+            ("teams_detail", []),
             ("must_change_password", False),
             ("totp_confirmed", False),
         ):
@@ -275,6 +445,7 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         profile_data = validated_data.pop("profile", {})
         countries = profile_data.pop("countries", [])
+        teams = profile_data.pop("teams", [])
         password = validated_data.pop("password")
 
         user = User(**validated_data)
@@ -287,13 +458,18 @@ class UserSerializer(serializers.ModelSerializer):
             user=user, must_change_password=True, **profile_data
         )
         profile.countries.set(countries)
+        profile.teams.set(teams)
         return user
 
     @transaction.atomic
     def update(self, instance, validated_data):
         profile_data = validated_data.pop("profile", {})
         countries = profile_data.pop("countries", None)
+        teams = profile_data.pop("teams", None)
         password = validated_data.pop("password", None)
+        # Validé identique à l'existant : rien à écrire, et surtout pas à
+        # journaliser comme un changement.
+        validated_data.pop("username", None)
 
         for field, value in validated_data.items():
             setattr(instance, field, value)
@@ -314,4 +490,6 @@ class UserSerializer(serializers.ModelSerializer):
         profile.save()
         if countries is not None:
             profile.countries.set(countries)
+        if teams is not None:
+            profile.teams.set(teams)
         return instance

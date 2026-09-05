@@ -2,7 +2,6 @@
 
 import pyotp
 from django.contrib.auth.models import User
-from django.core.cache import cache
 from django.db.models import Max
 from django.utils import timezone
 from rest_framework import status
@@ -16,21 +15,19 @@ PASSWORD = "Motdepasse-de-test-2026"
 
 
 class ApiTestCase(APITestCase):
-    def setUp(self):
-        # Les compteurs de débit vivent dans le cache : ils doivent repartir de
-        # zéro à chaque test.
-        cache.clear()
-        self.user = User.objects.create_user(username="admin.test", password=PASSWORD)
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="admin.test", password=PASSWORD)
         # Les vues exigent un profil : sans rôle, aucun droit.
         # Compte en service : mot de passe personnel et 2FA confirmée. La
         # connexion exige donc un code (cf. accounts.tests).
-        self.secret = pyotp.random_base32()
+        cls.secret = pyotp.random_base32()
         UserProfile.objects.create(
-            user=self.user, role=Role.SUPER_ADMIN, must_change_password=False,
-            totp_secret=self.secret, totp_confirmed_at=timezone.now(),
+            user=cls.user, role=Role.SUPER_ADMIN, must_change_password=False,
+            totp_secret=cls.secret, totp_confirmed_at=timezone.now(),
         )
-        self.token = Token.objects.create(user=self.user)
-        self.country = Country.objects.create(
+        cls.token = Token.objects.create(user=cls.user)
+        cls.country = Country.objects.create(
             name="Togo", code="TG", currency="XOF", timezone="Africa/Lome"
         )
 
@@ -160,6 +157,24 @@ class HistoryTests(ApiTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         actions = [entry["action"] for entry in response.data["results"]]
         self.assertIn(ChangeLog.Actions.DEACTIVATED, actions)
+
+    def test_une_entree_porte_la_difference_et_l_adresse(self):
+        """Qui, quoi, depuis où, avant et après : l'historique le dit, et
+        l'interface n'a pas à le deviner."""
+        self.client.patch(
+            f"/api/countries/{self.country.pk}/", {"is_active": False},
+            REMOTE_ADDR="203.0.113.7",
+        )
+
+        response = self.client.get("/api/history/", {"country": self.country.pk})
+
+        entry = next(
+            e for e in response.data["results"]
+            if e["action"] == ChangeLog.Actions.DEACTIVATED
+        )
+        self.assertEqual(entry["diff"], {"is_active": [True, False]})
+        self.assertEqual(entry["ip_address"], "203.0.113.7")
+        self.assertEqual(entry["changed_fields"], ["is_active"])
 
     def test_entree_sans_pays_conserve_la_cle_country_name(self):
         """Un événement sans pays (un manager) doit renvoyer `country_name:

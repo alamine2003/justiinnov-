@@ -1,34 +1,14 @@
-"""URLs de l'API."""
+"""URLs de ``core`` : le point de santé, sans authentification.
 
-from django.urls import include, path
-from rest_framework.routers import DefaultRouter
+Le référentiel, l'authentification et le back-office sont routés par
+``accounts.urls`` (décision 40), aux mêmes chemins et sous les mêmes noms.
+"""
+
+from django.urls import path
 
 from . import views
-
-router = DefaultRouter()
-router.register("countries", views.CountryViewSet, basename="country")
-router.register("managers", views.ManagerViewSet, basename="manager")
-router.register("teams", views.TeamViewSet, basename="team")
-router.register("cost-centers", views.CostCenterViewSet, basename="cost-center")
-router.register("projects", views.ProjectViewSet, basename="project")
-router.register("expense-titles", views.ExpenseTitleViewSet, basename="expense-title")
-router.register("marketing-categories", views.MarketingCategoryViewSet, basename="marketing-category")
-router.register("history", views.ChangeLogViewSet, basename="history")
 
 urlpatterns = [
     # Sans authentification : Docker et le déploiement s'en servent.
     path("health/", views.HealthView.as_view(), name="health"),
-    path(
-        "token-auth/",
-        views.ThrottledObtainAuthToken.as_view(),
-        name="token-auth",
-    ),
-    # Back-office : réservé au siège (cf. BackOfficePermission).
-    path("configuration/", views.ConfigurationView.as_view(), name="configuration"),
-    path(
-        "workflow-configuration/",
-        views.WorkflowConfigurationView.as_view(),
-        name="workflow-configuration",
-    ),
-    path("", include(router.urls)),
 ]

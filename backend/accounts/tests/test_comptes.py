@@ -73,15 +73,16 @@ class TraceDesComptesTests(ScopingTestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        entry = entrees(self.rep_togo, action=ChangeLog.Actions.UPDATED).get()
-        self.assertEqual(
-            entry.diff,
-            {
-                "role": [Role.MANAGER, Role.DM],
-                "email": ["togo.innov@innovpharma.net", "togo@innovpharma.net"],
-            },
+        # Le rôle est journalisé par le profil lui-même (``accounts.signals``),
+        # le compte par la vue : deux entrées, chacune avec avant/après.
+        diffs = [e.diff for e in entrees(self.rep_togo, action=ChangeLog.Actions.UPDATED)]
+        self.assertIn({"role": [Role.MANAGER, Role.DM]}, diffs)
+        self.assertIn(
+            {"email": ["togo.innov@innovpharma.net", "togo@innovpharma.net"]}, diffs
         )
-        self.assertEqual(entry.ip_address, "203.0.113.7")
+        for entry in entrees(self.rep_togo, action=ChangeLog.Actions.UPDATED):
+            self.assertEqual(entry.ip_address, "203.0.113.7")
+            self.assertEqual(entry.performed_by, self.siege.username)
 
     def test_le_changement_de_perimetre_est_trace(self):
         """Donner accès aux dépenses d'un autre pays doit se relire."""
@@ -95,6 +96,76 @@ class TraceDesComptesTests(ScopingTestCase):
         self.assertEqual(
             entry.diff, {"countries": [["Togo (TG)"], ["Côte d'Ivoire (CI)", "Togo (TG)"]]}
         )
+
+    def test_le_changement_d_equipes_est_trace(self):
+        """Restreindre ou élargir la vue d'un manager à des équipes se relit
+        comme un changement de pays."""
+        self.client.patch(
+            f"/api/users/{self.rep_togo.pk}/",
+            {"teams": [self.team_togo.pk]},
+            format="json",
+        )
+
+        entry = entrees(self.rep_togo, changed_fields=["teams"]).get()
+        self.assertEqual(entry.diff, {"teams": [[], ["Équipe Lomé (TG)"]]})
+
+    def test_le_nom_de_compte_est_immuable(self):
+        """Les traces et la règle des quatre yeux comparent sur ce nom."""
+        response = self.client.patch(
+            f"/api/users/{self.rep_togo.pk}/",
+            {"username": "autre.innov", "first_name": "Kossi"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("username", response.data)
+        self.rep_togo.refresh_from_db()
+        self.assertEqual(self.rep_togo.username, "togo.innov")
+        self.assertEqual(self.rep_togo.first_name, "")
+        self.assertFalse(entrees(self.rep_togo).exists())
+
+    def test_le_meme_nom_de_compte_repasse_sans_bruit(self):
+        """Un formulaire renvoie tout le compte, nom compris : identique, il
+        n'est ni refusé ni journalisé. Prénom et nom restent libres."""
+        response = self.client.patch(
+            f"/api/users/{self.rep_togo.pk}/",
+            {"username": "togo.innov", "first_name": "Kossi", "last_name": "Mensah"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        entry = entrees(self.rep_togo, action=ChangeLog.Actions.UPDATED).get()
+        self.assertEqual(sorted(entry.changed_fields), ["first_name", "last_name"])
+        self.assertNotIn("username", entry.diff)
+
+    def test_un_role_change_par_l_admin_django_est_trace_et_realigne_le_compte(self):
+        """L'admin Django enregistre le profil sans passer par l'API : la
+        trace et les drapeaux du compte ne doivent pas en dépendre."""
+        profil = self.rep_togo.profile
+        profil.role = Role.ADMIN
+        profil.language = "en"
+        profil.save()
+
+        self.rep_togo.refresh_from_db()
+        self.assertTrue(self.rep_togo.is_staff)
+        self.assertFalse(self.rep_togo.is_superuser)
+        entry = entrees(self.rep_togo, action=ChangeLog.Actions.UPDATED).get()
+        self.assertEqual(
+            entry.diff,
+            {"role": [Role.MANAGER, Role.ADMIN], "language": ["fr", "en"]},
+        )
+        # Hors requête API, l'auteur est celui de la requête courante — ici
+        # le siège connecté par jeton n'a pas encore été résolu : l'entrée
+        # existe, c'est l'essentiel ; ``seed_users`` la signe de son nom.
+
+    def test_la_langue_choisie_par_le_titulaire_est_tracee(self):
+        self.login(self.rep_togo)
+
+        self.client.patch("/api/me/", {"language": "en"}, format="json")
+
+        entry = entrees(self.rep_togo, changed_fields=["language"]).get()
+        self.assertEqual(entry.diff, {"language": ["fr", "en"]})
+        self.assertEqual(entry.performed_by, "togo.innov")
 
     def test_une_modification_sans_changement_ne_trace_rien(self):
         self.client.patch(

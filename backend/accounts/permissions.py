@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from django.utils.translation import gettext_lazy as _
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from .models import Role
+from .models import HEADQUARTERS_ROLES, Role  # noqa: F401 — ré-exporté
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,10 @@ class Access:
     #: Équipes auxquelles un manager est restreint ; ``None`` = pas de
     #: restriction par équipe (autre rôle, ou manager sans équipe).
     team_ids: list | None = None
+    #: Nom du compte, immuable (décision 27) : c'est sur lui que les quatre
+    #: yeux et la propriété d'un brouillon se jugent. Vide pour un accès
+    #: construit sans compte (une commande qui lit comme le siège).
+    username: str = ""
 
     @property
     def has_global_scope(self):
@@ -59,6 +63,7 @@ def get_access(user):
             role=profile.role,
             country_ids=profile.country_ids(),
             team_ids=profile.team_ids(),
+            username=user.username,
         )
     )
     setattr(user, _ATTRIBUT_MEMO, access)
@@ -111,6 +116,15 @@ REVIEW_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
 #: le siège qui constate qu'une pièce couvre un décaissement, jamais celui
 #: qui l'a engagé.
 VALIDATION_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
+
+#: Le pays : le manager, seul rôle qui déclare. C'est lui que l'on prévient
+#: quand une pièce manque ou qu'un dossier lui revient (décision 20), et
+#: lui seul que le cloisonnement par équipe concerne.
+COUNTRY_ROLES = frozenset({Role.MANAGER})
+
+#: Le siège entier — direction, RH, DF, DM — destinataire des rapports
+#: périodiques et des alertes, chacun sur son périmètre : alias de
+#: ``accounts.models.HEADQUARTERS_ROLES``, importé ci-dessus.
 
 #: Consultation du journal d'audit : la RH, qui audite, et la direction.
 #: Le DM et le DF en sont exclus : le journal relit *leurs* décisions autant

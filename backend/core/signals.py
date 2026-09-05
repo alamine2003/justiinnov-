@@ -1,12 +1,10 @@
 """Historisation automatique des changements et des rattachements de pays.
 
 La détection des modifications s'effectue en ``pre_save``, au moment où
-l'instance en mémoire diffère encore de l'état en base de données.
+l'instance en mémoire diffère encore de l'état en base de données. L'écriture
+elle-même passe par la façade ``core.journal`` (décision 38).
 """
 
-import datetime
-import decimal
-from contextvars import ContextVar
 from functools import partial
 
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
@@ -22,17 +20,15 @@ from .models import (
     Project,
     Team,
 )
-from .requetes import client_ip
+from .journal import serialisable, tracer  # noqa: F401 — ``serialisable`` ré-exporté
+from .requetes import (  # noqa: F401 — ré-exportés pour les commandes et les tests
+    get_current_request,
+    get_current_user,
+    reset_current_request,
+    set_current_request,
+)
 
 ALL_MODELS = (Country, Manager, Team, CostCenter, Project, ExpenseTitle, MarketingCategory)
-
-#: Requête HTTP en cours de traitement, posée par ``CurrentRequestMiddleware``.
-#:
-#: Une variable de contexte plutôt qu'un ``threading.local`` : elle suit la
-#: tâche, pas le fil d'exécution. Avec des workers gunicorn en threads, ou
-#: du code asynchrone, un ``threading.local`` mal remis à zéro ferait signer
-#: les écritures d'une requête par l'utilisateur d'une autre.
-_requete_courante = ContextVar("requete_courante", default=None)
 
 _MODEL_NAME = {
     "Country": ChangeLog.Models.COUNTRY,
@@ -45,83 +41,42 @@ _MODEL_NAME = {
 }
 
 
-def get_current_request():
-    """Requête en cours, ou ``None`` hors requête (commande, tâche, test)."""
-    return _requete_courante.get()
-
-
-def set_current_request(request):
-    """Pose la requête courante et rend le jeton qui permet de la retirer."""
-    return _requete_courante.set(request)
-
-
-def reset_current_request(token):
-    _requete_courante.reset(token)
-
-
-def get_current_user():
-    """Utilisateur authentifié de la requête courante, ou ``None``.
-
-    Lu au moment de l'écriture et non à l'entrée du middleware : pour une
-    requête par jeton, ``request.user`` n'est forcé par DRF qu'à l'entrée de
-    la vue, bien après le middleware.
-    """
-    request = get_current_request()
-    if request is None:
-        return None
-    user = getattr(request, "user", None)
-    if user is None or not user.is_authenticated:
-        return None
-    return user
-
-
-def serialisable(value):
-    """Valeur d'un champ sous une forme acceptée par ``JSONField``.
-
-    Les nombres décimaux et les dates n'ont pas d'équivalent JSON : ils
-    partent en texte, sans arrondi ni fuseau implicite.
-    """
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, decimal.Decimal):
-        return str(value)
-    if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
-        return value.isoformat()
-    if isinstance(value, (list, tuple, set, frozenset)):
-        return [serialisable(v) for v in value]
-    if isinstance(value, dict):
-        return {str(k): serialisable(v) for k, v in value.items()}
-    return str(value)
-
-
 def journaliser(instance, action, model_name, *, label=None, country=None,
                 from_value="", to_value=None, changed_fields=None, diff=None,
                 performed_by=None, request=None):
     """Écrit une entrée d'historique signée par la requête courante.
 
-    Point d'entrée unique : les signaux ci-dessous, la configuration du
-    workflow et les comptes passent tous par ici, pour que « qui, depuis
-    quelle adresse » soit rempli de la même façon partout.
+    Couche d'adaptation de :func:`core.journal.tracer` pour les écritures
+    qui nomment l'entité : les signaux ci-dessous, la configuration du
+    workflow et les comptes passent par ici, et la façade remplit « qui,
+    depuis quelle adresse » de la même façon partout.
     """
-    request = request or get_current_request()
-    if performed_by is None:
-        user = get_current_user() if request is None else getattr(request, "user", None)
-        performed_by = (
-            user.username if user is not None and user.is_authenticated else ""
-        )
-    return ChangeLog.objects.create(
-        model_name=model_name,
-        object_id=getattr(instance, "pk", None),
+    if model_name == ChangeLog.Models.USER:
+        famille = "session" if action in _ACTIONS_DE_SESSION else "compte"
+    elif model_name == ChangeLog.Models.WORKFLOW_CONFIGURATION:
+        famille = "configuration"
+    else:
+        famille = "referentiel"
+    return tracer(
+        request,
+        action,
+        instance,
+        famille=famille,
         label=(label if label is not None else str(instance))[:250],
-        action=action,
         country=country,
+        entite=model_name,
         from_value=from_value,
         to_value=str(instance) if to_value is None else to_value,
-        changed_fields=changed_fields or [],
-        diff=diff or {},
+        changed_fields=changed_fields,
+        diff=diff,
         performed_by=performed_by,
-        ip_address=client_ip(request) if request is not None else None,
     )
+
+
+#: Actions d'un compte qui relèvent de la session, pas de sa gestion.
+_ACTIONS_DE_SESSION = frozenset(
+    {ChangeLog.Actions.LOGIN, ChangeLog.Actions.LOGIN_FAILED, ChangeLog.Actions.LOGOUT}
+)
 
 
 def _resolve_country(instance, *, verify_exists=False):
@@ -279,12 +234,9 @@ def _log_deletion(sender, instance, model_name=None, country_resolver=None,
         from_value=str(instance),
         country_resolver=country_resolver,
     )
-    if isinstance(instance, Country):
-        # Les entités filles sont supprimées *avant* leur pays : leurs entrées
-        # d'historique, créées quelques instants plus tôt, y font encore
-        # référence. Le pays n'existant plus, ces liens doivent être coupés
-        # avant la fin de la transaction (contrainte de clé étrangère).
-        ChangeLog.objects.filter(country_id=instance.pk).update(country=None)
+    # Un pays qui a laissé des traces ne se supprime pas : ``ChangeLog.country``
+    # est en ``PROTECT`` et le journal est immuable en base. Il n'y a donc
+    # rien à détacher ici — la suppression échoue avant d'arriver là.
 
 
 def register(model, model_name, country_resolver=None):

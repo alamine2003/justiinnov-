@@ -114,6 +114,23 @@ class VerrouDeDoubleAuthentificationTests(ScopingTestCase):
         self.assertEqual(trace.ip_address, "203.0.113.7")
         self.assertNotIn(secret, str(trace.__dict__))
 
+    def test_le_code_de_confirmation_ne_ressert_pas_a_la_connexion(self):
+        secret = self.client.post("/api/me/2fa/enrol/").data["secret"]
+        code = code_courant(secret)
+        self.assertEqual(
+            self.client.post("/api/me/2fa/confirm/", {"code": code}).status_code,
+            status.HTTP_200_OK,
+        )
+        self.client.credentials()
+
+        response = self.client.post(
+            "/api/token-auth/",
+            {"username": "nouveau.innov", "password": MOT_DE_PASSE, "code": code},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["code"], ["Code de double authentification invalide."])
+
     def test_un_code_faux_est_refuse_et_journalise(self):
         secret = self.client.post("/api/me/2fa/enrol/").data["secret"]
 
@@ -220,6 +237,46 @@ class ConnexionAvecCodeTests(ScopingTestCase):
         Token.objects.filter(user=self.user).delete()
         trop_vieux = pyotp.TOTP(self.secret).at(timezone.now() - timedelta(seconds=90))
         self.assertEqual(self.connexion(code=trop_vieux).status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_un_code_ne_sert_qu_une_fois(self):
+        """Un code lu par-dessus l'épaule ne doit pas ouvrir une seconde
+        session pendant la minute où il reste valable."""
+        code = code_courant(self.secret)
+        self.assertEqual(self.connexion(code=code).status_code, status.HTTP_200_OK)
+        Token.objects.filter(user=self.user).delete()
+
+        rejeu = self.connexion(code=code)
+
+        self.assertEqual(rejeu.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(rejeu.data["code"], ["Code de double authentification invalide."])
+        self.assertFalse(Token.objects.filter(user=self.user).exists())
+        self.assertTrue(
+            ChangeLog.objects.filter(
+                pk__gt=self.repere, action=ChangeLog.Actions.LOGIN_FAILED,
+                object_id=self.user.pk,
+            ).exists()
+        )
+
+    def test_un_code_plus_ancien_que_le_dernier_accepte_est_refuse(self):
+        """Règle de la RFC 6238 : après le code courant, le précédent ne vaut
+        plus, même s'il est encore dans la fenêtre."""
+        self.assertEqual(
+            self.connexion(code=code_courant(self.secret)).status_code, status.HTTP_200_OK
+        )
+        Token.objects.filter(user=self.user).delete()
+        precedent = pyotp.TOTP(self.secret).at(timezone.now() - timedelta(seconds=30))
+
+        self.assertEqual(self.connexion(code=precedent).status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_la_reinitialisation_oublie_le_dernier_compteur(self):
+        self.user.profile.totp_last_counter = 10**9
+        self.user.profile.save()
+        self.login(self.siege)
+
+        self.client.post(f"/api/users/{self.user.pk}/reset-2fa/")
+
+        self.user.profile.refresh_from_db()
+        self.assertIsNone(self.user.profile.totp_last_counter)
 
     def test_un_compte_non_enrole_se_connecte_sans_code(self):
         """C'est le middleware qui le cantonne à l'enrôlement quand la

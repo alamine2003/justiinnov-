@@ -5,12 +5,13 @@ peut faire, le périmètre décide *sur quels pays* — et, pour un manager, *su
 quelles équipes*. Les deux sont portés par le profil, jamais déduits du nom
 d'utilisateur.
 
-Le profil porte aussi l'enrôlement TOTP : le secret, et la date à laquelle
-son titulaire a prouvé qu'il le détenait (``totp_confirmed_at``). Tant que
-cette date est vide, le compte n'est pas considéré comme protégé ; quand la
-politique l'exige (``settings.TOTP_REQUIRED``), la plateforme lui est fermée
-(cf. ``accounts.middleware``). Un compte enrôlé, obligation ou non, fournit
-toujours son code à la connexion.
+Le profil porte aussi l'enrôlement TOTP : le secret, la date à laquelle
+son titulaire a prouvé qu'il le détenait (``totp_confirmed_at``) et le
+dernier compteur accepté (``totp_last_counter``), qui interdit de rejouer
+un code. Tant que cette date est vide, le compte n'est pas considéré comme
+protégé ; quand la politique l'exige (``settings.TOTP_REQUIRED``), la
+plateforme lui est fermée (cf. ``accounts.middleware``). Un compte enrôlé,
+obligation ou non, fournit toujours son code à la connexion.
 """
 
 from django.conf import settings
@@ -55,6 +56,23 @@ ALWAYS_GLOBAL_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 
 #: Langue par défaut d'un profil : celle de référence des messages.
 DEFAULT_LANGUAGE = "fr"
+
+
+def aligner_drapeaux(user, role):
+    """Aligne l'accès à l'admin Django sur le rôle du profil.
+
+    Le back-office Django est réservé au siège. Sans cet alignement, un super
+    administrateur rétrogradé garderait ``is_superuser`` — et donc tous les
+    droits sur l'admin — alors que l'API ne lui reconnaît plus rien. Rend
+    vrai si un drapeau a changé, pour que l'appelant sache s'il doit
+    enregistrer le compte.
+    """
+    is_staff = role in (Role.SUPER_ADMIN, Role.ADMIN)
+    is_superuser = role == Role.SUPER_ADMIN
+    change = (user.is_staff, user.is_superuser) != (is_staff, is_superuser)
+    user.is_staff = is_staff
+    user.is_superuser = is_superuser
+    return change
 
 
 class UserProfile(TimeStampedModel):
@@ -112,6 +130,15 @@ class UserProfile(TimeStampedModel):
             "Vide : le compte n'est pas enrôlé, et la plateforme lui est "
             "fermée si la politique l'exige."
         ),
+    )
+    # Compteur de temps (RFC 6238) du dernier code accepté : un code ne vaut
+    # qu'une fois. Sans cette mémoire, un code lu par-dessus l'épaule restait
+    # valable une minute et demie, et pouvait ouvrir une seconde session.
+    totp_last_counter = models.BigIntegerField(
+        _("Dernier compteur TOTP accepté"),
+        null=True,
+        blank=True,
+        help_text=_("Un code déjà présenté, ou plus ancien, est refusé."),
     )
     language = models.CharField(
         _("Langue"),

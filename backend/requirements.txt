@@ -21,3 +21,9 @@ qrcode[pil]==8.0
 python-docx==1.1.2
 # Métriques pour Prometheus / Grafana
 django-prometheus==2.3.1
+# Contrat d'API : schéma OpenAPI généré depuis les vues et sérialiseurs
+# (``manage.py spectacular``), dont le frontend tire ses types.
+drf-spectacular==0.30.0
+# Sérialise les traces d'exception entre processus : sans lui, un test en
+# échec sous ``manage.py test --parallel`` fait avorter tout le run.
+tblib==3.2.2

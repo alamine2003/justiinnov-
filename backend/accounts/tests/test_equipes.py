@@ -95,6 +95,21 @@ class CloisonnementParEquipeTests(ScopingTestCase):
         )
         v._check_country_scope(SimpleNamespace(validated_data={"country": self.togo}))
 
+    def test_le_mixin_n_exige_pas_d_equipe_a_la_creation(self):
+        """Exiger une équipe d'un manager cloisonné est l'affaire du
+        sérialiseur de chaque ressource (« Choisissez une de vos équipes »,
+        ``expenses.serializers``), vérifié par l'API dans
+        ``expenses.tests.test_equipes``. Le mixin, lui, ne juge qu'une équipe
+        présente dans la charge utile : absente, il laisse passer — en
+        modification, c'est celle de l'instance, déjà filtrée par le
+        queryset."""
+        v = vue(VueParEquipe, self.manager)
+        sans_equipe = SimpleNamespace(validated_data={"country": self.togo})
+
+        v._check_country_scope(sans_equipe)
+        # Une pièce suit l'équipe de son dossier sans la porter : rien à juger.
+        v._check_country_scope(SimpleNamespace(validated_data={"dossier": None}))
+
     def test_une_vue_sans_team_lookup_n_est_pas_filtree(self):
         """Le cloisonnement par équipe est un choix de chaque ressource."""
         sans = vue(VueSansEquipe, self.manager)

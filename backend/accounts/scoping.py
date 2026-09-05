@@ -9,11 +9,24 @@ pays auquel on n'a pas droit.
 Le manager subit un second cloisonnement, à l'intérieur de son pays : quand
 des équipes lui sont rattachées, il ne voit que les leurs (``team_lookup``).
 Sans équipe rattachée, il voit tout son pays — voir ``UserProfile.team_ids``.
+
+Un manager cloisonné ne crée rien *sans* équipe : un dossier ou une ligne
+sans équipe échapperait à son propre filtre — il ne le reverrait plus — et
+resterait invisible à ses collègues, tout en pesant sur l'enveloppe. Cette
+exigence est portée par les sérialiseurs des ressources concernées
+(``expenses.serializers._exiger_une_equipe_du_perimetre``), pas par ce
+mixin : lui revalide seulement qu'une équipe *présente* dans la charge
+utile est une des siennes. Les clés étrangères de la charge utile suivent
+la même règle par ``accounts.perimetre.ChampCloisonne``.
+
+La règle elle-même — pays, équipes, ``team IS NULL`` — vit dans
+``accounts.perimetre.filtrer`` (décision 39) ; ce mixin l'applique aux vues.
 """
 
 from django.utils.translation import gettext as _
 from rest_framework.exceptions import PermissionDenied
 
+from .perimetre import filtrer
 from .permissions import get_access
 
 
@@ -26,7 +39,7 @@ class CountryScopedMixin:
 
     ``team_lookup`` est le chemin ORM menant à l'équipe ; ``None`` (défaut)
     signifie que la ressource n'est pas cloisonnée par équipe. Une vue qui le
-    déclare filtre les managers rattachés à des équipes, et refuse qu'ils
+    déclare filtre les managers rattachés à des équipes et refuse qu'ils
     écrivent une entité portant un champ ``team`` hors de leurs équipes.
     """
 
@@ -40,25 +53,25 @@ class CountryScopedMixin:
     team_field = "team"
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        access = get_access(self.request.user)
-        if access is None:
-            return queryset.none()
-        filtre = {}
-        if not access.has_global_scope:
-            filtre[f"{self.country_lookup}__in"] = access.country_ids
-        if self.team_lookup is not None and access.team_ids is not None:
-            filtre[f"{self.team_lookup}__in"] = access.team_ids
-        if not filtre:
-            return queryset
-        return queryset.filter(**filtre).distinct()
+        return filtrer(
+            super().get_queryset(),
+            get_access(self.request.user),
+            pays=self.country_lookup,
+            equipe=self.team_lookup,
+            # Un chemin peut traverser une relation multiple (``countries``
+            # d'un manager) : sans DISTINCT, l'objet sortirait en double.
+            distinct=True,
+        )
 
     def _check_country_scope(self, serializer):
         """Interdit d'affecter une entité à un pays ou à une équipe hors périmètre.
 
         Indispensable : le champ « pays » d'une charge utile n'est pas limité
         au périmètre du demandeur, contrairement au queryset de lecture. Même
-        chose pour l'équipe d'un manager cloisonné.
+        chose pour l'équipe d'un manager cloisonné. Une équipe *absente* de
+        la charge utile n'est pas jugée ici : en modification, c'est celle de
+        l'instance, déjà filtrée par le queryset ; en création, c'est au
+        sérialiseur de la ressource d'en exiger une.
         """
         access = get_access(self.request.user)
         if access is None:

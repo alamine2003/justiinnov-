@@ -2,7 +2,6 @@
 
 import pyotp
 from django.contrib.auth.models import User
-from django.core.cache import cache
 from django.db.models import Max
 from django.utils import timezone
 from rest_framework import status
@@ -39,25 +38,31 @@ def make_user(username, role, countries=(), must_change_password=False, *,
 
 
 class ScopingTestCase(APITestCase):
-    def setUp(self):
-        cache.clear()
-        self.ivoire = Country.objects.create(
+    """Deux pays, une équipe par pays, un manager du Togo et le siège.
+
+    Planté une fois par classe (``setUpTestData``) : chaque test en reçoit
+    une copie et sa transaction est annulée derrière lui.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ivoire = Country.objects.create(
             name="Côte d'Ivoire", code="CI", country_ref="CT-01",
             currency="XOF", timezone="Africa/Abidjan",
         )
-        self.togo = Country.objects.create(
+        cls.togo = Country.objects.create(
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
         )
-        self.team_ivoire = Team.objects.create(country=self.ivoire, name="Équipe Abidjan")
-        self.team_togo = Team.objects.create(country=self.togo, name="Équipe Lomé")
+        cls.team_ivoire = Team.objects.create(country=cls.ivoire, name="Équipe Abidjan")
+        cls.team_togo = Team.objects.create(country=cls.togo, name="Équipe Lomé")
 
         # Le pays : un manager, seul rôle côté pays. Le siège : la direction,
         # le DF qui tranche, le DM qui met en contrôle.
-        self.rep_togo = make_user("togo.innov", Role.MANAGER, [self.togo])
-        self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
-        self.controleur = make_user("rh.innov", Role.DF)
-        self.dm = make_user("dm.innov", Role.DM)
+        cls.rep_togo = make_user("togo.innov", Role.MANAGER, [cls.togo])
+        cls.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
+        cls.controleur = make_user("rh.innov", Role.DF)
+        cls.dm = make_user("dm.innov", Role.DM)
 
     def login(self, user):
         token, _ = Token.objects.get_or_create(user=user)

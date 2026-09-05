@@ -1,13 +1,13 @@
 """Middleware qui expose la requête courante à l'historisation.
 
 Les signaux d'historisation (``core.signals``) n'ont pas accès à la requête :
-ce middleware la pose dans une variable de contexte, d'où ``journaliser``
-lit l'auteur et son adresse. L'utilisateur n'est pas résolu ici mais au
+ce middleware la pose dans une variable de contexte (``core.requetes``), d'où
+la façade ``core.journal`` lit l'auteur et son adresse. L'utilisateur n'est pas résolu ici mais au
 moment de l'écriture : pour une requête par jeton, ``request.user`` n'est
 forcé par DRF qu'à l'entrée de la vue, bien après ce middleware.
 """
 
-from .signals import reset_current_request, set_current_request
+from .requetes import reset_current_request, set_current_request
 
 
 class CurrentRequestMiddleware:

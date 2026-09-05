@@ -10,14 +10,17 @@ from core.models import ChangeLog, CostCenter, Country, Manager, Team
 class ChangeLogTestCase(TestCase):
     """Base commune : deux pays et une équipe rattachée au premier."""
 
-    def setUp(self):
-        self.ghana = Country.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.ghana = Country.objects.create(
             name="Guinée", code="GN", currency="GNF", timezone="Africa/Conakry"
         )
-        self.senegal = Country.objects.create(
+        cls.senegal = Country.objects.create(
             name="Sénégal", code="SN", currency="XOF", timezone="Africa/Dakar"
         )
-        self.team = Team.objects.create(country=self.ghana, name="Équipe Nord")
+        cls.team = Team.objects.create(country=cls.ghana, name="Équipe Nord")
+
+    def setUp(self):
         self.oublier()
 
     def oublier(self):

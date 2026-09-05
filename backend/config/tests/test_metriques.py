@@ -1,5 +1,9 @@
 """Le point de collecte Prometheus n'est ouvert qu'au porteur du jeton."""
 
+import os
+import tempfile
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 
@@ -18,3 +22,15 @@ class MetriquesTests(TestCase):
         reponse = self.client.get("/metrics", HTTP_AUTHORIZATION="Bearer collecte-2026")
         self.assertEqual(reponse.status_code, 200)
         self.assertIn(b"django_http_requests", reponse.content)
+
+    @override_settings(METRICS_TOKEN="collecte-2026")
+    def test_en_multi_processus_le_point_repond_depuis_le_repertoire_partage(self):
+        """Avec plusieurs workers gunicorn, les compteurs sont lus dans
+        ``PROMETHEUS_MULTIPROC_DIR`` et non dans la mémoire du processus."""
+        with tempfile.TemporaryDirectory() as repertoire, patch.dict(
+            os.environ, {"PROMETHEUS_MULTIPROC_DIR": repertoire}
+        ):
+            reponse = self.client.get("/metrics", HTTP_AUTHORIZATION="Bearer collecte-2026")
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertTrue(reponse["Content-Type"].startswith("text/plain"))

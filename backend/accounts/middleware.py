@@ -6,10 +6,15 @@ l'exige (``settings.TOTP_REQUIRED``), la double authentification doit être
 enrôlée et confirmée. L'ordre compte : le mot de passe distribué par le siège
 est le maillon le plus faible, il tombe en premier ; et le QR d'enrôlement
 ne doit pas s'afficher à qui n'a que ce mot de passe.
+
+Les deux derniers verrous ferment aussi l'admin Django : un super
+administrateur au mot de passe provisoire, connecté par session, y aurait
+sinon tous les droits que l'API lui refuse. Il est renvoyé vers
+l'application, qui lui présente la sortie du verrou.
 """
 
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.translation import gettext as _
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -45,7 +50,7 @@ class ProvisionalPasswordMiddleware:
     un mot de passe réutilisé ailleurs suffit à agir au nom d'un autre. Son
     obligation est une politique (``settings.TOTP_REQUIRED``) : désactivée,
     le verrou ne s'applique pas, mais un compte enrôlé de son plein gré
-    fournit toujours son code à la connexion (cf. ``core.views``).
+    fournit toujours son code à la connexion (cf. ``accounts.views``).
 
     Un compte sans profil n'a ni rôle ni périmètre : le superutilisateur
     d'amorçage n'est pas un acteur du cahier des charges, et un compte hérité
@@ -69,7 +74,11 @@ class ProvisionalPasswordMiddleware:
         # encore eu lieu. Elle est faite ici, et son résultat est laissé sur la
         # requête pour que DRF ne la refasse pas à l'entrée de la vue.
         match = request.resolver_match
-        if match is None or not request.path.startswith("/api/"):
+        if match is None:
+            return None
+        if match.app_name == "admin":
+            return self._verrouiller_admin(request, match)
+        if not request.path.startswith("/api/"):
             return None
         if match.url_name in TOUJOURS_OUVERTES:
             return None
@@ -117,6 +126,32 @@ class ProvisionalPasswordMiddleware:
                 },
                 status=403,
             )
+        return None
+
+    def _verrouiller_admin(self, request, match):
+        """Mot de passe provisoire et double authentification sur ``/admin/``.
+
+        Le formulaire de connexion et la déconnexion restent joignables :
+        sans eux, l'admin n'aurait ni entrée ni sortie. Un compte verrouillé
+        est redirigé vers l'application (``APP_BASE_URL``), seul endroit où
+        il peut remplacer son mot de passe ou s'enrôler. Un compte sans
+        profil n'est pas traité ici : l'admin exige déjà ``is_staff``, et
+        c'est le compte d'amorçage qui, sans profil, doit pouvoir y entrer
+        pour s'en donner un.
+        """
+        if match.url_name in ("login", "logout"):
+            return None
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            return None
+        profile = getattr(user, "profile", None)
+        if profile is None:
+            return None
+        ferme = profile.must_change_password or (
+            settings.TOTP_REQUIRED and not profile.totp_confirmed
+        )
+        if ferme:
+            return HttpResponseRedirect(settings.APP_BASE_URL or "/")
         return None
 
 

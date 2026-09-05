@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from django.utils.translation import gettext_lazy as _
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
@@ -17,6 +18,41 @@ from .models import (
     Team,
     WorkflowConfiguration,
 )
+
+
+# ---------------------------------------------------------------------------
+# Champs JSON typés pour le schéma
+# ---------------------------------------------------------------------------
+# Un ``JSONField`` est « n'importe quoi » pour OpenAPI, donc ``unknown`` pour
+# le frontend, qui devait alors tester ce que le serveur écrit toujours de la
+# même façon. Ces sous-classes ne changent rien au rendu — un ``JSONField``
+# rend la valeur telle quelle — elles ne portent que la forme.
+
+
+@extend_schema_field({"type": "array", "items": {"type": "string"}})
+class ChampsModifiesField(serializers.JSONField):
+    """Noms des champs touchés par un changement."""
+
+
+@extend_schema_field(
+    {
+        "type": "object",
+        "additionalProperties": {
+            "type": "array",
+            "items": {},
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "[ancienne valeur, nouvelle valeur]",
+        },
+    }
+)
+class DiffField(serializers.JSONField):
+    """Par champ : ancienne et nouvelle valeur."""
+
+
+@extend_schema_field({"type": "object", "additionalProperties": {}})
+class DetailField(serializers.JSONField):
+    """Détail libre d'une entrée de journal, propre à chaque action."""
 
 
 class ManagerSerializer(serializers.ModelSerializer):
@@ -168,6 +204,8 @@ class ChangeLogSerializer(serializers.ModelSerializer):
     country_name = serializers.CharField(
         source="country.name", read_only=True, allow_null=True
     )
+    changed_fields = ChampsModifiesField(read_only=True)
+    diff = DiffField(read_only=True)
 
     class Meta:
         model = ChangeLog
@@ -256,3 +294,62 @@ class WorkflowConfigurationSerializer(serializers.ModelSerializer):
                 _("Un facteur strictement positif est attendu.")
             )
         return value
+
+# ---------------------------------------------------------------------------
+# Formes documentaires (schéma OpenAPI)
+# ---------------------------------------------------------------------------
+# Ces sérialiseurs ne lisent ni n'écrivent rien : ils décrivent, pour le
+# schéma et les types du frontend, des réponses composées à la main par les
+# vues (``@extend_schema``).
+
+
+class HealthSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=[("ok", "ok"), ("indisponible", "indisponible")], read_only=True)
+    database = serializers.ChoiceField(choices=[("ok", "ok"), ("ko", "ko")], read_only=True)
+
+
+class AvailableCountrySerializer(serializers.Serializer):
+    """Pays africain proposé à la création, non encore suivi."""
+
+    code = serializers.CharField(read_only=True)
+    name = serializers.CharField(read_only=True)
+
+
+class ConfigurationAlertesSerializer(serializers.Serializer):
+    seuils = serializers.ListField(child=serializers.IntegerField(), read_only=True)
+    facteur_depense_inhabituelle = serializers.FloatField(read_only=True)
+
+
+class ConfigurationJustificatifsSerializer(serializers.Serializer):
+    taille_max_mo = serializers.IntegerField(read_only=True)
+    formats_acceptes = serializers.ListField(child=serializers.CharField(), read_only=True)
+    stockage = serializers.CharField(read_only=True)
+
+
+class ConfigurationBudgetSerializer(serializers.Serializer):
+    devise_de_consolidation = serializers.CharField(read_only=True)
+
+
+class ConfigurationNotificationsSerializer(serializers.Serializer):
+    email_configure = serializers.BooleanField(read_only=True)
+    expediteur = serializers.CharField(read_only=True)
+
+
+class ConfigurationSystemeSerializer(serializers.Serializer):
+    fuseau = serializers.CharField(read_only=True)
+    mode_debug = serializers.BooleanField(read_only=True)
+
+
+class ConfigurationSerializer(serializers.Serializer):
+    """Réglages effectifs de la plateforme (``/api/configuration/``)."""
+
+    alertes = ConfigurationAlertesSerializer(read_only=True)
+    justificatifs = ConfigurationJustificatifsSerializer(read_only=True)
+    budget = ConfigurationBudgetSerializer(read_only=True)
+    notifications = ConfigurationNotificationsSerializer(read_only=True)
+    systeme = ConfigurationSystemeSerializer(read_only=True)
+    workflow = WorkflowConfigurationSerializer(read_only=True)
+    supervision = serializers.BooleanField(
+        read_only=True,
+        help_text=_("Un tableau de bord de supervision (Grafana) est déployé avec cette pile."),
+    )
