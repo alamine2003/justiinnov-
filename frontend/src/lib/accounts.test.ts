@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { platformClosed, totpEnrolmentRequired } from "@/lib/accounts"
 import type { Me } from "@/lib/types"
+import { PERMISSIONS_DU_PAYS } from "@/test/permissions-fixtures"
 
 function profil(overrides: Partial<Me>): Me {
   return {
@@ -20,16 +21,7 @@ function profil(overrides: Partial<Me>): Me {
     language: "fr",
     supervision: false,
     permissions: {
-      manage_users: false,
-      manage_countries: false,
-      manage_subentities: false,
-      manage_budgets: false,
-      record_expenses: true,
-      review_expenses: false,
-      validate_expenses: false,
-      view_audit: false,
-      export_data: false,
-      reopen_dossiers: false,
+      ...PERMISSIONS_DU_PAYS,
     },
     workflow: { require_review_step: false },
     ...overrides,

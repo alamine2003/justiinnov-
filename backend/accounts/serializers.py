@@ -13,7 +13,7 @@ from rest_framework import serializers
 from core.models import Country, Team, WorkflowConfiguration
 
 from .models import DEFAULT_LANGUAGE, Role, UserProfile, aligner_drapeaux
-from .permissions import CAPABILITIES, capabilities_for
+from .permissions import CAPACITES, CAPACITES_PAR_CLE, capacites_du_role
 from .validators import valider_email_professionnel
 
 
@@ -50,15 +50,13 @@ def _password_field(**kwargs):
 # vues. Ils portent ``read_only`` pour ne figurer qu'en réponse.
 
 #: Droits par capacité, tirés de la matrice : un droit ajouté à
-#: ``CAPABILITIES`` apparaît dans le schéma sans rien recopier.
+#: ``CAPACITES`` apparaît dans le schéma sans rien recopier.
 PermissionsSerializer = type(
     "PermissionsSerializer",
     (serializers.Serializer,),
     {
-        capability["key"]: serializers.BooleanField(
-            read_only=True, help_text=capability["description"]
-        )
-        for capability in CAPABILITIES
+        capacite.key: serializers.BooleanField(read_only=True, help_text=capacite.description)
+        for capacite in CAPACITES
     },
 )
 
@@ -116,13 +114,22 @@ class PermissionMatrixRoleSerializer(serializers.Serializer):
     always_global = serializers.BooleanField(read_only=True)
 
 
+def _liste_de_roles(**kwargs):
+    return serializers.ListField(child=serializers.ChoiceField(choices=Role.choices), **kwargs)
+
+
 class PermissionMatrixCapabilitySerializer(serializers.Serializer):
     key = serializers.CharField(read_only=True)
+    group = serializers.CharField(read_only=True)
     label = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True)
-    roles = serializers.ListField(
-        child=serializers.ChoiceField(choices=Role.choices), read_only=True
-    )
+    #: Rôles qui la portent aujourd'hui, verrous appliqués.
+    roles = _liste_de_roles(read_only=True)
+    #: Rôles par défaut, pour montrer ce qui a été changé et y revenir.
+    default_roles = _liste_de_roles(read_only=True)
+    #: Rôles qui l'ont toujours et rôles qui ne l'auront jamais : cases figées.
+    fixed_roles = _liste_de_roles(read_only=True)
+    locked_roles = _liste_de_roles(read_only=True)
 
 
 class PermissionMatrixSerializer(serializers.Serializer):
@@ -130,8 +137,42 @@ class PermissionMatrixSerializer(serializers.Serializer):
 
     roles = PermissionMatrixRoleSerializer(many=True, read_only=True)
     capabilities = PermissionMatrixCapabilitySerializer(many=True, read_only=True)
-    editable = serializers.BooleanField(read_only=True)
     note = serializers.CharField(read_only=True)
+
+
+class PermissionMatrixUpdateSerializer(serializers.Serializer):
+    """Modification de la matrice : capacité → rôles, verrous vérifiés.
+
+    Une clé inconnue est refusée plutôt qu'ignorée ; une case figée qu'on
+    tente de changer aussi, pour que l'appelant sache que rien n'a bougé.
+    """
+
+    capabilities = serializers.DictField(child=_liste_de_roles(allow_empty=True))
+
+    def validate_capabilities(self, choix):
+        erreurs = {}
+        propres = {}
+        for cle, roles in choix.items():
+            capacite = CAPACITES_PAR_CLE.get(cle)
+            if capacite is None:
+                erreurs[cle] = _("Capacité inconnue.")
+                continue
+            roles = set(roles)
+            manquants = capacite.fixes - roles
+            interdits = roles & (capacite.verrouillees - capacite.fixes)
+            if manquants:
+                erreurs[cle] = _("Ce droit ne se retire pas à : {roles}.").format(
+                    roles=", ".join(str(Role(r).label) for r in sorted(manquants))
+                )
+            elif interdits:
+                erreurs[cle] = _("Ce droit ne se donne pas à : {roles}.").format(
+                    roles=", ".join(str(Role(r).label) for r in sorted(interdits))
+                )
+            else:
+                propres[cle] = sorted(roles)
+        if erreurs:
+            raise serializers.ValidationError(erreurs)
+        return propres
 
 
 def _validate_password(password, user=None):
@@ -252,7 +293,7 @@ class MeSerializer(serializers.ModelSerializer):
         Lus dans la même matrice que celle qui les applique : les recopier ici
         les ferait diverger de la réalité au premier changement.
         """
-        return capabilities_for(self._role(user))
+        return capacites_du_role(self._role(user))
 
     @extend_schema_field(MeWorkflowSerializer)
     def get_workflow(self, user):

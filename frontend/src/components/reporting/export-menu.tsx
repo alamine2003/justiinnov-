@@ -37,7 +37,7 @@ interface ExportMenuProps {
  * Menu « Exporter » : dépenses et rapprochement en Excel, CSV ou Word, et
  * rapport PDF, sur l'exercice ou l'un de ses mois.
  *
- * Réservé aux administrateurs (`export_data`) : pour les autres rôles, ni
+ * Réservé aux administrateurs par défaut (`data.export`) : pour les autres rôles, ni
  * bouton ni lien. Le fichier passe par la vue authentifiée, jamais par une
  * URL construite à la main ; chaque export est inscrit au journal d'audit.
  */
@@ -48,7 +48,7 @@ export function ExportMenu({ year, country, onError }: ExportMenuProps) {
   const [month, setMonth] = useState<MonthValue>("")
   const [exporting, setExporting] = useState<ExportKind | null>(null)
 
-  if (!can("export_data")) return null
+  if (!can("data.export")) return null
 
   const exercice = year ?? ownYear
 

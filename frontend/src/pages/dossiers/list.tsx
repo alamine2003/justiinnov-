@@ -45,7 +45,7 @@ import { cn, formatAmount, formatDay, todayIso } from "@/lib/utils"
 export function DossiersPage() {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const canCreate = can("record_expenses")
+  const canCreate = can("expenses.create")
   const [params, setParams] = useSearchParams()
 
   // Le statut vit dans l'URL : une tuile du tableau de bord ou un favori

@@ -16,14 +16,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from accounts.permissions import (
-    AUDIT_READ_ROLES,
-    EXPENSE_WRITE_ROLES,
-    SUBENTITY_WRITE_ROLES,
-    VALIDATION_ROLES,
-    RolePermission,
-    get_access,
-)
+from accounts.permissions import RolePermission, get_access
 from accounts.perimetre import filtrer
 from accounts.scoping import CountryScopedMixin
 from core.journal import Trace
@@ -54,7 +47,7 @@ from .serializers import (
     TransitionSerializer,
     TransitionWarningMixin,
 )
-from .workflow import ACTION_ROLES
+from .workflow import ACTION_CAPACITES
 
 
 class DossierTransitionResponseSerializer(TransitionWarningMixin, DossierDetailSerializer):
@@ -83,13 +76,18 @@ def _schema_des_transitions(request, response, *noms):
 class WorkflowMixin:
     """Actions de transition : lecture de la charge utile, service, réponse."""
 
-    action_write_roles = ACTION_ROLES
+    #: Saisie et circuit : la capacité de chaque action. Modifier un
+    #: brouillon est l'écriture par défaut ; créer et supprimer ont la leur.
+    write_capability = "expenses.update"
+    action_write_capabilities = {
+        **ACTION_CAPACITES, "create": "expenses.create", "destroy": "expenses.delete",
+    }
     transition_serializer_class = TransitionSerializer
 
     def perform_transition(self, request, name):
         # Le périmètre d'abord : un objet hors périmètre répond 404 avant
         # que la charge utile ne soit lue. Le rôle a été vérifié par
-        # ``RolePermission`` via ``action_write_roles``.
+        # ``RolePermission`` via ``action_write_capabilities``.
         visible = self.get_object()
         serializer = self.transition_serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -136,7 +134,8 @@ class BeneficiaryViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     queryset = Beneficiary.objects.select_related("country").all()
     serializer_class = BeneficiarySerializer
     permission_classes = [RolePermission]
-    write_roles = SUBENTITY_WRITE_ROLES
+    write_capability = "referentiel.update"
+    action_write_capabilities = {"create": "referentiel.create"}
     filterset_fields = ["kind", "is_active", "country"]
     search_fields = ["name", "contact"]
     ordering_fields = ["name", "created_at"]
@@ -155,7 +154,6 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         Dossier.objects.select_related("country", "team", "owner").with_totals()
     )
     permission_classes = [RolePermission]
-    write_roles = EXPENSE_WRITE_ROLES
     filterset_fields = [
         "country", "country__country_ref", "status", "team", "owner",
     ]
@@ -262,7 +260,6 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     serializer_class = ExpenseSerializer
     transition_serializer_class = ExpenseTransitionSerializer
     permission_classes = [RolePermission]
-    write_roles = EXPENSE_WRITE_ROLES
     # Forme étendue : le §5.6 demande de filtrer par période et par état
     # multiple, ce qu'une simple liste de champs ne permet pas.
     filterset_fields = {
@@ -358,7 +355,6 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     queryset = Proof.objects.select_related("dossier__country").all()
     serializer_class = ProofSerializer
     permission_classes = [RolePermission]
-    write_roles = EXPENSE_WRITE_ROLES
     filterset_fields = ["dossier", "kind", "status", "is_complete"]
     search_fields = ["original_name", "dossier__number"]
     ordering_fields = ["created_at", "version"]
@@ -369,7 +365,8 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     country_via = "dossier"
     team_lookup = "dossier__team"
     # Le contrôle documentaire relève du siège (DF), pas du déposant.
-    action_write_roles = {"review": VALIDATION_ROLES}
+    write_capability = "proofs.upload"
+    action_write_capabilities = {"review": "proofs.review"}
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -477,7 +474,7 @@ class AuditLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     queryset = AuditLog.objects.select_related("country").all()
     serializer_class = AuditLogSerializer
     permission_classes = [RolePermission]
-    read_roles = AUDIT_READ_ROLES
+    read_capability = "audit.read"
     filterset_fields = ["user", "action", "object_type", "country"]
     search_fields = ["label", "user"]
     ordering_fields = ["created_at"]

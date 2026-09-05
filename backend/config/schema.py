@@ -20,7 +20,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.permissions import BasePermission
 
 from accounts.models import HEADQUARTERS_ROLES
-from accounts.permissions import USER_WRITE_ROLES, get_access
+from accounts.permissions import get_access, roles_pour
 
 
 #: Champs qu'une réponse peut omettre, seuls exceptés de la règle ci-dessous.
@@ -72,7 +72,7 @@ class SchemaUiPermission(BasePermission):
 
     def has_permission(self, request, view):
         access = get_access(request.user)
-        return access is not None and access.role in USER_WRITE_ROLES
+        return access is not None and access.role in roles_pour("configuration.manage")
 
 
 class SchemaView(SpectacularAPIView):

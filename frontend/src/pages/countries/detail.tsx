@@ -55,7 +55,9 @@ export function CountryDetailPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const { can } = useAuth()
-  const canManage = can("manage_subentities")
+  // L'éditeur du référentiel ajoute et modifie dans le même tableau : il
+  // s'affiche pour qui a les deux droits, plutôt qu'un bouton répondant 403.
+  const canManage = can("referentiel.create") && can("referentiel.update")
   const countryId = Number(id)
 
   const query = useQuery(
@@ -197,7 +199,7 @@ export function CountryDetailPage() {
                 countryId={countryId}
                 managers={country.managers}
                 onRefresh={refresh}
-                canManage={can("manage_countries")}
+                canManage={can("countries.update")}
               />
             </CardContent>
           </Card>

@@ -22,7 +22,7 @@ type StatusFilter = "all" | "active" | "inactive"
 export function CountriesPage() {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const canManage = can("manage_countries")
+  const canManage = can("countries.create") && can("countries.update")
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)

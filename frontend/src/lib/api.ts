@@ -269,11 +269,6 @@ export async function apiPatch<T>(url: string, data: unknown): Promise<T> {
   return res.data
 }
 
-export async function apiPut<T>(url: string, data: unknown): Promise<T> {
-  const res = await api.put<T>(url, data)
-  return res.data
-}
-
 /** Invalide le jeton côté serveur. Un échec n'empêche pas de fermer la session locale. */
 export async function apiLogout(): Promise<void> {
   await api.post("/logout/", {})

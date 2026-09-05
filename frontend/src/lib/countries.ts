@@ -39,10 +39,6 @@ export function updateCountryManagers(id: number, managerIds: number[]) {
 // ---------------------------------------------------------------------------
 // Managers
 // ---------------------------------------------------------------------------
-export function fetchManagers(params?: Record<string, unknown>) {
-  return apiGet<Paginated<Manager>>("/managers/", params)
-}
-
 export function createManager(data: unknown) {
   return apiPost<Manager>("/managers/", data)
 }
@@ -69,10 +65,6 @@ export function updateTeam(id: number, data: unknown) {
 // ---------------------------------------------------------------------------
 // Centres de coûts
 // ---------------------------------------------------------------------------
-export function fetchCostCenters(params?: Record<string, unknown>) {
-  return apiGet<Paginated<CostCenter>>("/cost-centers/", params)
-}
-
 export function createCostCenter(data: unknown) {
   return apiPost<CostCenter>("/cost-centers/", data)
 }
@@ -99,10 +91,6 @@ export function updateProject(id: number, data: unknown) {
 // ---------------------------------------------------------------------------
 // Intitulés de dépenses
 // ---------------------------------------------------------------------------
-export function fetchExpenseTitles(params?: Record<string, unknown>) {
-  return apiGet<Paginated<ExpenseTitle>>("/expense-titles/", params)
-}
-
 export function createExpenseTitle(data: unknown) {
   return apiPost<ExpenseTitle>("/expense-titles/", data)
 }
@@ -114,10 +102,6 @@ export function updateExpenseTitle(id: number, data: unknown) {
 // ---------------------------------------------------------------------------
 // Catégories marketing
 // ---------------------------------------------------------------------------
-export function fetchMarketingCategories(params?: Record<string, unknown>) {
-  return apiGet<Paginated<MarketingCategory>>("/marketing-categories/", params)
-}
-
 export function createMarketingCategory(data: unknown) {
   return apiPost<MarketingCategory>("/marketing-categories/", data)
 }

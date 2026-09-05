@@ -30,12 +30,20 @@ from . import totp
 from .authentication import obtenir_jeton, revoquer_jeton
 from .journal import etat_compte, journaliser_compte, journaliser_modification
 from .models import ALWAYS_GLOBAL_ROLES, HEADQUARTERS_ROLES, Role, UserProfile
-from .permissions import CAPABILITIES, USER_WRITE_ROLES, RolePermission, get_access
+from .permissions import (
+    CAPACITES,
+    CAPACITES_PAR_CLE,
+    RolePermission,
+    get_access,
+    matrice_effective,
+    roles_pour,
+)
 from .serializers import (
     ChangePasswordSerializer,
     MePreferencesSerializer,
     MeSerializer,
     PermissionMatrixSerializer,
+    PermissionMatrixUpdateSerializer,
     TokenAuthErrorSerializer,
     TokenAuthSerializer,
     TokenSerializer,
@@ -166,13 +174,13 @@ class ThrottledObtainAuthToken(ObtainAuthToken):
 
 
 class BackOfficePermission(RolePermission):
-    """Le back-office est réservé au siège."""
+    """Le back-office est réservé aux administrateurs (``configuration.manage``)."""
 
     message = _("Le back-office est réservé aux administrateurs du siège.")
 
     def has_permission(self, request, view):
         access = get_access(request.user)
-        return access is not None and access.role in USER_WRITE_ROLES
+        return access is not None and access.role in roles_pour("configuration.manage")
 
 
 class ConfigurationView(APIView):
@@ -453,8 +461,9 @@ class UserViewSet(NoDestroyModelViewSet):
     )
     serializer_class = UserSerializer
     permission_classes = [RolePermission]
-    read_roles = USER_WRITE_ROLES
-    write_roles = USER_WRITE_ROLES
+    read_capability = "users.read"
+    write_capability = "users.update"
+    action_write_capabilities = {"create": "users.create"}
     filterset_fields = ["is_active", "profile__role"]
     search_fields = ["username", "first_name", "last_name", "email"]
     ordering_fields = ["username", "date_joined"]
@@ -510,7 +519,7 @@ class UserViewSet(NoDestroyModelViewSet):
                     {"is_active": _("Vous ne pouvez pas désactiver votre propre compte.")}
                 )
             role = serializer.validated_data.get("profile", {}).get("role")
-            if role is not None and role not in USER_WRITE_ROLES:
+            if role is not None and role not in roles_pour("users.update"):
                 raise ValidationError(
                     {"role": _("Vous ne pouvez pas retirer vos propres droits d'administration.")}
                 )
@@ -568,46 +577,94 @@ class UserViewSet(NoDestroyModelViewSet):
 
 
 class PermissionMatrixView(APIView):
-    """Matrice des rôles et de ce qu'ils autorisent.
+    """Matrice des rôles et de ce qu'ils autorisent (décision 43).
 
-    Lue dans les mêmes constantes que celles appliquées par ``RolePermission``.
-    La matrice est **volontairement non modifiable** : la rendre éditable
-    permettrait de rendre à un pays le droit de justifier ses propres dépenses,
-    précisément ce que la séparation des tâches interdit.
+    Lue dans la même table que celle appliquée par ``RolePermission``, et
+    modifiable par les administrateurs, case par case — sauf les verrous :
+    le super administrateur garde tout, le pays ne reçoit jamais le droit de
+    contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
+    Chaque modification est journalisée avec l'avant et l'après.
     """
 
     permission_classes = [BackOfficePermission]
 
+    @staticmethod
+    def _matrice(configuration):
+        effective = matrice_effective(configuration)
+        return {
+            "roles": [
+                {
+                    "value": role.value,
+                    "label": str(role.label),
+                    "siege": role in HEADQUARTERS_ROLES,
+                    # Un rôle du siège peut être restreint à des pays
+                    # (DM, DF) ; la RH et les super administrateurs,
+                    # jamais : ils administrent l'ensemble.
+                    "always_global": role in ALWAYS_GLOBAL_ROLES,
+                }
+                for role in Role
+            ],
+            "capabilities": [
+                {
+                    "key": capacite.key,
+                    "group": str(capacite.groupe),
+                    "label": str(capacite.label),
+                    "description": str(capacite.description),
+                    "roles": sorted(effective[capacite.key]),
+                    "default_roles": sorted(capacite.defaut),
+                    "fixed_roles": sorted(capacite.fixes),
+                    "locked_roles": sorted(capacite.verrouillees - capacite.fixes),
+                }
+                for capacite in CAPACITES
+            ],
+            "note": _(
+                "Les droits s'appliquent à chaque requête, dès l'enregistrement. "
+                "Le super administrateur garde tout ; un pays ne contrôle jamais "
+                "ce qu'il déclare, n'administre rien et n'arbitre pas ses enveloppes."
+            ),
+        }
+
     @extend_schema(responses=PermissionMatrixSerializer)
     def get(self, request):
-        return Response(
-            {
-                "roles": [
-                    {
-                        "value": role.value,
-                        "label": str(role.label),
-                        "siege": role in HEADQUARTERS_ROLES,
-                        # Un rôle du siège peut être restreint à des pays
-                        # (DM, DF) ; la RH et les super administrateurs,
-                        # jamais : ils administrent l'ensemble.
-                        "always_global": role in ALWAYS_GLOBAL_ROLES,
-                    }
-                    for role in Role
-                ],
-                "capabilities": [
-                    {
-                        "key": capability["key"],
-                        "label": str(capability["label"]),
-                        "description": str(capability["description"]),
-                        "roles": sorted(str(r) for r in capability["roles"]),
-                    }
-                    for capability in CAPABILITIES
-                ],
-                "editable": False,
-                "note": _(
-                    "Les droits sont fixés dans le code et appliqués à chaque "
-                    "requête. Les rendre modifiables permettrait de redonner à "
-                    "un pays le droit de justifier ses propres dépenses."
-                ),
-            }
+        return Response(self._matrice(WorkflowConfiguration.charger()))
+
+    @extend_schema(request=PermissionMatrixUpdateSerializer, responses=PermissionMatrixSerializer)
+    @transaction.atomic
+    def patch(self, request):
+        serializer = PermissionMatrixUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        choix = serializer.validated_data["capabilities"]
+        # Lue en base et verrouillée, pas depuis le cache : deux
+        # administrateurs qui règlent des cases différentes au même instant
+        # se succèdent au lieu de s'écraser.
+        configuration, _cree = (
+            WorkflowConfiguration.objects.select_for_update().get_or_create(pk=1)
         )
+        avant = {cle: sorted(roles) for cle, roles in matrice_effective(configuration).items()}
+        retenus = dict(configuration.capability_roles or {})
+        for cle, roles in choix.items():
+            capacite = CAPACITES_PAR_CLE[cle]
+            # Revenir au défaut efface le choix : la configuration ne garde
+            # que ce qui s'en écarte, et un défaut qui change suit.
+            if set(roles) == set(capacite.defaut):
+                retenus.pop(cle, None)
+            else:
+                retenus[cle] = roles
+        configuration.capability_roles = retenus
+        configuration.save(update_fields=["capability_roles", "updated_at"])
+        apres = {cle: sorted(roles) for cle, roles in matrice_effective(configuration).items()}
+
+        changes = [cle for cle in apres if avant[cle] != apres[cle]]
+        if changes:
+            tracer(
+                request,
+                ChangeLog.Actions.UPDATED,
+                configuration,
+                famille="configuration",
+                label="Matrice des droits",
+                from_value=json.dumps({c: avant[c] for c in changes}, ensure_ascii=False),
+                to_value=json.dumps({c: apres[c] for c in changes}, ensure_ascii=False),
+                changed_fields=changes,
+                diff={cle: [avant[cle], apres[cle]] for cle in changes},
+            )
+        return Response(self._matrice(configuration))

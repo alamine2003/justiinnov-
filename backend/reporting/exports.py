@@ -412,11 +412,6 @@ FORMATS = {
 }
 
 
-def build_expenses_workbook(expenses):
-    """Classeur des lignes de dépenses, classées par date."""
-    return classeur_xlsx([lignes_depenses(expenses)])
-
-
 def build_reconciliation_workbook(budgets, dossiers):
     """Classeur de rapprochement, enveloppes puis dossiers."""
     return classeur_xlsx(tableaux_rapprochement(budgets, dossiers))

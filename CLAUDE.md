@@ -69,31 +69,56 @@ l'application.
   réouverture ; `super_admin` (DG, DO, CEO, développeurs) peut tout. Il n'y
   a ni « direction des opérations » ni « auditeur » distincts. Un `manager`
   rattaché à des équipes ne voit que les leurs (`team__in`, sur le queryset,
-  via `CountryScopedMixin.team_lookup`) ; sans équipe, tout son pays. La
-  matrice vit dans `accounts/permissions.py` et nulle part ailleurs.
-- **Le DM et le DF n'ont aucun droit d'administration.** Décision du
-  produit : ils ne sont ni administrateurs ni super administrateurs. Ils
-  gardent leurs seules fonctions de contrôle — `dm` dans `REVIEW_ROLES`,
-  `df` dans `VALIDATION_ROLES` — et lisent l'historique du référentiel
-  (`HISTORY_READ_ROLES`, `/api/history/`) sur leur périmètre. Ils ne
-  figurent dans aucun autre ensemble : ni comptes, ni pays, ni référentiel,
-  ni enveloppes, ni fichiers, ni réouverture, ni journal d'audit.
-- **Les enveloppes sont l'affaire des super administrateurs.** Attribuer
-  une enveloppe, demander, approuver ou refuser une réallocation, tenir les
-  taux de change, valider un dépassement : `BUDGET_WRITE_ROLES` =
-  `OVERRUN_APPROVERS` = `super_admin` seul. Le DF constate ce qui a été
+  via `CountryScopedMixin.team_lookup`) ; sans équipe, tout son pays.
+- **Chaque action de l'API est une capacité nommée, et la matrice se
+  règle dans la configuration.** `accounts/permissions.py` (`CAPACITES`)
+  liste chaque création, modification, suppression, transition, lecture
+  réservée et export, avec ses rôles par défaut ; une vue déclare la
+  capacité de chaque écriture (`write_capability`,
+  `action_write_capabilities`) et jamais un rôle. Les administrateurs
+  (`admin`, `super_admin`) modifient les rôles de chaque capacité dans
+  « Configuration › Permissions » (`PATCH /api/permissions/`, stocké dans
+  `WorkflowConfiguration.capability_roles`, journalisé) ; le réglage
+  s'applique à la requête suivante, côté vues, services, notifications et
+  `allowed_actions`. **Deux verrous ne se règlent pas** : le super
+  administrateur garde toutes les capacités, et le `manager` ne reçoit
+  jamais le contrôle (mise en contrôle, justification, clôture, contrôle
+  d'une pièce, réouverture), l'administration (comptes, configuration,
+  journal d'audit, ouverture ou modification d'un pays) ni l'arbitrage des
+  enveloppes ; les comptes et la configuration ne s'ouvrent qu'aux
+  administrateurs, jamais au DM ni au DF, qui pourraient sinon se créer un
+  administrateur. Le référentiel d'un pays et la demande de réallocation,
+  eux, restent ouvrables au pays par choix d'organisation. Les verrous
+  s'appliquent à la lecture de la matrice, pas seulement à
+  l'enregistrement.
+- **Par défaut, le DM et le DF n'ont aucun droit d'administration.**
+  Décision du produit : ils ne sont ni administrateurs ni super
+  administrateurs. Ils gardent leurs fonctions de contrôle — `dm` sur
+  `expenses.review`, `df` sur `expenses.validate`, `expenses.close`,
+  `proofs.review` — et lisent l'historique du référentiel
+  (`history.read`, `/api/history/`) sur leur périmètre. Ils ne figurent
+  dans aucune autre capacité par défaut : ni comptes, ni pays, ni
+  référentiel, ni enveloppes, ni fichiers, ni réouverture, ni journal
+  d'audit. Un administrateur peut leur en ouvrir une depuis la matrice ;
+  c'est une décision tracée, pas un défaut.
+- **Par défaut, les enveloppes sont l'affaire des super administrateurs.**
+  Attribuer une enveloppe, demander, approuver ou refuser une réallocation,
+  tenir les taux de change, valider un dépassement : `budgets.create`,
+  `budgets.update`, `reallocations.request`, `reallocations.decide`,
+  `rates.manage` sont à `super_admin` seul. Le DF constate ce qui a été
   dépensé, il ne fixe pas ce qui peut l'être ; la RH tient les comptes, pas
   l'argent.
 - **Le journal d'audit est l'affaire de la RH et de la direction.**
-  `AUDIT_READ_ROLES` = `admin`, `super_admin`. Le journal relit les
-  décisions du DM et du DF autant que celles des pays : cette relecture est
-  un acte d'administration, pas de contrôle. L'historique du référentiel
-  (`/api/history/`), lui, reste ouvert au siège entier.
+  `audit.read` = `admin`, `super_admin` par défaut ; jamais le pays. Le
+  journal relit les décisions du DM et du DF autant que celles des pays :
+  cette relecture est un acte d'administration, pas de contrôle.
+  L'historique du référentiel (`/api/history/`), lui, reste ouvert au
+  siège entier.
 - **Une dépense soumise est irréversible.** Elle ne revient pas au brouillon,
   ne se modifie plus, ne se supprime pas. Seul un brouillon — jamais soumis,
   donc sans valeur probante — peut être retiré par son auteur. **Une seule
-  exception : la réouverture** (`reopen`, `REOPEN_ROLES` = `admin`,
-  `super_admin`), motivée (`note`, gardée dans `Dossier.reopen_note`),
+  exception : la réouverture** (`reopen`, capacité `dossiers.reopen` :
+  `admin`, `super_admin` par défaut, jamais le pays), motivée (`note`, gardée dans `Dossier.reopen_note`),
   tracée (`AuditLog` `reopened` sur le dossier et chaque ligne) et notifiée
   aux `dm` et `manager` du pays — elle sert à demander des comptes, jamais
   à corriger en silence. Les lignes reviennent en brouillon sans
@@ -107,7 +132,10 @@ l'application.
   l'API répond 405 sur `DELETE`. La conservation est illimitée : ni tâche
   de ménage, ni rétention sur les dossiers, les pièces ou les journaux.
 - **Les chiffres se calculent côté serveur.** Solde, écart, taux : l'interface
-  affiche, elle ne recalcule pas.
+  affiche, elle ne recalcule pas. Les actions possibles aussi : chaque
+  dossier et chaque ligne portent `allowed_actions` — saisie (`edit`,
+  `add_line`, `upload`, `delete`) et circuit — et l'interface n'a aucune
+  liste d'états ni de rôles à recopier.
 - **Le cloisonnement par pays est vérifié sur le queryset**, pas seulement à
   l'affichage. Un objet hors périmètre répond 404, sans révéler son existence.
   Les écritures sont revalidées : une charge utile ne doit pas permettre de
@@ -116,15 +144,16 @@ l'application.
   qui, quoi, quand, depuis quelle adresse, ancienne et nouvelle valeur.
 - **Le manager déclare, le DM contrôle, le DF constate.** Côté pays, seul
   le `manager` saisit et soumet. Au siège, le `dm` (directeur manager) met
-  en contrôle (`review_expenses`), le `df` (directeur financier) justifie,
-  refuse ou clôture (`validate_expenses`) ; `admin` (RH) et `super_admin`
-  peuvent tout. Un manager ne justifie jamais une dépense, pas même la
+  en contrôle (`expenses.review`), le `df` (directeur financier) justifie,
+  refuse ou clôture (`expenses.validate`, `expenses.close`) ; `admin` (RH)
+  et `super_admin` peuvent tout. Un manager ne justifie jamais une dépense, pas même la
   sienne. Et celui qui a saisi une dépense ne peut pas la justifier
   lui-même, fût-il au siège — il faut deux personnes.
 - **La RH gère tous les pays.** Le référentiel d'un pays (équipes, projets,
   intitulés, catégories, bénéficiaires) est tenu par `admin` et
-  `super_admin` sur tous les pays (`manage_subentities`) ; ni le `manager`,
-  ni le `dm`, ni le `df` ne le modifient. `dm` et `df` sont des comptes du
+  `super_admin` sur tous les pays (`referentiel.create`,
+  `referentiel.update`) ; ni le `manager`, ni le `dm`, ni le `df` ne le
+  modifient par défaut. `dm` et `df` sont des comptes du
   siège, restrictibles à des pays ; `admin` et `super_admin` sont toujours
   globaux.
 - **Déclarer tient en une action.** Le manager remplit ses lignes, joint la
@@ -139,8 +168,9 @@ l'application.
 - **Un rejet exige un motif.** Une réouverture aussi.
 - **Les fichiers entrent et sortent par les administrateurs.** L'import
   Excel et les exports (`xlsx`, `csv`, `docx`, `pdf` ; `year`, `month`
-  facultatif, `country`) sont réservés à `EXPORT_ROLES` (`admin`,
-  `super_admin`), lecture comprise ; tous les autres travaillent dans
+  facultatif, `country`) sont réservés aux administrateurs par défaut
+  (`data.export`, `data.import` : `admin`, `super_admin`), lecture
+  comprise ; tous les autres travaillent dans
   l'application, où chaque chiffre est calculé et chaque action tracée. Un
   total ne s'écrit qu'à devise unique.
 - **Tout compte est protégé par une double authentification TOTP** et
@@ -175,7 +205,7 @@ l'application.
 | Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce) | `backend/expenses/transitions.py` |
 | Services de réallocation (demander, approuver, refuser) | `backend/budget/transitions.py` |
 | Refus métier (`RegleViolee`, `PermissionRefusee`, `HorsPerimetre`) et leur traduction HTTP | `backend/core/regles.py` |
-| Rôles, périmètres, équipes, double authentification, authentification | `backend/accounts/` (`permissions.py`, `perimetre.py`, `scoping.py`, `views.py`) |
+| Capacités et leurs défauts, périmètres, équipes, double authentification, authentification | `backend/accounts/` (`permissions.py`, `perimetre.py`, `scoping.py`, `views.py`) ; matrice réglée dans `WorkflowConfiguration.capability_roles` |
 | API du référentiel (pays, équipes, projets…) et historique | `backend/accounts/referentiel.py` |
 | Journaux `ChangeLog` et `AuditLog` : la seule porte d'écriture | `backend/core/journal.py` |
 | Ordre des applications (`core < accounts < notifications < budget < expenses < reporting`) | `backend/core/tests/test_dependances.py` |

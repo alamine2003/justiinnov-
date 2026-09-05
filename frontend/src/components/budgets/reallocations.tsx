@@ -39,11 +39,13 @@ import { formatAmount, formatDate, normalizeDecimal } from "@/lib/utils"
 
 interface ReallocationsProps {
   budgets: Budget[]
-  canDecide: boolean
+  /** Demander un transfert (`reallocations.request`). L'arbitrage, lui,
+   * vient ligne par ligne du serveur (`can_decide`). */
+  canRequest: boolean
   onChanged: () => void
 }
 
-export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsProps) {
+export function Reallocations({ budgets, canRequest, onChanged }: ReallocationsProps) {
   const { t } = useTranslation()
   const query = useQuery(
     "reallocations",
@@ -78,7 +80,7 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
             {t("budgets.realloc.description")}
           </p>
         </div>
-        {canDecide && (
+        {canRequest && (
           <Button size="sm" onClick={() => setFormOpen(true)}>
             <Plus className="mr-1 h-4 w-4" aria-hidden />
             {t("budgets.realloc.demander")}
@@ -109,7 +111,7 @@ export function Reallocations({ budgets, canDecide, onChanged }: ReallocationsPr
                 icon={ArrowRightLeft}
                 title={t("budgets.realloc.vide_titre")}
                 hint={
-                  canDecide
+                  canRequest
                     ? t("budgets.realloc.vide_indication_siege")
                     : t("budgets.realloc.vide_indication_pays")
                 }

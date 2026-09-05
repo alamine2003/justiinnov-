@@ -38,10 +38,18 @@ function demande(overrides: Partial<Reallocation>): Reallocation {
   } as Reallocation
 }
 
-function afficher(rows: Reallocation[], canDecide = true) {
+function afficher(rows: Reallocation[], canRequest = true) {
   fetchReallocations.mockResolvedValue({ count: rows.length, next: null, previous: null, results: rows })
-  return render(<Reallocations budgets={[]} canDecide={canDecide} onChanged={vi.fn()} />)
+  return render(<Reallocations budgets={[]} canRequest={canRequest} onChanged={vi.fn()} />)
 }
+
+describe("Reallocations — qui demande", () => {
+  it("ne propose « Demander » qu'à qui a le droit de demander", async () => {
+    afficher([], false)
+    expect(await screen.findByText("Aucune réallocation")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Demander/ })).not.toBeInTheDocument()
+  })
+})
 
 describe("Reallocations — qui tranche", () => {
   it("propose d'approuver ou de refuser quand le serveur ouvre la décision", async () => {

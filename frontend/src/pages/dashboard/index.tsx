@@ -53,7 +53,7 @@ export function DashboardPage() {
   // Les seuils d'alerte de la configuration colorent la barre d'exécution ;
   // la configuration n'est lisible que par les administrateurs.
   const configuration = useReferentiel("configuration", fetchConfiguration, {
-    enabled: can("manage_users"),
+    enabled: can("configuration.manage"),
   })
   const warningRate = executionWarningRate(configuration.data?.alertes.seuils)
   const query = useQuery(

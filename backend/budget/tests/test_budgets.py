@@ -50,7 +50,7 @@ class BudgetTestCase(APITestCase):
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
         )
-        # La direction seule attribue et arbitre (BUDGET_WRITE_ROLES =
+        # La direction seule attribue et arbitre (``budgets.create`` =
         # super administrateurs). Deux comptes distincts : celui qui demande
         # une réallocation ne peut pas la décider.
         cls.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
@@ -565,6 +565,21 @@ class ReallocationTests(BudgetTestCase):
         self.login(self.doo)
         return response
 
+    def test_la_liste_ne_relit_pas_la_matrice_par_ligne(self):
+        """Ni la matrice des droits (``can_decide``), ni le libellé des
+        enveloppes (projet, équipe, manager) ne coûtent une requête par
+        réallocation affichée."""
+        self._demander(amount="1000.00")
+        with CaptureQueriesContext(connection) as une_ligne:
+            self.assertEqual(self.client.get("/api/reallocations/").data["count"], 1)
+        self._demander(amount="2000.00")
+        self._demander(amount="3000.00")
+
+        with CaptureQueriesContext(connection) as trois_lignes:
+            self.assertEqual(self.client.get("/api/reallocations/").data["count"], 3)
+
+        self.assertEqual(len(trois_lignes), len(une_ligne))
+
     def test_justification_obligatoire(self):
         response = self._demander(reason="   ")
 
@@ -593,7 +608,7 @@ class ReallocationTests(BudgetTestCase):
         restreint au Togo *voit* une réallocation Togo → Côte d'Ivoire, mais
         ne peut pas l'approuver — la destination n'existe pas pour lui
         (404, sans rien dire de plus), et rien n'a bougé. Aucun décideur
-        n'est restreint aujourd'hui (``BUDGET_WRITE_ROLES`` est toujours
+        n'est restreint aujourd'hui (``reallocations.decide`` est toujours
         global) : la restriction est simulée sur le profil, et un transfert
         interne au Togo passe sous la même restriction, pour prouver que le
         404 tient à la destination."""

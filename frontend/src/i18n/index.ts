@@ -21,8 +21,8 @@ import fr from "./fr.json"
 export const LANGUAGES = ["fr", "en"] as const
 export type Language = (typeof LANGUAGES)[number]
 
-export const DEFAULT_LANGUAGE: Language = "fr"
-export const LANGUAGE_STORAGE_KEY = "justi_lang"
+const DEFAULT_LANGUAGE: Language = "fr"
+const LANGUAGE_STORAGE_KEY = "justi_lang"
 
 export function isLanguage(value: unknown): value is Language {
   return typeof value === "string" && (LANGUAGES as readonly string[]).includes(value)

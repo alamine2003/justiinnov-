@@ -439,7 +439,7 @@ class Expense(TimeStampedModel):
 
     @property
     def gap(self):
-        """Écart entre la dépense et ce qui est prouvé — jamais saisi."""
+        """Écart entre la dépense et ce qui est prouvé — jamais saisi ; lu par les sérialiseurs."""
         return self.amount - self.justified_amount
 
     @property

@@ -178,10 +178,6 @@ class UserProfile(TimeStampedModel):
             return None
         return list(self.countries.values_list("id", flat=True))
 
-    def can_access_country(self, country_id):
-        allowed = self.country_ids()
-        return allowed is None or country_id in allowed
-
     def team_ids(self):
         """Identifiants des équipes auxquelles la vue est restreinte, ou ``None``.
 

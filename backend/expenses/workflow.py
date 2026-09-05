@@ -46,12 +46,7 @@ ne sont plus déclarées, elles ne pèsent plus. Le journal, lui, garde tout.
 
 from django.utils.translation import gettext_lazy as _
 
-from accounts.permissions import (
-    EXPENSE_WRITE_ROLES,
-    REOPEN_ROLES,
-    REVIEW_ROLES,
-    VALIDATION_ROLES,
-)
+from accounts.permissions import roles_pour
 
 from core.regles import RegleViolee
 
@@ -95,18 +90,31 @@ TRANSITIONS = {
 #: auprès de celui qui les subit.
 MOTIVATED_ACTIONS = frozenset({"reject", "reopen"})
 
-#: Rôle habilité pour chaque action du circuit. Le pays (manager) soumet ;
-#: au siège, le DM met en contrôle et le DF tranche (justifie, rejette,
-#: clôt), les administrateurs pouvant faire l'un et l'autre ; les
-#: administrateurs seuls rouvrent — ni le pays, qui se corrigerait lui-même,
-#: ni la direction financière, dont le constat ne se défait pas.
-ACTION_ROLES = {
-    "submit": EXPENSE_WRITE_ROLES,
-    "review": REVIEW_ROLES,
-    "justify": VALIDATION_ROLES,
-    "reject": VALIDATION_ROLES,
-    "close": VALIDATION_ROLES,
-    "reopen": REOPEN_ROLES,
+#: Capacité exigée pour chaque action du circuit (``accounts.permissions``).
+#: Par défaut, le pays (manager) soumet ; au siège, le DM met en contrôle et
+#: le DF tranche (justifie, rejette, clôt), les administrateurs pouvant faire
+#: l'un et l'autre ; les administrateurs seuls rouvrent — ni le pays, qui se
+#: corrigerait lui-même, ni la direction financière, dont le constat ne se
+#: défait pas. La matrice des droits peut élargir ces défauts, jamais au
+#: pays pour le contrôle.
+ACTION_CAPACITES = {
+    "submit": "dossiers.submit",
+    "review": "expenses.review",
+    "justify": "expenses.validate",
+    "reject": "expenses.validate",
+    "close": "expenses.close",
+    "reopen": "dossiers.reopen",
+}
+
+#: Actions de saisie et leur capacité. Elles ne sont pas des transitions —
+#: l'état ne change pas — mais l'interface les propose au même endroit que
+#: le circuit, et c'est le serveur qui dit si elles sont possibles :
+#: brouillon ou non, auteur ou non, capacité ou non.
+SAISIE_CAPACITES = {
+    "edit": "expenses.update",
+    "add_line": "expenses.create",
+    "upload": "proofs.upload",
+    "delete": "expenses.delete",
 }
 
 #: Actions soumises à la règle des quatre yeux : tout acte de contrôle, de
@@ -205,7 +213,7 @@ def next_status(action, current, configuration=None):
 
 def can_transition(action, current, *, role, configuration=None):
     """Le rôle et l'état permettent-ils l'action ? Ni plus, ni moins."""
-    if role not in ACTION_ROLES[action]:
+    if role not in roles_pour(ACTION_CAPACITES[action], configuration):
         return False
     try:
         next_status(action, current, configuration)
@@ -225,33 +233,67 @@ def breaks_four_eyes(action, author, username):
     return action in FOUR_EYES_ACTIONS and bool(author) and author == username
 
 
-#: Actions d'une ligne, dans l'ordre où l'interface les propose.
-EXPENSE_ACTIONS = ("review", "justify", "reject", "close")
+#: Actions d'une ligne, dans l'ordre où l'interface les propose : la saisie
+#: d'abord, le contrôle ensuite.
+EXPENSE_ACTIONS = ("edit", "delete", "review", "justify", "reject", "close")
 
 #: Actions d'un dossier, dans le même ordre que le circuit.
-DOSSIER_ACTIONS = ("submit", "review", "justify", "reject", "close", "reopen")
+DOSSIER_ACTIONS = (
+    "edit", "add_line", "upload", "delete",
+    "submit", "review", "justify", "reject", "close", "reopen",
+)
+
+
+def peut_saisir(action, objet, *, role, username, configuration=None):
+    """La saisie ``action`` (modifier, ajouter, déposer, supprimer) est-elle possible ?
+
+    Une dépense déclarée ne se modifie plus ni ne se supprime ; une pièce se
+    dépose jusqu'à la clôture ; un brouillon ne se retire que par son auteur
+    (``transitions.retirer_brouillon``). Sans auteur connu — import, compte
+    disparu — le retrait reste ouvert à qui a la capacité. Comme pour
+    ``justify``, la liste dit ce qui peut être *tenté* : le retrait d'un
+    dossier qui porte la ligne d'un autre auteur est proposé ici et refusé
+    par le service, qui seul lit les lignes.
+    """
+    if role not in roles_pour(SAISIE_CAPACITES[action], configuration):
+        return False
+    if action == "delete":
+        return objet.status in DELETABLE_STATUSES and (
+            not objet.created_by or objet.created_by == username
+        )
+    if action == "upload":
+        return objet.status not in PROOF_LOCKED_STATUSES
+    return objet.status not in LOCKED_STATUSES
 
 
 def expense_allowed_actions(expense, *, role, username, configuration=None):
     """Actions qu'un demandeur peut tenter sur une ligne (``allowed_actions``).
 
     Calculées côté serveur pour que l'interface n'ait pas à recopier les
-    règles : rôle, état courant, étape de contrôle obligatoire et quatre
-    yeux. Une ligne sans auteur connu n'admet aucune action de contrôle,
-    puisque la règle des quatre yeux ne peut pas y être vérifiée.
+    règles : capacité (matrice des droits), état courant, étape de contrôle
+    obligatoire et quatre yeux. Une ligne sans auteur connu n'admet aucune
+    action de contrôle, puisque la règle des quatre yeux ne peut pas y être
+    vérifiée ; les actions de saisie (``SAISIE_CAPACITES``) obéissent aux
+    mêmes règles que les services qui les exécutent (``peut_saisir``).
 
     La politique de dépassement n'entre pas dans ce calcul : elle se juge
     sous verrou, sur l'enveloppe, au moment de justifier — ``justify`` peut
     donc figurer ici et répondre 400 pour dépassement.
     """
-    if not expense.created_by:
-        return []
-    return [
-        action
-        for action in EXPENSE_ACTIONS
-        if can_transition(action, expense.status, role=role, configuration=configuration)
-        and not breaks_four_eyes(action, expense.created_by, username)
-    ]
+    actions = []
+    for action in EXPENSE_ACTIONS:
+        if action in SAISIE_CAPACITES:
+            if peut_saisir(
+                action, expense, role=role, username=username, configuration=configuration
+            ):
+                actions.append(action)
+        elif (
+            expense.created_by
+            and can_transition(action, expense.status, role=role, configuration=configuration)
+            and not breaks_four_eyes(action, expense.created_by, username)
+        ):
+            actions.append(action)
+    return actions
 
 
 def dossier_allowed_actions(dossier, *, role, username, configuration=None):
@@ -275,6 +317,12 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
     actions = []
     lines = None
     for action in DOSSIER_ACTIONS:
+        if action in SAISIE_CAPACITES:
+            if peut_saisir(
+                action, dossier, role=role, username=username, configuration=configuration
+            ):
+                actions.append(action)
+            continue
         if not can_transition(action, dossier.status, role=role, configuration=configuration):
             continue
         if breaks_four_eyes(action, dossier.created_by, username):

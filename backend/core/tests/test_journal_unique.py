@@ -6,27 +6,18 @@ les sources et refuse toute création directe hors de la façade.
 """
 
 import re
-from pathlib import Path
 
 from django.test import SimpleTestCase
 
-RACINE = Path(__file__).resolve().parents[2]
+from .aides import RACINE, sources
 FACADE = RACINE / "core" / "journal.py"
 INTERDIT = re.compile(r"\b(AuditLog|ChangeLog)\.objects\.(create|bulk_create)\(")
-
-
-def _sources():
-    for chemin in sorted(RACINE.rglob("*.py")):
-        parties = chemin.relative_to(RACINE).parts
-        if "tests" in parties or "migrations" in parties:
-            continue
-        yield chemin
 
 
 class JournalUniqueTests(SimpleTestCase):
     def test_aucune_ecriture_directe_hors_de_la_facade(self):
         fautifs = []
-        for chemin in _sources():
+        for chemin in sources():
             if chemin == FACADE:
                 continue
             for numero, ligne in enumerate(chemin.read_text().splitlines(), 1):

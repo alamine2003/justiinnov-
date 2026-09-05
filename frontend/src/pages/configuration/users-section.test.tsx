@@ -46,7 +46,6 @@ vi.mock("@/lib/accounts", () => ({
         { value: "manager", label: "Manager", siege: false, always_global: false },
       ],
       capabilities: [],
-      editable: false,
       note: "",
     }),
 }))

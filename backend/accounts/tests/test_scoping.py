@@ -336,11 +336,11 @@ class MeTests(ScopingTestCase):
         self.assertEqual(
             [c["country_ref"] for c in response.data["countries"]], ["TG-02"]
         )
-        self.assertFalse(response.data["permissions"]["manage_countries"])
-        self.assertFalse(response.data["permissions"]["manage_subentities"])
-        self.assertTrue(response.data["permissions"]["record_expenses"])
-        self.assertFalse(response.data["permissions"]["review_expenses"])
-        self.assertFalse(response.data["permissions"]["validate_expenses"])
+        self.assertFalse(response.data["permissions"]["countries.create"])
+        self.assertFalse(response.data["permissions"]["referentiel.update"])
+        self.assertTrue(response.data["permissions"]["expenses.create"])
+        self.assertFalse(response.data["permissions"]["expenses.review"])
+        self.assertFalse(response.data["permissions"]["expenses.validate"])
 
     def test_profil_du_dm(self):
         """Le DM met en contrôle sans trancher ni déclarer."""
@@ -348,13 +348,13 @@ class MeTests(ScopingTestCase):
 
         permissions = self.client.get("/api/me/").data["permissions"]
 
-        self.assertTrue(permissions["review_expenses"])
-        self.assertFalse(permissions["validate_expenses"])
-        self.assertFalse(permissions["record_expenses"])
-        self.assertFalse(permissions["manage_subentities"])
+        self.assertTrue(permissions["expenses.review"])
+        self.assertFalse(permissions["expenses.validate"])
+        self.assertFalse(permissions["expenses.create"])
+        self.assertFalse(permissions["referentiel.update"])
         # Aucun droit d'administration : ni journal, ni enveloppes.
-        self.assertFalse(permissions["view_audit"])
-        self.assertFalse(permissions["manage_budgets"])
+        self.assertFalse(permissions["audit.read"])
+        self.assertFalse(permissions["budgets.update"])
 
     def test_compte_sans_profil_garde_une_reponse_complete(self):
         """Un compte technique hérité n'a pas de profil : la liste des comptes
@@ -375,7 +375,7 @@ class MeTests(ScopingTestCase):
         response = self.client.get("/api/me/")
 
         self.assertTrue(response.data["has_global_scope"])
-        self.assertTrue(response.data["permissions"]["manage_users"])
+        self.assertTrue(response.data["permissions"]["users.update"])
 
     def test_changement_de_mot_de_passe(self):
         self.login(self.rep_togo)
@@ -432,20 +432,21 @@ class BackOfficeTests(ScopingTestCase):
         capacites = {c["key"]: c["roles"] for c in matrice["capabilities"]}
         # Le pays est exclu de la justification, la matrice doit le dire ;
         # le DM met en contrôle mais ne tranche pas.
-        self.assertNotIn(Role.MANAGER, capacites["validate_expenses"])
-        self.assertNotIn(Role.DM, capacites["validate_expenses"])
-        self.assertIn(Role.DF, capacites["validate_expenses"])
-        self.assertIn(Role.DM, capacites["review_expenses"])
-        self.assertNotIn(Role.MANAGER, capacites["review_expenses"])
+        self.assertNotIn(Role.MANAGER, capacites["expenses.validate"])
+        self.assertNotIn(Role.DM, capacites["expenses.validate"])
+        self.assertIn(Role.DF, capacites["expenses.validate"])
+        self.assertIn(Role.DM, capacites["expenses.review"])
+        self.assertNotIn(Role.MANAGER, capacites["expenses.review"])
         # La RH tient le référentiel de tous les pays, pas le manager.
-        self.assertIn(Role.ADMIN, capacites["manage_subentities"])
-        self.assertNotIn(Role.MANAGER, capacites["manage_subentities"])
+        self.assertIn(Role.ADMIN, capacites["referentiel.update"])
+        self.assertNotIn(Role.MANAGER, capacites["referentiel.update"])
         # Le DM et le DF n'administrent rien : les enveloppes sont à la
         # direction seule, le journal d'audit à la RH et à la direction.
-        self.assertEqual(capacites["manage_budgets"], [Role.SUPER_ADMIN])
-        self.assertEqual(sorted(capacites["view_audit"]), [Role.ADMIN, Role.SUPER_ADMIN])
-        for capacite in ("manage_users", "manage_countries", "manage_subentities",
-                         "manage_budgets", "view_audit", "export_data", "reopen_dossiers"):
+        self.assertEqual(capacites["budgets.update"], [Role.SUPER_ADMIN])
+        self.assertEqual(sorted(capacites["audit.read"]), [Role.ADMIN, Role.SUPER_ADMIN])
+        for capacite in ("users.update", "countries.create", "referentiel.update",
+                         "budgets.update", "audit.read", "data.export", "dossiers.reopen",
+                         "configuration.manage"):
             self.assertNotIn(Role.DM, capacites[capacite], capacite)
             self.assertNotIn(Role.DF, capacites[capacite], capacite)
 
@@ -479,13 +480,15 @@ class BackOfficeTests(ScopingTestCase):
         self.assertFalse(roles[Role.MANAGER]["siege"])
         self.assertFalse(roles[Role.MANAGER]["always_global"])
 
-    def test_la_matrice_n_est_pas_modifiable(self):
+    def test_la_matrice_se_modifie_par_patch_seulement(self):
+        """Elle est modifiable (décision 43), mais par ``PATCH`` : un ``POST``
+        ne remplace pas la matrice entière."""
         self.login(self.siege)
 
         lecture = self.client.get("/api/permissions/")
         ecriture = self.client.post("/api/permissions/", {})
 
-        self.assertFalse(lecture.data["editable"])
+        self.assertEqual(lecture.status_code, status.HTTP_200_OK)
         self.assertEqual(ecriture.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 

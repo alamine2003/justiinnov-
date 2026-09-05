@@ -209,7 +209,7 @@ class DiffEtAdresseTests(ChangeLogTestCase):
     def test_les_valeurs_non_json_sont_converties(self):
         from decimal import Decimal
 
-        from core.signals import serialisable
+        from core.journal import serialisable
 
         self.assertEqual(serialisable(Decimal("12.50")), "12.50")
         self.assertEqual(serialisable(self.team.created_at), self.team.created_at.isoformat())

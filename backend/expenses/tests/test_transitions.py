@@ -12,21 +12,14 @@ from accounts.models import Role
 from accounts.permissions import get_access
 from accounts.tests.test_scoping import make_user
 from budget.models import OverrunPolicy
-from core.journal import Trace
 from core.regles import PermissionRefusee, RegleViolee
 from expenses import transitions
 from expenses.models import AuditLog, Dossier
 from expenses.workflow import Status, TransitionError
 
+from core.tests.aides import ADRESSE, trace
+
 from .base import ExpenseTestCase
-
-ADRESSE = "41.79.0.10"
-
-
-def trace(user):
-    """La trace qu'une vue construirait depuis la requête."""
-    return Trace(user=user.username, ip=ADRESSE, user_agent="Test", compte=user)
-
 
 class ServicesDuCircuitTests(ExpenseTestCase):
     def setUp(self):

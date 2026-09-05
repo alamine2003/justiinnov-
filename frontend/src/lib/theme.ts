@@ -11,7 +11,7 @@ export type Theme = "light" | "dark" | "system"
 /** Ce qui est réellement appliqué à la page. */
 export type ResolvedTheme = "light" | "dark"
 
-export const THEME_STORAGE_KEY = "justi_theme"
+const THEME_STORAGE_KEY = "justi_theme"
 
 export const THEMES: Theme[] = ["light", "dark", "system"]
 
@@ -32,7 +32,7 @@ export function storeTheme(theme: Theme): void {
   }
 }
 
-export function systemTheme(): ResolvedTheme {
+function systemTheme(): ResolvedTheme {
   if (!window.matchMedia) {
     return "light"
   }

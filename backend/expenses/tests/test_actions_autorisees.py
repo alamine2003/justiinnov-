@@ -11,12 +11,19 @@ from datetime import date
 from rest_framework import status
 
 from accounts.models import Role
+from accounts.permissions import get_access
 from accounts.tests.test_scoping import make_user
+from core.regles import PermissionRefusee
+from core.tests.aides import trace
+from expenses import transitions
 from expenses.models import Dossier, Proof
 from expenses.workflow import Status
 
 from .base import ExpenseTestCase
 from .test_workflow import configurer
+
+#: Actions de saisie d'un brouillon, pour son auteur : avant le circuit.
+SAISIE = ["edit", "add_line", "upload", "delete"]
 
 
 class ActionsDeLigneTests(ExpenseTestCase):
@@ -109,12 +116,12 @@ class ActionsDeDossierTests(ExpenseTestCase):
         )
 
     def test_un_dossier_vide_ne_se_soumet_pas(self):
-        self.assertEqual(self._actions(self.owner), [])
+        self.assertEqual(self._actions(self.owner), SAISIE)
 
         self.make_expense()
 
-        self.assertEqual(self._actions(self.owner), ["submit"])
-        self.assertEqual(self._actions(self.owner, via="liste"), ["submit"])
+        self.assertEqual(self._actions(self.owner), SAISIE + ["submit"])
+        self.assertEqual(self._actions(self.owner, via="liste"), SAISIE + ["submit"])
         self.assertEqual(self._actions(self.controller), [])
 
     def test_un_dossier_soumis_attend_ses_lignes(self):
@@ -127,8 +134,8 @@ class ActionsDeDossierTests(ExpenseTestCase):
 
         self.assertEqual(self._actions(self.dm), ["review"])
         self.assertEqual(self._actions(self.controller), ["review"])
-        self.assertEqual(self._actions(self.admin), ["review", "reopen"])
-        self.assertEqual(self._actions(self.owner), [])
+        self.assertEqual(self._actions(self.admin), ["upload", "review", "reopen"])
+        self.assertEqual(self._actions(self.owner), ["upload"])
 
     def test_les_lignes_tranchees_ouvrent_le_constat(self):
         ligne = self.make_expense()
@@ -148,7 +155,7 @@ class ActionsDeDossierTests(ExpenseTestCase):
         # constate non justifié.
         self.assertEqual(toutes_tranchees, ["review", "reject"])
         # Une ligne justifiée est un constat : plus de réouverture.
-        self.assertEqual(rouvrable, ["review", "reject"])
+        self.assertEqual(rouvrable, ["upload", "review", "reject"])
 
     def test_un_dossier_sans_piece_exploitable_ne_se_justifie_pas(self):
         ligne = self.make_expense()
@@ -177,7 +184,7 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.submit_dossier()
 
         self.assertEqual(self._actions(self.controller), [])
-        self.assertEqual(self._actions(self.doo), ["review", "reopen"])
+        self.assertEqual(self._actions(self.doo), ["upload", "review", "reopen"])
 
     def test_un_dossier_justifie_se_clot(self):
         ligne = self.make_expense()
@@ -188,7 +195,8 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
 
         self.assertEqual(self._actions(self.controller), ["close"])
-        self.assertEqual(self._actions(self.admin), ["close"])
+        # La RH saisit aussi : une pièce peut encore arriver avant la clôture.
+        self.assertEqual(self._actions(self.admin), ["upload", "close"])
 
 
 class TransitionRenvoieLeDetailTests(ExpenseTestCase):
@@ -210,7 +218,8 @@ class TransitionRenvoieLeDetailTests(ExpenseTestCase):
         self.assertEqual(response.data["expenses"][0]["status"], Status.SUBMITTED)
         self.assertEqual(len(response.data["proofs"]), 1)
         self.assertEqual(response.data["expense_count"], 1)
-        self.assertEqual(response.data["allowed_actions"], [])
+        # Déclaré, le dossier ne se modifie plus ; une pièce peut encore arriver.
+        self.assertEqual(response.data["allowed_actions"], ["upload"])
 
     def test_la_justification_renvoie_le_detail_avec_les_actions(self):
         ligne = self.make_expense()
@@ -228,3 +237,115 @@ class TransitionRenvoieLeDetailTests(ExpenseTestCase):
         self.assertEqual(response.data["expenses"][0]["status"], Status.JUSTIFIED)
         self.assertEqual(response.data["expenses"][0]["allowed_actions"], ["close"])
         self.assertEqual(response.data["allowed_actions"], ["close"])
+
+
+class ActionsDeSaisieTests(ExpenseTestCase):
+    """Modifier, ajouter, déposer, supprimer : le serveur dit ce qui est
+    possible, l'interface n'a plus de liste d'états à recopier."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = make_user("rh.admin", Role.ADMIN)
+
+    def _ligne(self, user, ligne):
+        self.login(user)
+        return self.client.get(f"/api/expenses/{ligne.pk}/").data["allowed_actions"]
+
+    def _dossier(self, user):
+        self.login(user)
+        return self.client.get(f"/api/dossiers/{self.dossier.pk}/").data["allowed_actions"]
+
+    def test_un_brouillon_se_modifie_et_se_supprime_par_son_auteur(self):
+        ligne = self.make_expense()
+
+        self.assertEqual(self._ligne(self.owner, ligne), ["edit", "delete"])
+        # L'administrateur peut le corriger, pas retirer le brouillon d'un autre.
+        self.assertEqual(self._ligne(self.admin, ligne), ["edit"])
+        # Le DF ne saisit pas.
+        self.assertEqual(self._ligne(self.controller, ligne), [])
+
+    def test_une_ligne_sans_auteur_se_retire_par_qui_saisit(self):
+        """Import, compte disparu : personne ne peut se plaindre du retrait."""
+        anonyme = self.make_expense(created_by="")
+
+        self.assertEqual(self._ligne(self.admin, anonyme), ["edit", "delete"])
+
+    def test_declaree_une_ligne_ne_se_touche_plus(self):
+        ligne = self.make_expense()
+        self.submit_dossier()
+
+        self.assertEqual(self._ligne(self.owner, ligne), [])
+
+    def test_une_piece_se_depose_jusqu_a_la_cloture(self):
+        ligne = self.make_expense()
+        Proof.objects.create(
+            dossier=self.dossier, file="justificatifs/f.pdf",
+            original_name="facture.pdf", sha256="a" * 64,
+        )
+        self.submit_dossier()
+        self.assertEqual(self._dossier(self.owner), ["upload"])
+
+        self.login(self.controller)
+        self.client.post(f"/api/expenses/{ligne.pk}/justify/")
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
+
+        self.assertEqual(self._dossier(self.owner), [])
+
+    def test_la_matrice_retire_la_suppression_au_pays(self):
+        """Un droit retiré dans la configuration disparaît des actions
+        proposées, sans que l'interface ait rien à savoir."""
+        ligne = self.make_expense()
+        self.login(self.admin)
+        response = self.client.patch(
+            "/api/permissions/",
+            {"capabilities": {"expenses.delete": ["super_admin", "admin"]}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        self.assertEqual(self._ligne(self.owner, ligne), ["edit"])
+        self.login(self.owner)
+        self.assertEqual(
+            self.client.delete(f"/api/expenses/{ligne.pk}/").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+class MatriceEtServicesTests(ExpenseTestCase):
+    """Les services lisent la même matrice que les vues : un droit retiré
+    ferme le service, un droit ouvert le rend possible."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = make_user("rh.admin", Role.ADMIN)
+
+    def _regler(self, **capacites):
+        self.login(self.admin)
+        response = self.client.patch(
+            "/api/permissions/", {"capabilities": capacites}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_rouvrir_suit_la_matrice(self):
+        self.make_expense()
+        self.submit_dossier()
+        self._regler(**{"dossiers.reopen": ["super_admin", "df"]})
+
+        with self.assertRaises(PermissionRefusee):
+            transitions.rouvrir(
+                self.dossier, get_access(self.admin), "Ligne douteuse", trace(self.admin)
+            )
+        resultat = transitions.rouvrir(
+            self.dossier, get_access(self.controller), "Ligne douteuse",
+            trace(self.controller),
+        )
+
+        self.assertEqual(resultat.instance.status, Status.DRAFT)
+
+    def test_retirer_un_brouillon_suit_la_matrice(self):
+        ligne = self.make_expense()
+        self._regler(**{"expenses.delete": ["super_admin", "admin"]})
+
+        with self.assertRaises(PermissionRefusee):
+            transitions.retirer_brouillon(ligne, get_access(self.owner), trace(self.owner))

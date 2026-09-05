@@ -23,7 +23,7 @@ const ConfigurationPage = lazy(() => import("@/pages/configuration").then((m) =>
 const PasswordPage = lazy(() => import("@/pages/password").then((m) => ({ default: m.PasswordPage })))
 const TwoFactorPage = lazy(() => import("@/pages/two-factor").then((m) => ({ default: m.TwoFactorPage })))
 
-export function FullPageLoader() {
+function FullPageLoader() {
   const { t } = useTranslation()
   return (
     <div className="flex min-h-screen items-center justify-center" aria-busy="true">
@@ -149,7 +149,7 @@ export default function App() {
           <Route
             path="/audit"
             element={
-              <RequirePermission permission="view_audit">
+              <RequirePermission permission="audit.read">
                 <AuditPage />
               </RequirePermission>
             }
@@ -157,7 +157,7 @@ export default function App() {
           <Route
             path="/configuration"
             element={
-              <RequirePermission permission="manage_users">
+              <RequirePermission permission="configuration.manage">
                 <ConfigurationPage />
               </RequirePermission>
             }

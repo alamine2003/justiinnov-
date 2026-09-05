@@ -20,10 +20,15 @@ import).
 
 - Français partout : code, docstrings, messages, noms de tests. Un
   commentaire explique **pourquoi**, jamais quoi.
-- Droits : n'ajoutez jamais un test de rôle dans une vue ; déclarez
-  `write_roles`, `read_roles`, `action_write_roles` avec les ensembles de
-  `accounts/permissions.py`. Un nouveau droit = un ensemble nommé, une
-  capacité dans `CAPABILITIES`, un test de refus.
+- Droits : n'ajoutez jamais un test de rôle dans une vue ni un service ;
+  déclarez `write_capability`, `read_capability`,
+  `action_write_capabilities`, `action_read_capabilities` avec une clé de
+  `CAPACITES` (`accounts/permissions.py`), et `exiger_la_capacite(cle,
+  acteur)` ou `roles_pour(cle)` dans un service. Un nouveau droit = une
+  `Capacite` (clé `ressource.verbe`, groupe, défaut, verrous), un test de
+  refus, une traduction. Les rôles effectifs viennent de la configuration
+  (`WorkflowConfiguration.capability_roles`, décision 43) : un ensemble de
+  rôles figé dans le code est un défaut.
 - Cloisonnement : une seule primitive, `accounts.perimetre.filtrer`
   (pays, équipes du manager) appelée par `CountryScopedMixin`
   (`country_lookup`, `country_via`, `team_lookup`), et `ChampCloisonne`

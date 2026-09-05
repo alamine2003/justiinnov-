@@ -41,7 +41,11 @@ const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 
 export function BudgetsPage() {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const canManage = can("manage_budgets")
+  // Attribuer, modifier, arbitrer : trois droits, à la direction par défaut.
+  const canCreate = can("budgets.create")
+  const canEdit = can("budgets.update")
+  const canRequest = can("reallocations.request")
+  const canManage = canCreate || canEdit
   // Un seul exercice pour le résumé par pays et la liste des enveloppes :
   // les deux onglets parlent des mêmes chiffres.
   const [year, setYear] = useState(CURRENT_YEAR)
@@ -76,7 +80,7 @@ export function BudgetsPage() {
     { enabled: canManage },
   )
   const configuration = useReferentiel("configuration", fetchConfiguration, {
-    enabled: canManage && can("manage_users"),
+    enabled: canManage && can("configuration.manage"),
   })
 
   const [formOpen, setFormOpen] = useState(false)
@@ -118,7 +122,7 @@ export function BudgetsPage() {
               </option>
             ))}
           </NativeSelect>
-          {canManage && (
+          {canCreate && (
             <Button
               onClick={() => {
                 setEditing(null)
@@ -206,7 +210,7 @@ export function BudgetsPage() {
                         icon={Wallet}
                         title={t("budgets.vide.pays_titre")}
                         hint={
-                          canManage
+                          canCreate
                             ? t("budgets.vide.pays_indication_siege")
                             : t("budgets.vide.pays_indication_pays")
                         }
@@ -274,17 +278,17 @@ export function BudgetsPage() {
                       <TableHead scope="col" className="text-right">{t("budgets.colonnes.disponible")}</TableHead>
                       <TableHead scope="col">{t("budgets.colonnes.execution")}</TableHead>
                       <TableHead scope="col">{t("budgets.colonnes.depassement")}</TableHead>
-                      {canManage && (
+                      {canEdit && (
                         <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
                       )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {query.loading ? (
-                      <SkeletonRows columns={canManage ? 8 : 7} />
+                      <SkeletonRows columns={canEdit ? 8 : 7} />
                     ) : budgets.length === 0 ? (
                       <EmptyRow
-                        colSpan={canManage ? 8 : 7}
+                        colSpan={canEdit ? 8 : 7}
                         icon={Wallet}
                         title={t("budgets.vide.enveloppes_titre")}
                         hint={
@@ -326,7 +330,7 @@ export function BudgetsPage() {
                               {budget.overrun_policy_display}
                             </Badge>
                           </TableCell>
-                          {canManage && (
+                          {canEdit && (
                             <TableCell className="text-right">
                               <Button
                                 variant="ghost"
@@ -359,7 +363,7 @@ export function BudgetsPage() {
             <CardContent className="pt-6">
               <Reallocations
                 budgets={budgets}
-                canDecide={canManage}
+                canRequest={canRequest}
                 onChanged={query.reload}
               />
             </CardContent>

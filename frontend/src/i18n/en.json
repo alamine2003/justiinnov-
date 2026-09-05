@@ -1,8 +1,7 @@
 {
   "app": {
     "titre": "JUSTI INNOV — Budget control",
-    "tagline": "Budget control application",
-    "description": "Tracking of country spending and supporting documents: what was spent, when, where, for whom, and where the proof is."
+    "tagline": "Budget control application"
   },
   "commun": {
     "annuler": "Cancel",
@@ -17,13 +16,9 @@
     "desactive": "Deactivated",
     "activer": "Activate",
     "desactiver": "Deactivate",
-    "modifier": "Edit",
     "creer": "Create",
     "ajouter": "Add",
-    "retirer": "Remove",
-    "rechercher": "Search",
     "tous": "All",
-    "toutes": "All",
     "oui": "Yes",
     "non": "No",
     "statut": "Status",
@@ -31,14 +26,12 @@
     "montant": "Amount",
     "pays": "Country",
     "nom": "Name",
-    "code": "Code",
     "description": "Description",
     "annee": "Year",
     "devise": "Currency",
     "siege_tous_pays": "Headquarters — all countries",
     "sans_role": "No role",
     "aucun": "—",
-    "voir": "View",
     "telecharger": "Download",
     "precedent": "Previous",
     "suivant": "Next",
@@ -213,9 +206,6 @@
     "langue": {
       "fr": "Français",
       "en": "English"
-    },
-    "notification_type": {
-      "dossier_reopened": "File reopened"
     }
   },
   "layout": {
@@ -238,7 +228,6 @@
   },
   "pwa": {
     "installer": "Install the app",
-    "installation_impossible": "Installation failed",
     "note_connexion": "Available as a desktop app on Windows and macOS: install it from Chrome or Edge to open it outside the browser."
   },
   "ui": {
@@ -885,10 +874,22 @@
       "seuil_requis": "Enter at least one threshold."
     },
     "permissions": {
-      "non_modifiables": "Permissions cannot be changed",
+      "titre": "Rights matrix",
+      "description": "Each cell says which role may attempt the action; the server applies the setting from the next request. A greyed-out cell is locked.",
       "droit": "Permission",
       "siege": "headquarters",
-      "pays": "country"
+      "pays": "country",
+      "toujours": "Always granted",
+      "jamais": "Never granted",
+      "case_aria": "{{droit}} for {{role}}",
+      "modifie": "Changed",
+      "retablir": "Restore default",
+      "retablir_aria": "Restore the default for {{droit}}",
+      "modifications_one": "{{count}} unsaved change",
+      "modifications_other": "{{count}} unsaved changes",
+      "annuler": "Discard changes",
+      "enregistre": "Rights saved: they apply from now on.",
+      "erreur": "Could not save"
     },
     "utilisateurs": {
       "titre": "Accounts",

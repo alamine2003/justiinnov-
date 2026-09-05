@@ -1,7 +1,7 @@
 """La requête HTTP en cours et l'adresse fiable de son client.
 
 Deux choses que les journaux demandent à chaque écriture : *qui* signe
-(``get_current_user``) et *depuis où* (``client_ip``). Elles vivent ici,
+(``get_current_request``) et *depuis où* (``client_ip``). Elles vivent ici,
 sous ``core.signals``, pour que la façade ``core.journal`` puisse les lire
 sans dépendre des signaux qui, eux, dépendent d'elle.
 
@@ -39,22 +39,6 @@ def set_current_request(request):
 
 def reset_current_request(token):
     _requete_courante.reset(token)
-
-
-def get_current_user():
-    """Utilisateur authentifié de la requête courante, ou ``None``.
-
-    Lu au moment de l'écriture et non à l'entrée du middleware : pour une
-    requête par jeton, ``request.user`` n'est forcé par DRF qu'à l'entrée de
-    la vue, bien après le middleware.
-    """
-    request = get_current_request()
-    if request is None:
-        return None
-    user = getattr(request, "user", None)
-    if user is None or not user.is_authenticated:
-        return None
-    return user
 
 
 def _nombre_de_mandataires():

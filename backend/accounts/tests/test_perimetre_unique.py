@@ -10,11 +10,10 @@ que la liste ne vieillisse pas.
 """
 
 import re
-from pathlib import Path
 
 from django.test import SimpleTestCase
 
-RACINE = Path(__file__).resolve().parents[2]
+from core.tests.aides import RACINE, sources
 PRIMITIVE = RACINE / "accounts" / "perimetre.py"
 INTERDIT = re.compile(r"\b(team|team_id|country|country_id)__in\b")
 
@@ -31,19 +30,11 @@ TOLERES = {
 }
 
 
-def _sources():
-    for chemin in sorted(RACINE.rglob("*.py")):
-        parties = chemin.relative_to(RACINE).parts
-        if "tests" in parties or "migrations" in parties or ".venv" in parties:
-            continue
-        yield chemin
-
-
 class PerimetreUniqueTests(SimpleTestCase):
     def test_aucun_filtre_de_perimetre_hors_de_la_primitive(self):
         fautifs = []
         toleres_vus = set()
-        for chemin in _sources():
+        for chemin in sources():
             if chemin == PRIMITIVE:
                 continue
             relatif = chemin.relative_to(RACINE).as_posix()

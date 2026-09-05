@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from django.db.models import Sum
 from django.utils.translation import gettext as _
 
-from accounts.permissions import BUDGET_WRITE_ROLES
+from accounts.permissions import roles_pour
 from budget.models import Budget, OverrunPolicy
 from core.regles import RegleViolee
 
@@ -18,12 +18,15 @@ from .workflow import CONSUMING_STATUSES, ENGAGING_STATUSES
 
 ZERO = Decimal("0.00")
 
-#: Rôles habilités à valider une dépense qui dépasse son enveloppe lorsque la
-#: politique du budget l'exige : ceux qui attribuent les enveloppes — la
-#: direction (DG, DO, CEO), super administratrice. Ni la RH ni la direction
-#: financière n'arbitrent un dépassement ; l'ensemble est le même que pour
-#: l'attribution, pour ne pas dériver de lui.
-OVERRUN_APPROVERS = BUDGET_WRITE_ROLES
+def approuve_les_depassements(role):
+    """Le rôle peut-il valider une dépense qui dépasse son enveloppe ?
+
+    Ceux qui modifient les enveloppes (``budgets.update``) — la direction
+    par défaut ; ni la RH ni la direction financière n'arbitrent un
+    dépassement. La capacité est la même que pour l'attribution, pour ne
+    pas dériver d'elle.
+    """
+    return role in roles_pour("budgets.update")
 
 
 #: Ordre de priorité des sous-enveloppes, du plus précis au plus large.
@@ -160,7 +163,7 @@ def check_budget_capacity(
         )
 
     if budget.overrun_policy == OverrunPolicy.APPROVAL:
-        if at_approval and role not in OVERRUN_APPROVERS:
+        if at_approval and not approuve_les_depassements(role):
             raise RegleViolee(
                 "amount",
                 _(

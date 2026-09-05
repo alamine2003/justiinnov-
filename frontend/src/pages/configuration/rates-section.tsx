@@ -74,7 +74,7 @@ export function RatesSection() {
         </div>
         {/* Les taux sont l'affaire de la direction : un administrateur qui
             n'a pas ce droit ne voit pas un bouton qui lui répondrait 403. */}
-        {can("manage_budgets") && (
+        {can("rates.manage") && (
           <Button size="sm" onClick={() => setOpen(true)}>
             <Plus className="mr-2 h-4 w-4" aria-hidden />
             {t("configuration.taux.publier")}

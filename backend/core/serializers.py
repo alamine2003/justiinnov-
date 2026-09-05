@@ -55,6 +55,21 @@ class DetailField(serializers.JSONField):
     """Détail libre d'une entrée de journal, propre à chaque action."""
 
 
+def champ_montant(**kwargs):
+    """Montant rendu en chaîne décimale, comme partout dans l'API."""
+    return serializers.DecimalField(
+        max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True, **kwargs
+    )
+
+
+def champ_taux(**kwargs):
+    """Taux de change, quatre décimales, absent quand aucun taux ne s'applique."""
+    return serializers.DecimalField(
+        max_digits=10, decimal_places=4, coerce_to_string=True, read_only=True,
+        allow_null=True, **kwargs
+    )
+
+
 class ManagerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Manager

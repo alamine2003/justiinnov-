@@ -8,34 +8,22 @@ ces réponses pour ``manage.py spectacular``, donc pour les types du frontend.
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+from core.serializers import champ_montant, champ_taux
 from notifications.models import Notification
-
-
-def _montant(**kwargs):
-    return serializers.DecimalField(
-        max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True, **kwargs
-    )
-
-
-def _taux():
-    return serializers.DecimalField(
-        max_digits=10, decimal_places=4, coerce_to_string=True, read_only=True,
-        allow_null=True,
-    )
 
 
 class DashboardTotalsSerializer(serializers.Serializer):
     """Totaux consolidés en FCFA (``totals``)."""
 
     currency = serializers.CharField(read_only=True)
-    allocated = _montant()
-    engaged = _montant()
-    consumed = _montant()
-    justified = _montant()
-    gap = _montant(help_text=_("Dépensé sans preuve à l'appui."))
-    remaining = _montant()
-    execution_rate = _taux()
-    justification_rate = _taux()
+    allocated = champ_montant()
+    engaged = champ_montant()
+    consumed = champ_montant()
+    justified = champ_montant()
+    gap = champ_montant(help_text=_("Dépensé sans preuve à l'appui."))
+    remaining = champ_montant()
+    execution_rate = champ_taux()
+    justification_rate = champ_taux()
     unconverted_currencies = serializers.ListField(
         child=serializers.CharField(), read_only=True,
         help_text=_("Devises sans taux connu, laissées hors des totaux."),
@@ -47,21 +35,21 @@ class DashboardCountryRowSerializer(serializers.Serializer):
     country_name = serializers.CharField(read_only=True)
     country_ref = serializers.CharField(read_only=True, allow_null=True)
     currency = serializers.CharField(read_only=True)
-    allocated = _montant()
-    sub_allocated = _montant()
-    engaged = _montant()
-    consumed = _montant()
-    justified = _montant()
-    gap = _montant()
-    remaining = _montant()
-    execution_rate = _taux()
-    justification_rate = _taux()
-    remaining_xof = _montant(allow_null=True)
+    allocated = champ_montant()
+    sub_allocated = champ_montant()
+    engaged = champ_montant()
+    consumed = champ_montant()
+    justified = champ_montant()
+    gap = champ_montant()
+    remaining = champ_montant()
+    execution_rate = champ_taux()
+    justification_rate = champ_taux()
+    remaining_xof = champ_montant(allow_null=True)
 
 
 class ConsolidatedXofSerializer(serializers.Serializer):
-    allocated = _montant()
-    remaining = _montant()
+    allocated = champ_montant()
+    remaining = champ_montant()
     unconverted_currencies = serializers.ListField(
         child=serializers.CharField(), read_only=True
     )
@@ -102,9 +90,9 @@ class DashboardSerializer(serializers.Serializer):
 
 class BreakdownRowSerializer(serializers.Serializer):
     label = serializers.CharField(read_only=True)
-    amount = _montant()
-    justified = _montant()
-    gap = _montant()
+    amount = champ_montant()
+    justified = champ_montant()
+    gap = champ_montant()
     lines = serializers.IntegerField(read_only=True)
 
 

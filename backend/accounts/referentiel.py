@@ -40,14 +40,7 @@ from core.serializers import (
 )
 
 from .models import HEADQUARTERS_ROLES
-from .permissions import (
-    HISTORY_READ_ROLES,
-    REFERENTIAL_WRITE_ROLES,
-    SUBENTITY_WRITE_ROLES,
-    USER_WRITE_ROLES,
-    RolePermission,
-    get_access,
-)
+from .permissions import RolePermission, get_access, roles_pour
 from .scoping import CountryScopedMixin
 
 
@@ -68,9 +61,10 @@ class CountryViewSet(ScopedViewSet):
     filterset_fields = ["is_active", "currency", "country_ref"]
     search_fields = ["name", "code", "country_ref", "timezone"]
     ordering_fields = ["name", "code", "created_at"]
-    write_roles = REFERENTIAL_WRITE_ROLES
+    write_capability = "countries.update"
+    action_write_capabilities = {"create": "countries.create"}
     # La liste des pays à créer n'intéresse que ceux qui peuvent en créer.
-    action_read_roles = {"disponibles": REFERENTIAL_WRITE_ROLES}
+    action_read_capabilities = {"disponibles": "countries.create"}
     # Le pays est l'objet lui-même : il n'y a pas de champ « pays » à valider.
     country_lookup = "pk"
     country_field = None
@@ -112,7 +106,8 @@ class ManagerViewSet(ScopedViewSet):
     serializer_class = ManagerSerializer
     filterset_fields = ["is_active"]
     search_fields = ["name", "email", "title"]
-    write_roles = REFERENTIAL_WRITE_ROLES
+    write_capability = "countries.update"
+    action_write_capabilities = {"create": "countries.create"}
     # Un manager est rattaché à ses pays par une relation multiple.
     country_lookup = "countries"
     country_field = None
@@ -123,7 +118,8 @@ class TeamViewSet(ScopedViewSet):
     serializer_class = TeamSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["name"]
-    write_roles = SUBENTITY_WRITE_ROLES
+    write_capability = "referentiel.update"
+    action_write_capabilities = {"create": "referentiel.create"}
     # Un manager rattaché à des équipes ne voit que les siennes : la liste
     # qu'il consulte est celle dans laquelle il choisit pour ses dépenses.
     team_lookup = "pk"
@@ -134,7 +130,8 @@ class CostCenterViewSet(ScopedViewSet):
     serializer_class = CostCenterSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["code", "name"]
-    write_roles = SUBENTITY_WRITE_ROLES
+    write_capability = "referentiel.update"
+    action_write_capabilities = {"create": "referentiel.create"}
 
 
 class ProjectViewSet(ScopedViewSet):
@@ -143,7 +140,8 @@ class ProjectViewSet(ScopedViewSet):
     filterset_fields = ["country", "status", "is_active"]
     search_fields = ["name"]
     ordering_fields = ["created_at", "name"]
-    write_roles = SUBENTITY_WRITE_ROLES
+    write_capability = "referentiel.update"
+    action_write_capabilities = {"create": "referentiel.create"}
 
 
 class ExpenseTitleViewSet(ScopedViewSet):
@@ -151,7 +149,8 @@ class ExpenseTitleViewSet(ScopedViewSet):
     serializer_class = ExpenseTitleSerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["label"]
-    write_roles = SUBENTITY_WRITE_ROLES
+    write_capability = "referentiel.update"
+    action_write_capabilities = {"create": "referentiel.create"}
 
 
 class MarketingCategoryViewSet(ScopedViewSet):
@@ -161,7 +160,8 @@ class MarketingCategoryViewSet(ScopedViewSet):
     serializer_class = MarketingCategorySerializer
     filterset_fields = ["country", "is_active"]
     search_fields = ["name"]
-    write_roles = SUBENTITY_WRITE_ROLES
+    write_capability = "referentiel.update"
+    action_write_capabilities = {"create": "referentiel.create"}
 
 
 class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
@@ -170,7 +170,7 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     queryset = ChangeLog.objects.select_related("country").all()
     serializer_class = ChangeLogSerializer
     permission_classes = [RolePermission]
-    read_roles = HISTORY_READ_ROLES
+    read_capability = "history.read"
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["country", "model_name", "action"]
     ordering_fields = ["created_at"]
@@ -196,7 +196,7 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
             queryset = ChangeLog.objects.select_related("country").filter(
                 Q(country__in=access.country_ids) | Q(country__isnull=True)
             )
-        if access.role not in USER_WRITE_ROLES:
+        if access.role not in roles_pour("configuration.manage"):
             queryset = queryset.exclude(model_name__in=self.ENTREES_D_ADMINISTRATION)
         return queryset
 

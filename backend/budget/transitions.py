@@ -22,8 +22,8 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from accounts.permissions import BUDGET_WRITE_ROLES, RolePermission
-from core.journal import Trace, tracer  # noqa: F401 — ``Trace`` ré-exportée
+from accounts.permissions import exiger_la_capacite, roles_pour
+from core.journal import tracer
 from core.regles import HorsPerimetre, PermissionRefusee, RegleViolee
 from notifications import triggers
 
@@ -52,12 +52,6 @@ def disponible(budget):
     et l'engagé. Recalculé sur l'instance, hors annotations de liste."""
     totals = consumption(budget)
     return budget.amount - totals["consumed"] - totals["engaged"]
-
-
-def exiger_le_role(acteur):
-    """Demander, approuver, refuser : la direction seule (``BUDGET_WRITE_ROLES``)."""
-    if acteur is None or acteur.role not in BUDGET_WRITE_ROLES:
-        raise PermissionRefusee(str(RolePermission.message))
 
 
 def exiger_le_perimetre(acteur, *budgets):
@@ -104,9 +98,12 @@ def verifier_la_decision(reallocation, acteur):
     exiger_le_perimetre(acteur, reallocation.target)
 
 
-def peut_decider(reallocation, acteur):
-    """``can_decide`` : les mêmes conditions que la décision, en booléen."""
-    if acteur is None or acteur.role not in BUDGET_WRITE_ROLES:
+def peut_decider(reallocation, acteur, configuration=None):
+    """``can_decide`` : les mêmes conditions que la décision, en booléen.
+
+    ``configuration`` évite à une liste de relire la matrice ligne par ligne.
+    """
+    if acteur is None or acteur.role not in roles_pour("reallocations.decide", configuration):
         return False
     try:
         verifier_la_decision(reallocation, acteur)
@@ -163,7 +160,7 @@ def demander(source, target, montant, motif, acteur, trace):
     Le disponible de la source est jugé sous verrou dès la demande : une
     demande qu'on sait impossible n'a pas à attendre l'arbitre.
     """
-    exiger_le_role(acteur)
+    exiger_la_capacite("reallocations.request", acteur)
     exiger_le_perimetre(acteur, source, target)
     if source.pk == target.pk:
         raise RegleViolee("target", _("La source et la destination doivent différer."))
@@ -198,7 +195,7 @@ def approuver(reallocation, acteur, note, trace):
     même temps prendraient sinon les verrous en sens inverse et
     s'interbloqueraient.
     """
-    exiger_le_role(acteur)
+    exiger_la_capacite("reallocations.decide", acteur)
     note = (note or "").strip()
     reallocation = verrouiller_pour_decision(reallocation, acteur)
     budgets = {
@@ -230,7 +227,7 @@ def approuver(reallocation, acteur, note, trace):
 @transaction.atomic
 def refuser(reallocation, acteur, note, trace):
     """Refuse le transfert. Le motif est obligatoire (§5.5)."""
-    exiger_le_role(acteur)
+    exiger_la_capacite("reallocations.decide", acteur)
     note = (note or "").strip()
     if not note:
         raise RegleViolee("note", _("Un refus doit être motivé."))

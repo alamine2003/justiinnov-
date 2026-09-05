@@ -24,14 +24,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-export interface ColumnDef<T> {
+interface ColumnDef<T> {
   key: keyof T | string
   /** En-tête déjà traduit par l'appelant. */
   header: string
   render?: (item: T) => ReactNode
 }
 
-export interface FormField {
+interface FormField {
   key: string
   /** Libellé déjà traduit par l'appelant. */
   label: string

@@ -108,12 +108,12 @@ export function AppLayout() {
       <NavItem to="/countries" icon={Globe} onNavigate={() => setMenuOpen(false)}>
         {t("nav.pays")}
       </NavItem>
-      {can("view_audit") && (
+      {can("audit.read") && (
         <NavItem to="/audit" icon={ScrollText} onNavigate={() => setMenuOpen(false)}>
           {t("nav.audit")}
         </NavItem>
       )}
-      {can("manage_users") && (
+      {can("configuration.manage") && (
         <NavItem to="/configuration" icon={Settings} onNavigate={() => setMenuOpen(false)}>
           {t("nav.configuration")}
         </NavItem>
@@ -193,7 +193,7 @@ export function AppLayout() {
                 {t("nav.activer_2fa")}
               </Button>
             )}
-            {!closed && can("manage_users") && me?.supervision === true && (
+            {!closed && can("configuration.manage") && me?.supervision === true && (
               <Button
                 variant="ghost"
                 className="w-full"

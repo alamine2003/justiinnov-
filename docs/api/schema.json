@@ -5376,10 +5376,56 @@
         "/api/permissions/": {
             "get": {
                 "operationId": "permissions_retrieve",
-                "description": "Matrice des rôles et de ce qu'ils autorisent.\n\nLue dans les mêmes constantes que celles appliquées par ``RolePermission``.\nLa matrice est **volontairement non modifiable** : la rendre éditable\npermettrait de rendre à un pays le droit de justifier ses propres dépenses,\nprécisément ce que la séparation des tâches interdit.",
+                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous :\nle super administrateur garde tout, le pays ne reçoit jamais le droit de\ncontrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
                 "tags": [
                     "permissions"
                 ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PermissionMatrix"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "permissions_partial_update",
+                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous :\nle super administrateur garde tout, le pays ne reçoit jamais le droit de\ncontrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
+                "tags": [
+                    "permissions"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPermissionMatrixUpdateRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPermissionMatrixUpdateRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPermissionMatrixUpdateRequest"
+                            }
+                        }
+                    }
+                },
                 "security": [
                     {
                         "tokenAuth": []
@@ -12535,6 +12581,29 @@
                     }
                 }
             },
+            "PatchedPermissionMatrixUpdateRequest": {
+                "type": "object",
+                "description": "Modification de la matrice : capacité → rôles, verrous vérifiés.\n\nUne clé inconnue est refusée plutôt qu'ignorée ; une case figée qu'on\ntente de changer aussi, pour que l'appelant sache que rien n'a bougé.",
+                "properties": {
+                    "capabilities": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "enum": [
+                                    "super_admin",
+                                    "admin",
+                                    "df",
+                                    "dm",
+                                    "manager"
+                                ],
+                                "type": "string",
+                                "description": "* `super_admin` - Super administrateur (DG, DO, CEO, DEV)\n* `admin` - Administrateur (RH)\n* `df` - DF — directeur financier (siège)\n* `dm` - DM — directeur manager (siège)\n* `manager` - Manager (pays)"
+                            }
+                        }
+                    }
+                }
+            },
             "PatchedProjectRequest": {
                 "type": "object",
                 "properties": {
@@ -12739,10 +12808,6 @@
                         },
                         "readOnly": true
                     },
-                    "editable": {
-                        "type": "boolean",
-                        "readOnly": true
-                    },
                     "note": {
                         "type": "string",
                         "readOnly": true
@@ -12751,7 +12816,6 @@
                 "required": [
                     "roles",
                     "capabilities",
-                    "editable",
                     "note"
                 ]
             },
@@ -12759,6 +12823,10 @@
                 "type": "object",
                 "properties": {
                     "key": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "group": {
                         "type": "string",
                         "readOnly": true
                     },
@@ -12776,13 +12844,38 @@
                             "$ref": "#/components/schemas/RoleEnum"
                         },
                         "readOnly": true
+                    },
+                    "default_roles": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RoleEnum"
+                        },
+                        "readOnly": true
+                    },
+                    "fixed_roles": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RoleEnum"
+                        },
+                        "readOnly": true
+                    },
+                    "locked_roles": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RoleEnum"
+                        },
+                        "readOnly": true
                     }
                 },
                 "required": [
                     "key",
+                    "group",
                     "label",
                     "description",
-                    "roles"
+                    "roles",
+                    "default_roles",
+                    "fixed_roles",
+                    "locked_roles"
                 ]
             },
             "PermissionMatrixRole": {
@@ -12819,68 +12912,170 @@
             "Permissions": {
                 "type": "object",
                 "properties": {
-                    "manage_users": {
+                    "users.read": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Créer, modifier, activer ou désactiver un compte."
+                        "description": "Consulter la liste des comptes, leurs rôles et leurs périmètres."
                     },
-                    "manage_countries": {
+                    "users.create": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Créer et modifier les pays, leurs devises et leurs managers."
+                        "description": "Ouvrir un compte et lui donner un rôle et un périmètre."
                     },
-                    "manage_subentities": {
+                    "users.update": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Gérer le référentiel des pays : équipes, projets, intitulés, catégories, bénéficiaires. Le manager y déclare, la RH le tient."
+                        "description": "Changer le rôle, le périmètre, activer ou désactiver, réinitialiser la double authentification."
                     },
-                    "manage_budgets": {
+                    "configuration.manage": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Attribuer les budgets, arbitrer les transferts, tenir les taux de change : super administrateurs."
+                        "description": "Lire la configuration, régler la politique du circuit et cette matrice. Réservé aux administrateurs, sans exception."
                     },
-                    "record_expenses": {
+                    "audit.read": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Saisir des dépenses, déposer des pièces, soumettre un dossier : le manager, pour son pays."
+                        "description": "Relire la trace des actions sensibles, décisions du siège comprises."
                     },
-                    "review_expenses": {
+                    "history.read": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Prendre un dossier soumis en contrôle : le DM prépare, le DF tranche. Le pays en est exclu."
+                        "description": "Lire qui a modifié quoi dans le référentiel, sur son périmètre."
                     },
-                    "validate_expenses": {
+                    "countries.create": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Constater qu'une pièce couvre une dépense, ou l'absence de preuve. Le DF tranche ; le pays en est exclu : il déclare, le siège constate."
+                        "description": "Créer un pays parmi les filiales du groupe, ou un manager."
                     },
-                    "view_audit": {
+                    "countries.update": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Consulter la trace des actions sensibles : RH et direction."
+                        "description": "Changer la devise, le fuseau, les managers ; activer ou désactiver."
                     },
-                    "export_data": {
+                    "referentiel.create": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Importer un classeur, exporter en Excel, CSV, Word ou PDF. Le reste de l'organisation travaille dans l'application."
+                        "description": "Ajouter une équipe, un centre de coûts, un projet, un intitulé, une catégorie, un bénéficiaire."
                     },
-                    "reopen_dossiers": {
+                    "referentiel.update": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Rouvrir un dossier déclaré pour demander des comptes. Seule exception à l'irréversibilité, motivée et tracée."
+                        "description": "Renommer, rattacher, activer ou désactiver une entité du référentiel."
+                    },
+                    "budgets.create": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Créer une enveloppe annuelle ou une sous-enveloppe."
+                    },
+                    "budgets.update": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Changer le montant, la politique de dépassement, désactiver ; valider une dépense qui dépasse son enveloppe."
+                    },
+                    "reallocations.request": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Proposer un transfert entre deux enveloppes."
+                    },
+                    "reallocations.decide": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Approuver ou refuser un transfert. Jamais le sien."
+                    },
+                    "rates.manage": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Ajouter ou corriger un taux vers la devise de consolidation."
+                    },
+                    "expenses.create": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Ouvrir un dossier, y ajouter des lignes de dépense."
+                    },
+                    "expenses.update": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Corriger un dossier ou une ligne tant qu'ils ne sont pas soumis."
+                    },
+                    "expenses.delete": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Retirer un dossier ou une ligne jamais soumis. Son auteur seulement."
+                    },
+                    "proofs.upload": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Joindre un justificatif, ou le remplacer, jusqu'à la clôture."
+                    },
+                    "dossiers.submit": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Déclarer un dossier : ses lignes partent avec lui, sans retour."
+                    },
+                    "expenses.review": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Prendre un dossier soumis en contrôle : le DM prépare, le DF tranche."
+                    },
+                    "expenses.validate": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Constater qu'une pièce couvre une dépense, ou l'absence de preuve."
+                    },
+                    "expenses.close": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Déclarer l'affaire terminée une fois chaque ligne justifiée."
+                    },
+                    "proofs.review": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Valider, rejeter ou signaler incomplet un justificatif."
+                    },
+                    "dossiers.reopen": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui."
+                    },
+                    "data.export": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Télécharger le registre en Excel, CSV, Word ou PDF."
+                    },
+                    "data.import": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Charger un classeur de dépenses en brouillons."
                     }
                 },
                 "required": [
-                    "manage_users",
-                    "manage_countries",
-                    "manage_subentities",
-                    "manage_budgets",
-                    "record_expenses",
-                    "review_expenses",
-                    "validate_expenses",
-                    "view_audit",
-                    "export_data",
-                    "reopen_dossiers"
+                    "users.read",
+                    "users.create",
+                    "users.update",
+                    "configuration.manage",
+                    "audit.read",
+                    "history.read",
+                    "countries.create",
+                    "countries.update",
+                    "referentiel.create",
+                    "referentiel.update",
+                    "budgets.create",
+                    "budgets.update",
+                    "reallocations.request",
+                    "reallocations.decide",
+                    "rates.manage",
+                    "expenses.create",
+                    "expenses.update",
+                    "expenses.delete",
+                    "proofs.upload",
+                    "dossiers.submit",
+                    "expenses.review",
+                    "expenses.validate",
+                    "expenses.close",
+                    "proofs.review",
+                    "dossiers.reopen",
+                    "data.export",
+                    "data.import"
                 ]
             },
             "Project": {
@@ -13549,6 +13744,10 @@
             },
             "TransitionEnum": {
                 "enum": [
+                    "edit",
+                    "add_line",
+                    "upload",
+                    "delete",
                     "submit",
                     "review",
                     "justify",
@@ -13557,7 +13756,7 @@
                     "reopen"
                 ],
                 "type": "string",
-                "description": "* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen"
+                "description": "* `edit` - edit\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen"
             },
             "TransitionRequest": {
                 "type": "object",

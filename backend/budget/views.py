@@ -10,7 +10,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from accounts.permissions import BUDGET_WRITE_ROLES, RolePermission, get_access
+from accounts.permissions import RolePermission, get_access
 from accounts.scoping import CountryScopedMixin
 from core.journal import Trace
 from core.mixins import NoDestroyModelViewSet
@@ -38,7 +38,8 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     )
     serializer_class = BudgetSerializer
     permission_classes = [RolePermission]
-    write_roles = BUDGET_WRITE_ROLES
+    write_capability = "budgets.update"
+    action_write_capabilities = {"create": "budgets.create"}
     filterset_fields = [
         "country", "country__country_ref", "year", "project", "team",
         "manager", "is_active",
@@ -109,12 +110,16 @@ def _as_str(value):
 class BudgetReallocationViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     """Transferts entre enveloppes, soumis à approbation."""
 
+    # Le libellé d'une enveloppe nomme son pays et sa dimension (projet,
+    # équipe, manager) : tout se lit en une requête, pas une par ligne.
     queryset = BudgetReallocation.objects.select_related(
-        "source__country", "target__country"
+        "source__country", "source__project", "source__team", "source__manager",
+        "target__country", "target__project", "target__team", "target__manager",
     ).all()
     serializer_class = BudgetReallocationSerializer
     permission_classes = [RolePermission]
-    write_roles = BUDGET_WRITE_ROLES
+    write_capability = "reallocations.decide"
+    action_write_capabilities = {"create": "reallocations.request"}
     filterset_fields = ["status", "source__country", "target__country"]
     ordering_fields = ["created_at", "amount"]
     country_lookup = "source__country"
@@ -166,6 +171,6 @@ class ExchangeRateViewSet(NoDestroyModelViewSet):
     queryset = ExchangeRate.objects.all()
     serializer_class = ExchangeRateSerializer
     permission_classes = [RolePermission]
-    write_roles = BUDGET_WRITE_ROLES
+    write_capability = "rates.manage"
     filterset_fields = ["currency"]
     ordering_fields = ["currency", "valid_from"]

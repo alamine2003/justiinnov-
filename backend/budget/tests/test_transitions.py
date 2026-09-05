@@ -16,19 +16,12 @@ from accounts.permissions import Access, get_access
 from accounts.tests.test_scoping import make_user
 from budget import transitions
 from budget.models import Budget, BudgetReallocation
-from core.journal import Trace
 from core.models import ChangeLog, Country, Project
+from core.tests.aides import ADRESSE, trace
 from core.regles import HorsPerimetre, PermissionRefusee, RegleViolee
 from expenses.models import AuditLog, Dossier, Expense
 from expenses.workflow import Status
 from notifications.models import Notification
-
-ADRESSE = "41.79.0.10"
-
-
-def trace(user):
-    return Trace(user=user.username, ip=ADRESSE, user_agent="Test", compte=user)
-
 
 class ServicesDeReallocationTests(TestCase):
     @classmethod

@@ -38,15 +38,6 @@ export function workflowLabel(t: TFunction, status: WorkflowStatus): string {
   return t(`libelles.workflow.${status}`, { defaultValue: status })
 }
 
-export const PROOF_STATUSES: ProofStatus[] = [
-  "received",
-  "incomplete",
-  "to_review",
-  "validated",
-  "rejected",
-  "archived",
-]
-
 export function proofStatusLabel(t: TFunction, status: ProofStatus): string {
   return t(`libelles.piece_statut.${status}`, { defaultValue: status })
 }
@@ -105,38 +96,22 @@ export function auditActionLabel(t: TFunction, action: string): string {
   })
 }
 
-/** Icône d'une action du journal quand elle en mérite une ; les autres restent un badge. */
-export const AUDIT_ACTION_ICONS: Partial<Record<(typeof AUDIT_ACTIONS)[number], LucideIcon>> = {
-  reopened: RotateCcw,
-}
-
 /**
- * Types de notification connus de l'interface. Le libellé du serveur
- * (`kind_display`) reste prioritaire ; ces tables ne servent qu'à l'icône et
- * au repli.
+ * Icône d'une notification quand elle en mérite une. Le libellé, lui, vient
+ * du serveur (`kind_display`).
  */
-export const NOTIFICATION_KINDS = ["dossier_reopened"] as const
-
-export function notificationKindLabel(t: TFunction, kind: string): string {
-  return t(`libelles.notification_type.${kind as (typeof NOTIFICATION_KINDS)[number]}`, {
-    defaultValue: kind,
-  })
-}
-
-export const NOTIFICATION_KIND_ICONS: Partial<
-  Record<(typeof NOTIFICATION_KINDS)[number], LucideIcon>
-> = {
+const NOTIFICATION_KIND_ICONS: Record<string, LucideIcon> = {
   dossier_reopened: RotateCcw,
 }
 
 export function notificationKindIcon(kind: string): LucideIcon | undefined {
-  return NOTIFICATION_KIND_ICONS[kind as (typeof NOTIFICATION_KINDS)[number]]
+  return NOTIFICATION_KIND_ICONS[kind]
 }
 
 /** Types de bénéficiaire, dans l'ordre du modèle de données. */
-export const BENEFICIARY_KINDS = ["prospect", "client", "supplier", "beneficiary", "other"] as const
+const BENEFICIARY_KINDS = ["prospect", "client", "supplier", "beneficiary", "other"] as const
 
-export function beneficiaryKindLabel(t: TFunction, kind: string): string {
+function beneficiaryKindLabel(t: TFunction, kind: string): string {
   return t(`libelles.beneficiaire_type.${kind as (typeof BENEFICIARY_KINDS)[number]}`, {
     defaultValue: kind,
   })

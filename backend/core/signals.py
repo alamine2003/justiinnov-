@@ -20,10 +20,9 @@ from .models import (
     Project,
     Team,
 )
-from .journal import serialisable, tracer  # noqa: F401 — ``serialisable`` ré-exporté
+from .journal import serialisable, tracer
 from .requetes import (  # noqa: F401 — ré-exportés pour les commandes et les tests
     get_current_request,
-    get_current_user,
     reset_current_request,
     set_current_request,
 )

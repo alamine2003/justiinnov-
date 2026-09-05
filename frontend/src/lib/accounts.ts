@@ -83,6 +83,11 @@ export function fetchPermissionMatrix() {
   return apiGet<PermissionMatrix>("/permissions/")
 }
 
+/** Règle les rôles de quelques capacités ; répond la matrice entière. */
+export function updatePermissionMatrix(capabilities: Record<string, string[]>) {
+  return apiPatch<PermissionMatrix>("/permissions/", { capabilities })
+}
+
 export function updateWorkflowConfiguration(data: Partial<WorkflowConfiguration>) {
   return apiPatch<WorkflowConfiguration>("/workflow-configuration/", data)
 }

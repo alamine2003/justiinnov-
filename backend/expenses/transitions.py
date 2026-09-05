@@ -14,7 +14,7 @@ l'import et les commandes appellent :
 - :func:`controler_piece` — le contrôle documentaire d'un justificatif.
 
 Chaque service prend les verrous (``select_for_update``), vérifie l'état
-(``next_status``), le rôle (``ACTION_ROLES``), les quatre yeux, les lignes
+(``next_status``), la capacité (``ACTION_CAPACITES``), les quatre yeux, les lignes
 exigées, l'imputation et la politique de dépassement, journalise via
 ``core.journal`` et déclenche les notifications. Il reçoit l'``Access`` de
 celui qui agit et une :class:`~core.journal.Trace` (qui, depuis où) ; il
@@ -33,13 +33,8 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 
-from accounts.permissions import (
-    EXPENSE_WRITE_ROLES,
-    VALIDATION_ROLES,
-    RolePermission,
-)
+from accounts.permissions import exiger_la_capacite
 from budget.models import Budget
-from core.journal import Trace  # noqa: F401 — ré-exportée pour les appelants
 from core.models import WorkflowConfiguration
 from core.regles import PermissionRefusee, RegleViolee
 from notifications import triggers
@@ -53,7 +48,7 @@ from .services import (
     committed_total,
 )
 from .workflow import (
-    ACTION_ROLES,
+    ACTION_CAPACITES,
     DELETABLE_STATUSES,
     FOUR_EYES_ACTIONS,
     LINES_REQUIRED,
@@ -113,16 +108,6 @@ class Resultat:
 
 
 # --- Prédicats partagés -----------------------------------------------------
-
-
-def exiger_le_role(roles, acteur):
-    """Le rôle de l'acteur figure dans ``roles``, sinon refus.
-
-    Une vue l'a déjà vérifié par ``RolePermission`` ; le service le revérifie
-    pour que l'import et les commandes ne puissent pas contourner la matrice.
-    """
-    if acteur is None or acteur.role not in roles:
-        raise PermissionRefusee(str(RolePermission.message))
 
 
 def exiger_les_quatre_yeux(objet, action, acteur):
@@ -551,7 +536,7 @@ def _transition(objet, action, acteur, trace, *, note="", justified_amount=None)
     sans que le journal ne le dise.
     """
     verrouiller, instantane, avant, appliquer, apres = _CIRCUITS[type(objet)]
-    exiger_le_role(ACTION_ROLES[action], acteur)
+    exiger_la_capacite(ACTION_CAPACITES[action], acteur)
     note = (note or "").strip()
     if action in MOTIVATED_ACTIONS and not note:
         raise RegleViolee("note", str(MOTIF_MANQUANT[action]))
@@ -664,7 +649,7 @@ def retirer_brouillon(objet, acteur, trace):
     retire pas s'il porte la ligne d'un autre auteur — ce serait effacer le
     travail de quelqu'un d'autre sous couvert de ranger le sien.
     """
-    exiger_le_role(EXPENSE_WRITE_ROLES, acteur)
+    exiger_la_capacite("expenses.delete", acteur)
     instance = (
         type(objet)._default_manager.select_related("country")
         .select_for_update(of=("self",))
@@ -759,11 +744,11 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
 def controler_piece(proof, statut, acteur, *, motif="", trace):
     """Contrôle documentaire : valide, rejette ou signale un justificatif.
 
-    Relève du siège (``VALIDATION_ROLES``), pas du déposant. Une pièce d'un
+    Relève du siège (``proofs.review``), pas du déposant. Une pièce d'un
     dossier clôturé ne se contrôle plus, comme il ne s'en dépose plus ; les
     états atteignables sont ceux de ``PROOF_TRANSITIONS``.
     """
-    exiger_le_role(VALIDATION_ROLES, acteur)
+    exiger_la_capacite("proofs.review", acteur)
     motif = (motif or "").strip()
     piece = (
         Proof.objects.select_related("dossier__country")

@@ -1256,12 +1256,13 @@ export interface paths {
             cookie?: never
         }
         /**
-         * @description Matrice des rôles et de ce qu'ils autorisent.
+         * @description Matrice des rôles et de ce qu'ils autorisent (décision 43).
          *
-         *     Lue dans les mêmes constantes que celles appliquées par ``RolePermission``.
-         *     La matrice est **volontairement non modifiable** : la rendre éditable
-         *     permettrait de rendre à un pays le droit de justifier ses propres dépenses,
-         *     précisément ce que la séparation des tâches interdit.
+         *     Lue dans la même table que celle appliquée par ``RolePermission``, et
+         *     modifiable par les administrateurs, case par case — sauf les verrous :
+         *     le super administrateur garde tout, le pays ne reçoit jamais le droit de
+         *     contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
+         *     Chaque modification est journalisée avec l'avant et l'après.
          */
         get: operations["permissions_retrieve"]
         put?: never
@@ -1269,7 +1270,16 @@ export interface paths {
         delete?: never
         options?: never
         head?: never
-        patch?: never
+        /**
+         * @description Matrice des rôles et de ce qu'ils autorisent (décision 43).
+         *
+         *     Lue dans la même table que celle appliquée par ``RolePermission``, et
+         *     modifiable par les administrateurs, case par case — sauf les verrous :
+         *     le super administrateur garde tout, le pays ne reçoit jamais le droit de
+         *     contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
+         *     Chaque modification est journalisée avec l'avant et l'après.
+         */
+        patch: operations["permissions_partial_update"]
         trace?: never
     }
     "/api/projects/": {
@@ -3600,6 +3610,17 @@ export interface components {
         PatchedMePreferencesRequest: {
             language?: components["schemas"]["LanguageEnum"]
         }
+        /**
+         * @description Modification de la matrice : capacité → rôles, verrous vérifiés.
+         *
+         *     Une clé inconnue est refusée plutôt qu'ignorée ; une case figée qu'on
+         *     tente de changer aussi, pour que l'appelant sache que rien n'a bougé.
+         */
+        PatchedPermissionMatrixUpdateRequest: {
+            capabilities?: {
+                [key: string]: ("super_admin" | "admin" | "df" | "dm" | "manager")[]
+            }
+        }
         PatchedProjectRequest: {
             /** Pays */
             country?: number
@@ -3711,14 +3732,17 @@ export interface components {
         PermissionMatrix: {
             readonly roles: components["schemas"]["PermissionMatrixRole"][]
             readonly capabilities: components["schemas"]["PermissionMatrixCapability"][]
-            readonly editable: boolean
             readonly note: string
         }
         PermissionMatrixCapability: {
             readonly key: string
+            readonly group: string
             readonly label: string
             readonly description: string
             readonly roles: components["schemas"]["RoleEnum"][]
+            readonly default_roles: components["schemas"]["RoleEnum"][]
+            readonly fixed_roles: components["schemas"]["RoleEnum"][]
+            readonly locked_roles: components["schemas"]["RoleEnum"][]
         }
         PermissionMatrixRole: {
             readonly value: components["schemas"]["RoleEnum"]
@@ -3727,26 +3751,60 @@ export interface components {
             readonly always_global: boolean
         }
         Permissions: {
-            /** @description Créer, modifier, activer ou désactiver un compte. */
-            readonly manage_users: boolean
-            /** @description Créer et modifier les pays, leurs devises et leurs managers. */
-            readonly manage_countries: boolean
-            /** @description Gérer le référentiel des pays : équipes, projets, intitulés, catégories, bénéficiaires. Le manager y déclare, la RH le tient. */
-            readonly manage_subentities: boolean
-            /** @description Attribuer les budgets, arbitrer les transferts, tenir les taux de change : super administrateurs. */
-            readonly manage_budgets: boolean
-            /** @description Saisir des dépenses, déposer des pièces, soumettre un dossier : le manager, pour son pays. */
-            readonly record_expenses: boolean
-            /** @description Prendre un dossier soumis en contrôle : le DM prépare, le DF tranche. Le pays en est exclu. */
-            readonly review_expenses: boolean
-            /** @description Constater qu'une pièce couvre une dépense, ou l'absence de preuve. Le DF tranche ; le pays en est exclu : il déclare, le siège constate. */
-            readonly validate_expenses: boolean
-            /** @description Consulter la trace des actions sensibles : RH et direction. */
-            readonly view_audit: boolean
-            /** @description Importer un classeur, exporter en Excel, CSV, Word ou PDF. Le reste de l'organisation travaille dans l'application. */
-            readonly export_data: boolean
-            /** @description Rouvrir un dossier déclaré pour demander des comptes. Seule exception à l'irréversibilité, motivée et tracée. */
-            readonly reopen_dossiers: boolean
+            /** @description Consulter la liste des comptes, leurs rôles et leurs périmètres. */
+            readonly "users.read": boolean
+            /** @description Ouvrir un compte et lui donner un rôle et un périmètre. */
+            readonly "users.create": boolean
+            /** @description Changer le rôle, le périmètre, activer ou désactiver, réinitialiser la double authentification. */
+            readonly "users.update": boolean
+            /** @description Lire la configuration, régler la politique du circuit et cette matrice. Réservé aux administrateurs, sans exception. */
+            readonly "configuration.manage": boolean
+            /** @description Relire la trace des actions sensibles, décisions du siège comprises. */
+            readonly "audit.read": boolean
+            /** @description Lire qui a modifié quoi dans le référentiel, sur son périmètre. */
+            readonly "history.read": boolean
+            /** @description Créer un pays parmi les filiales du groupe, ou un manager. */
+            readonly "countries.create": boolean
+            /** @description Changer la devise, le fuseau, les managers ; activer ou désactiver. */
+            readonly "countries.update": boolean
+            /** @description Ajouter une équipe, un centre de coûts, un projet, un intitulé, une catégorie, un bénéficiaire. */
+            readonly "referentiel.create": boolean
+            /** @description Renommer, rattacher, activer ou désactiver une entité du référentiel. */
+            readonly "referentiel.update": boolean
+            /** @description Créer une enveloppe annuelle ou une sous-enveloppe. */
+            readonly "budgets.create": boolean
+            /** @description Changer le montant, la politique de dépassement, désactiver ; valider une dépense qui dépasse son enveloppe. */
+            readonly "budgets.update": boolean
+            /** @description Proposer un transfert entre deux enveloppes. */
+            readonly "reallocations.request": boolean
+            /** @description Approuver ou refuser un transfert. Jamais le sien. */
+            readonly "reallocations.decide": boolean
+            /** @description Ajouter ou corriger un taux vers la devise de consolidation. */
+            readonly "rates.manage": boolean
+            /** @description Ouvrir un dossier, y ajouter des lignes de dépense. */
+            readonly "expenses.create": boolean
+            /** @description Corriger un dossier ou une ligne tant qu'ils ne sont pas soumis. */
+            readonly "expenses.update": boolean
+            /** @description Retirer un dossier ou une ligne jamais soumis. Son auteur seulement. */
+            readonly "expenses.delete": boolean
+            /** @description Joindre un justificatif, ou le remplacer, jusqu'à la clôture. */
+            readonly "proofs.upload": boolean
+            /** @description Déclarer un dossier : ses lignes partent avec lui, sans retour. */
+            readonly "dossiers.submit": boolean
+            /** @description Prendre un dossier soumis en contrôle : le DM prépare, le DF tranche. */
+            readonly "expenses.review": boolean
+            /** @description Constater qu'une pièce couvre une dépense, ou l'absence de preuve. */
+            readonly "expenses.validate": boolean
+            /** @description Déclarer l'affaire terminée une fois chaque ligne justifiée. */
+            readonly "expenses.close": boolean
+            /** @description Valider, rejeter ou signaler incomplet un justificatif. */
+            readonly "proofs.review": boolean
+            /** @description Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui. */
+            readonly "dossiers.reopen": boolean
+            /** @description Télécharger le registre en Excel, CSV, Word ou PDF. */
+            readonly "data.export": boolean
+            /** @description Charger un classeur de dépenses en brouillons. */
+            readonly "data.import": boolean
         }
         Project: {
             readonly id: number
@@ -4031,7 +4089,11 @@ export interface components {
             readonly secret: string
         }
         /**
-         * @description * `submit` - submit
+         * @description * `edit` - edit
+         *     * `add_line` - add_line
+         *     * `upload` - upload
+         *     * `delete` - delete
+         *     * `submit` - submit
          *     * `review` - review
          *     * `justify` - justify
          *     * `reject` - reject
@@ -4039,7 +4101,7 @@ export interface components {
          *     * `reopen` - reopen
          * @enum {string}
          */
-        TransitionEnum: "submit" | "review" | "justify" | "reject" | "close" | "reopen"
+        TransitionEnum: "edit" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen"
         /**
          * @description Motif accompagnant une transition ; obligatoire pour un rejet (§5.5)
          *     et pour une réouverture.
@@ -6737,6 +6799,31 @@ export interface operations {
             cookie?: never
         }
         requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["PermissionMatrix"]
+                }
+            }
+        }
+    }
+    permissions_partial_update: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedPermissionMatrixUpdateRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedPermissionMatrixUpdateRequest"]
+                "multipart/form-data": components["schemas"]["PatchedPermissionMatrixUpdateRequest"]
+            }
+        }
         responses: {
             200: {
                 headers: {

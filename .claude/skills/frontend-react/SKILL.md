@@ -24,10 +24,14 @@ rappelle), puis `frontend/src/i18n/index.ts` et `frontend/src/lib/labels.ts`.
 - Données : `useQuery(clé, fetcher)` pour un écran, `useReferentiel` pour
   pays, équipes, projets, managers ; remise à la page 1 dans le gestionnaire
   de filtre, jamais dans un effet ; `useDebounced` sur une recherche.
-- Droits : `const { can } = useAuth()` et les clés `permissions` du serveur
-  (`record_expenses`, `review_expenses`, `validate_expenses`,
-  `manage_budgets`, `export_data`, `reopen_dossiers`, `manage_users`,
-  `view_audit`, `manage_subentities`). Jamais de test sur le code du rôle.
+- Droits : `const { can } = useAuth()` et les clés `permissions` du serveur,
+  celles de la matrice `accounts/permissions.py` (`expenses.create`,
+  `expenses.review`, `expenses.validate`, `budgets.create`, `data.export`,
+  `dossiers.reopen`, `configuration.manage`, `audit.read`,
+  `referentiel.update`…), réglables par les administrateurs. Sur un dossier
+  ou une ligne, `allowed_actions` dit ce qui se saisit encore (`edit`,
+  `add_line`, `upload`, `delete`) et quelles transitions sont ouvertes.
+  Jamais de test sur le code du rôle ni sur le statut pour masquer un bouton.
 - Chiffres : l'interface formate (`formatAmount`, `formatRate`,
   `formatDateIn`), elle ne calcule jamais.
 - Composants partagés obligatoires : `PageHeader`, `FormError`, `StatCard`,

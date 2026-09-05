@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { ProofPanel } from "./proof-panel"
 import type { Proof } from "@/lib/types"
 
-// Le droit `manage_users` ne sert qu'à lire la configuration du dépôt ; les
+// Le droit `configuration.manage` ne sert qu'à lire la configuration du dépôt ; les
 // décisions de contrôle viennent du serveur (`allowed_reviews`), pas du rôle.
 vi.mock("@/context/use-auth", () => ({
   useAuth: () => ({

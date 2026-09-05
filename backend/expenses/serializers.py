@@ -10,7 +10,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
 from accounts.perimetre import ChampCloisonne
-from accounts.permissions import VALIDATION_ROLES, get_access
+from accounts.permissions import get_access, roles_pour
 from budget.aggregates import convert
 from core.models import Country, Team, WorkflowConfiguration
 from core.serializers import DetailField
@@ -34,10 +34,15 @@ PROOF_FINAL_STATUSES = frozenset(
 )
 
 
-#: Transitions qu'une dépense ou un dossier peut se voir proposer, pour le
-#: schéma (``allowed_actions``) : les noms des actions du circuit.
+#: Actions qu'une dépense ou un dossier peut se voir proposer, pour le
+#: schéma (``allowed_actions``) : la saisie (modifier, ajouter une ligne,
+#: déposer une pièce, supprimer) puis les transitions du circuit.
 TRANSITION_CHOICES = [
-    (name, name) for name in ("submit", "review", "justify", "reject", "close", "reopen")
+    (name, name)
+    for name in (
+        "edit", "add_line", "upload", "delete",
+        "submit", "review", "justify", "reject", "close", "reopen",
+    )
 ]
 
 
@@ -188,7 +193,9 @@ class ProofSerializer(serializers.ModelSerializer):
         pour qui ne contrôle pas. L'ordre est celui des états du modèle.
         """
         access = _acces(self)
-        if access is None or access.role not in VALIDATION_ROLES:
+        if access is None or access.role not in roles_pour(
+            "proofs.review", _configuration(self)
+        ):
             return []
         if proof.dossier.status in PROOF_LOCKED_STATUSES:
             return []

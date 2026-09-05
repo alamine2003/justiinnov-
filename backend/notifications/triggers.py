@@ -15,26 +15,30 @@ import logging
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
-from accounts.permissions import BUDGET_WRITE_ROLES, COUNTRY_ROLES, REVIEW_ROLES
+from accounts.permissions import COUNTRY_ROLES, roles_pour
 
 from .models import Notification
 from .services import notify, recipients_for
 
 logger = logging.getLogger(__name__)
 
-#: Qui contrôle les dépenses — le siège, jamais le pays qui les a engagées :
-#: le DM, qui met en contrôle, le DF, qui tranche, et les administrateurs,
-#: qui peuvent l'un et l'autre. ``recipients_for`` cloisonne : un DM ou un
-#: DF restreint à des pays n'est prévenu que pour ceux-là. Ce sont ceux qui
-#: peuvent mettre en contrôle : l'ensemble est celui de ``permissions``.
-CONTROLLERS = REVIEW_ROLES
+def controleurs():
+    """Qui contrôle les dépenses — le siège, jamais le pays qui les a engagées.
+
+    Ceux qui peuvent mettre en contrôle, lus dans la matrice des droits au
+    moment de l'envoi : le DM, le DF et les administrateurs par défaut.
+    ``recipients_for`` cloisonne : un DM ou un DF restreint à des pays n'est
+    prévenu que pour ceux-là.
+    """
+    return roles_pour("expenses.review")
 
 #: Qui peut fournir une pièce manquante ou corriger un dossier : le manager,
 #: seul rôle du pays.
 PROVIDERS = COUNTRY_ROLES
 
-#: Qui arbitre le budget : ceux qui l'écrivent, la direction.
-BUDGET_OWNERS = BUDGET_WRITE_ROLES
+def arbitres():
+    """Qui arbitre le budget : ceux qui décident des réallocations."""
+    return roles_pour("reallocations.decide")
 
 
 def _safe(action):
@@ -66,7 +70,7 @@ def dossier_submitted(dossier, actor):
     totaux = dossier.totals()
     return _safe(
         lambda: notify(
-            _sauf(recipients_for(CONTROLLERS, dossier.country, dossier.team), actor),
+            _sauf(recipients_for(controleurs(), dossier.country, dossier.team), actor),
             kind=Notification.Kind.EXPENSE_SUBMITTED,
             level=Notification.Level.INFO,
             title=format_lazy(
@@ -153,16 +157,20 @@ ALERT_KINDS = {
 #: Qui doit être averti, selon la nature de l'alerte : le siège entier
 #: (super administrateurs, RH, DF, DM), et le manager pour les alertes de
 #: son pays.
-ALERT_AUDIENCE = {
-    # L'enveloppe : la direction l'arbitre, le contrôle la surveille, et le
-    # pays reste averti de son état même s'il ne la justifie pas lui-même.
-    "budget_overrun": CONTROLLERS | PROVIDERS,
-    "budget_threshold": CONTROLLERS | PROVIDERS,
-    # Un justificatif manquant concerne d'abord ceux qui peuvent le fournir —
-    # le pays — autant que ceux qui devront le contrôler.
-    "proof_missing": CONTROLLERS | PROVIDERS,
-    "proof_incomplete": CONTROLLERS | PROVIDERS,
-}
+#: L'enveloppe : la direction l'arbitre, le contrôle la surveille, et le
+#: pays reste averti de son état même s'il ne la justifie pas lui-même. Un
+#: justificatif manquant concerne d'abord ceux qui peuvent le fournir — le
+#: pays — autant que ceux qui devront le contrôler.
+ALERT_KINDS_NOTIFIED = frozenset(
+    {"budget_overrun", "budget_threshold", "proof_missing", "proof_incomplete"}
+)
+
+
+def audience_roles(alert_kind):
+    """Rôles avertis d'une alerte : le contrôle et le pays."""
+    if alert_kind not in ALERT_KINDS_NOTIFIED:
+        raise KeyError(alert_kind)
+    return controleurs() | PROVIDERS
 
 
 def audience_for(alert_kind, country, team=None):
@@ -176,7 +184,7 @@ def audience_for(alert_kind, country, team=None):
     ``team`` est celle du dossier ou de la ligne en alerte (identifiant ou
     instance) ; une alerte d'enveloppe n'en a pas et s'adresse au pays.
     """
-    return list(recipients_for(ALERT_AUDIENCE[alert_kind], country, team))
+    return list(recipients_for(audience_roles(alert_kind), country, team))
 
 
 def alert_raised(alert, country, recipients=None):
@@ -216,7 +224,7 @@ def reallocation_requested(reallocation, actor):
     country = reallocation.source.country
     return _safe(
         lambda: notify(
-            _sauf(recipients_for(BUDGET_OWNERS, country), actor),
+            _sauf(recipients_for(arbitres(), country), actor),
             kind=Notification.Kind.REALLOCATION_REQUESTED,
             level=Notification.Level.INFO,
             title=_("Demande de réallocation budgétaire"),

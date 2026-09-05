@@ -330,6 +330,11 @@ class WorkflowConfiguration(models.Model):
     warn_without_proof_submission = models.BooleanField(
         "Avertir à la soumission sans pièce", default=True
     )
+    #: Matrice des droits : capacité → rôles, pour les seules capacités que
+    #: les administrateurs ont écartées du défaut (décision 43). Les défauts
+    #: et les verrous vivent dans ``accounts.permissions`` ; ``core`` ne les
+    #: connaît pas, il ne fait que garder le choix.
+    capability_roles = models.JSONField(_("Matrice des droits"), default=dict, blank=True)
     updated_at = models.DateTimeField(_("Modifié le"), auto_now=True)
 
     class Meta:

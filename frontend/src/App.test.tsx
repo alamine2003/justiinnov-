@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
 import App from "@/App"
 import type { Me, Permissions } from "@/lib/types"
+import { PERMISSIONS_DU_PAYS } from "@/test/permissions-fixtures"
 
 function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Partial<Permissions> }): Me {
   return {
@@ -26,16 +27,7 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
     workflow: { require_review_step: false },
     ...overrides,
     permissions: {
-      manage_users: false,
-      manage_countries: false,
-      manage_subentities: false,
-      manage_budgets: false,
-      record_expenses: true,
-      review_expenses: false,
-      validate_expenses: false,
-      view_audit: false,
-      export_data: false,
-      reopen_dossiers: false,
+      ...PERMISSIONS_DU_PAYS,
       ...overrides.permissions,
     },
   }
@@ -109,7 +101,7 @@ describe("garde des routes", () => {
   })
 
   it("laisse le siège ouvrir la configuration", async () => {
-    me = profil({ has_global_scope: true, permissions: { manage_users: true } })
+    me = profil({ has_global_scope: true, permissions: { "configuration.manage": true } })
     ouvrir("/configuration")
 
     expect(await screen.findByRole("heading", { name: "Configuration" })).toBeInTheDocument()

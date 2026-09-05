@@ -29,10 +29,6 @@ export function createDossier(data: unknown) {
   return apiPost<Dossier>("/dossiers/", data)
 }
 
-export function updateDossier(id: number, data: unknown) {
-  return apiPatch<Dossier>(`/dossiers/${id}/`, data)
-}
-
 /** Charge utile d'une transition : motif, et montant justifié pour `justify`. */
 export interface TransitionData {
   note?: string
@@ -61,10 +57,6 @@ export function reopenDossier(id: number, note: string) {
 // ---------------------------------------------------------------------------
 // Dépenses
 // ---------------------------------------------------------------------------
-export function fetchExpenses(params?: Record<string, unknown>) {
-  return apiGet<Paginated<Expense>>("/expenses/", params)
-}
-
 /**
  * Registre de justification : chaque dépense avec ses preuves.
  *

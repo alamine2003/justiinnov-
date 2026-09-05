@@ -47,9 +47,6 @@ import { fetchCountry } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import { scopedTeams, teamRequired } from "@/lib/teams"
 import {
-  DELETABLE_STATUSES,
-  LOCKED_STATUSES,
-  PROOF_LOCKED_STATUSES,
   type Expense,
   type ExpenseTransitionName,
   type TransitionName,
@@ -61,8 +58,7 @@ export function DossierDetailPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const dossierId = Number(id)
-  const { can, me } = useAuth()
-  const canWrite = can("record_expenses")
+  const { me } = useAuth()
 
   const query = useQuery(
     `dossier:${dossierId}`,
@@ -181,10 +177,15 @@ export function DossierDetailPage() {
     )
   }
 
-  const locked = LOCKED_STATUSES.includes(dossier.status)
-  // Une pièce se dépose jusqu'à la clôture : une preuve arrivée après coup
-  // peut encore justifier ce qui ne l'était pas.
-  const closed = PROOF_LOCKED_STATUSES.includes(dossier.status)
+  // Ce qui se saisit encore vient du serveur (`allowed_actions`) : brouillon
+  // ou non, droit ou non, l'interface ne recopie aucune règle. Une pièce se
+  // dépose jusqu'à la clôture : une preuve arrivée après coup peut encore
+  // justifier ce qui ne l'était pas.
+  const canAddLine = dossier.allowed_actions.includes("add_line")
+  const canUpload = dossier.allowed_actions.includes("upload")
+  // Un libellé, pas une règle : le panneau des pièces explique pourquoi le
+  // dépôt est fermé ; le droit de déposer, lui, vient de `allowed_actions`.
+  const closed = dossier.status === "closed"
   const currencySymbol = country.data?.currency_symbol || dossier.currency
   // Un manager rattaché à des équipes ne saisit que pour elles ; l'équipe du
   // dossier, elle, figure toujours, puisque chaque ligne la porte.
@@ -311,7 +312,7 @@ export function DossierDetailPage() {
                 {t("dossiers.detail.lignes_description")}
               </p>
             </div>
-            {canWrite && !locked && (
+            {canAddLine && (
               <Button
                 size="sm"
                 onClick={() => {
@@ -345,7 +346,7 @@ export function DossierDetailPage() {
                     icon={FileText}
                     title={t("dossiers.detail.vide.titre")}
                     hint={
-                      canWrite && !locked
+                      canAddLine
                         ? t("dossiers.detail.vide.aide_ajouter")
                         : t("dossiers.detail.vide.aide_verrouille")
                     }
@@ -403,7 +404,7 @@ export function DossierDetailPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
-                          {canWrite && !LOCKED_STATUSES.includes(expense.status) && (
+                          {expense.allowed_actions.includes("edit") && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -416,7 +417,7 @@ export function DossierDetailPage() {
                               <Pencil className="h-4 w-4" />
                             </Button>
                           )}
-                          {canWrite && DELETABLE_STATUSES.includes(expense.status) && (
+                          {expense.allowed_actions.includes("delete") && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -457,7 +458,7 @@ export function DossierDetailPage() {
           <ProofPanel
             dossierId={dossier.id}
             proofs={dossier.proofs}
-            canUpload={canWrite && !closed}
+            canUpload={canUpload}
             closed={closed}
             onChanged={async () => {
               query.reload()

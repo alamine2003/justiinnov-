@@ -10,24 +10,11 @@ from accounts.perimetre import ChampCloisonne
 from accounts.permissions import get_access
 from core.models import Country, Manager, Project, Team, WorkflowConfiguration
 from core.regles import RegleViolee
+from core.serializers import champ_montant, champ_taux
 
 from .aggregates import budget_figures, current_rates
 from .models import Budget, BudgetReallocation, ExchangeRate
 from .transitions import exiger_le_disponible, peut_decider
-
-
-def _montant(**kwargs):
-    """Montant rendu en chaîne décimale, comme partout dans l'API."""
-    return serializers.DecimalField(
-        max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True, **kwargs
-    )
-
-
-def _taux(**kwargs):
-    return serializers.DecimalField(
-        max_digits=10, decimal_places=4, coerce_to_string=True, read_only=True,
-        allow_null=True, **kwargs
-    )
 
 
 class BudgetFiguresSerializer(serializers.Serializer):
@@ -37,15 +24,15 @@ class BudgetFiguresSerializer(serializers.Serializer):
     ne sert qu'au schéma.
     """
 
-    engaged = _montant(help_text=gettext_lazy("Soumis ou en contrôle : sorti de l'enveloppe, pas encore constaté."))
-    consumed = _montant()
-    justified = _montant()
-    gap = _montant(help_text=gettext_lazy("Consommé sans preuve à l'appui."))
-    remaining = _montant()
-    execution_rate = _taux()
-    justification_rate = _taux()
-    amount_xof = _montant(allow_null=True)
-    remaining_xof = _montant(allow_null=True)
+    engaged = champ_montant(help_text=gettext_lazy("Soumis ou en contrôle : sorti de l'enveloppe, pas encore constaté."))
+    consumed = champ_montant()
+    justified = champ_montant()
+    gap = champ_montant(help_text=gettext_lazy("Consommé sans preuve à l'appui."))
+    remaining = champ_montant()
+    execution_rate = champ_taux()
+    justification_rate = champ_taux()
+    amount_xof = champ_montant(allow_null=True)
+    remaining_xof = champ_montant(allow_null=True)
 
 
 class CountryBudgetRowSerializer(serializers.Serializer):
@@ -55,18 +42,18 @@ class CountryBudgetRowSerializer(serializers.Serializer):
     country_name = serializers.CharField(read_only=True)
     country_ref = serializers.CharField(read_only=True, allow_null=True)
     currency = serializers.CharField(read_only=True)
-    allocated = _montant()
-    sub_allocated = _montant()
-    engaged = _montant()
-    consumed = _montant()
-    justified = _montant()
-    remaining = _montant()
-    remaining_xof = _montant(allow_null=True)
+    allocated = champ_montant()
+    sub_allocated = champ_montant()
+    engaged = champ_montant()
+    consumed = champ_montant()
+    justified = champ_montant()
+    remaining = champ_montant()
+    remaining_xof = champ_montant(allow_null=True)
 
 
 class BudgetSummarySerializer(serializers.Serializer):
     countries = CountryBudgetRowSerializer(many=True, read_only=True)
-    total_remaining_xof = _montant()
+    total_remaining_xof = champ_montant()
     unconverted_currencies = serializers.ListField(
         child=serializers.CharField(), read_only=True,
         help_text=gettext_lazy("Devises sans taux connu, laissées hors du total."),
@@ -307,7 +294,11 @@ class BudgetReallocationSerializer(serializers.ModelSerializer):
         """
         request = self.context.get("request")
         access = get_access(getattr(request, "user", None)) if request else None
-        return peut_decider(reallocation, access)
+        # La matrice des droits se lit une fois par réponse, pas par ligne.
+        configuration = self.context.get("workflow_configuration")
+        if configuration is None:
+            configuration = self.context["workflow_configuration"] = WorkflowConfiguration.charger()
+        return peut_decider(reallocation, access, configuration)
 
     def validate_reason(self, value):
         # §5.2 : une réallocation sans justification n'est pas recevable.

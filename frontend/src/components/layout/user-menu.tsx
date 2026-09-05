@@ -94,7 +94,7 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
         {/* Nouvel onglet : Grafana a sa propre session, l'application garde
             la sienne. Ce n'est pas un droit mais un réglage de déploiement :
             sans Grafana derrière Caddy, le lien mènerait à un 404. */}
-        {can("manage_users") && me?.supervision === true && (
+        {can("configuration.manage") && me?.supervision === true && (
           <DropdownMenuItem
             render={
               <a href={SUPERVISION_PATH} target="_blank" rel="noopener noreferrer">

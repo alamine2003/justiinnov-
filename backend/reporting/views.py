@@ -32,7 +32,7 @@ from .exports import (
     tableaux_rapprochement,
 )
 from .scope import Periode, fuseau_de, scoped_querysets
-from accounts.permissions import EXPORT_ROLES, RolePermission, get_access
+from accounts.permissions import RolePermission, get_access
 from .imports import audit_import, importer_depenses
 from .serializers import (
     BreakdownSerializer,
@@ -339,7 +339,7 @@ class ExportView(APIView):
     """
 
     permission_classes = [RolePermission]
-    read_roles = EXPORT_ROLES
+    read_capability = "data.export"
 
     #: Radical du nom de fichier et libellé d'audit, par vue. Le libellé
     #: d'audit reste en français : le journal se relit tel qu'il a été
@@ -463,7 +463,7 @@ class ExpensesImportView(APIView):
 
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [RolePermission]
-    write_roles = EXPORT_ROLES
+    write_capability = "data.import"
 
     @extend_schema(
         parameters=[

@@ -1,8 +1,7 @@
 {
   "app": {
     "titre": "JUSTI INNOV — Contrôle budgétaire",
-    "tagline": "Application de contrôle budgétaire",
-    "description": "Suivi des dépenses des pays et de leurs justificatifs : ce qui a été dépensé, quand, où, au profit de qui, et où est la preuve."
+    "tagline": "Application de contrôle budgétaire"
   },
   "commun": {
     "annuler": "Annuler",
@@ -17,13 +16,9 @@
     "desactive": "Désactivé",
     "activer": "Activer",
     "desactiver": "Désactiver",
-    "modifier": "Modifier",
     "creer": "Créer",
     "ajouter": "Ajouter",
-    "retirer": "Retirer",
-    "rechercher": "Rechercher",
     "tous": "Tous",
-    "toutes": "Toutes",
     "oui": "Oui",
     "non": "Non",
     "statut": "Statut",
@@ -31,14 +26,12 @@
     "montant": "Montant",
     "pays": "Pays",
     "nom": "Nom",
-    "code": "Code",
     "description": "Description",
     "annee": "Année",
     "devise": "Devise",
     "siege_tous_pays": "Siège — tous pays",
     "sans_role": "Sans rôle",
     "aucun": "—",
-    "voir": "Voir",
     "telecharger": "Télécharger",
     "precedent": "Précédent",
     "suivant": "Suivant",
@@ -213,9 +206,6 @@
     "langue": {
       "fr": "Français",
       "en": "English"
-    },
-    "notification_type": {
-      "dossier_reopened": "Dossier rouvert"
     }
   },
   "layout": {
@@ -238,7 +228,6 @@
   },
   "pwa": {
     "installer": "Installer l'application",
-    "installation_impossible": "Installation impossible",
     "note_connexion": "Disponible en application de bureau sur Windows et macOS : installez-la depuis Chrome ou Edge pour l'ouvrir sans le navigateur."
   },
   "ui": {
@@ -885,10 +874,22 @@
       "seuil_requis": "Indiquez au moins un seuil."
     },
     "permissions": {
-      "non_modifiables": "Droits non modifiables",
+      "titre": "Matrice des droits",
+      "description": "Chaque case dit quel rôle peut tenter l'action ; le serveur applique le réglage à la requête suivante. Une case grisée est verrouillée.",
       "droit": "Droit",
       "siege": "siège",
-      "pays": "pays"
+      "pays": "pays",
+      "toujours": "Toujours accordé",
+      "jamais": "Jamais accordé",
+      "case_aria": "{{droit}} pour {{role}}",
+      "modifie": "Modifié",
+      "retablir": "Rétablir le défaut",
+      "retablir_aria": "Rétablir le défaut pour {{droit}}",
+      "modifications_one": "{{count}} modification non enregistrée",
+      "modifications_other": "{{count}} modifications non enregistrées",
+      "annuler": "Annuler les modifications",
+      "enregistre": "Droits enregistrés : ils s'appliquent dès maintenant.",
+      "erreur": "Enregistrement impossible"
     },
     "utilisateurs": {
       "titre": "Comptes",

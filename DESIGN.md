@@ -164,10 +164,14 @@ que « Aucune donnée ».
 
 ## Droits et données
 
-- Les droits viennent de `/api/me/` via `can("record_expenses")`,
-  `can("validate_expenses")`, `can("view_audit")`… **Ne recopiez jamais une
-  table de rôles dans un composant** : elle divergerait du serveur. Masquer une
-  action est un confort ; le refus reste côté serveur.
+- Les droits viennent de `/api/me/` via `can("expenses.create")`,
+  `can("expenses.validate")`, `can("audit.read")`… — les clés sont celles
+  de la matrice (`accounts/permissions.py`), que les administrateurs règlent
+  dans « Configuration › Permissions ». Sur un dossier ou une ligne, ce qui
+  est possible vient de `allowed_actions` (`edit`, `add_line`, `upload`,
+  `delete`, puis le circuit). **Ne recopiez jamais une table de rôles ni une
+  liste d'états dans un composant** : elle divergerait du serveur. Masquer
+  une action est un confort ; le refus reste côté serveur.
 - **Aucune chaîne en dur visible par l'utilisateur.** L'interface est
   bilingue : tout texte passe par la fonction de traduction du projet
   (`t("…")`, dictionnaires français et anglais), y compris les `aria-label`,
@@ -213,7 +217,7 @@ role_display`) avec une pastille **« 2FA active »** (`Badge`,
 manager qui y est rattaché ; **« Activer la double authentification »**
 (icône `ShieldCheck`, lien vers `/2fa`) tant que `totp_confirmed` est
 faux — rien quand le serveur ne connaît pas la 2FA ; **« Supervision »**
-(icône `Activity`) pour les administrateurs seulement (`can("manage_users")`),
+(icône `Activity`) pour les administrateurs seulement (`can("configuration.manage")`),
 qui ouvre `/grafana/` — chemin relatif à l'origine, servi par Caddy — dans
 un nouvel onglet avec `rel="noopener noreferrer"`, parce que Grafana a sa
 propre session ; « Installer l'application » quand le navigateur le
@@ -266,8 +270,8 @@ demandé à chaque connexion d'un compte enrôlé.
 
 Sur le détail d'un dossier, un bouton **« Rouvrir »** en variante
 `outline`, dans les actions de `PageHeader`, rendu **seulement** si
-`can("reopen_dossiers")` — c'est-à-dire pour `REOPEN_ROLES`, `admin` et
-`super_admin` — et si le dossier est soumis, en contrôle ou non justifié
+`can("dossiers.reopen")` — `admin` et `super_admin` par défaut, jamais le
+pays — et si le dossier est soumis, en contrôle ou non justifié
 (`POST /api/dossiers/{id}/reopen/ {note}`). Il ouvre un
 dialogue au titre affirmatif (« Rouvrir le dossier N°… »), dont la
 description dit la conséquence : « Le dossier et ses lignes reviennent au
@@ -288,7 +292,7 @@ l'écran.
 ### Menu d'export
 
 Les exports et l'import sont réservés aux administrateurs : le menu
-n'apparaît que si `can("export_data")`. C'est un `DropdownMenu` ouvert par
+n'apparaît que si `can("data.export")`. C'est un `DropdownMenu` ouvert par
 un bouton `outline` « Exporter » (icône `Download`) dans les actions de
 `PageHeader` des écrans registre, dossiers et tableau de bord, avec :
 
@@ -305,8 +309,8 @@ Le fichier se télécharge par la vue authentifiée (`/api/exports/…`), jamais
 par une URL construite à la main ; pendant la génération, le bouton montre
 `<Loader2 className="animate-spin" />`. Le registre porte le même menu, qui
 reprend le pays de son filtre. L'import (`Upload`) vit dans l'onglet
-« Import » de la Configuration (`?onglet=import`), réservé lui aussi à
-`can("export_data")`, et propose la simulation (`dry_run`) avant
+« Import » de la Configuration (`?onglet=import`), réservé à
+`can("data.import")`, et propose la simulation (`dry_run`) avant
 l'écriture. Pour tous les autres rôles, ni bouton, ni lien : ils
 travaillent dans l'application.
 

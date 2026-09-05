@@ -28,7 +28,8 @@ from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 
-from accounts.permissions import EXPORT_ROLES, HEADQUARTERS_ROLES, get_access
+from accounts.models import HEADQUARTERS_ROLES
+from accounts.permissions import get_access, roles_pour
 from budget.aggregates import consolidation_par_pays, current_rates
 from expenses.models import Expense
 from notifications.services import langue_de, recipients_for
@@ -61,7 +62,7 @@ def _groupes_par_perimetre(users):
         if access is None:
             continue
         perimetre = None if access.has_global_scope else tuple(sorted(access.country_ids))
-        cle = (perimetre, access.role in EXPORT_ROLES, langue_de(user))
+        cle = (perimetre, access.role in roles_pour("data.export"), langue_de(user))
         groupes.setdefault(cle, (access, []))[1].append(user)
     return groupes
 

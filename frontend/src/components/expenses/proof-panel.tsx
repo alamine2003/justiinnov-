@@ -90,7 +90,7 @@ export function ProofPanel({
   // serveur, réservée au siège. Un compte pays dépose sans ces garde-fous :
   // le serveur reste seul juge, l'écran ne fait qu'éviter un aller-retour.
   const configuration = useReferentiel("configuration", fetchConfiguration, {
-    enabled: canUpload && can("manage_users"),
+    enabled: canUpload && can("configuration.manage"),
   })
   const rules: UploadRules = configuration.data
     ? {
