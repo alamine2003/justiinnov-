@@ -76,9 +76,17 @@ services:
     entrypoint: ["python", "manage.py", "run_scheduler"]
     # L'image hérite du contrôle de santé du backend, qui interroge l'API sur
     # le port 8000 : l'ordonnanceur n'y répond pas et serait déclaré mort.
-    # Il n'expose rien ; `restart` le relance s'il s'arrête.
+    # Le sien lit le battement de cœur que `run_scheduler` touche chaque
+    # minute (core/management/commands/run_scheduler.py) : plus de trois
+    # minutes sans battement, la boucle est bloquée. Le désactiver n'est pas
+    # une option : `docker compose up --wait` refuse un service sans contrôle
+    # de santé, et la livraison s'arrêtait là.
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-c", "import os, sys, time; sys.exit(0 if time.time() - os.stat('/tmp/scheduler.battement').st_mtime < 180 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
     environment:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432

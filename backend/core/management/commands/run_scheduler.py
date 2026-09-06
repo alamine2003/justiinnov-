@@ -10,16 +10,28 @@ gunicorn : trois workers déclencheraient trois fois chaque tâche.
 """
 
 import logging
+import os
 import signal
+from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import close_old_connections
 
 logger = logging.getLogger("scheduler")
+
+#: Battement de cœur : un fichier que l'ordonnanceur touche lui-même à
+#: chaque minute, et que le contrôle de santé du conteneur lit
+#: (`docker-compose.yml`, `deploy/docker-compose.prod.yml`). Un processus
+#: vivant dont la boucle est bloquée cesse de battre ; un fichier frais
+#: prouve que la boucle tourne. Sans contrôle de santé, `docker compose up
+#: --wait` refuse d'attendre le service — et la livraison échouait.
+BATTEMENT = Path(os.environ.get("SCHEDULER_BATTEMENT", "/tmp/scheduler.battement"))
+BATTEMENT_SECONDES = 60
 
 #: Tâches et leur cadence, en syntaxe cron.
 #:
@@ -49,6 +61,11 @@ JOBS = [
         "command": ("send_periodic_report", {"period": "monthly"}),
     },
 ]
+
+
+def battre():
+    """Rafraîchit le battement de cœur lu par le contrôle de santé."""
+    BATTEMENT.touch()
 
 
 def run_job(job):
@@ -122,6 +139,17 @@ class Command(BaseCommand):
             )
             self.stdout.write(f"planifié : {expression:<16} {job['label']}")
 
+        # Le battement part avant la boucle, pour que le conteneur soit sain
+        # dès le démarrage et non une minute plus tard.
+        scheduler.add_job(
+            battre,
+            IntervalTrigger(seconds=BATTEMENT_SECONDES),
+            id="battement",
+            max_instances=1,
+            coalesce=True,
+        )
+        battre()
+
         # Un arrêt de conteneur doit laisser une tâche en cours se terminer,
         # pour ne pas couper un envoi au milieu de sa liste de destinataires.
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -133,8 +161,6 @@ class Command(BaseCommand):
 
 def os_cron(job):
     """Cadence de la tâche, surchargeable par l'environnement."""
-    import os
-
     return os.environ.get(job["cron"], job["default"]).strip()
 
 
