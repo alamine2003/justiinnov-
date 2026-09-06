@@ -18,6 +18,7 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 | `prometheus/prometheus.yml` | cibles de collecte : backend (sous jeton), base, serveur |
 | `grafana/provisioning/` | source de données Prometheus et chargement des tableaux de bord au démarrage de Grafana |
 | `grafana/dashboards/justi-innov.json` | le tableau de bord de la plateforme |
+| `preparer_serveur.sh` | prépare une machine Ubuntu neuve (« Préparer un serveur », plus bas) |
 | `deploy.sh` | vérifie la configuration (`compose config`), tire une étiquette d'images, relance la pile, attend qu'elle soit saine ; sinon montre l'état et les journaux de chaque service non sain et rétablit l'étiquette précédente |
 | `.env.example` | modèle du `.env` du serveur, jamais versionné ; aucun service ne le lit en bloc (« Secrets et variables », plus bas) |
 | `docker-compose.override.yml` | facultatif, jamais versionné : surcharge locale déclarée par `COMPOSE_FILE` dans `.env` (« Surcharge locale ») |
@@ -30,7 +31,16 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 1. Une machine Linux avec Docker Engine et le plugin Compose (v2.24 ou plus),
    les ports 80 et 443 ouverts, un enregistrement DNS vers elle.
 2. Un utilisateur dédié, membre du groupe `docker`, avec une clé SSH
-   réservée au déploiement :
+   réservée au déploiement. Sur une Ubuntu neuve, `preparer_serveur.sh`
+   fait tout cela d'un coup — Docker et Compose, l'utilisateur `deploy`,
+   ses clés (celle de déploiement en argument, plus celles déjà autorisées
+   pour root), le pare-feu limité à 22, 80 et 443, les mises à jour de
+   sécurité automatiques, SSH par clé seulement — et se relance sans dégât :
+   ```bash
+   ssh-keygen -t ed25519 -N "" -C deploy@justi-innov -f ~/.ssh/justi-innov-deploy
+   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)'" < deploy/preparer_serveur.sh
+   ```
+   À la main, l'équivalent minimal :
    ```bash
    sudo adduser --disabled-password deploy && sudo usermod -aG docker deploy
    sudo -u deploy mkdir -p ~deploy/.ssh ~deploy/justi-innov
