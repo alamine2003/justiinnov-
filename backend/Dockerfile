@@ -40,10 +40,11 @@ EXPOSE 8000
 
 # Docker ne déclare le conteneur prêt que lorsque l'API répond et voit sa
 # base : `docker compose up --wait` et la livraison continue s'y fient. Le
-# délai de grâce couvre les migrations appliquées au démarrage.
+# délai de grâce couvre les migrations appliquées au démarrage. Le port est
+# celui de l'entrypoint : PORT s'il est imposé par l'hébergeur, 8000 sinon.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-    CMD python -c "import sys, urllib.request; \
-r = urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=4); \
+    CMD python -c "import os, sys, urllib.request; \
+r = urllib.request.urlopen('http://127.0.0.1:%s/api/health/' % os.environ.get('PORT', '8000'), timeout=4); \
 sys.exit(0 if r.status == 200 else 1)"
 
 ENTRYPOINT ["/app/entrypoint.sh"]

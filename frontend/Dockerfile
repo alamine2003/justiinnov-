@@ -18,10 +18,18 @@ RUN npm run build
 # Étape finale : service des fichiers par nginx, en production.
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# `nginx.conf` est un gabarit : l'entrypoint de l'image le passe par
+# `envsubst` au démarrage et n'y remplace que les `${NGINX_*}` (le filtre
+# protège les `$host`, `$uri`… de nginx). Les valeurs par défaut viennent de
+# `docker-entrypoint.d/10-variables.envsh`, sourcé juste avant — d'où le
+# bit d'exécution, sans lequel l'entrypoint l'ignore.
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+COPY --chmod=755 docker-entrypoint.d/10-variables.envsh /docker-entrypoint.d/10-variables.envsh
+ENV NGINX_ENVSUBST_FILTER=^NGINX_
 EXPOSE 80
+# Le port suit celui de l'hébergeur (PORT) quand il en impose un.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -qO- http://127.0.0.1/healthz >/dev/null || exit 1
+    CMD wget -qO- "http://127.0.0.1:${PORT:-80}/healthz" >/dev/null || exit 1
 # Le processus maître reste root : il lui faut lier le port 80 et ouvrir les
 # journaux, puis il abandonne ses privilèges — les workers, qui traitent les
 # requêtes, tournent sous `nginx` (directive `user` de l'image). Passer en

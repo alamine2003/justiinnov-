@@ -8,10 +8,11 @@ alertes, imports et exports, supervision.
 
 Les règles que le code doit respecter sont dans [`CLAUDE.md`](CLAUDE.md) ;
 le modèle de données et les décisions prises, dans
-[`docs/model-de-donnees.md`](docs/model-de-donnees.md) ; le serveur, la
-supervision et les sauvegardes, dans [`deploy/README.md`](deploy/README.md).
-L'équipe de développement compte une seule personne : ces trois documents
-sont écrits pour être suffisants.
+[`docs/model-de-donnees.md`](docs/model-de-donnees.md) ; l'hébergement sur
+Railway, dans [`docs/deploiement-railway.md`](docs/deploiement-railway.md) ;
+un serveur dédié, sa supervision et ses sauvegardes, dans
+[`deploy/README.md`](deploy/README.md). L'équipe de développement compte une
+seule personne : ces documents sont écrits pour être suffisants.
 
 ## Périmètre
 
@@ -419,7 +420,14 @@ au sein de la livraison continue, en cinq travaux indépendants :
 | Parcours complet | la pile livrable (backend en production sans code monté, frontend nginx, Caddy devant avec le Caddyfile livré) démarre, des comptes jetables entrent par `compose cp` et `seed_users`, `seed_demo --base-jetable` remplit des données, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, `/admin/` répond l'application et non le back-office, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
 | Dépendances | `pip-audit --strict` et `npm audit --audit-level=high`, **bloquants** |
 
-La livraison continue (`.github/workflows/cd.yml`) appelle la CI, puis :
+**La plateforme est hébergée sur Railway**
+([`docs/deploiement-railway.md`](docs/deploiement-railway.md)) : Railway
+construit les trois services (`backend`, `scheduler`, `frontend`) depuis
+leurs Dockerfile à chaque poussée sur `main` et fournit le domaine, la base
+et le stockage des justificatifs. `cd.yml` se contente alors de faire
+tourner la CI sur `main` ; sa livraison par SSH vers un serveur dédié ne
+part que si la variable de dépôt `DEPLOIEMENT_SSH` vaut `1`. Le cas
+échéant, elle appelle la CI, puis :
 
 ```
 main ──────▶ CI ──▶ images ghcr.io ──▶ staging      (automatique)
@@ -518,6 +526,8 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |
 | `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
 | `GUNICORN_WORKERS` / `GUNICORN_THREADS` / `GUNICORN_TIMEOUT` | `2` / `4` / `120` | processus, fils par processus et délai (s) du serveur d'application |
+| `PORT` | `8000` (backend), `80` (frontend) | port d'écoute, quand l'hébergeur l'impose (Railway) ; les contrôles de santé le suivent |
+| `NGINX_API_UPSTREAM` / `NGINX_RESOLVER` / `NGINX_RESOLVER_IPV6` / `NGINX_TRUSTED_PROXY` | `http://backend:8000` / résolveur du conteneur / `off` / `127.0.0.1` | image frontend : adresse du backend, résolveur DNS, résolution IPv6 et mandataire public cru pour `X-Forwarded-For` ; `frontend/nginx.conf` est un gabarit rempli au démarrage (`docs/deploiement-railway.md`) |
 | `PROMETHEUS_MULTIPROC_DIR` | — | dossier partagé des compteurs Prometheus entre les processus gunicorn (`/dev/shm/prometheus` en production) ; créé et vidé par `entrypoint.sh` au démarrage ; ne pas le donner à l'ordonnanceur |
 | `COMPOSE_FILE` | — | pile de production : liste de fichiers Compose (`docker-compose.prod.yml:docker-compose.override.yml`) pour une surcharge locale, lue par `deploy.sh` et `restaurer.sh` (`deploy/README.md`) |
 

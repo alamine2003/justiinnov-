@@ -1,5 +1,11 @@
 # Déploiement de JUSTI INNOV
 
+> La plateforme est aujourd'hui hébergée sur Railway, sans serveur dédié :
+> voir [`docs/deploiement-railway.md`](../docs/deploiement-railway.md). Ce
+> dossier décrit la pile complète pour un serveur à soi (Caddy, MinIO,
+> sauvegardes, Grafana) ; la livraison par SSH de `cd.yml` ne part que si
+> la variable de dépôt `DEPLOIEMENT_SSH` vaut `1`.
+
 La livraison continue (`.github/workflows/cd.yml`) livre `main` en
 préproduction et les tags `v*` en production, après approbation. Ce dossier
 est copié en entier sur le serveur à chaque livraison ; il contient tout ce
