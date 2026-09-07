@@ -445,6 +445,18 @@ def choisir_email_backend(email_host, *, debug, console):
     que personne ne s'en aperçoive. Fonction pure, pour être testable sans
     recharger les réglages.
     """
+    if email_host and console:
+        # Les deux ensemble ne veulent rien dire, et l'hôte l'emportait en
+        # silence : un `smtp.a-renseigner.invalid` posé en attendant le vrai
+        # serveur faisait échouer chaque envoi après dix secondes, sans que
+        # les journaux reçoivent quoi que ce soit — l'inverse de ce que
+        # EMAIL_BACKEND_CONSOLE promet. La contradiction se dit au démarrage.
+        raise ImproperlyConfigured(
+            "EMAIL_HOST et EMAIL_BACKEND_CONSOLE=1 se contredisent : l'hôte "
+            "l'emporterait, et les alertes échoueraient sans passer par les "
+            "journaux. Videz EMAIL_HOST pour écrire dans les journaux, ou "
+            "retirez EMAIL_BACKEND_CONSOLE pour envoyer par SMTP."
+        )
     if email_host:
         return "django.core.mail.backends.smtp.EmailBackend"
     if debug or console:

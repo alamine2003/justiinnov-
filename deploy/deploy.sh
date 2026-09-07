@@ -168,6 +168,30 @@ fi
 
 echo "$IMAGE_TAG" > .deployed
 
+# Les noms d'images et l'étiquette livrée sont réinscrits dans le `.env`, que
+# Compose lit de lui-même : sans eux, toutes les commandes d'exploitation de
+# README.md — `compose exec backend manage.py seed_users`, `restaurer.sh`, la
+# réinitialisation d'une double authentification, une sauvegarde à la demande —
+# échouent sur « BACKEND_IMAGE manquant », puisque `.deploy-env` est effacé
+# aussitôt lu et que `.deployed` ne garde que l'étiquette. Le bloc est réécrit
+# à chaque livraison réussie ; l'environnement, lui, l'emporte toujours sur le
+# `.env`, si bien qu'un retour arrière à la main garde la main.
+inscrire_images_dans_env() {
+  # `cat >` plutôt que `mv` : le `.env` garde son inode, ses droits (600) et
+  # son propriétaire, quel que soit l'umask de la livraison.
+  copie="$(mktemp)" || return 1
+  grep -vE '^(IMAGE_TAG|BACKEND_IMAGE|FRONTEND_IMAGE)=|^# Livraison : écrit par deploy\.sh' .env > "$copie"
+  {
+    printf '# Livraison : écrit par deploy.sh — ne pas modifier à la main.\n'
+    printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
+    printf 'BACKEND_IMAGE=%s\n' "$BACKEND_IMAGE"
+    printf 'FRONTEND_IMAGE=%s\n' "$FRONTEND_IMAGE"
+  } >> "$copie"
+  cat "$copie" > .env
+  rm -f "$copie"
+}
+inscrire_images_dans_env
+
 # Supervision désactivée après avoir été active : `up` sans le profil ne
 # touche pas aux conteneurs d'un profil inactif (ils ne sont pas orphelins
 # pour Compose), Grafana tournerait sans être routé. On les arrête, en

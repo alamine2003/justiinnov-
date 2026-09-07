@@ -25,7 +25,7 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 | `grafana/provisioning/` | source de données Prometheus et chargement des tableaux de bord au démarrage de Grafana |
 | `grafana/dashboards/justi-innov.json` | le tableau de bord de la plateforme |
 | `preparer_serveur.sh` | prépare une machine Ubuntu neuve (« Préparer un serveur », plus bas) |
-| `deploy.sh` | vérifie la configuration (`compose config`), tire une étiquette d'images, relance la pile, attend qu'elle soit saine ; sinon montre l'état et les journaux de chaque service non sain et rétablit l'étiquette précédente |
+| `deploy.sh` | vérifie la configuration (`compose config`), tire une étiquette d'images, relance la pile, attend qu'elle soit saine ; sinon montre l'état et les journaux de chaque service non sain et rétablit l'étiquette précédente. Une livraison réussie réinscrit étiquette et noms d'images dans le `.env`, pour que les commandes ci-dessous marchent ensuite telles quelles |
 | `.env.example` | modèle du `.env` du serveur, jamais versionné ; aucun service ne le lit en bloc (« Secrets et variables », plus bas) |
 | `docker-compose.override.yml` | facultatif, jamais versionné : surcharge locale déclarée par `COMPOSE_FILE` dans `.env` (« Surcharge locale ») |
 | `creer_role_applicatif.sql` | rôle Postgres du service, sans droit de modifier le schéma |
@@ -101,7 +101,9 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    Les valeurs transmises au serveur (étiquette, noms d'images, domaine,
    chemin) sont vérifiées par expression régulière avant tout appel SSH, et
    passent par un fichier `.deploy-env` lu puis effacé sur le serveur ; le
-   jeton de registre, lui, ne transite que par l'entrée standard.
+   jeton de registre, lui, ne transite que par l'entrée standard. Étiquette
+   et noms d'images sont ensuite réinscrits dans le `.env` par `deploy.sh`
+   (« Commandes d'exploitation », plus bas).
 
 ## Ce qui se passe pendant un déploiement
 
@@ -146,6 +148,20 @@ Une livraison peut être rejouée sans nouvelle image : `deploy.sh` avec la
 même étiquette recharge la configuration copiée (Caddyfile, Prometheus,
 tableaux de bord Grafana), puisque ces fichiers sont montés depuis ce
 dossier et non copiés dans les images.
+
+## Commandes d'exploitation
+
+Toutes celles qui suivent passent par `docker compose`, qui a besoin de
+`BACKEND_IMAGE`, `FRONTEND_IMAGE` et `IMAGE_TAG` pour interpoler la pile.
+La livraison continue les transmet dans `.deploy-env`, effacé aussitôt lu ;
+`deploy.sh` les réinscrit donc dans le `.env` à la fin de chaque livraison
+réussie, et Compose les y lit de lui-même. Rien à préfixer.
+
+Sur un serveur livré avant que cette réinscription n'existe, le `.env` ne
+les porte pas encore et Compose refuse de démarrer (« BACKEND_IMAGE
+manquant ») : une livraison suffit à le remettre en état. En attendant,
+`docker exec justi-innov-backend-1 …` et `docker cp` parlent directement aux
+conteneurs, sans Compose.
 
 ## Première mise en service
 

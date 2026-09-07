@@ -519,7 +519,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `UNJUSTIFIED_ALERT_DAYS` | `0` | jours sans pièce après soumission avant alerte ; `0` désactive (idem) |
 | `WARN_WITHOUT_PROOF_SUBMISSION` | `1` | avertir à la soumission d'un dossier sans pièce (idem) |
 | `EMAIL_HOST` | — | serveur SMTP, **obligatoire hors mode debug** : sans lui, le backend refuse de démarrer plutôt que de perdre les alertes |
-| `EMAIL_BACKEND_CONSOLE` | `0` | `1` acquitte l'absence de SMTP hors debug : les e-mails vont dans les journaux (CI, préproduction) |
+| `EMAIL_BACKEND_CONSOLE` | `0` | `1` acquitte l'**absence** de SMTP hors debug : les e-mails vont dans les journaux (CI, préproduction). Avec un `EMAIL_HOST` renseigné, le démarrage est refusé : l'hôte l'emporterait et les envois échoueraient sans rien laisser dans les journaux |
 | `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | `587` / — / — / `1` | paramètres SMTP |
 | `DEFAULT_FROM_EMAIL` | `controle-budgetaire@justi-innov.local` | expéditeur des e-mails |
 | `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |

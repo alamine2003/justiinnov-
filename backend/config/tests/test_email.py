@@ -26,3 +26,14 @@ class ChoixDuTransportTests(SimpleTestCase):
 
     def test_la_console_se_demande_explicitement(self):
         self.assertEqual(choisir_email_backend("", debug=False, console=True), CONSOLE)
+
+    def test_un_serveur_nomme_et_la_console_se_contredisent(self):
+        """Un hôte de remplissage posé en attendant le vrai serveur, avec
+        EMAIL_BACKEND_CONSOLE=1 pour « au moins garder les messages » :
+        l'hôte l'emportait, et rien n'arrivait nulle part."""
+        with self.assertRaisesMessage(ImproperlyConfigured, "se contredisent"):
+            choisir_email_backend("smtp.example.org", debug=False, console=True)
+
+    def test_la_contradiction_vaut_aussi_en_developpement(self):
+        with self.assertRaisesMessage(ImproperlyConfigured, "se contredisent"):
+            choisir_email_backend("smtp.example.org", debug=True, console=True)
