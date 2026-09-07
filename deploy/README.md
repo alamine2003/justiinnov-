@@ -227,6 +227,56 @@ un `METRICS_TOKEN` vide ou différent entre `.env` et le conteneur (relancez
 la pile après l'avoir changé). Créez alors les comptes « direction » et
 « technique » (« Supervision », plus bas).
 
+## Courrier
+
+Le backend refuse de démarrer sans transport de courrier : `EMAIL_HOST`
+renseigné, ou `EMAIL_BACKEND_CONSOLE=1` pour acquitter son absence. **Les
+deux ensemble sont refusés** — un hôte de remplissage l'emporterait sur le
+drapeau, et chaque envoi échouerait après dix secondes sans que rien
+n'atterrisse dans les journaux.
+
+En production, le transport est le SMTP de Gmail, avec un **mot de passe
+d'application** (Google refuse un mot de passe de compte depuis la
+suppression des « applications moins sécurisées ») :
+
+```
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=<le compte qui envoie>
+EMAIL_HOST_PASSWORD=<seize lettres, sans espaces>
+EMAIL_USE_TLS=1
+DEFAULT_FROM_EMAIL=<le même compte>
+```
+
+Trois contraintes à connaître avant d'ouvrir la plateforme aux pays :
+
+- **Gmail réécrit l'expéditeur.** Les messages partent de
+  `EMAIL_HOST_USER`, quelle que soit la valeur de `DEFAULT_FROM_EMAIL` :
+  seule une adresse vérifiée sur ce compte y échappe. Les deux valeurs sont
+  donc gardées identiques.
+- **Le mot de passe d'application ouvre aussi l'IMAP** du compte : qui lit
+  le `.env` lit le courrier de ce compte. Le compte utilisé doit être
+  **dédié à la plateforme**, jamais celui d'une personne.
+- **500 messages par jour** pour un compte Gmail ordinaire, 2 000 sur
+  Google Workspace. Les alertes et les rapports périodiques restent loin
+  du plafond ; un envoi en masse ne passerait pas.
+
+Le jour où le domaine aura ses propres boîtes, seules ces six lignes
+changent. Pour vérifier après coup :
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T backend python manage.py shell -c "
+from django.core.mail import send_mail
+from django.conf import settings
+send_mail('Test', 'Controle.', settings.DEFAULT_FROM_EMAIL, [settings.DEFAULT_FROM_EMAIL], fail_silently=False)
+print('parti')
+"
+```
+
+Rappel : les notifications vont à l'adresse de chaque compte, qui doit
+appartenir à `ALLOWED_EMAIL_DOMAINS`. Si ces boîtes n'existent pas encore
+chez le fournisseur du domaine, les messages partiront et rebondiront.
+
 ## Double authentification
 
 Elle est **facultative par défaut** : la direction a reporté son
