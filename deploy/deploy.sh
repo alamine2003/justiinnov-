@@ -100,6 +100,15 @@ if [ -n "${GHCR_USER:-}" ]; then
   echo "→ Connexion au registre…"
   docker login ghcr.io -u "$GHCR_USER" --password-stdin
 fi
+# Secrets Compose alimentés par l'environnement (`secrets:` de la pile) :
+# Compose refuse de créer un service monté sur un secret dont la variable
+# n'existe pas — « environment variable "X" required by secret "…" is not
+# set » —, même quand le secret est facultatif (rôle applicatif non joué,
+# pas de copie hors machine). Une variable absente du .env est donc
+# exportée vide : le fichier sous /run/secrets est vide, ce que les
+# entrypoints savent lire. Une valeur du .env, elle, reste celle du .env.
+for secret in METRICS_TOKEN POSTGRES_MIGRATION_PASSWORD SAUVEGARDE_DISTANT_SECRET; do grep -qE "^${secret}=" .env || export "${secret}="; done
+
 
 echo "→ Récupération des images ${IMAGE_TAG}…"
 compose pull --quiet
