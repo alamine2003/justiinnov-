@@ -104,7 +104,8 @@ echo "→ Démarrage du serveur…"
 # deploy/.env.example). Workers gthread : chaque worker sert plusieurs
 # requêtes à la fois, ce qui absorbe les téléchargements de justificatifs
 # sans multiplier les processus ; le contexte de requête de `core/signals.py`
-# est porté par des contextvars, donc sûr entre threads. Les workers sont
+# est porté par des contextvars, donc sûr entre threads. Le port est celui
+# que l'hébergeur impose (PORT, sur Railway), 8000 sinon. Les workers sont
 # recyclés périodiquement (fuites mémoire de longue durée) et leurs fichiers
 # de battement vont en mémoire partagée, pas sur disque. Les en-têtes
 # X-Forwarded-* sont acceptés de tout proxy : c'est Django qui les lit
@@ -112,7 +113,7 @@ echo "→ Démarrage du serveur…"
 # Ce qui ne tient pas sur une ligne de commande — les crochets Prometheus —
 # est dans gunicorn.conf.py, à côté de manage.py.
 exec gunicorn -c gunicorn.conf.py config.wsgi:application \
-  --bind 0.0.0.0:8000 \
+  --bind "0.0.0.0:${PORT:-8000}" \
   --worker-class gthread \
   --workers "${GUNICORN_WORKERS:-2}" \
   --threads "${GUNICORN_THREADS:-4}" \

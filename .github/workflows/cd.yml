@@ -33,6 +33,13 @@
 #                        par défaut
 # Le fichier `.env` du serveur n'est jamais dans le dépôt : `deploy/.env.example`
 # en donne le modèle.
+#
+# La plateforme est hébergée sur Railway (`docs/deploiement-railway.md`), qui
+# construit et déploie lui-même chaque poussée sur `main` : ici, seule
+# l'intégration continue tourne. La publication des images et le déploiement
+# par SSH ne partent que si la variable de dépôt `DEPLOIEMENT_SSH` vaut `1`
+# (Settings › Secrets and variables › Actions › Variables) — le jour où un
+# serveur existe.
 name: Livraison continue
 
 on:
@@ -71,6 +78,8 @@ jobs:
   images:
     name: Construire et publier les images
     needs: ci
+    # Sans serveur SSH, rien à publier : Railway construit ses propres images.
+    if: vars.DEPLOIEMENT_SSH == '1'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -203,7 +212,10 @@ jobs:
           verifier BACKEND_IMAGE  "$BACKEND_IMAGE"  '^ghcr\.io/[a-z0-9._/-]+$'
           verifier FRONTEND_IMAGE "$FRONTEND_IMAGE" '^ghcr\.io/[a-z0-9._/-]+$'
           verifier APP_DOMAIN     "$APP_DOMAIN"     '^[a-z0-9.-]+$'
-          verifier GHCR_USER      "$GHCR_USER"      '^[A-Za-z0-9._\[\]-]+$'
+          # Classe POSIX : `]` en tête et `-` en queue sont littéraux, `\` ne
+          # l'est pas — `\]` fermait la classe et le motif exigeait « -] »,
+          # ce qu'aucun compte GitHub ne satisfait (livraison v1.0.1).
+          verifier GHCR_USER      "$GHCR_USER"      '^[]A-Za-z0-9._[-]+$'
           verifier DEPLOY_PATH    "$DEPLOY_PATH"    '^~?[A-Za-z0-9._/-]+$'
           # Le serveur lit ce fichier avec `set -a ; . ./.deploy-env` : les
           # valeurs viennent d'être bornées, aucune n'a besoin de guillemets.

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Valeurs par défaut des variables du gabarit `nginx.conf` (voir son en-tête).
+# Sourcé par l'entrypoint de l'image nginx avant `20-envsubst-on-templates.sh`,
+# qui remplace les `${NGINX_*}` du gabarit par ces valeurs. Sans variable
+# d'environnement, le résultat est exactement la configuration de la pile
+# Docker et de la CI ; Railway (`docs/deploiement-railway.md`) ne renseigne
+# que ce qui diffère.
+
+# Port d'écoute : celui que l'hébergeur impose (PORT), sinon 80.
+: "${NGINX_PORT:=${PORT:-80}}"
+# Le backend, par le nom de son service.
+: "${NGINX_API_UPSTREAM:=http://backend:8000}"
+# Aucun mandataire public à croire en plus des réseaux privés.
+: "${NGINX_TRUSTED_PROXY:=127.0.0.1}"
+: "${NGINX_RESOLVER_IPV6:=off}"
+
+# Résolveur DNS : celui du conteneur. C'est 127.0.0.11 sous Docker, et le
+# résolveur interne de l'hébergeur ailleurs — une adresse IPv6 va entre
+# crochets pour nginx. Plusieurs `nameserver` donnent plusieurs adresses.
+if [ -z "${NGINX_RESOLVER:-}" ]; then
+  NGINX_RESOLVER=$(awk '$1 == "nameserver" { ip = $2; if (ip ~ /:/) ip = "[" ip "]"; printf "%s%s", sep, ip; sep = " " }' /etc/resolv.conf 2>/dev/null)
+  : "${NGINX_RESOLVER:=127.0.0.11}"
+fi
+
+export NGINX_PORT NGINX_API_UPSTREAM NGINX_TRUSTED_PROXY NGINX_RESOLVER NGINX_RESOLVER_IPV6
