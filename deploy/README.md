@@ -157,11 +157,25 @@ La livraison continue les transmet dans `.deploy-env`, effacé aussitôt lu ;
 `deploy.sh` les réinscrit donc dans le `.env` à la fin de chaque livraison
 réussie, et Compose les y lit de lui-même. Rien à préfixer.
 
-Sur un serveur livré avant que cette réinscription n'existe, le `.env` ne
-les porte pas encore et Compose refuse de démarrer (« BACKEND_IMAGE
-manquant ») : une livraison suffit à le remettre en état. En attendant,
-`docker exec justi-innov-backend-1 …` et `docker cp` parlent directement aux
-conteneurs, sans Compose.
+Compose exige en outre que **toute variable nommée par un secret existe**,
+même vide : `METRICS_TOKEN`, `POSTGRES_MIGRATION_PASSWORD` et
+`SAUVEGARDE_DISTANT_SECRET` sont donc déclarées dans `.env.example`, et
+`deploy.sh` exporte à vide celles qui manqueraient. Une seule absente et
+Compose refuse de créer le conteneur — « environment variable "…" required
+by secret "…" is not set » —, y compris pour une commande d'exploitation sur
+une pile parfaitement saine.
+
+Sur un serveur préparé avant ces deux garde-fous, complétez son `.env` une
+fois pour toutes :
+
+```bash
+cd ~/justi-innov
+grep -q '^POSTGRES_MIGRATION_PASSWORD=' .env || echo 'POSTGRES_MIGRATION_PASSWORD=' >> .env
+```
+
+puis relivrez, ou ajoutez à la main l'étiquette et les noms d'images lus
+dans `.deployed`. En dépannage, `docker exec justi-innov-backend-1 …` et
+`docker cp` parlent directement aux conteneurs, sans passer par Compose.
 
 ## Première mise en service
 
