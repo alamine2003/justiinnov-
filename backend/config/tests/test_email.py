@@ -35,5 +35,7 @@ class ChoixDuTransportTests(SimpleTestCase):
             choisir_email_backend("smtp.example.org", debug=False, console=True)
 
     def test_la_contradiction_vaut_aussi_en_developpement(self):
+        """Le mode debug n'excuse pas la contradiction : elle se corrige là où
+        elle a été écrite, avant d'être recopiée dans un `.env` de serveur."""
         with self.assertRaisesMessage(ImproperlyConfigured, "se contredisent"):
             choisir_email_backend("smtp.example.org", debug=True, console=True)

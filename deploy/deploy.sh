@@ -177,20 +177,34 @@ echo "$IMAGE_TAG" > .deployed
 # à chaque livraison réussie ; l'environnement, lui, l'emporte toujours sur le
 # `.env`, si bien qu'un retour arrière à la main garde la main.
 inscrire_images_dans_env() {
-  # `cat >` plutôt que `mv` : le `.env` garde son inode, ses droits (600) et
-  # son propriétaire, quel que soit l'umask de la livraison.
-  copie="$(mktemp)" || return 1
-  grep -vE '^(IMAGE_TAG|BACKEND_IMAGE|FRONTEND_IMAGE)=|^# Livraison : écrit par deploy\.sh' .env > "$copie"
-  {
-    printf '# Livraison : écrit par deploy.sh — ne pas modifier à la main.\n'
-    printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
-    printf 'BACKEND_IMAGE=%s\n' "$BACKEND_IMAGE"
-    printf 'FRONTEND_IMAGE=%s\n' "$FRONTEND_IMAGE"
-  } >> "$copie"
-  cat "$copie" > .env
-  rm -f "$copie"
+  # Le remplacement final est un `mv` dans le même dossier, donc atomique :
+  # une troncature interrompue (disque plein, machine coupée) laisserait un
+  # `.env` amputé de tous les secrets du serveur, qui n'existent nulle part
+  # ailleurs — il n'est pas versionné. `umask` donne au temporaire les mêmes
+  # droits (600) qu'au fichier qu'il remplace.
+  copie=".env.livraison.$$"
+  (
+    umask 077
+    # `grep -v` sort en 1 quand il ne retient aucune ligne : un `.env` qui ne
+    # contiendrait que ce bloc. Au-delà de 1, c'est une vraie erreur de
+    # lecture, et réécrire le fichier avec le seul bloc le viderait de tout.
+    statut=0
+    grep -vE '^(IMAGE_TAG|BACKEND_IMAGE|FRONTEND_IMAGE)=|^# Livraison : écrit par deploy\.sh' .env > "$copie" || statut=$?
+    [ "$statut" -le 1 ] || exit 1
+    {
+      printf '# Livraison : écrit par deploy.sh — ne pas modifier à la main.\n'
+      printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
+      printf 'BACKEND_IMAGE=%s\n' "$BACKEND_IMAGE"
+      printf 'FRONTEND_IMAGE=%s\n' "$FRONTEND_IMAGE"
+    } >> "$copie"
+  ) && mv "$copie" .env
 }
-inscrire_images_dans_env
+# La livraison a réussi : elle ne se déclare pas en échec parce que ce
+# confort d'exploitation n'a pas pu s'écrire. On le dit, et on continue.
+if ! inscrire_images_dans_env; then
+  rm -f ".env.livraison.$$"
+  echo "⚠ Étiquette et noms d'images non réinscrits dans .env : les commandes d'exploitation demanderont IMAGE_TAG, BACKEND_IMAGE et FRONTEND_IMAGE (deploy/README.md, « Commandes d'exploitation »)." >&2
+fi
 
 # Supervision désactivée après avoir été active : `up` sans le profil ne
 # touche pas aux conteneurs d'un profil inactif (ils ne sont pas orphelins
