@@ -8,11 +8,12 @@ alertes, imports et exports, supervision.
 
 Les règles que le code doit respecter sont dans [`CLAUDE.md`](CLAUDE.md) ;
 le modèle de données et les décisions prises, dans
-[`docs/model-de-donnees.md`](docs/model-de-donnees.md) ; l'hébergement sur
-Railway, dans [`docs/deploiement-railway.md`](docs/deploiement-railway.md) ;
-un serveur dédié, sa supervision et ses sauvegardes, dans
-[`deploy/README.md`](deploy/README.md). L'équipe de développement compte une
-seule personne : ces documents sont écrits pour être suffisants.
+[`docs/model-de-donnees.md`](docs/model-de-donnees.md) ; le serveur, sa
+supervision et ses sauvegardes, dans [`deploy/README.md`](deploy/README.md) ;
+l'hébergement de repli sur Railway, dans
+[`docs/deploiement-railway.md`](docs/deploiement-railway.md). L'équipe de
+développement compte une seule personne : ces documents sont écrits pour
+être suffisants.
 
 ## Périmètre
 
@@ -420,14 +421,12 @@ au sein de la livraison continue, en cinq travaux indépendants :
 | Parcours complet | la pile livrable (backend en production sans code monté, frontend nginx, Caddy devant avec le Caddyfile livré) démarre, des comptes jetables entrent par `compose cp` et `seed_users`, `seed_demo --base-jetable` remplit des données, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, `/admin/` répond l'application et non le back-office, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
 | Dépendances | `pip-audit --strict` et `npm audit --audit-level=high`, **bloquants** |
 
-**La plateforme est hébergée sur Railway**
-([`docs/deploiement-railway.md`](docs/deploiement-railway.md)) : Railway
-construit les trois services (`backend`, `scheduler`, `frontend`) depuis
-leurs Dockerfile à chaque poussée sur `main` et fournit le domaine, la base
-et le stockage des justificatifs. `cd.yml` se contente alors de faire
-tourner la CI sur `main` ; sa livraison par SSH vers un serveur dédié ne
-part que si la variable de dépôt `DEPLOIEMENT_SSH` vaut `1`. Le cas
-échéant, elle appelle la CI, puis :
+**La plateforme tourne sur un serveur dédié** (Hetzner), joint par le
+domaine gratuit `178-105-215-49.sslip.io` en attendant un nom de domaine
+du groupe ; la livraison par SSH de `cd.yml` ne part que si la variable de
+dépôt `DEPLOIEMENT_SSH` vaut `1` (c'est le cas). Railway reste une voie de
+repli documentée ([`docs/deploiement-railway.md`](docs/deploiement-railway.md)) :
+le code n'a pas à changer pour y aller. La livraison appelle la CI, puis :
 
 ```
 main ──────▶ CI ──▶ images ghcr.io ──▶ staging      (automatique)

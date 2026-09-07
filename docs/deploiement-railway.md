@@ -1,7 +1,12 @@
-# Déploiement sur Railway
+# Déploiement sur Railway (voie de repli)
 
-La plateforme est hébergée sur [Railway](https://railway.com), sans serveur
-à administrer ni nom de domaine à posséder : Railway construit les images
+> La plateforme tourne aujourd'hui sur le serveur Hetzner (`deploy/`,
+> domaine `178-105-215-49.sslip.io`) : Railway refuse la carte prépayée du
+> groupe pour son abonnement. Ce document reste prêt pour le jour où une
+> carte bancaire classique le permettra, ou pour un autre projet.
+
+Sur [Railway](https://railway.com), sans serveur
+à administrer ni nom de domaine à posséder, Railway construit les images
 depuis GitHub à chaque poussée sur `main`, fournit un domaine
 `*.up.railway.app` avec son certificat, la base Postgres et le stockage
 objet des justificatifs. La pile Docker de `deploy/` (Caddy, MinIO,
