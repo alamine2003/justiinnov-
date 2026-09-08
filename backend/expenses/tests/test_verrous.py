@@ -225,3 +225,172 @@ class CourseSurLeCircuit(TransactionTestCase):
         codes = sorted([premiere.status_code, seconde.status_code])
         self.assertEqual(codes, [status.HTTP_201_CREATED, status.HTTP_400_BAD_REQUEST], (premiere.data, seconde.data))
         self.assertEqual(Proof.objects.filter(dossier=dossier).count(), 1)
+
+
+class CourseSurLaSaisie(CourseSurLeCircuit):
+    """Audit du 8 septembre 2026, §3.6 et §3.7 : les écritures de saisie —
+    modification d'une ligne ou d'un dossier, import — relisent l'état sous
+    verrou avant d'écrire. Une modification validée sur un objet lu sans
+    verrou écrasait ensuite l'état posé par une soumission passée
+    entre-temps : la ligne revenait au brouillon, sans imputation, sans
+    réouverture ni trace."""
+
+    def test_une_modification_pendant_la_soumission_ne_ramene_pas_la_ligne_au_brouillon(self):
+        dossier = self._dossier("N-0010", "1000.00")
+        ligne = dossier.expenses.get()
+
+        premiere, seconde = self._en_course(
+            lambda: self._client(self.owner).post(f"/api/dossiers/{dossier.pk}/submit/"),
+            lambda: self._client(self.owner).patch(
+                f"/api/expenses/{ligne.pk}/", {"title": "Carburant corrigé"}, format="json"
+            ),
+        )
+
+        self.assertEqual(premiere.status_code, status.HTTP_200_OK, premiere.data)
+        self.assertEqual(seconde.status_code, status.HTTP_400_BAD_REQUEST, seconde.data)
+        ligne.refresh_from_db()
+        self.assertEqual(ligne.status, Status.SUBMITTED)
+        self.assertEqual(ligne.budget_id, self.budget.pk)
+        self.assertEqual(ligne.title, "Carburant")
+        self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.UPDATED).exists())
+
+    def test_une_modification_du_dossier_pendant_sa_soumission_est_refusee(self):
+        dossier = self._dossier("N-0011", "1000.00")
+
+        premiere, seconde = self._en_course(
+            lambda: self._client(self.owner).post(f"/api/dossiers/{dossier.pk}/submit/"),
+            lambda: self._client(self.owner).patch(
+                f"/api/dossiers/{dossier.pk}/", {"label": "Mission renommée"}, format="json"
+            ),
+        )
+
+        self.assertEqual(premiere.status_code, status.HTTP_200_OK, premiere.data)
+        self.assertEqual(seconde.status_code, status.HTTP_400_BAD_REQUEST, seconde.data)
+        dossier.refresh_from_db()
+        self.assertEqual(dossier.status, Status.SUBMITTED)
+        self.assertEqual(dossier.label, "Mission N-0011")
+
+    def test_deux_modifications_simultanees_ne_perdent_rien(self):
+        """Deux corrections du même brouillon : la seconde attend la
+        première et repart de l'état écrit — les deux changements restent."""
+        dossier = self._dossier("N-0012", "1000.00")
+        ligne = dossier.expenses.get()
+        url = f"/api/expenses/{ligne.pk}/"
+
+        premiere, seconde = self._en_course(
+            lambda: self._client(self.owner).patch(url, {"title": "Péage"}, format="json"),
+            lambda: self._client(self.owner).patch(url, {"amount": "2000.00"}, format="json"),
+        )
+
+        self.assertEqual(premiere.status_code, status.HTTP_200_OK, premiere.data)
+        self.assertEqual(seconde.status_code, status.HTTP_200_OK, seconde.data)
+        ligne.refresh_from_db()
+        self.assertEqual((ligne.title, ligne.amount), ("Péage", Decimal("2000.00")))
+
+    def test_une_ligne_ajoutee_pendant_le_retrait_du_dossier_ne_casse_rien(self):
+        """L'auteur retire son brouillon pendant qu'une ligne s'y ajoute :
+        l'ajout attend le verrou du dossier, puis apprend qu'il n'existe
+        plus — pas de 500, pas de ligne orpheline, pas de fichier perdu."""
+        dossier = self._dossier("N-0013", "1000.00")
+
+        premiere, seconde = self._en_course(
+            lambda: self._client(self.owner).delete(f"/api/dossiers/{dossier.pk}/"),
+            lambda: self._client(self.owner).post(
+                "/api/expenses/",
+                {"dossier": dossier.pk, "country": self.togo.pk, "date": timezone.now().isoformat(),
+                 "title": "Ajout tardif", "amount": "10.00", "team": self.team.pk, "owner": self.manager.pk},
+                format="json",
+            ),
+        )
+
+        self.assertEqual(premiere.status_code, status.HTTP_204_NO_CONTENT, premiere.data)
+        self.assertEqual(seconde.status_code, status.HTTP_404_NOT_FOUND, seconde.data)
+        self.assertFalse(Dossier.objects.filter(pk=dossier.pk).exists())
+        self.assertFalse(Expense.objects.filter(title="Ajout tardif").exists())
+
+
+class CourseSurLImport(CourseSurLeCircuit):
+    """Deux imports du même classeur, ou un import pendant une soumission :
+    la base et le verrou du dossier tranchent ce que la validation ne peut
+    pas voir."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = make_user("rh.innov", Role.ADMIN)
+
+    def _classeur(self, numero, lignes):
+        from io import BytesIO
+
+        from openpyxl import Workbook
+
+        from reporting.exports import EXPENSE_COLUMNS
+
+        entetes = [titre for titre, _ in EXPENSE_COLUMNS]
+        workbook = Workbook()
+        feuille = workbook.active
+        feuille.title = "BASE DE DONNEES ACTIONS"
+        feuille.append(entetes)
+        for libelle, montant in lignes:
+            ligne = {
+                "N°ORDRE": numero, "DATE": f"15/03/{self.year} 12:30", "PAYS": "Togo",
+                "TEAM": "Équipe Lomé", "OWNER": "Kodjo Mensah",
+                "LIBELLE DES TRANSACTIONS": libelle, "DEPENSES": montant,
+            }
+            feuille.append([ligne.get(entete) for entete in entetes])
+        contenu = BytesIO()
+        workbook.save(contenu)
+        return contenu.getvalue()
+
+    def _importer(self, contenu):
+        return self._client(self.admin).post(
+            "/api/imports/expenses.xlsx",
+            {"file": SimpleUploadedFile("depenses.xlsx", contenu,
+                                        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            format="multipart",
+        )
+
+    def test_un_import_pendant_la_soumission_n_ajoute_rien_a_un_dossier_declare(self):
+        dossier = self._dossier("N-0020", "1000.00")
+        classeur = self._classeur("N-0020", [("Taxi", 500)])
+
+        premiere, seconde = self._en_course(
+            lambda: self._client(self.owner).post(f"/api/dossiers/{dossier.pk}/submit/"),
+            lambda: self._importer(classeur),
+        )
+
+        self.assertEqual(premiere.status_code, status.HTTP_200_OK, premiere.data)
+        self.assertEqual(seconde.status_code, status.HTTP_200_OK, seconde.data)
+        self.assertEqual(seconde.data["lignes_creees"], 0)
+        self.assertIn("déjà déclaré", seconde.data["erreurs"][0]["motif"])
+        self.assertEqual(Expense.objects.filter(dossier=dossier).count(), 1)
+        self.assertFalse(Expense.objects.filter(dossier=dossier, status=Status.DRAFT).exists())
+
+    def test_deux_imports_du_meme_classeur_n_ecrivent_les_lignes_qu_une_fois(self):
+        """Le dossier existe déjà en brouillon : chaque import valide sans
+        voir l'autre, le second attend le verrou du dossier, puis la
+        contrainte refuse ses lignes — deux lignes en base, pas quatre."""
+        self._dossier("N-0021", "1000.00")
+        classeur = self._classeur("N-0021", [("Taxi", 500), ("Hôtel", 30000)])
+
+        premiere, seconde = self._en_course(
+            lambda: self._importer(classeur),
+            lambda: self._importer(classeur),
+        )
+
+        self.assertEqual(premiere.status_code, status.HTTP_200_OK, premiere.data)
+        self.assertEqual(premiere.data["lignes_creees"], 2)
+        self.assertEqual(seconde.status_code, status.HTTP_200_OK, seconde.data)
+        self.assertEqual(seconde.data["lignes_creees"], 0)
+        self.assertIn("autre import", seconde.data["erreurs"][0]["motif"])
+        self.assertEqual(Expense.objects.filter(title__in=["Taxi", "Hôtel"]).count(), 2)
+
+    def test_un_nouvel_envoi_du_meme_classeur_est_refuse_ligne_par_ligne(self):
+        self._dossier("N-0022", "1000.00")
+        classeur = self._classeur("N-0022", [("Taxi", 500)])
+        self.assertEqual(self._importer(classeur).data["lignes_creees"], 1)
+
+        response = self._importer(classeur)
+
+        self.assertEqual(response.data["lignes_creees"], 0)
+        self.assertIn("déjà présente", response.data["erreurs"][0]["motif"])
+        self.assertEqual(Expense.objects.filter(title="Taxi").count(), 1)
