@@ -17,7 +17,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, SimpleRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
 from rest_framework.views import APIView
 
 from core.journal import tracer
@@ -54,16 +54,29 @@ from .serializers import (
 )
 
 
-class LoginRateThrottle(AnonRateThrottle):
-    """Limite les tentatives d'authentification par adresse IP."""
+class LoginRateThrottle(SimpleRateThrottle):
+    """Limite les tentatives d'authentification par adresse IP.
+
+    Dérivait d'``AnonRateThrottle``, dont la clé est nulle — donc « laisse
+    passer » — dès que la requête est authentifiée. Or ``ObtainAuthToken``
+    ne retire pas les classes d'authentification : un jeton valide, celui
+    d'un manager, dans l'en-tête ``Authorization`` suffisait à lever la
+    limite par adresse et à pulvériser un mot de passe sur tous les comptes
+    (audit du 8 septembre 2026, §3.5). La vue n'authentifie plus rien
+    (``authentication_classes = []``), et cette classe compte **toujours**
+    par adresse, authentifié ou non.
+    """
 
     scope = "login"
 
-    def get_ident(self, request):
+    def get_cache_key(self, request, view):
         # Même lecture de l'adresse que le journal : derrière nginx, la
         # version DRF compterait toutes les tentatives sur l'adresse du
         # mandataire — ou sur ce que le client a écrit dans X-Forwarded-For.
-        return client_ip(request) or super().get_ident(request)
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": client_ip(request) or self.get_ident(request),
+        }
 
 
 class LoginUsernameThrottle(SimpleRateThrottle):
@@ -105,6 +118,10 @@ class ThrottledObtainAuthToken(ObtainAuthToken):
     qu'on a choisi d'activer ne se contourne pas.
     """
 
+    # Obtenir un jeton ne demande pas d'en avoir un : rien n'est authentifié
+    # ici, et un en-tête ``Authorization`` présent — valide ou non — ne
+    # change ni les limites ni le traitement.
+    authentication_classes = []
     throttle_classes = [LoginRateThrottle, LoginUsernameThrottle]
 
     def _journaliser_echec(self, request, username, user=None, motif=None):

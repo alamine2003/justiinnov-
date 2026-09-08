@@ -379,14 +379,12 @@ jobs:
           npx tsx scripts/shot-theme.mts
 
       - name: Limitation de débit de nginx
-        # `frontend/nginx.conf` limite `/api/` à 20 requêtes par seconde et
-        # par adresse, avec une réserve de 40. Cent requêtes lancées d'un
-        # coup (50 en parallèle) doivent donc en voir au moins une refusée
-        # en 429 — et cette réponse doit être le JSON de l'API, pas la page
-        # d'erreur de nginx. Cent plutôt que soixante : sur un exécuteur
-        # lent, soixante requêtes étalées sur deux secondes passeraient
-        # toutes. L'étape vient après les captures pour ne pas les priver
-        # de réserve.
+        # `frontend/nginx.conf` limite `/api/health/` à 2 requêtes par
+        # seconde et par adresse, avec une réserve de 5 (et `/api/` à 40,
+        # réserve 80). Cent requêtes lancées d'un coup (50 en parallèle)
+        # doivent donc en voir refusées en 429 — et cette réponse doit être
+        # le JSON de l'API, pas la page d'erreur de nginx. L'étape vient
+        # après les captures pour ne pas les priver de réserve.
         # Derrière Caddy, nginx lit l'adresse réelle dans X-Forwarded-For
         # (`set_real_ip_from`) : la rafale vient d'une seule adresse, celle
         # de l'exécuteur, et doit être limitée comme telle.

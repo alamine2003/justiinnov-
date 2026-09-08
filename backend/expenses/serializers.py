@@ -6,6 +6,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db import IntegrityError
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
@@ -168,6 +169,12 @@ def _equipe_effective(serializer, attrs):
 
 
 class BeneficiarySerializer(serializers.ModelSerializer):
+    # Cloisonné : un pays hors périmètre est un pays inconnu, et le
+    # validateur d'unicité ne dit rien du voisin (audit du 8 septembre 2026,
+    # §4.5).
+    country = ChampCloisonne(
+        queryset=Country.objects.all(), chemin_pays="pk", label=gettext_lazy("Pays")
+    )
     kind_display = serializers.CharField(source="get_kind_display", read_only=True)
     country_name = serializers.CharField(
         source="country.name", read_only=True, allow_null=True

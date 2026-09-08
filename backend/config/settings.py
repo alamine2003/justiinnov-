@@ -235,6 +235,9 @@ REST_FRAMEWORK = {
         "login": "10/min",
         "login_user": "5/min",
         "password": "10/min",
+        # Le point de santé interroge la base : compté par adresse (nginx
+        # le borne aussi, avant Django).
+        "health": "60/min",
     },
     # Nombre de mandataires de confiance devant Django (nginx, Caddy…) : sert
     # à lire l'adresse réelle du client dans X-Forwarded-For, pour le journal
