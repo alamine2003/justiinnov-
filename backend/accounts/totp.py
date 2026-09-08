@@ -59,7 +59,9 @@ def compteur_du_code(secret, code):
     if not secret or code is None:
         return None
     code = "".join(str(code).split())
-    if not code.isdigit():
+    # ``isdigit`` accepte les chiffres arabo-indiens et les exposants, que
+    # ``compare_digest`` refuse (TypeError, donc 500) : chiffres ASCII seuls.
+    if not (code.isascii() and code.isdigit()):
         return None
     generateur = pyotp.TOTP(secret)
     maintenant = timezone.now()

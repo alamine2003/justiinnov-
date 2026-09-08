@@ -368,6 +368,9 @@ docker compose exec scheduler python manage.py run_scheduler --once  # tout, tou
 
 | Tâche | Cadence par défaut | Variable |
 |---|---|---|
+| Reprise des e-mails de notification qui ne sont pas partis | toutes les 5 minutes | `SCHEDULE_EMAILS` |
+| Reprise des effacements de fichiers (pièces retirées avec un brouillon) | toutes les 5 minutes | `SCHEDULE_SUPPRESSIONS` |
+| Contrôle de fraîcheur des sauvegardes (marqueurs du volume, notification des administrateurs) | 8 h 30 | `SCHEDULE_VERIF_SAUVEGARDES` |
 | Notification des alertes | toutes les heures | `SCHEDULE_ALERTS` |
 | Rapport de rapprochement hebdomadaire | lundi 7 h | `SCHEDULE_WEEKLY_REPORT` |
 | Rapport de rapprochement mensuel | le 1er à 7 h | `SCHEDULE_MONTHLY_REPORT` |
@@ -519,11 +522,12 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `UNJUSTIFIED_ALERT_DAYS` | `0` | jours sans pièce après soumission avant alerte ; `0` désactive (idem) |
 | `WARN_WITHOUT_PROOF_SUBMISSION` | `1` | avertir à la soumission d'un dossier sans pièce (idem) |
 | `EMAIL_HOST` | — | serveur SMTP, **obligatoire hors mode debug** : sans lui, le backend refuse de démarrer plutôt que de perdre les alertes |
-| `EMAIL_BACKEND_CONSOLE` | `0` | `1` acquitte l'absence de SMTP hors debug : les e-mails vont dans les journaux (CI, préproduction) |
+| `EMAIL_BACKEND_CONSOLE` | `0` | `1` acquitte l'**absence** de SMTP hors debug : les e-mails vont dans les journaux (CI, préproduction). Avec un `EMAIL_HOST` renseigné, le démarrage est refusé : l'hôte l'emporterait et les envois échoueraient sans rien laisser dans les journaux |
 | `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | `587` / — / — / `1` | paramètres SMTP |
 | `DEFAULT_FROM_EMAIL` | `controle-budgetaire@justi-innov.local` | expéditeur des e-mails |
 | `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |
-| `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
+| `SCHEDULE_EMAILS` / `SCHEDULE_SUPPRESSIONS` / `SCHEDULE_VERIF_SAUVEGARDES` / `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `*/5 * * * *` / `*/5 * * * *` / `30 8 * * *` / `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
+| `SAUVEGARDES_MARQUEURS` / `SAUVEGARDES_AGE_MAX_HEURES` | vide / `26` | dossier des marqueurs de réussite des sauvegardes (volume monté dans l'ordonnanceur) et âge au-delà duquel une sauvegarde est en défaut |
 | `GUNICORN_WORKERS` / `GUNICORN_THREADS` / `GUNICORN_TIMEOUT` | `2` / `4` / `120` | processus, fils par processus et délai (s) du serveur d'application |
 | `PORT` | `8000` (backend), `80` (frontend) | port d'écoute, quand l'hébergeur l'impose (Railway) ; les contrôles de santé le suivent |
 | `NGINX_API_UPSTREAM` / `NGINX_RESOLVER` / `NGINX_RESOLVER_IPV6` / `NGINX_TRUSTED_PROXY` | `http://backend:8000` / résolveur du conteneur / `off` / `127.0.0.1` | image frontend : adresse du backend, résolveur DNS, résolution IPv6 et mandataire public cru pour `X-Forwarded-For` ; `frontend/nginx.conf` est un gabarit rempli au démarrage (`docs/deploiement-railway.md`) |
@@ -593,7 +597,23 @@ un fichier déjà présent sur le même dossier est refusé, sauf remplacement
 explicite, qui archive la version précédente. Les formats acceptés sont
 limités par liste blanche. Le téléchargement passe par une vue authentifiée
 plutôt que par une URL signée : le périmètre est vérifié à chaque accès et
-chaque téléchargement laisse une trace.
+chaque téléchargement laisse une trace. Cette trace (`downloaded`) dit que
+le serveur a **servi** le fichier — ouvert dans le stockage, remis en flux
+— pas que le client l'a reçu en entier, ce qu'aucun serveur ne peut
+attester ; un fichier introuvable dans le stockage répond 503, est
+journalisé, et ne laisse aucune trace de téléchargement.
+
+**Aucun fichier ne s'efface tant que la transaction peut être annulée.** La
+seule suppression tolérée — les pièces d'un brouillon retiré par son auteur
+— est *demandée* dans la transaction du retrait (`FichierASupprimer`, qui
+n'existe que si le retrait est acquis) et *exécutée* après le commit ; ce
+que le stockage n'a pas effacé est repris par l'ordonnanceur (`manage.py
+supprimer_fichiers`, `SCHEDULE_SUPPRESSIONS`), et jamais un fichier qu'une
+fiche référence encore. Un dépôt refusé par la base après l'écriture du
+fichier (doublon tranché par la contrainte) retire son fichier aussitôt.
+Ce qui resterait malgré tout se voit avec `manage.py pieces_orphelines`,
+qui inventorie sans rien effacer les objets qu'aucune fiche ne référence,
+plus vieux que 24 h (`--age`).
 
 ## Heure locale
 
@@ -621,9 +641,37 @@ inhabituelles. Une dépense est jugée inhabituelle par rapport aux **autres**
 dépenses de son pays — s'inclure dans sa propre référence l'empêcherait de
 s'en détacher.
 
+**Les mêmes chiffres partout** (règles en tête de `backend/budget/aggregates.py`,
+décision 54) : engagé, consommé, justifié et disponible se calculent une
+seule fois, pour l'API, les écrans, les exports et les rapports ; un
+brouillon ne compte nulle part, pas même dans la ligne TOTAL de l'export
+des dépenses, où il reste listé avec son statut ; un pays sans enveloppe
+de pays a pour attribué la somme de ses sous-enveloppes. **Un exercice se
+consolide aux taux en vigueur à sa date de référence** — le 31 décembre
+d'un exercice clos, ce jour pour l'exercice en cours — et les taux se
+publient dans l'ordre du temps sans jamais se modifier : un rapport sur
+2024 donne le même chiffre en 2026 qu'en 2025. Relire un exercice clos
+aux taux d'aujourd'hui est une **revalorisation**, un autre chiffre qui se
+demande explicitement (`manage.py consolidation --annee 2024
+--taux-du-jour`) et ne s'affiche sur aucun écran. Une enveloppe qui porte
+des lignes déclarées ne se désactive pas : son consommé disparaîtrait.
+
 Les alertes budgétaires deviennent des notifications persistantes, in-app et
 par e-mail, avec une clé d'unicité qui évite de signaler deux fois le même
 franchissement.
+
+**La notification et son e-mail sont deux choses.** La ligne in-app est
+écrite dans la transaction de l'action qu'elle signale, sous un point de
+reprise : une transition annulée ne laisse pas de notification, et une
+notification impossible (une erreur de base) n'annule jamais la transition
+ni sa trace d'audit — elle est journalisée. L'e-mail part **après** la
+validation de la transaction (`transaction.on_commit`), hors de tout verrou
+métier ; s'il ne part pas (serveur de courrier en panne, processus arrêté
+entre le commit et l'envoi), la ligne reste avec `emailed_at` vide et
+l'ordonnanceur la reprend toutes les cinq minutes (`manage.py
+envoyer_emails`, `SCHEDULE_EMAILS`), jusqu'à cinq essais et pour les
+notifications de moins de trois jours. `emailed_at` n'est posé qu'après
+l'envoi, jamais avant.
 
 ## Import Excel et N°ORDRE
 
@@ -645,6 +693,18 @@ obligatoires.
   Togo et le « 12 » de la Côte d'Ivoire sont deux dossiers. Une ligne rejoint
   le dossier de son pays s'il est encore en brouillon, sinon elle le crée ;
   un entier est lu en texte (« 12 », jamais « 12.0 »).
+- **Une ligne importée n'existe qu'une fois par dossier.** Son identité est
+  l'empreinte de son jour, de son libellé et de son montant
+  (`Expense.import_key`) : la validation la compare aux lignes déjà en
+  base, et la base (`ligne_importee_unique_par_dossier`) tranche ce que la
+  validation ne peut pas voir — un autre import du même classeur écrit au
+  même instant. Le second import est refusé entier, sans rien écrire, et
+  se relance : les lignes déjà présentes sont alors signalées une à une.
+  Une ligne saisie dans l'application n'a pas d'empreinte : deux dépenses
+  identiques saisies à la main sont deux dépenses. Le dossier est relu sous
+  verrou juste avant d'écrire : soumis entre-temps, il ne reçoit rien.
+  `manage.py doublons_importes` liste, sans rien supprimer, les groupes de
+  brouillons en double d'un même dossier.
 - Tout arrive en **brouillon**, sans montant justifié : MONTANT JUSTIFIER,
   ECART et STATUT sont ignorés — le siège constate. La mention de la colonne
   PIECES JUSTIFICATIVES est gardée en remarque de la ligne

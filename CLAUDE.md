@@ -183,14 +183,21 @@ l'application.
   comprise ; tous les autres travaillent dans
   l'application, où chaque chiffre est calculé et chaque action tracée. Un
   total ne s'écrit qu'à devise unique.
-- **Tout compte est protégé par une double authentification TOTP** et
-  porte une adresse professionnelle (`ALLOWED_EMAIL_DOMAINS`, par défaut
-  `innovpharma.net`). Un compte non enrôlé n'ouvre rien (`403
-  totp_setup_required`), comme un mot de passe provisoire ; le jeton exige
-  le `code` (`400 totp_required`) ; seul un administrateur réinitialise
-  l'enrôlement (`reset-2fa`), et cela se trace (`totp_reset`). La clé
-  `totp_secret` de `seed_users` n'existe que pour les environnements
-  jetables.
+- **La double authentification TOTP est prête, obligatoire seulement si la
+  politique du serveur l'exige** (`DJANGO_TOTP_REQUIRED`, faux par défaut :
+  la direction a reporté l'obligation — c'est la règle « proposée, pas
+  imposée » ci-dessus). Quand elle est exigée, un compte non enrôlé n'ouvre
+  rien (`403 totp_setup_required`), comme un mot de passe provisoire ; un
+  compte **enrôlé** présente son `code` à chaque connexion, que la politique
+  l'exige ou non (`400 totp_required`) — un second facteur activé
+  volontairement ne se contourne pas. Tout compte porte une adresse
+  professionnelle (`ALLOWED_EMAIL_DOMAINS`, par défaut `innovpharma.net`).
+  Seul un administrateur réinitialise l'enrôlement (`reset-2fa`), et cela
+  se trace (`totp_reset`). La clé `totp_secret` de `seed_users` n'existe que
+  pour les environnements jetables. Recommandation, hors politique : imposer
+  la double authentification aux comptes privilégiés (`admin`,
+  `super_admin`) avant l'ouverture aux filiales — c'est un réglage de
+  déploiement, pas une règle du code.
 - **L'interface est bilingue**, français et anglais : les textes passent par
   `gettext` côté serveur (un seul catalogue, `backend/locale/en`,
   `Accept-Language`, préférence `language` sur le profil ; notifications et

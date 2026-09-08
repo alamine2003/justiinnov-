@@ -22,24 +22,32 @@
 #
 # Secrets attendus par environnement (Settings › Environments) :
 #   DEPLOY_HOST          hôte SSH
-#   DEPLOY_USER          utilisateur SSH, membre du groupe docker
+#   DEPLOY_USER          compte SSH de livraison (`deploy`), qui n'est PAS
+#                        membre du groupe docker et dont la clé ne peut
+#                        exécuter que la commande forcée `justi-livrer`
+#                        (deploy/preparer_serveur.sh)
 #   DEPLOY_SSH_KEY       clé privée dédiée au déploiement
 #   DEPLOY_KNOWN_HOSTS   empreinte du serveur (`ssh-keyscan -H <hôte>`),
 #                        obligatoire : relever l'empreinte au premier contact
 #                        reviendrait à faire confiance à n'importe qui
 # Variables d'environnement (Settings › Environments › Variables) :
 #   APP_DOMAIN           domaine public, pour le contrôle final
-#   DEPLOY_PATH          (optionnel) répertoire sur le serveur, `~/justi-innov`
-#                        par défaut
 # Le fichier `.env` du serveur n'est jamais dans le dépôt : `deploy/.env.example`
 # en donne le modèle.
 #
-# La plateforme est hébergée sur Railway (`docs/deploiement-railway.md`), qui
-# construit et déploie lui-même chaque poussée sur `main` : ici, seule
-# l'intégration continue tourne. La publication des images et le déploiement
-# par SSH ne partent que si la variable de dépôt `DEPLOIEMENT_SSH` vaut `1`
-# (Settings › Secrets and variables › Actions › Variables) — le jour où un
-# serveur existe.
+# La livraison ne copie plus rien sur le serveur : elle lui demande, par la
+# commande forcée de sa clé, de déployer une étiquette d'images. Le
+# deploy.sh qui s'exécute est celui du répertoire d'exploitation, propriété
+# de root, que la clé ne peut pas remplacer ; les fichiers de deploy/ se
+# mettent à jour en root, à la main (deploy/README.md, « Réduire les
+# pouvoirs de la livraison »). Quiconque pousse sur `main` n'exécute donc
+# plus de code en root sur le serveur.
+#
+# La plateforme tourne sur le serveur Hetzner (deploy/README.md) ; Railway
+# reste une voie de repli documentée (`docs/deploiement-railway.md`). La
+# publication des images et le déploiement par SSH ne partent que si la
+# variable de dépôt `DEPLOIEMENT_SSH` vaut `1` (Settings › Secrets and
+# variables › Actions › Variables) — c'est le cas en production.
 name: Livraison continue
 
 on:
@@ -91,7 +99,7 @@ jobs:
       frontend: ${{ steps.noms.outputs.frontend }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Noms des images
         id: noms
@@ -110,9 +118,9 @@ jobs:
         # quand il y en a un, sert aux humains.
         run: echo "tag=sha-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -120,7 +128,7 @@ jobs:
 
       - name: Métadonnées backend
         id: meta_backend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ steps.noms.outputs.backend }}
           # Pas de `latest` : une étiquette mouvante ne dit pas quel code
@@ -134,7 +142,7 @@ jobs:
 
       - name: Métadonnées frontend
         id: meta_frontend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ steps.noms.outputs.frontend }}
           flavor: latest=false
@@ -145,7 +153,7 @@ jobs:
             org.opencontainers.image.title=Plateforme de contrôle budgétaire — frontend
 
       - name: Publier l'image backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: backend
           push: true
@@ -155,7 +163,7 @@ jobs:
           cache-to: type=gha,scope=backend,mode=max
 
       - name: Publier l'image frontend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: frontend
           target: runtime
@@ -183,17 +191,13 @@ jobs:
       url: https://${{ vars.APP_DOMAIN }}
     timeout-minutes: 20
 
-    env:
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '~/justi-innov' }}
-
     steps:
-      - uses: actions/checkout@v4
-
       - name: Vérifier les valeurs transmises au serveur
         # Ces valeurs finissent dans une ligne de commande distante : chacune
         # est confrontée à une expression régulière stricte, et le travail
         # s'arrête net si l'une d'elles sort du cadre — plutôt que d'espérer
-        # qu'un guillemet fasse son office.
+        # qu'un guillemet fasse son office. Le serveur les revérifie de son
+        # côté (deploy/justi-livrer), avec les mêmes motifs.
         env:
           IMAGE_TAG: ${{ needs.images.outputs.tag }}
           BACKEND_IMAGE: ${{ needs.images.outputs.backend }}
@@ -216,16 +220,9 @@ jobs:
           # l'est pas — `\]` fermait la classe et le motif exigeait « -] »,
           # ce qu'aucun compte GitHub ne satisfait (livraison v1.0.1).
           verifier GHCR_USER      "$GHCR_USER"      '^[]A-Za-z0-9._[-]+$'
-          verifier DEPLOY_PATH    "$DEPLOY_PATH"    '^~?[A-Za-z0-9._/-]+$'
-          # Le serveur lit ce fichier avec `set -a ; . ./.deploy-env` : les
+          # Une seule ligne, lue par la commande forcée du serveur : les
           # valeurs viennent d'être bornées, aucune n'a besoin de guillemets.
-          {
-            printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
-            printf 'BACKEND_IMAGE=%s\n' "$BACKEND_IMAGE"
-            printf 'FRONTEND_IMAGE=%s\n' "$FRONTEND_IMAGE"
-            printf 'APP_DOMAIN=%s\n' "$APP_DOMAIN"
-            printf 'GHCR_USER=%s\n' "$GHCR_USER"
-          } > .deploy-env
+          echo "livrer $IMAGE_TAG $BACKEND_IMAGE $FRONTEND_IMAGE $APP_DOMAIN $GHCR_USER" > commande
 
       - name: Préparer l'accès SSH
         env:
@@ -262,28 +259,16 @@ jobs:
             echo "  ConnectTimeout 20"
           } > ~/.ssh/config
 
-      - name: Copier les fichiers de déploiement
-        # DEPLOY_PATH a été vérifié plus haut : il ne contient ni espace ni
-        # métacaractère, et reste non cité pour que `~` se développe sur le
-        # serveur. Tout `deploy/` part, README et modèle de .env compris :
-        # la pile monte les scripts de sauvegarde, le SQL du rôle applicatif,
-        # la configuration Prometheus et le provisioning Grafana. Le `.env`
-        # du serveur n'est pas touché : il n'est pas dans le dépôt.
-        run: |
-          ssh cible "mkdir -p $DEPLOY_PATH"
-          scp -r deploy/. .deploy-env "cible:$DEPLOY_PATH/"
-
       - name: Déployer
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # Le jeton du workflow passe par l'entrée standard, jamais par la ligne
         # de commande (visible dans `ps`) ni par un fichier, et n'est plus
-        # valable une fois le travail terminé. Les autres valeurs viennent du
-        # fichier `.deploy-env` vérifié plus haut, qui est effacé aussitôt lu.
+        # valable une fois le travail terminé. La commande demandée n'est pas
+        # exécutée telle quelle : sshd lance la commande forcée de la clé,
+        # qui la relit, la valide et appelle le deploy.sh du serveur.
         run: |
-          printf '%s' "$GHCR_TOKEN" | ssh cible \
-            "cd $DEPLOY_PATH && set -a && . ./.deploy-env && set +a && \
-             rm -f .deploy-env && chmod +x deploy.sh && ./deploy.sh"
+          printf '%s' "$GHCR_TOKEN" | ssh cible "$(cat commande)"
 
       - name: Contrôle public
         env:

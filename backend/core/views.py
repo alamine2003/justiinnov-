@@ -10,23 +10,44 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
+from .requetes import client_ip
 from .serializers import HealthSerializer
+
+
+class HealthRateThrottle(SimpleRateThrottle):
+    """Le contrôle de santé interroge la base : il se compte par adresse.
+
+    Sans limite, n'importe qui pouvait faire exécuter un ``SELECT`` par
+    requête, sans compte ; et la limite nginx se contournait par un en-tête
+    ``Authorization`` arbitraire (audit du 8 septembre 2026, §4.6). Le
+    contrôle du conteneur, toutes les trente secondes, et celui de la
+    livraison restent loin de la limite.
+    """
+
+    scope = "health"
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": client_ip(request) or self.get_ident(request),
+        }
 
 
 class HealthView(APIView):
     """État de la plateforme, pour Docker et la livraison continue.
 
-    Ni compte, ni jeton, ni limitation de débit : le contrôle de santé du
-    conteneur l'interroge toutes les trente secondes, et un déploiement n'est
-    déclaré réussi que lorsqu'il répond. Il ne dit que deux choses — le
-    serveur répond, la base est joignable — et rien sur ce qu'elle contient.
+    Ni compte, ni jeton : le contrôle de santé du conteneur l'interroge
+    toutes les trente secondes, et un déploiement n'est déclaré réussi que
+    lorsqu'il répond. Il ne dit que deux choses — le serveur répond, la base
+    est joignable — et rien sur ce qu'elle contient.
     """
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = []
+    throttle_classes = [HealthRateThrottle]
 
     @extend_schema(responses={200: HealthSerializer, 503: HealthSerializer}, auth=[])
     def get(self, request):

@@ -7,15 +7,18 @@ utile, l'appel du service et la réponse. Les règles du circuit — verrous,
 ``expenses.transitions`` (décision 41).
 """
 
+import logging
+
 from django.db import IntegrityError, transaction
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from django.db.models import Prefetch
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import RolePermission, get_access
@@ -25,7 +28,7 @@ from core.journal import Trace
 from core.mixins import NoDestroyModelViewSet
 from core.regles import traduire_les_regles
 
-from . import transitions
+from . import stockage, transitions
 from .audit import record
 from .mixins import DraftDeletableViewSet
 from .models import (
@@ -50,6 +53,31 @@ from .serializers import (
     TransitionWarningMixin,
 )
 from .workflow import ACTION_CAPACITES
+
+
+logger = logging.getLogger(__name__)
+
+
+class FichierIntrouvable(APIException):
+    """La fiche existe, le fichier n'est plus dans le stockage : une anomalie
+    grave, jamais un simple 404 — le justificatif est censé être là."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = gettext_lazy(
+        "Le fichier de ce justificatif est introuvable dans le stockage : "
+        "l'anomalie est journalisée, prévenez l'administrateur."
+    )
+    default_code = "fichier_introuvable"
+
+
+class StockageIndisponible(APIException):
+    """Le stockage n'a pas répondu : à réessayer, rien n'est perdu."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = gettext_lazy(
+        "Le stockage des justificatifs ne répond pas : réessayez dans un instant."
+    )
+    default_code = "stockage_indisponible"
 
 
 class DossierTransitionResponseSerializer(TransitionWarningMixin, DossierDetailSerializer):
@@ -239,7 +267,12 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
     def perform_update(self, serializer):
+        # Relecture sous verrou : l'instance validée a été lue sans verrou,
+        # et une soumission a pu passer entre-temps. Écrire depuis l'objet
+        # périmé ramenait le dossier au brouillon sans réouverture ni trace.
+        serializer.instance = transitions.verrouiller(serializer.instance)
         with traduire_les_regles():
+            transitions.exiger_un_brouillon(serializer.instance)
             transitions.exiger_l_auteur_du_brouillon(
                 serializer.instance, get_access(self.request.user)
             )
@@ -318,20 +351,40 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         pas le droit de le voir révélerait son existence et son état.
         """
         self._check_country_scope(serializer)
+        # Le dossier est verrouillé le temps de l'insertion : une soumission
+        # ou un retrait du dossier au même instant attend, puis trouve la
+        # ligne — au lieu d'une ligne en brouillon dans un dossier déclaré
+        # que rien ne soumettrait plus, ou d'un retrait qui bute (§3.7, §4.4).
         with traduire_les_regles():
-            transitions.exiger_un_dossier_ouvert(serializer.validated_data.get("dossier"))
+            transitions.exiger_un_dossier_ouvert(
+                transitions.verrouiller_le_dossier_vise(
+                    serializer.validated_data.get("dossier"), None
+                )
+            )
         serializer.save(created_by=self.request.user.username)
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
     def perform_update(self, serializer):
         self._check_country_scope(serializer)
-        # Déplacer un brouillon vers un dossier déjà déclaré l'y perdrait,
-        # exactement comme l'y créer.
+        # Relecture sous verrou : l'instance validée a été lue sans verrou,
+        # et une soumission a pu passer entre-temps. Écrire depuis l'objet
+        # périmé ramenait la ligne au brouillon, sans imputation, sans
+        # réouverture ni trace — la seule exception à l'irréversibilité
+        # contournée par un double clic.
+        # Le dossier d'abord, la ligne ensuite : le même ordre que la
+        # soumission, qui verrouille le dossier puis ses lignes — l'ordre
+        # inverse pouvait s'interbloquer. Déplacer un brouillon vers un
+        # dossier déjà déclaré l'y perdrait, exactement comme l'y créer.
+        dossier_vise = transitions.verrouiller_le_dossier_vise(
+            serializer.validated_data.get("dossier"), serializer.instance
+        )
+        serializer.instance = transitions.verrouiller(serializer.instance)
         with traduire_les_regles():
+            transitions.exiger_un_brouillon(serializer.instance)
             transitions.exiger_l_auteur_du_brouillon(
                 serializer.instance, get_access(self.request.user)
             )
-            transitions.exiger_un_dossier_ouvert(serializer.validated_data.get("dossier"))
+            transitions.exiger_un_dossier_ouvert(dossier_vise)
         stored = serializer.instance
         previous = {
             "amount": str(stored.amount),
@@ -377,10 +430,42 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     write_capability = "proofs.upload"
     action_write_capabilities = {"review": "proofs.review"}
 
+    def create(self, request, *args, **kwargs):
+        """Dépose une pièce ; un échec ne laisse pas son fichier derrière lui.
+
+        ``FileField`` écrit le fichier dans le stockage **avant** l'``INSERT``,
+        et l'écriture du fichier n'a pas de retour arrière : si la
+        transaction de la vue est ensuite annulée — trace d'audit
+        impossible, contrainte sur la pièce remplacée, verrou du dossier
+        perdu — la fiche disparaît et le fichier reste. Il est retiré ici,
+        après la sortie du bloc transactionnel, sur le chemin d'erreur
+        (audit du 8 septembre 2026, §4.4 ; le cas du seul ``INSERT`` refusé
+        est traité dans ``ProofSerializer.create``).
+        """
+        with stockage.suivre_les_depots() as deposes:
+            try:
+                return super().create(request, *args, **kwargs)
+            except Exception:
+                for nom in deposes:
+                    stockage.effacer_nom_sans_bruit(nom)
+                raise
+
     @transaction.atomic
     def perform_create(self, serializer):
         self._check_country_scope(serializer)
-        dossier = serializer.validated_data["dossier"]
+        # Le dossier sous verrou le temps du dépôt : un retrait du brouillon
+        # au même instant attend, puis la pièce ne trouve plus son dossier
+        # (404) au lieu d'une violation de clé étrangère ; une clôture au
+        # même instant est relue avant d'écrire.
+        with traduire_les_regles():
+            dossier = transitions.verrouiller_le_dossier_vise(
+                serializer.validated_data["dossier"], None
+            )
+        if dossier.status in transitions.PROOF_LOCKED_STATUSES:
+            raise ValidationError(
+                _("Le dossier est clôturé : plus aucun justificatif ne peut y être ajouté.")
+            )
+        serializer.validated_data["dossier"] = dossier
         replaced = serializer.validated_data.get("replaces")
         if replaced is not None:
             # Revalidé ici, hors sérialiseur : la pièce remplacée change
@@ -464,6 +549,22 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         pièce de vingt mégaoctets ne doit pas en coûter vingt au serveur.
         """
         proof = self.get_object()
+        # Le fichier d'abord, la trace ensuite : une entrée « téléchargé »
+        # écrite avant l'ouverture attestait d'un téléchargement qui n'avait
+        # pas eu lieu quand l'objet manquait dans le stockage. La trace dit
+        # que le serveur a **servi** le fichier — pas que le client l'a
+        # reçu en entier, ce qu'aucun serveur ne peut attester.
+        try:
+            contenu = proof.file.open("rb")
+        except FileNotFoundError as exc:
+            logger.error(
+                "Justificatif %s (%s) introuvable dans le stockage : %s",
+                proof.pk, proof.file.name, exc,
+            )
+            raise FichierIntrouvable() from exc
+        except Exception as exc:
+            logger.exception("Stockage des justificatifs injoignable (%s)", proof.file.name)
+            raise StockageIndisponible() from exc
         record(
             request,
             AuditLog.Action.DOWNLOADED,
@@ -472,7 +573,7 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
             sha256=proof.sha256,
         )
         return FileResponse(
-            proof.file.open("rb"),
+            contenu,
             as_attachment=True,
             filename=proof.original_name or proof.file.name.rsplit("/", 1)[-1],
             content_type=proof.content_type or None,

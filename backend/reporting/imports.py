@@ -18,6 +18,7 @@ ligne dans le classeur ; rien n'est écrit tant qu'une seule ligne est en
 erreur.
 """
 
+import hashlib
 import logging
 import re
 import zipfile
@@ -371,6 +372,18 @@ def _empreinte(number, jour, title, amount):
     return (number, jour, title, amount)
 
 
+def cle_d_import(jour, title, amount):
+    """Identité d'une ligne importée dans son dossier (``Expense.import_key``).
+
+    La même chose que :func:`_empreinte`, sans le dossier — qui est l'autre
+    colonne de la contrainte —, résumée en une empreinte de taille fixe.
+    La validation la compare aux lignes déjà en base ; la base la compare
+    à ce que la validation ne peut pas voir, l'autre import en cours.
+    """
+    texte = f"{jour.isoformat()}|{title}|{Decimal(amount):.2f}"
+    return hashlib.sha256(texte.encode("utf-8")).hexdigest()
+
+
 def _lignes_en_base(dossier, cache):
     """Empreintes des lignes déjà présentes dans un dossier, lues une fois."""
     if dossier.pk not in cache:
@@ -600,6 +613,8 @@ def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
             dossier = dossiers_existants[ligne["cle_dossier"]]
             if dossier is None:
                 dossier = _creer_le_dossier(ligne, user)
+            else:
+                dossier = _verrouiller_le_dossier(dossier, ligne)
             dossiers[ligne["cle_dossier"]] = dossier
         depenses.append(
             Expense(
@@ -620,11 +635,40 @@ def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
                 note=ligne["note"],
                 status=Status.DRAFT,
                 created_by=user.username,
+                import_key=cle_d_import(ligne["date"].date(), ligne["title"], ligne["amount"]),
             )
         )
     # Aucun signal n'écoute ``Expense`` : l'insertion par lots ne fait
-    # perdre aucune trace, et évite une requête par ligne.
-    Expense.objects.bulk_create(depenses, batch_size=TAILLE_LOT)
+    # perdre aucune trace, et évite une requête par ligne. La contrainte
+    # ``ligne_importee_unique_par_dossier`` tranche ce que la validation n'a
+    # pas pu voir : un autre import du même classeur, écrit entre-temps.
+    try:
+        with transaction.atomic():
+            Expense.objects.bulk_create(depenses, batch_size=TAILLE_LOT)
+    except IntegrityError:
+        raise _LigneEnErreur(
+            valides[0]["ligne"],
+            _(
+                "Un autre import vient d'écrire une ou plusieurs de ces lignes : "
+                "relancez l'import, les lignes déjà présentes seront signalées."
+            ),
+        )
+
+
+def _verrouiller_le_dossier(dossier, ligne):
+    """Relit sous verrou un dossier existant, juste avant d'y écrire.
+
+    Son état a été lu à la validation, sans verrou : soumis entre-temps, il
+    recevrait des lignes en brouillon que rien ne soumettrait plus. Le
+    verrou fait attendre une soumission en cours, et l'état relu fait foi.
+    """
+    verrouille = Dossier.objects.select_for_update(of=("self",)).get(pk=dossier.pk)
+    if verrouille.status != Status.DRAFT:
+        raise _LigneEnErreur(
+            ligne["ligne"],
+            _("Le dossier « %(number)s » est déjà déclaré") % {"number": ligne["number"]},
+        )
+    return verrouille
 
 
 def _resultat(dossiers, lignes, erreurs, dry_run, *, equipes_creees=0, managers_crees=0):

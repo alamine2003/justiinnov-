@@ -20,6 +20,8 @@ Trois refus, trois codes :
 
 from contextlib import contextmanager
 
+from django.db.models import ProtectedError
+from django.utils.translation import gettext as _
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 
@@ -56,6 +58,20 @@ def traduire_les_regles():
         yield
     except RegleViolee as exc:
         raise ValidationError({exc.champ: [str(exc.message)]}) from exc
+    except ProtectedError as exc:
+        # Un retrait qui bute sur une ligne ou une pièce arrivée entre-temps
+        # : la base a refusé, la transaction est défaite, rien n'a été
+        # perdu. Un 500 disait le contraire.
+        raise ValidationError(
+            {
+                "non_field_errors": [
+                    _(
+                        "Cet élément a reçu une ligne ou une pièce pendant son "
+                        "retrait : rien n'a été supprimé, rechargez et réessayez."
+                    )
+                ]
+            }
+        ) from exc
     except PermissionRefusee as exc:
         raise PermissionDenied(str(exc)) from exc
     except HorsPerimetre as exc:

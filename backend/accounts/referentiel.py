@@ -7,6 +7,7 @@ dépendances, ``accounts`` juste au-dessus (décision 40).
 """
 
 from django.db.models import Q
+from django.utils.translation import gettext_lazy
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import filters, viewsets
@@ -40,8 +41,53 @@ from core.serializers import (
 )
 
 from .models import HEADQUARTERS_ROLES
+from .perimetre import ChampCloisonne
 from .permissions import RolePermission, get_access, roles_pour
 from .scoping import CountryScopedMixin
+
+
+def _cloisonne(serializer_class, **champs):
+    """Le sérialiseur de ``core``, ses clés étrangères limitées au périmètre.
+
+    ``core`` ne connaît pas les périmètres (décision 40) : ses sérialiseurs
+    exposent ``country`` comme une clé étrangère ordinaire, et leur
+    validateur d'unicité ``(country, nom)`` s'exécutait **avant** le contrôle
+    de périmètre de la vue. Un compte restreint doté de ``referentiel.create``
+    lisait alors, dans la différence entre « existe déjà » (400) et « hors
+    périmètre » (403), les équipes, projets et bénéficiaires de la filiale
+    voisine (audit du 8 septembre 2026, §4.5). Ici, comme pour les dépenses
+    et les enveloppes, un identifiant hors périmètre est un identifiant
+    inconnu : même réponse, rien à lire. La classe garde son nom, donc son
+    nom de composant dans le schéma d'API.
+    """
+    return type(serializer_class.__name__, (serializer_class,), {
+        "__doc__": serializer_class.__doc__, "__module__": serializer_class.__module__, **champs,
+    })
+
+
+def _pays_cloisonne():
+    # Le libellé garde le titre du champ dans le schéma d'API, comme la clé
+    # étrangère déduite du modèle qu'il remplace.
+    return ChampCloisonne(
+        queryset=Country.objects.all(), chemin_pays="pk", label=gettext_lazy("Pays")
+    )
+
+
+TeamSerializer = _cloisonne(TeamSerializer, country=_pays_cloisonne())
+CostCenterSerializer = _cloisonne(CostCenterSerializer, country=_pays_cloisonne())
+ProjectSerializer = _cloisonne(ProjectSerializer, country=_pays_cloisonne())
+ExpenseTitleSerializer = _cloisonne(ExpenseTitleSerializer, country=_pays_cloisonne())
+MarketingCategorySerializer = _cloisonne(MarketingCategorySerializer, country=_pays_cloisonne())
+# Un manager n'a pas de pays propre : c'est le pays qui le rattache. Un rôle
+# restreint doté de ``countries.update`` ne rattache que des managers de
+# son périmètre — ou des managers encore sans pays, qu'il peut accueillir.
+CountryWriteSerializer = _cloisonne(
+    CountryWriteSerializer,
+    managers=ChampCloisonne(
+        many=True, queryset=Manager.objects.all(), chemin_pays="countries",
+        distinct=True, required=False,
+    ),
+)
 
 
 class ScopedViewSet(CountryScopedMixin, NoDestroyModelViewSet):

@@ -39,7 +39,10 @@ class SuppressionDossierTests(ExpenseTestCase):
         chemin = piece.file.name
         self.assertTrue(default_storage.exists(chemin))
 
-        response = self.client.delete(f"/api/dossiers/{self.dossier.pk}/")
+        # Le fichier s'efface après la validation de la transaction
+        # (``expenses.stockage``) : les rappels après commit sont joués ici.
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(f"/api/dossiers/{self.dossier.pk}/")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Dossier.objects.filter(pk=self.dossier.pk).exists())

@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, MultiPartParser
 
-from budget.aggregates import consolidation_par_pays, current_rates, to_xof
+from budget.aggregates import consolidation_par_pays, current_rates, date_de_reference, to_xof
 from core.journal import tracer
 from core.models import Country
 from expenses.models import AuditLog
@@ -108,7 +108,10 @@ class DashboardView(APIView):
         country_id = _as_int(request.query_params.get("country"), "country")
         budgets, dossiers, expenses = scoped_querysets(request, year, country_id)
 
-        rows, _, consolidated = self._per_country(budgets)
+        # Un exercice se consolide aux taux en vigueur à sa date de référence
+        # — sa clôture, ou ce jour — pour qu'un exercice clos ne bouge plus.
+        rates = current_rates(on_date=date_de_reference(year))
+        rows, _, consolidated = self._per_country(budgets, rates)
         current_alerts = alert_rules.collect(budgets, dossiers, expenses)
 
         return Response(
@@ -116,7 +119,7 @@ class DashboardView(APIView):
                 "year": year,
                 # Les totaux en devise n'existent que par pays : au niveau
                 # global, seul le FCFA consolidé a un sens.
-                "totals": self._totaux_consolides(rows),
+                "totals": self._totaux_consolides(rows, rates),
                 "consolidated_xof": consolidated,
                 "countries": rows,
                 "workload": self._workload(dossiers, expenses),
@@ -136,15 +139,14 @@ class DashboardView(APIView):
     #: Chiffres d'une ligne de pays qui se consolident en FCFA.
     MONTANTS = ("allocated", "engaged", "consumed", "justified", "remaining")
 
-    def _totaux_consolides(self, rows):
+    def _totaux_consolides(self, rows, rates):
         """Totaux globaux, en FCFA uniquement.
 
         Additionner « allocated » du Togo (XOF) et du Guinée (GNF) donnait un
         chiffre sans unité, présenté comme un total. Chaque montant est
-        converti au taux courant ; un pays dont la devise n'a pas de taux est
-        écarté et nommé, jamais absorbé.
+        converti aux taux de la date de référence de l'exercice ; un pays
+        dont la devise n'a pas de taux est écarté et nommé, jamais absorbé.
         """
-        rates = current_rates()
         totaux = {key: ZERO for key in self.MONTANTS}
         non_converties = set()
         for row in rows:
@@ -169,10 +171,10 @@ class DashboardView(APIView):
             "unconverted_currencies": sorted(non_converties),
         }
 
-    def _per_country(self, budgets):
+    def _per_country(self, budgets, rates):
         """Agrège par pays via :func:`consolidation_par_pays`, seul point de
         calcul partagé avec ``/api/budgets/summary/``."""
-        rows, consolidated = consolidation_par_pays(budgets, rates=current_rates())
+        rows, consolidated = consolidation_par_pays(budgets, rates=rates)
 
         # Totaux en devises locales additionnées : conservés tels quels pour
         # ne pas changer le contrat de la vue ici ; le sens n'en est assuré

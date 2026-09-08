@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Prépare une machine Ubuntu 24.04 neuve pour recevoir la pile de production
 # (« Préparer un serveur », README.md de ce dossier) : Docker Engine et son
-# plugin Compose, l'utilisateur `deploy` membre du groupe docker, sa clé SSH
-# de déploiement, le pare-feu (22, 80, 443) et les mises à jour de sécurité
-# automatiques. Idempotent : relançable sans dégât.
+# plugin Compose, l'utilisateur `deploy` — SANS le groupe docker, qui vaut
+# root — dont la clé SSH ne peut exécuter que la commande forcée de
+# livraison (justi-livrer, par un sudo restreint à elle seule), le
+# répertoire d'exploitation propriété de root, le pare-feu (22, 80, 443)
+# et les mises à jour de sécurité automatiques. Idempotent.
 #
-# Depuis votre poste, en root sur le serveur, la clé publique de déploiement
-# en argument :
+# Depuis votre poste : d'abord les fichiers d'exploitation, en root, puis ce
+# script, la clé publique de déploiement en argument :
 #
+#   rsync -a --exclude .env deploy/ root@<hôte>:/home/deploy/justi-innov/
 #   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)'" \
 #       < deploy/preparer_serveur.sh
 #
-# Les clés déjà autorisées pour root (celle de votre poste, posée par
-# l'hébergeur) sont reprises pour `deploy`, afin que vous puissiez y ouvrir
-# une session pour la première mise en service.
+# Les humains entrent en root, avec la clé que l'hébergeur y a posée : le
+# compte `deploy` ne sert qu'à la livraison continue, et ne peut rien
+# d'autre (README.md, « Réduire les pouvoirs de la livraison »).
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8
 
@@ -40,17 +43,34 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 systemctl enable --now docker
 
-echo "== Utilisateur deploy"
+echo "== Utilisateur deploy : hors du groupe docker, une seule commande"
+REPERTOIRE=/home/deploy/justi-innov
+if [ ! -f "$REPERTOIRE/justi-livrer" ]; then
+  echo "✘ $REPERTOIRE/justi-livrer absent : copiez d'abord deploy/ (rsync, voir l'en-tête)." >&2
+  exit 1
+fi
 id deploy >/dev/null 2>&1 || adduser --disabled-password --gecos "" deploy
-usermod -aG docker deploy
+gpasswd -d deploy docker >/dev/null 2>&1 || true
+install -o root -g root -m 0755 "$REPERTOIRE/justi-livrer" /usr/local/bin/justi-livrer
+cat > /etc/sudoers.d/justi-livrer <<'EOF'
+# La clé de livraison ne peut exécuter que ceci, en root, sans mot de passe.
+Defaults!/usr/local/bin/justi-livrer env_keep += "SSH_ORIGINAL_COMMAND"
+deploy ALL=(root) NOPASSWD: /usr/local/bin/justi-livrer
+EOF
+chmod 0440 /etc/sudoers.d/justi-livrer
+visudo -cf /etc/sudoers.d/justi-livrer >/dev/null
 install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
-install -d -m 750 -o deploy -g deploy /home/deploy/justi-innov
-touch /home/deploy/.ssh/authorized_keys
-{ [ -f /root/.ssh/authorized_keys ] && cat /root/.ssh/authorized_keys; echo "$CLE_DEPLOIEMENT"; } \
-  | sort -u > /home/deploy/.ssh/authorized_keys.tmp
-mv /home/deploy/.ssh/authorized_keys.tmp /home/deploy/.ssh/authorized_keys
+printf 'command="sudo -n /usr/local/bin/justi-livrer",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty %s\n' \
+  "$CLE_DEPLOIEMENT" > /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
-chown -R deploy:deploy /home/deploy/.ssh
+chown deploy:deploy /home/deploy/.ssh/authorized_keys
+# Le répertoire d'exploitation appartient à root : la clé de livraison ne
+# peut pas remplacer ce qu'elle exécute, ni lire le .env.
+chown -R root:root "$REPERTOIRE"
+find "$REPERTOIRE" -type d -exec chmod 755 {} +
+find "$REPERTOIRE" -type f -exec chmod 644 {} +
+chmod 755 "$REPERTOIRE"/*.sh
+if [ -f "$REPERTOIRE/.env" ]; then chmod 600 "$REPERTOIRE/.env"; fi
 
 echo "== Pare-feu"
 ufw default deny incoming >/dev/null

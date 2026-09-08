@@ -457,7 +457,10 @@ class NotificationTests(DashboardTestCase):
         self.controller.email = "dina@example.org"
         self.controller.save()
 
-        self.soumettre()
+        # L'e-mail part après la validation de la transaction de la
+        # soumission : les rappels après commit sont joués ici.
+        with self.captureOnCommitCallbacks(execute=True):
+            self.soumettre()
 
         # Le socle de test peut donner une adresse à d'autres comptes du
         # siège : ce qui compte est que la contrôleuse reçoive le sien, seule

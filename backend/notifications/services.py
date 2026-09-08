@@ -4,13 +4,29 @@ Chaque destinataire lit sa notification et son e-mail dans **sa** langue :
 titre et corps sont rendus au moment de l'écriture, sous la langue du
 profil. Un titre rendu en amont l'aurait été dans la langue du processus
 émetteur — celle de l'ordonnanceur, pour tout le monde.
+
+**La notification et l'e-mail sont deux choses.** La ligne in-app est
+écrite dans la transaction de l'action qu'elle signale : une transition
+annulée ne laisse pas de notification derrière elle. L'e-mail, lui, part
+**après** la validation de cette transaction (``transaction.on_commit``),
+hors de tout verrou métier : un serveur SMTP lent bloquait l'enveloppe du
+pays le temps de cinq envois, et un serveur en panne faisait de chaque
+soumission une attente de dix secondes. ``on_commit`` ne garantit pas la
+livraison — un processus qui meurt entre le commit et l'envoi perd le
+rappel — : la ligne elle-même est l'enregistrement durable du travail
+restant (``emailed_at`` vide), et ``envoyer_les_emails`` reprend ces lignes
+depuis l'ordonnanceur (``manage.py envoyer_emails``, toutes les cinq
+minutes) jusqu'à ``ESSAIS_MAX`` essais.
 """
 
 import logging
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.mail import EmailMessage, get_connection
+from django.db import transaction
+from django.db.models import F, Q
 from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 
@@ -22,6 +38,24 @@ logger = logging.getLogger(__name__)
 
 #: Langue des destinataires dont le profil n'en déclare pas.
 LANGUE_PAR_DEFAUT = "fr"
+
+#: Une ligne réclamée pour un envoi (``email_attempted_at`` posé) n'est
+#: reprise par un autre processus qu'après ce délai : le temps qu'un envoi
+#: en cours aboutisse, ou qu'un processus mort soit tenu pour tel. Un envoi
+#: interrompu entre la réclamation et ``send()`` est donc rejoué — au pire
+#: en double, jamais perdu.
+DELAI_DE_REPRISE = timedelta(minutes=10)
+
+#: Au-delà, on n'insiste plus : une adresse invalide ou un serveur qui
+#: refuse durablement se lisent dans les journaux, pas dans une boucle.
+ESSAIS_MAX = 5
+
+#: L'ordonnanceur ne reprend pas les lignes plus anciennes : une
+#: notification d'il y a un mois dont l'e-mail n'est jamais parti n'a plus
+#: à partir, et les lignes antérieures à la reprise (``emailed_at`` vide
+#: parce que le destinataire n'avait pas d'adresse) ne doivent pas se
+#: mettre à partir en bloc au premier passage.
+AGE_MAX_DE_REPRISE = timedelta(days=3)
 
 
 def langue_de(user):
@@ -126,8 +160,13 @@ def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
         ).select_related("recipient", "recipient__profile")
     )
 
-    if send_email and created:
-        _send_emails(created, link)
+    if send_email:
+        a_envoyer = [n.pk for n in created if n.recipient.email]
+        if a_envoyer:
+            # Après la validation de la transaction de l'appelant — hors
+            # transaction, tout de suite. ``robust`` : un échec ici ne
+            # remonte pas à l'appelant, la ligne reste à reprendre.
+            transaction.on_commit(lambda: envoyer_les_emails(a_envoyer), robust=True)
     return created
 
 
@@ -137,57 +176,105 @@ def _sujet(title):
     return _("[Contrôle budgétaire]") + " " + " ".join(title.split())
 
 
-def _send_emails(notifications, link):
-    """Envoie l'e-mail associé, sans jamais faire échouer l'action métier.
+def reclamer(pks=None, *, maintenant):
+    """Réclame les lignes dont l'e-mail reste à envoyer, en une mise à jour.
 
-    Le sujet et le corps reprennent la ligne enregistrée, déjà rendue dans
-    la langue du destinataire ; seul le préfixe du sujet reste à traduire.
+    Une seule requête conditionnelle : la ligne n'est prise que si l'e-mail
+    n'est pas parti, si personne ne l'a réclamée depuis moins de
+    ``DELAI_DE_REPRISE`` et si les essais ne sont pas épuisés. Deux
+    processus — la requête qui vient de commiter et l'ordonnanceur — ne
+    peuvent pas la prendre tous les deux : le second ne voit plus la
+    condition vraie. Sans ``pks`` (ordonnanceur), les lignes plus vieilles
+    que ``AGE_MAX_DE_REPRISE`` sont laissées.
+    """
+    a_reprendre = Notification.objects.filter(
+        emailed_at__isnull=True,
+        recipient__email__gt="",
+        email_attempts__lt=ESSAIS_MAX,
+    ).filter(
+        Q(email_attempted_at__isnull=True)
+        | Q(email_attempted_at__lt=maintenant - DELAI_DE_REPRISE)
+    )
+    if pks is not None:
+        a_reprendre = a_reprendre.filter(pk__in=pks)
+    else:
+        a_reprendre = a_reprendre.filter(created_at__gte=maintenant - AGE_MAX_DE_REPRISE)
+    a_reprendre.update(
+        email_attempted_at=maintenant, email_attempts=F("email_attempts") + 1
+    )
+    reclamees = Notification.objects.filter(
+        email_attempted_at=maintenant, emailed_at__isnull=True
+    ).select_related("recipient", "recipient__profile")
+    if pks is not None:
+        reclamees = reclamees.filter(pk__in=pks)
+    return list(reclamees)
 
-    Les lignes à envoyer sont d'abord **réclamées** : ``emailed_at`` est posé
-    en une seule mise à jour filtrée sur les lignes encore vierges. L'ordonnanceur
-    et une requête web peuvent notifier le même événement au même moment ;
-    avec ``ignore_conflicts``, chacun relisait ensuite la même ligne et
-    envoyait le même e-mail deux fois. Un seul des deux gagne la mise à jour.
+
+def envoyer_les_emails(pks=None):
+    """Envoie les e-mails des notifications réclamées ; rend ``(envoyés, échecs)``.
+
+    Appelé tout de suite après le commit de l'action (``notify``), puis par
+    l'ordonnanceur pour ce qui n'est pas parti. Chaque message est envoyé et
+    marqué **un par un** : trois envois réussis sur cinq restent acquis
+    quand le quatrième échoue, et ne repartent pas. ``emailed_at`` n'est
+    posé qu'après ``send()`` — jamais avant : un horodatage posé d'avance
+    prétendait qu'un e-mail était parti quand le processus mourait entre
+    les deux.
 
     Un message par destinataire : un envoi groupé exposait à chacun les
-    adresses de tous les autres.
+    adresses de tous les autres. Le sujet et le corps reprennent la ligne
+    enregistrée, déjà rendue dans la langue du destinataire ; seul le
+    préfixe du sujet reste à traduire. Aucune exception ne sort d'ici : un
+    échec est journalisé, la ligne reste à reprendre.
     """
-    addressed = [n for n in notifications if n.recipient.email]
-    if not addressed:
-        return
-
-    stamped = timezone.now()
-    Notification.objects.filter(
-        pk__in=[n.pk for n in addressed], emailed_at__isnull=True
-    ).update(emailed_at=stamped)
-    reclamees = [
-        n for n in Notification.objects.filter(
-            pk__in=[n.pk for n in addressed], emailed_at=stamped
-        ).select_related("recipient", "recipient__profile")
-    ]
+    reclamees = reclamer(pks, maintenant=timezone.now())
     if not reclamees:
-        return
+        return 0, 0
 
-    url = f"{settings.APP_BASE_URL}{link}" if link else settings.APP_BASE_URL
+    envoyes = echecs = 0
     try:
-        with get_connection() as connection:
-            for notification in reclamees:
-                with translation.override(langue_de(notification.recipient)):
-                    message = (
-                        f"{notification.body}\n\n{url}" if notification.body else url
-                    )
-                    EmailMessage(
-                        subject=_sujet(notification.title),
-                        body=message,
-                        from_email=settings.DEFAULT_FROM_EMAIL,
-                        to=[notification.recipient.email],
-                        connection=connection,
-                    ).send(fail_silently=False)
+        connection = get_connection()
+        connection.open()
     except Exception:
-        # Une notification in-app reste enregistrée : l'utilisateur la verra.
-        # L'horodatage est retiré : rien n'est parti, il ne faut pas le
-        # prétendre.
-        logger.exception("Envoi d'e-mail de notification impossible")
-        Notification.objects.filter(
-            pk__in=[n.pk for n in reclamees], emailed_at=stamped
-        ).update(emailed_at=None)
+        logger.exception(
+            "Serveur de courrier injoignable : %d e-mail(s) à reprendre", len(reclamees)
+        )
+        return 0, len(reclamees)
+    try:
+        for notification in reclamees:
+            if _envoyer_un(notification, connection):
+                envoyes += 1
+            else:
+                echecs += 1
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            logger.exception("Fermeture de la connexion de courrier impossible")
+    return envoyes, echecs
+
+
+def _envoyer_un(notification, connection):
+    """Un e-mail ; ``True`` s'il est parti et marqué comme tel."""
+    lien = notification.link
+    url = f"{settings.APP_BASE_URL}{lien}" if lien else settings.APP_BASE_URL
+    try:
+        with translation.override(langue_de(notification.recipient)):
+            message = f"{notification.body}\n\n{url}" if notification.body else url
+            EmailMessage(
+                subject=_sujet(notification.title),
+                body=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[notification.recipient.email],
+                connection=connection,
+            ).send(fail_silently=False)
+    except Exception:
+        # La notification in-app reste enregistrée : l'utilisateur la verra.
+        # Rien n'est parti, rien ne le prétend ; l'ordonnanceur reprendra.
+        logger.exception(
+            "Envoi d'e-mail de notification impossible (notification %s, essai %d/%d)",
+            notification.pk, notification.email_attempts, ESSAIS_MAX,
+        )
+        return False
+    Notification.objects.filter(pk=notification.pk).update(emailed_at=timezone.now())
+    return True

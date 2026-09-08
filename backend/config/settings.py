@@ -235,6 +235,9 @@ REST_FRAMEWORK = {
         "login": "10/min",
         "login_user": "5/min",
         "password": "10/min",
+        # Le point de santé interroge la base : compté par adresse (nginx
+        # le borne aussi, avant Django).
+        "health": "60/min",
     },
     # Nombre de mandataires de confiance devant Django (nginx, Caddy…) : sert
     # à lire l'adresse réelle du client dans X-Forwarded-For, pour le journal
@@ -318,6 +321,13 @@ SPECTACULAR_SETTINGS = {
 # son code à chaque connexion. L'obligation, elle, est une politique :
 # DJANGO_TOTP_REQUIRED=1 ferme la plateforme aux comptes non enrôlés
 # (cf. accounts.middleware). Par défaut, elle n'est pas exigée.
+# Contrôle de fraîcheur des sauvegardes (reporting/management/commands/
+# verifier_sauvegardes.py) : le volume `sauvegardes` de la pile est monté
+# ici en lecture seule, ses marqueurs `.derniere-reussite-*` disent quand
+# chaque sauvegarde a réussi pour la dernière fois. Vide hors production.
+SAUVEGARDES_MARQUEURS = os.environ.get("SAUVEGARDES_MARQUEURS", "")
+SAUVEGARDES_AGE_MAX_HEURES = int(os.environ.get("SAUVEGARDES_AGE_MAX_HEURES", "26"))
+
 TOTP_REQUIRED = os.environ.get("DJANGO_TOTP_REQUIRED", "0") == "1"
 # Nom affiché par l'application d'authentification à côté du compte.
 TOTP_ISSUER = "JUSTI INNOV"
@@ -445,6 +455,18 @@ def choisir_email_backend(email_host, *, debug, console):
     que personne ne s'en aperçoive. Fonction pure, pour être testable sans
     recharger les réglages.
     """
+    if email_host and console:
+        # Les deux ensemble ne veulent rien dire, et l'hôte l'emportait en
+        # silence : un `smtp.a-renseigner.invalid` posé en attendant le vrai
+        # serveur faisait échouer chaque envoi après dix secondes, sans que
+        # les journaux reçoivent quoi que ce soit — l'inverse de ce que
+        # EMAIL_BACKEND_CONSOLE promet. La contradiction se dit au démarrage.
+        raise ImproperlyConfigured(
+            "EMAIL_HOST et EMAIL_BACKEND_CONSOLE=1 se contredisent : l'hôte "
+            "l'emporterait, et les alertes échoueraient sans passer par les "
+            "journaux. Videz EMAIL_HOST pour écrire dans les journaux, ou "
+            "retirez EMAIL_BACKEND_CONSOLE pour envoyer par SMTP."
+        )
     if email_host:
         return "django.core.mail.backends.smtp.EmailBackend"
     if debug or console:

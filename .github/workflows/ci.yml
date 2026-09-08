@@ -10,6 +10,11 @@
 #
 # Les travaux sont indépendants : un échec de lint ne masque pas un échec de
 # test, et l'on voit d'un coup d'œil ce qui est cassé.
+#
+# Les actions tierces sont épinglées par SHA complet, la version en
+# commentaire : une étiquette comme `v4` est mutable, et un dépôt d'action
+# compromis peut la faire pointer où il veut (incident tj-actions, mars
+# 2025). Dependabot (`.github/dependabot.yml`) met les SHA à jour.
 name: Intégration continue
 
 on:
@@ -79,9 +84,9 @@ jobs:
       EMAIL_BACKEND_CONSOLE: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: pip
@@ -167,9 +172,9 @@ jobs:
         working-directory: frontend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           # La même version que l'image de production (`frontend/Dockerfile`).
           node-version: "24"
@@ -206,16 +211,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       # Le conteneur frontend a déjà été cassé par un Dockerfile qui
       # construisait la mauvaise cible : la construction fait partie de la
       # vérification, pas seulement les tests. Le cache est partagé avec la
       # livraison continue, qui reconstruit les mêmes couches.
       - name: Construire l'image backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: backend
           push: false
@@ -223,7 +228,7 @@ jobs:
           cache-to: type=gha,scope=backend,mode=max
 
       - name: Construire l'image frontend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: frontend
           target: runtime
@@ -249,9 +254,9 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
@@ -374,14 +379,12 @@ jobs:
           npx tsx scripts/shot-theme.mts
 
       - name: Limitation de débit de nginx
-        # `frontend/nginx.conf` limite `/api/` à 20 requêtes par seconde et
-        # par adresse, avec une réserve de 40. Cent requêtes lancées d'un
-        # coup (50 en parallèle) doivent donc en voir au moins une refusée
-        # en 429 — et cette réponse doit être le JSON de l'API, pas la page
-        # d'erreur de nginx. Cent plutôt que soixante : sur un exécuteur
-        # lent, soixante requêtes étalées sur deux secondes passeraient
-        # toutes. L'étape vient après les captures pour ne pas les priver
-        # de réserve.
+        # `frontend/nginx.conf` limite `/api/health/` à 2 requêtes par
+        # seconde et par adresse, avec une réserve de 5 (et `/api/` à 40,
+        # réserve 80). Cent requêtes lancées d'un coup (50 en parallèle)
+        # doivent donc en voir refusées en 429 — et cette réponse doit être
+        # le JSON de l'API, pas la page d'erreur de nginx. L'étape vient
+        # après les captures pour ne pas les priver de réserve.
         # Derrière Caddy, nginx lit l'adresse réelle dans X-Forwarded-For
         # (`set_real_ip_from`) : la rafale vient d'une seule adresse, celle
         # de l'exécuteur, et doit être limitée comme telle.
@@ -399,7 +402,7 @@ jobs:
 
       - name: Publier les captures
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: captures-${{ github.sha }}
           path: ${{ runner.temp }}/captures
@@ -414,6 +417,29 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v --remove-orphans
 
+  exploitation:
+    name: Exploitation — scripts de sauvegarde
+    runs-on: ubuntu-latest
+    # `sauvegarder.sh` ne tourne nulle part ailleurs dans la CI : il vit
+    # dans des conteneurs qui n'existent qu'en production, et son défaut
+    # ne se découvrirait qu'une nuit de panne. Ses tests remplacent
+    # `pg_dump`, `mc` et `rclone` par des doublures et gardent le vrai
+    # `openssl` : ils éprouvent ce qui compte — qu'une sauvegarde ratée
+    # ne pose jamais son marqueur de réussite, et qu'un dump chiffré à
+    # clé publique se déchiffre bien avec la clé privée.
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Syntaxe des scripts
+        run: |
+          for script in deploy/*.sh deploy/justi-livrer deploy/tests/*.sh; do
+            sh -n "$script" || { echo "::error::$script : syntaxe invalide"; exit 1; }
+          done
+
+      - name: Tests de sauvegarder.sh
+        run: sh deploy/tests/test_sauvegarder.sh
+
   audit:
     name: Dépendances vulnérables
     runs-on: ubuntu-latest
@@ -425,9 +451,9 @@ jobs:
     # accompagné d'un commentaire qui dit pourquoi.
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
 
@@ -437,7 +463,7 @@ jobs:
           pip install pip-audit
           pip-audit --strict -r requirements.txt
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm

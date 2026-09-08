@@ -29,6 +29,13 @@ from notifications.services import notify, recipients_for
 
 class NotificationTestCase(ExpenseTestCase):
     def notifier(self, recipients, cle="evenement:1", **extra):
+        """``notify``, e-mails compris.
+
+        L'e-mail part après la validation de la transaction
+        (``transaction.on_commit``) ; sous ``TestCase``, tout tient dans une
+        transaction jamais validée : les rappels sont joués ici, à la sortie,
+        comme le ferait le commit.
+        """
         options = {
             "kind": Notification.Kind.PROOF_MISSING,
             "title": "Justificatif manquant — N-0001",
@@ -36,7 +43,8 @@ class NotificationTestCase(ExpenseTestCase):
             "country": self.togo,
         }
         options.update(extra)
-        return notify(recipients, **options)
+        with self.captureOnCommitCallbacks(execute=True):
+            return notify(recipients, **options)
 
 
 class CloisonnementTests(NotificationTestCase):
@@ -170,6 +178,9 @@ class EmailTests(NotificationTestCase):
 
         notification.refresh_from_db()
         self.assertIsNone(notification.emailed_at)
+        # … et reste à reprendre par l'ordonnanceur (``envoyer_emails``).
+        self.assertEqual(notification.email_attempts, 1)
+        self.assertIsNotNone(notification.email_attempted_at)
 
 
 class DeclencheursTests(NotificationTestCase):

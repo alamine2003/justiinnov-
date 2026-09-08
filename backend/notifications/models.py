@@ -14,6 +14,20 @@ from django.utils.translation import gettext_lazy as _
 
 from core.models import Country
 
+#: Longueur maximale d'un titre de notification, préfixe compris.
+#:
+#: Un titre se compose d'un préfixe traduit et d'un libellé venu d'ailleurs,
+#: repris **tel quel** — jamais tronqué : « Dépense refusée — {title} » porte
+#: les 250 caractères de ``Expense.title`` ; « Seuil 100 % atteint —
+#: {budget} » porte ``Budget.__str__``, soit le nom du pays (120), l'année,
+#: et le nom du projet, de l'équipe ou du manager (180), un peu plus de 330
+#: caractères au pire. La colonne faisait 200 : un libellé importé un peu
+#: long faisait lever la base au moment d'écrire la notification, et cette
+#: erreur, avalée, annulait la transition qu'elle signalait
+#: (``notifications.tests.test_reprise_des_emails``). La marge est large,
+#: et un test compose le pire cas pour qu'elle le reste.
+TITRE_MAX = 500
+
 
 class Notification(models.Model):
     # Les libellés sont traduits à l'affichage (``kind_display`` suit la
@@ -44,7 +58,7 @@ class Notification(models.Model):
     level = models.CharField(
         "Niveau", max_length=16, choices=Level.choices, default=Level.INFO
     )
-    title = models.CharField("Titre", max_length=200)
+    title = models.CharField("Titre", max_length=TITRE_MAX)
     body = models.TextField("Message", blank=True)
     link = models.CharField(
         "Lien", max_length=250, blank=True,
@@ -61,7 +75,21 @@ class Notification(models.Model):
         help_text="Empêche de notifier deux fois le même événement.",
     )
     read_at = models.DateTimeField("Lu le", null=True, blank=True)
+    #: Posé quand l'e-mail est **parti** — après ``send()``, jamais avant.
     emailed_at = models.DateTimeField("E-mail envoyé le", null=True, blank=True)
+    #: Reprise des envois (``services.envoyer_les_emails``) : l'e-mail part
+    #: après la validation de la transaction, hors de tout verrou métier, et
+    #: son échec ne fait échouer ni l'action ni sa réponse. Il faut donc
+    #: pouvoir le reprendre plus tard : ``email_attempted_at`` réclame la
+    #: ligne pour un envoi en cours (un second processus ne la reprend
+    #: qu'après ``DELAI_DE_REPRISE``), ``email_attempts`` borne les essais.
+    #: Une ligne avec ``emailed_at`` vide et une adresse est un envoi qui
+    #: reste à faire — c'est l'enregistrement durable du travail restant,
+    #: sans table de file d'attente.
+    email_attempted_at = models.DateTimeField(
+        "Dernier essai d'envoi le", null=True, blank=True
+    )
+    email_attempts = models.PositiveSmallIntegerField("Essais d'envoi", default=0)
     created_at = models.DateTimeField("Le", auto_now_add=True)
 
     class Meta:
@@ -78,6 +106,13 @@ class Notification(models.Model):
             # par sa clé seule : sans index dédié, chaque alerte parcourait
             # la table entière.
             models.Index(fields=["dedup_key"], name="notification_dedup_key_idx"),
+            # La reprise cherche les envois restants par ``emailed_at`` vide :
+            # un index partiel, petit, sur les seules lignes à reprendre.
+            models.Index(
+                fields=["email_attempted_at"],
+                name="notification_email_a_faire_idx",
+                condition=models.Q(emailed_at__isnull=True),
+            ),
         ]
 
     def __str__(self):

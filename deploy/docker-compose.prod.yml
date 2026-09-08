@@ -119,6 +119,9 @@ x-django: &django
   # « Supervision » que s'il vaut 1 — sinon le lien mènerait à un 404.
   SUPERVISION: ${SUPERVISION:-0}
   # --- Ordonnanceur ---
+  SCHEDULE_EMAILS: ${SCHEDULE_EMAILS:-*/5 * * * *}
+  SCHEDULE_SUPPRESSIONS: ${SCHEDULE_SUPPRESSIONS:-*/5 * * * *}
+  SCHEDULE_VERIF_SAUVEGARDES: ${SCHEDULE_VERIF_SAUVEGARDES:-30 8 * * *}
   SCHEDULE_ALERTS: ${SCHEDULE_ALERTS:-0 * * * *}
   SCHEDULE_WEEKLY_REPORT: ${SCHEDULE_WEEKLY_REPORT:-0 7 * * 1}
   SCHEDULE_MONTHLY_REPORT: ${SCHEDULE_MONTHLY_REPORT:-0 7 1 * *}
@@ -193,8 +196,17 @@ services:
   scheduler:
     <<: *backend
     mem_limit: 256m
-    environment: *django
+    environment:
+      <<: *django
+      # Marqueurs de réussite des sauvegardes (sauvegarder.sh), lus par
+      # `manage.py verifier_sauvegardes` : une sauvegarde qui manque ou
+      # vieillit devient une notification aux administrateurs.
+      SAUVEGARDES_MARQUEURS: /sauvegardes
     entrypoint: ["python", "manage.py", "run_scheduler"]
+    volumes:
+      # En lecture seule : l'ordonnanceur lit les marqueurs, il n'écrit
+      # jamais dans les sauvegardes.
+      - sauvegardes:/sauvegardes:ro
     # L'image hérite du contrôle de santé du backend, qui interroge l'API sur
     # le port 8000 : l'ordonnanceur n'y répond pas et serait déclaré mort.
     # Le sien lit le battement de cœur que `run_scheduler` touche chaque
@@ -271,6 +283,9 @@ services:
       SAUVEGARDE_HEURE: ${SAUVEGARDE_HEURE:-02:00}
       SAUVEGARDE_RETENTION_JOURS: ${SAUVEGARDE_RETENTION_JOURS:-30}
       SAUVEGARDE_DISTANT_ENDPOINT: ${SAUVEGARDE_DISTANT_ENDPOINT:-}
+      # Chiffrement à clé publique des dumps, sur place : le certificat est
+      # public, la clé privée reste hors du serveur (.env.example).
+      SAUVEGARDE_CLE_PUBLIQUE: ${SAUVEGARDE_CLE_PUBLIQUE:-}
     volumes:
       - ./sauvegarder.sh:/sauvegarder.sh:ro
       - ./creer_role_applicatif.sql:/creer_role_applicatif.sql:ro
@@ -328,10 +343,17 @@ services:
       SAUVEGARDE_DISTANT_REGION: ${SAUVEGARDE_DISTANT_REGION:-}
       SAUVEGARDE_DISTANT_FOURNISSEUR: ${SAUVEGARDE_DISTANT_FOURNISSEUR:-Other}
       # La même rétention que sur la machine, appliquée au préfixe
-      # quotidien/ du distant ; mensuel/ n'est jamais touché.
+      # quotidien/ du distant ; mensuel/ n'est jamais touché — et seulement
+      # si SAUVEGARDE_DISTANT_ROTATION=1 : par défaut le serveur n'efface
+      # rien là-bas, c'est la règle de cycle de vie du bucket qui le fait.
       SAUVEGARDE_RETENTION_JOURS: ${SAUVEGARDE_RETENTION_JOURS:-30}
+      SAUVEGARDE_DISTANT_ROTATION: ${SAUVEGARDE_DISTANT_ROTATION:-0}
+      # Sel du chiffrement (facultatif) ; la clé, elle, passe par un secret.
+      SAUVEGARDE_CHIFFREMENT_SEL: ${SAUVEGARDE_CHIFFREMENT_SEL:-}
+      SAUVEGARDE_DISTANT_EN_CLAIR: ${SAUVEGARDE_DISTANT_EN_CLAIR:-0}
     secrets:
       - sauvegarde_distant_secret
+      - sauvegarde_chiffrement_cle
     volumes:
       - ./sauvegarder.sh:/sauvegarder.sh:ro
       - sauvegardes:/sauvegardes
@@ -494,3 +516,5 @@ secrets:
     environment: POSTGRES_MIGRATION_PASSWORD
   sauvegarde_distant_secret:
     environment: SAUVEGARDE_DISTANT_SECRET
+  sauvegarde_chiffrement_cle:
+    environment: SAUVEGARDE_CHIFFREMENT_CLE

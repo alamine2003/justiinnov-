@@ -30,7 +30,7 @@ from django.utils.translation import gettext_lazy
 
 from accounts.models import HEADQUARTERS_ROLES
 from accounts.permissions import get_access, roles_pour
-from budget.aggregates import consolidation_par_pays, current_rates
+from budget.aggregates import consolidation_par_pays, current_rates, date_de_reference
 from expenses.models import Expense
 from notifications.services import langue_de, recipients_for
 from reporting import alerts as alert_rules
@@ -157,7 +157,9 @@ class Command(BaseCommand):
         le seul total est le consolidé en FCFA, les devises sans taux étant
         nommées plutôt qu'absorbées.
         """
-        rows, consolide = consolidation_par_pays(budgets, rates=current_rates())
+        rows, consolide = consolidation_par_pays(
+            budgets, rates=current_rates(on_date=date_de_reference(year))
+        )
         lignes_pays = [
             _(
                 "- %(country)s (%(currency)s) : attribué %(allocated)s, "

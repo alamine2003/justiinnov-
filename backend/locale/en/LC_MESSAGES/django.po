@@ -2096,3 +2096,103 @@ msgstr "The file field is required."
 #: reporting/views.py:509
 msgid "Pays inconnu."
 msgstr "Unknown country."
+
+#: core/regles.py:71
+msgid "Cet élément a reçu une ligne ou une pièce pendant son retrait : rien n'a été supprimé, rechargez et réessayez."
+msgstr "This item received a line or a document while being withdrawn: nothing was deleted, reload and try again."
+
+#: expenses/models.py:520
+msgid "Chemin dans le stockage"
+msgstr "Storage path"
+
+#: expenses/models.py:522
+msgid "N° d'ordre du dossier"
+msgstr "Dossier order number"
+
+#: expenses/models.py:527
+msgid "Demandé par"
+msgstr "Requested by"
+
+#: expenses/models.py:528
+msgid "Demandé le"
+msgstr "Requested on"
+
+#: expenses/models.py:529
+msgid "Dernier essai le"
+msgstr "Last attempt on"
+
+#: expenses/models.py:530
+msgid "Essais"
+msgstr "Attempts"
+
+#: expenses/models.py:531
+msgid "Effacé le"
+msgstr "Deleted on"
+
+#: expenses/models.py:532
+msgid "Dernière erreur"
+msgstr "Last error"
+
+#: expenses/models.py:536
+msgid "Fichier à supprimer"
+msgstr "File to delete"
+
+#: expenses/models.py:537
+msgid "Fichiers à supprimer"
+msgstr "Files to delete"
+
+#: expenses/views.py:63
+msgid "Le fichier de ce justificatif est introuvable dans le stockage : l'anomalie est journalisée, prévenez l'administrateur."
+msgstr "The file of this supporting document cannot be found in storage: the anomaly has been logged, notify the administrator."
+
+#: expenses/views.py:74
+msgid "Le stockage des justificatifs ne répond pas : réessayez dans un instant."
+msgstr "The supporting document storage is not responding: try again in a moment."
+
+#: reporting/management/commands/verifier_sauvegardes.py:35
+msgid "la sauvegarde de la base"
+msgstr "the database backup"
+
+#: reporting/management/commands/verifier_sauvegardes.py:36
+msgid "le miroir des justificatifs"
+msgstr "the supporting documents mirror"
+
+#: reporting/management/commands/verifier_sauvegardes.py:37
+msgid "la copie hors machine"
+msgstr "the off-site copy"
+
+#: reporting/management/commands/verifier_sauvegardes.py:118
+msgid "Aucune réussite enregistrée : le service ne tourne pas, ou n'a jamais abouti."
+msgstr "No success recorded: the service is not running, or has never completed."
+
+#: reporting/management/commands/verifier_sauvegardes.py:121
+msgid "Dernière réussite le {quand} ; plus de {heures} h sans sauvegarde."
+msgstr "Last success on {quand}; more than {heures} h without a backup."
+
+#: reporting/management/commands/verifier_sauvegardes.py:129
+msgid "Sauvegarde en défaut — {quoi}"
+msgstr "Backup failing — {quoi}"
+
+#: reporting/management/commands/verifier_sauvegardes.py:131
+msgid "{detail} Vérifiez « docker compose logs sauvegarde{suffixe} » sur le serveur (deploy/README.md, « Sauvegardes et restauration »)."
+msgstr "{detail} Check “docker compose logs sauvegarde{suffixe}” on the server (deploy/README.md, “Backups and restoration”)."
+
+#: expenses/models.py:400
+msgid "Empreinte d'import"
+msgstr "Import fingerprint"
+
+#: reporting/imports.py:640
+msgid "Un autre import vient d'écrire une ou plusieurs de ces lignes : relancez l'import, les lignes déjà présentes seront signalées."
+msgstr "Another import has just written one or more of these lines: run the import again, the lines already present will be reported."
+
+#: budget/serializers.py:180
+msgid "Un taux publié ne se modifie pas : publiez un nouveau taux, daté du jour de son entrée en vigueur."
+msgstr "A published rate cannot be modified: publish a new rate, dated the day it comes into effect."
+
+#: budget/serializers.py:196
+msgid "Les taux se publient dans l'ordre du temps : le dernier taux {currency} est daté du {date}."
+msgstr "Rates are published in chronological order: the latest {currency} rate is dated {date}."
+
+#: budget/serializers.py:218
+msgid "Cette enveloppe porte {count} ligne(s) déclarée(s) : elle ne se désactive pas, ses dépenses disparaîtraient du consommé."
+msgstr "This envelope carries {count} declared line(s): it cannot be deactivated, its expenses would disappear from the consumed total."

@@ -2,9 +2,35 @@
 
 Le solde ne doit jamais être reconstitué dans l'interface : c'est ici, et
 uniquement ici, que consommation, écart et disponible sont établis.
+
+Règles de calcul (décision 54 de ``docs/model-de-donnees.md``), les mêmes
+pour l'API, les écrans, les exports et les rapports périodiques :
+
+- **engagé** = lignes soumises ou en contrôle ; **consommé** = lignes
+  justifiées, non justifiées ou clôturées (une dépense non justifiée pèse) ;
+  **justifié** = somme des montants justifiés des lignes consommées ;
+  **un brouillon ne compte pour rien**, nulle part — ni dans un total
+  d'écran, ni dans la ligne TOTAL d'un export ;
+- **attribué** d'un pays = son enveloppe de pays ; à défaut, la somme de
+  ses sous-enveloppes, qui sont alors tout ce qu'il a. Une sous-enveloppe
+  découpe l'enveloppe du pays, elle ne s'y ajoute pas ;
+- **disponible** = attribué − consommé − engagé ;
+- **conversion en FCFA** : au taux en vigueur à la **date de référence de
+  l'exercice** (:func:`date_de_reference`) — le 31 décembre pour un
+  exercice clos, ce jour pour l'exercice en cours. Un rapport sur 2024
+  donne le même chiffre en 2026 qu'en 2025 : les taux se publient dans
+  l'ordre du temps et ne se modifient pas (``ExchangeRateSerializer``),
+  donc le taux « en vigueur au 31 décembre 2024 » est acquis pour toujours.
+  Une **revalorisation** — relire un exercice clos aux taux d'aujourd'hui —
+  est un autre calcul, demandé explicitement (``manage.py consolidation
+  --taux-du-jour``), jamais celui des écrans ;
+- **arrondis** : les montants au centime, après le calcul, jamais avant ;
+  un taux croisé (devise → FCFA → devise) est appliqué exact, et le taux
+  figé sur la ligne (six décimales) est indicatif.
 """
 
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 
 from django.db.models import Q, Sum
@@ -92,6 +118,19 @@ def _ratio(numerator, denominator):
 
 
 # --- Taux de change ---------------------------------------------------------
+
+
+def date_de_reference(year):
+    """Date à laquelle un exercice se consolide : sa clôture, ou ce jour.
+
+    Le 31 décembre d'un exercice clos ; aujourd'hui pour l'exercice en
+    cours (et pour un exercice à venir, qui n'a pas encore de taux). C'est
+    la date à passer à :func:`current_rates` pour que le consolidé d'un
+    exercice passé ne bouge plus au gré des taux du jour.
+    """
+    aujourd_hui = timezone.localdate()
+    cloture = date(int(year), 12, 31)
+    return cloture if cloture < aujourd_hui else aujourd_hui
 
 
 def _date_effective(on_date):
@@ -182,8 +221,14 @@ def convert(amount, from_currency, to_currency, on_date=None, rates=None):
     if source is None or cible is None or not cible:
         return None, None
 
+    # Le montant est calculé sur le rapport exact des deux taux, arrondi au
+    # centime à la fin ; le taux rendu — figé sur la ligne — est ce rapport
+    # à six décimales, indicatif. Arrondir le rapport avant de multiplier
+    # coûtait jusqu'à 0,5 % sur une devise faible convertie vers une devise
+    # forte (10 000 000 GNF → EUR : 2,50 EUR d'écart). Vers le FCFA, cible
+    # à 1, les deux calculs coïncident exactement.
     rate = (source / cible).quantize(RATE_PRECISION)
-    return (Decimal(amount) * rate).quantize(CENTS), rate
+    return (Decimal(amount) * source / cible).quantize(CENTS), rate
 
 
 # --- Consolidation ----------------------------------------------------------
@@ -242,6 +287,11 @@ def consolidation_par_pays(budgets, rates=None):
 
     for country_id, entry in per_country.items():
         country = countries[country_id]
+        # Sans enveloppe de pays, les sous-enveloppes sont tout ce que le
+        # pays a : c'est elles qu'on lui attribue. Un « attribué » à zéro
+        # donnait un disponible négatif et un taux d'exécution absent.
+        if not entry["allocated"] and entry["sub_allocated"]:
+            entry["allocated"] = entry["sub_allocated"]
         used = entry["consumed"] + entry["engaged"]
         remaining = entry["allocated"] - used
         row = {

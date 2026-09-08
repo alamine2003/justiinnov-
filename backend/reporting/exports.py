@@ -38,6 +38,7 @@ from reportlab.platypus import (
 )
 
 from budget.aggregates import budget_figures
+from core.statuts import Status
 from expenses.models import Proof
 
 from .scope import fuseau_de
@@ -200,8 +201,11 @@ def lignes_depenses(expenses):
         dossier = expense.dossier
         if dossier.pk not in pieces:
             pieces[dossier.pk] = _proof_summary(dossier)
-        totals["amount"] += expense.amount
-        totals["justified"] += expense.justified_amount
+        # La ligne TOTAL suit la règle des écrans : un brouillon n'est pas
+        # une dépense, il est listé (colonne STATUT) mais ne compte pas.
+        if expense.status != Status.DRAFT:
+            totals["amount"] += expense.amount
+            totals["justified"] += expense.justified_amount
         devises.add(expense.country.currency)
         tableau.lignes.append([
             dossier.number,

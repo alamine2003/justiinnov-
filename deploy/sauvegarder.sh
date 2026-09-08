@@ -27,9 +27,56 @@
 #                           rien ne part et le journal le dit à chaque fois.
 #
 # Disposition du distant (bucket, ou bucket/sous-dossier) :
-#   quotidien/<base>-<horodatage>.dump   même rotation que base/
+#   quotidien/<base>-<horodatage>.dump   rotation par le distant lui-même
 #   mensuel/<base>-<AAAA-MM>.dump        jamais supprimé
 #   pieces/…                             miroir des justificatifs
+#
+# CE QUI EST CHIFFRÉ, ET CE QUI NE L'EST PAS — à lire avant de s'y fier :
+#
+#   volume `sauvegardes` du serveur (base/, base/mensuel/, pieces/)
+#       EN CLAIR. rclone crypt chiffre ce qu'il ENVOIE, pas ce qui reste
+#       ici. Qui lit ce volume lit les dumps, donc les jetons de session
+#       et les secrets TOTP. Le volume est protégé par les droits de la
+#       machine, rien d'autre.
+#   copie distante (quotidien/, mensuel/, pieces/)
+#       CHIFFRÉE par rclone crypt (XSalsa20-Poly1305), noms de fichiers en
+#       clair pour --lister et --rapatrier. Le tiers qui héberge le bucket
+#       ne lit pas le contenu.
+#   dumps rapatriés par --rapatrier / --rapatrier-pieces
+#       DÉCHIFFRÉS à l'arrivée, en clair dans le volume : c'est ce que
+#       pg_restore et mc attendent.
+#
+# Le secret est SYMÉTRIQUE et présent sur le serveur : le processus qui
+# chiffre le lit dans /run/secrets/sauvegarde_chiffrement_cle (secret
+# Compose alimenté par SAUVEGARDE_CHIFFREMENT_CLE du .env). Le serveur
+# peut donc déchiffrer sa propre copie distante ; « clé hors serveur »
+# signifie qu'une COPIE DE RÉCUPÉRATION est gardée ailleurs (coffre,
+# gestionnaire de mots de passe), pas que le serveur en soit dépourvu.
+# Pour qu'il ne puisse PAS déchiffrer, voir SAUVEGARDE_CLE_PUBLIQUE
+# ci-dessous et README.md, « Chiffrement : ce qui est protégé de quoi ».
+#
+# Sans secret, rien ne part vers le distant — sauf
+# SAUVEGARDE_DISTANT_EN_CLAIR=1, réservé à un essai.
+#
+# SAUVEGARDE_CLE_PUBLIQUE (facultatif, à clé publique) : chemin d'un
+# certificat X.509 dont la clé privée reste HORS du serveur. Quand il est
+# donné, chaque dump est chiffré sur place, à la sortie de pg_dump
+# (openssl smime, AES-256), et c'est le fichier chiffré qui est écrit,
+# tourné et copié. Le serveur ne détient alors aucun moyen de le relire :
+# la restauration passe par la clé privée, ailleurs. Les justificatifs du
+# miroir, eux, restent en clair sur le volume — ils viennent de MinIO, qui
+# les sert en clair de toute façon.
+#
+# Le serveur N'EFFACE RIEN sur le distant par défaut : un serveur compromis
+# ne doit pas pouvoir emporter les sauvegardes avec lui. La clé du distant
+# se donne sans droit de suppression, et c'est la règle de cycle de vie du
+# bucket qui applique la rétention (README.md). SAUVEGARDE_DISTANT_ROTATION=1
+# rétablit l'ancienne rotation faite d'ici, pour un distant sans règle.
+#
+# Chaque sauvegarde réussie laisse un marqueur daté dans le volume
+# (.derniere-reussite-base, -pieces, -distant) : l'ordonnanceur de
+# l'application les lit (`manage.py verifier_sauvegardes`) et prévient les
+# administrateurs quand une sauvegarde manque ou vieillit.
 #
 # Sans autre argument, le script tourne indéfiniment : `base` et `pieces` se
 # réveillent chaque jour à SAUVEGARDE_HEURE (UTC, 02:00 par défaut),
@@ -65,6 +112,12 @@ HEURE="${SAUVEGARDE_HEURE:-02:00}"
 RETENTION_JOURS="${SAUVEGARDE_RETENTION_JOURS:-30}"
 DEMANDES="$DESTINATION/.distant"
 DISTANT_ENDPOINT="${SAUVEGARDE_DISTANT_ENDPOINT:-}"
+DISTANT_ROTATION="${SAUVEGARDE_DISTANT_ROTATION:-0}"
+DISTANT_EN_CLAIR="${SAUVEGARDE_DISTANT_EN_CLAIR:-0}"
+CLE_PUBLIQUE="${SAUVEGARDE_CLE_PUBLIQUE:-}"
+#: Suffixe des dumps chiffrés à clé publique : restaurer.sh le reconnaît et
+#: refuse de les passer à pg_restore sans déchiffrement préalable.
+SUFFIXE_CHIFFRE=".enc"
 # Une copie distante qui a échoué (réseau, quota, clé révoquée) est
 # retentée après ce délai, pas toutes les minutes.
 REESSAI_SECONDES=900
@@ -72,6 +125,18 @@ REESSAI_SECONDES=900
 horodatage() { date -u +%Y-%m-%dT%H%M%SZ; }
 journal() { echo "$(date -u +%FT%TZ) $*"; }
 echec() { journal "✘ $*" >&2; return 1; }
+
+# Marqueur de réussite, lu par `manage.py verifier_sauvegardes` : l'instant
+# UTC de la dernière sauvegarde (ou copie) réussie. Écrit par renommage,
+# jamais à moitié. Un marqueur qui ne s'écrit pas ne remet pas en cause la
+# sauvegarde, qui est faite ; il est signalé.
+marquer_reussite() {
+  if printf '%s\n' "$(date -u +%FT%TZ)" > "$DESTINATION/.derniere-reussite-$1.partiel" \
+      && mv "$DESTINATION/.derniere-reussite-$1.partiel" "$DESTINATION/.derniere-reussite-$1"; then
+    return 0
+  fi
+  journal "⚠ marqueur de réussite non écrit ($1) : verifier_sauvegardes le signalera comme manquant"
+}
 
 # --- Copie hors machine : côté demandeur -----------------------------------
 
@@ -105,19 +170,49 @@ sauvegarder_base() {
   base="${PGDATABASE:-justi_innov}"
   mkdir -p "$DESTINATION/base/mensuel" || return 1
   fichier="$DESTINATION/base/$base-$(horodatage).dump"
+  # Chiffrement à clé publique demandé : le dump n'existe en clair nulle
+  # part, pas même un instant sur le disque — pg_dump écrit sur la sortie
+  # standard, openssl chiffre au fil de l'eau.
+  if [ -n "$CLE_PUBLIQUE" ]; then
+    if [ ! -s "$CLE_PUBLIQUE" ]; then
+      echec "SAUVEGARDE_CLE_PUBLIQUE=$CLE_PUBLIQUE introuvable ou vide : aucun dump écrit"
+      return 1
+    fi
+    fichier="$fichier$SUFFIXE_CHIFFRE"
+  fi
   partiel="$fichier.partiel"
 
   # Écriture dans un fichier temporaire puis renommage : un dump interrompu
   # ne laisse pas de fichier à moitié écrit qu'on croirait complet.
-  if [ -n "${DATABASE_URL:-}" ]; then
-    pg_dump -Fc --file "$partiel" "$DATABASE_URL"
+  if [ -n "$CLE_PUBLIQUE" ]; then
+    # `set -o pipefail` n'existe pas dans un sh POSIX : le code de pg_dump
+    # est relevé par un fichier témoin, sans quoi un pg_dump raté suivi
+    # d'un openssl content donnerait un « succès » chiffré et vide.
+    temoin="$partiel.pgdump"
+    (
+      if [ -n "${DATABASE_URL:-}" ]; then pg_dump -Fc "$DATABASE_URL"; else pg_dump -Fc; fi
+      echo "$?" > "$temoin"
+    ) | openssl smime -encrypt -binary -aes-256-cbc -outform DER \
+          -out "$partiel" "$CLE_PUBLIQUE"
+    resultat_openssl=$?
+    resultat_dump="$(cat "$temoin" 2>/dev/null || echo 1)"
+    rm -f "$temoin"
+    if [ "$resultat_openssl" -ne 0 ] || [ "$resultat_dump" -ne 0 ]; then
+      rm -f "$partiel"
+      echec "dump chiffré impossible (pg_dump=$resultat_dump, openssl=$resultat_openssl) : aucun dump écrit pour $base"
+      return 1
+    fi
   else
-    pg_dump -Fc --file "$partiel"
-  fi
-  if [ $? -ne 0 ]; then
-    rm -f "$partiel"
-    echec "pg_dump a échoué : aucun dump écrit pour $base"
-    return 1
+    if [ -n "${DATABASE_URL:-}" ]; then
+      pg_dump -Fc --file "$partiel" "$DATABASE_URL"
+    else
+      pg_dump -Fc --file "$partiel"
+    fi
+    if [ $? -ne 0 ]; then
+      rm -f "$partiel"
+      echec "pg_dump a échoué : aucun dump écrit pour $base"
+      return 1
+    fi
   fi
   # Un dump vide n'est pas une sauvegarde : pg_dump peut créer le fichier
   # avant d'échouer, et l'on refuse de le renommer, et plus encore de le
@@ -140,6 +235,7 @@ sauvegarder_base() {
   # impossible). Elle reste quand le quotidien part en rotation. Le dump
   # vient d'être vérifié non vide : c'est la condition pour arriver ici.
   mensuel="$DESTINATION/base/mensuel/$base-$(date -u +%Y-%m).dump"
+  [ -n "$CLE_PUBLIQUE" ] && mensuel="$mensuel$SUFFIXE_CHIFFRE"
   if [ ! -f "$mensuel" ]; then
     if ln "$fichier" "$mensuel" 2>/dev/null || cp "$fichier" "$mensuel"; then
       journal "copie mensuelle conservée sans limite : $mensuel"
@@ -153,13 +249,14 @@ sauvegarder_base() {
   # Rotation des quotidiens seulement (`-maxdepth 1` épargne mensuel/) :
   # les dumps plus vieux que la rétention partent. `-mtime +N` signifie
   # « strictement plus de N jours ».
-  supprimes=$(find "$DESTINATION/base" -maxdepth 1 -name '*.dump' -mtime +"$RETENTION_JOURS" -print -delete | wc -l)
+  supprimes=$(find "$DESTINATION/base" -maxdepth 1 \( -name '*.dump' -o -name "*.dump$SUFFIXE_CHIFFRE" \) -mtime +"$RETENTION_JOURS" -print -delete | wc -l)
   if [ "$supprimes" -gt 0 ]; then
     journal "rotation : $supprimes dump(s) quotidien(s) de plus de $RETENTION_JOURS jours supprimé(s)"
   fi
   # Restes d'un passage interrompu brutalement (conteneur tué en plein dump).
   rm -f "$DESTINATION"/base/*.partiel
 
+  marquer_reussite base
   demander_copie_distante base
   return 0
 }
@@ -181,6 +278,7 @@ sauvegarder_pieces() {
   fi
   journal "pièces mises en miroir dans $DESTINATION/pieces ($(du -sh "$DESTINATION/pieces" | cut -f1))"
 
+  marquer_reussite pieces
   demander_copie_distante pieces
   return 0
 }
@@ -219,8 +317,66 @@ distant_preparer() {
   export RCLONE_STATS="${RCLONE_STATS:-0}" RCLONE_RETRIES="${RCLONE_RETRIES:-3}"
   export RCLONE_S3_CHUNK_SIZE="${RCLONE_S3_CHUNK_SIZE:-8M}"
   export RCLONE_S3_UPLOAD_CONCURRENCY="${RCLONE_S3_UPLOAD_CONCURRENCY:-2}"
-  CIBLE="distant:${SAUVEGARDE_DISTANT_BUCKET}"
+
+  # Chiffrement avant transfert : le distant reçoit un « coffre » rclone
+  # (crypt) posé sur le bucket. Le contenu est chiffré (XSalsa20-Poly1305,
+  # clé dérivée de SAUVEGARDE_CHIFFREMENT_CLE par scrypt, salée par
+  # SAUVEGARDE_CHIFFREMENT_SEL) ; les noms restent en clair pour que
+  # --lister et --rapatrier restent lisibles. Rien ne part en clair sans le
+  # dire explicitement.
+  cle="${SAUVEGARDE_CHIFFREMENT_CLE:-}"
+  if [ -z "$cle" ] && [ -s /run/secrets/sauvegarde_chiffrement_cle ]; then
+    cle="$(cat /run/secrets/sauvegarde_chiffrement_cle)"
+  fi
+  if [ -n "$cle" ]; then
+    export RCLONE_CONFIG_COFFRE_TYPE=crypt
+    export RCLONE_CONFIG_COFFRE_REMOTE="distant:${SAUVEGARDE_DISTANT_BUCKET}"
+    export RCLONE_CONFIG_COFFRE_FILENAME_ENCRYPTION=off
+    export RCLONE_CONFIG_COFFRE_DIRECTORY_NAME_ENCRYPTION=false
+    RCLONE_CONFIG_COFFRE_PASSWORD="$(rclone obscure "$cle")" || return 1
+    export RCLONE_CONFIG_COFFRE_PASSWORD
+    if [ -n "${SAUVEGARDE_CHIFFREMENT_SEL:-}" ]; then
+      RCLONE_CONFIG_COFFRE_PASSWORD2="$(rclone obscure "$SAUVEGARDE_CHIFFREMENT_SEL")" || return 1
+      export RCLONE_CONFIG_COFFRE_PASSWORD2
+    fi
+    CIBLE="coffre:"
+    CHIFFRE=1
+  elif [ "$DISTANT_EN_CLAIR" = "1" ]; then
+    journal "⚠ COPIE DISTANTE EN CLAIR (SAUVEGARDE_DISTANT_EN_CLAIR=1) : les dumps contiennent les jetons de session et les secrets TOTP. Réservé à un essai." >&2
+    CIBLE="distant:${SAUVEGARDE_DISTANT_BUCKET}"
+    CHIFFRE=0
+  else
+    echec "copie distante refusée : SAUVEGARDE_CHIFFREMENT_CLE est vide. Un dump contient les jetons de session et les secrets TOTP ; il ne part pas en clair chez un tiers. Renseignez la clé (README.md, « Copie hors machine »)."
+    return 1
+  fi
   return 0
+}
+
+# Vérification d'une copie. Sur le coffre chiffré, `rclone check` ne peut
+# pas comparer les sommes (le distant ne connaît que le chiffré) :
+# `cryptcheck` rechiffre localement et compare les sommes des chiffrés,
+# ce qui vaut une vérification complète. Sur un distant en clair, la
+# vérification d'origine.
+verifier_copie() {
+  source="$1"; cible="$2"; shift 2
+  if [ "${CHIFFRE:-0}" != "1" ]; then
+    rclone check --one-way "$source" "$cible" "$@"
+    return $?
+  fi
+  # `--checksum` demande la comparaison des sommes : c'est cryptcheck qui
+  # la fait sur un coffre. Les autres options passent telles quelles ; les
+  # arguments sont refaits un à un pour ne jamais développer un motif
+  # comme '*.dump'.
+  somme=0; n=$#; i=0
+  while [ "$i" -lt "$n" ]; do
+    arg="$1"; shift; i=$((i + 1))
+    if [ "$arg" = "--checksum" ]; then somme=1; else set -- "$@" "$arg"; fi
+  done
+  if [ "$somme" -eq 1 ]; then
+    rclone cryptcheck --one-way "$source" "$cible" "$@"
+  else
+    rclone check --one-way "$source" "$cible" "$@"
+  fi
 }
 
 # Copie puis vérification d'un dossier. rclone copy n'efface jamais rien
@@ -235,38 +391,42 @@ distant_preparer() {
 copier_et_verifier() {
   source="$1"; cible="$2"; shift 2
   rclone copy "$source" "$cible" "$@" || return 1
-  rclone check --one-way "$source" "$cible" "$@" || return 1
+  verifier_copie "$source" "$cible" "$@" || return 1
   return 0
 }
 
 copier_base_distant() {
   distant_preparer || return 1
-  quotidiens=$(find "$DESTINATION/base" -maxdepth 1 -name '*.dump' 2>/dev/null | wc -l)
-  mensuels=$(find "$DESTINATION/base/mensuel" -maxdepth 1 -name '*.dump' 2>/dev/null | wc -l)
+  quotidiens=$(find "$DESTINATION/base" -maxdepth 1 \( -name '*.dump' -o -name "*.dump$SUFFIXE_CHIFFRE" \) 2>/dev/null | wc -l)
+  mensuels=$(find "$DESTINATION/base/mensuel" -maxdepth 1 \( -name '*.dump' -o -name "*.dump$SUFFIXE_CHIFFRE" \) 2>/dev/null | wc -l)
   if [ "$quotidiens" -eq 0 ] && [ "$mensuels" -eq 0 ]; then
     journal "copie distante (base) : aucun dump à copier"
     return 0
   fi
   if [ "$quotidiens" -gt 0 ]; then
     # `--max-depth 1` épargne mensuel/, `--include` écarte un .partiel.
-    if ! copier_et_verifier "$DESTINATION/base" "$CIBLE/quotidien" --checksum --max-depth 1 --include '*.dump'; then
+    if ! copier_et_verifier "$DESTINATION/base" "$CIBLE/quotidien" --checksum --max-depth 1 --include '*.dump' --include "*.dump$SUFFIXE_CHIFFRE"; then
       echec "copie distante (base) : les dumps quotidiens ne sont pas tous vérifiés sur $CIBLE/quotidien"
       return 1
     fi
   fi
   if [ "$mensuels" -gt 0 ]; then
-    if ! copier_et_verifier "$DESTINATION/base/mensuel" "$CIBLE/mensuel" --checksum --include '*.dump'; then
+    if ! copier_et_verifier "$DESTINATION/base/mensuel" "$CIBLE/mensuel" --checksum --include '*.dump' --include "*.dump$SUFFIXE_CHIFFRE"; then
       echec "copie distante (base) : les copies mensuelles ne sont pas toutes vérifiées sur $CIBLE/mensuel"
       return 1
     fi
   fi
   journal "✔ copie distante (base) : $quotidiens dump(s) quotidien(s) et $mensuels mensuel(s) présents et vérifiés sur $CIBLE"
-  # Même rotation que sur la machine, sur quotidien/ seulement : mensuel/
-  # est un autre préfixe, cette commande ne peut pas y toucher. Elle ne
-  # supprime que ce qui est plus vieux que la rétention : un volume local
-  # vide ou tout neuf ne fait rien effacer là-bas.
-  if ! rclone delete "$CIBLE/quotidien" --min-age "${RETENTION_JOURS}d"; then
-    journal "⚠ rotation distante non faite sur $CIBLE/quotidien : sera retentée à la prochaine copie"
+  # Par défaut, rien ne s'efface d'ici : la rétention des quotidiens est
+  # l'affaire d'une règle de cycle de vie sur le bucket, et la clé du
+  # distant n'a pas le droit de supprimer — un serveur compromis ne peut
+  # alors ni effacer ni raccourcir l'historique. Sur un distant sans règle
+  # de cycle de vie, SAUVEGARDE_DISTANT_ROTATION=1 rétablit la rotation
+  # faite d'ici, sur quotidien/ seulement : mensuel/ est un autre préfixe.
+  if [ "$DISTANT_ROTATION" = "1" ]; then
+    if ! rclone delete "$CIBLE/quotidien" --min-age "${RETENTION_JOURS}d"; then
+      journal "⚠ rotation distante non faite sur $CIBLE/quotidien : sera retentée à la prochaine copie"
+    fi
   fi
   return 0
 }
@@ -303,6 +463,9 @@ traiter_demande() {
   fi
   if "copier_${d}_distant"; then
     rm -f "$DEMANDES/demande-$d"
+    # Le marqueur du distant ne se pose que sur la copie de la base : c'est
+    # elle qui compte pour la fraîcheur, les pièces suivent.
+    [ "$d" = "base" ] && marquer_reussite distant
     return 0
   fi
   return 1
@@ -313,13 +476,19 @@ copier_tout_distant() {
   resultat=0
   copier_base_distant || resultat=1
   copier_pieces_distant || resultat=1
-  [ "$resultat" -eq 0 ] && rm -f "$DEMANDES"/demande-base "$DEMANDES"/demande-pieces
+  if [ "$resultat" -eq 0 ]; then
+    rm -f "$DEMANDES"/demande-base "$DEMANDES"/demande-pieces
+    marquer_reussite distant
+  fi
   return $resultat
 }
 
 lister_distant() {
   distant_configure || { echo "(aucune copie hors machine : SAUVEGARDE_DISTANT_ENDPOINT vide)"; return 0; }
   distant_preparer || return 1
+  if [ "${CHIFFRE:-0}" = "1" ]; then
+    echo "(copie chiffrée : coffre rclone sur distant:${SAUVEGARDE_DISTANT_BUCKET})"
+  fi
   echo "Dumps quotidiens sur $CIBLE/quotidien :"
   rclone lsl "$CIBLE/quotidien" 2>/dev/null | grep . || echo "(aucun)"
   echo "Copies mensuelles sur $CIBLE/mensuel, à désigner par mensuel/<nom> :"
