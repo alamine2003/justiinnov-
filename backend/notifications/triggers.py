@@ -1,7 +1,10 @@
 """Déclencheurs métier des notifications (§8).
 
-Appelés depuis les vues, après que l'action a réussi : une notification ne doit
-jamais faire échouer l'opération qu'elle signale.
+Appelés depuis les services de transition, dans la transaction de l'action,
+une fois celle-ci écrite : une notification ne doit jamais faire échouer
+l'opération qu'elle signale (``_safe``), et une opération annulée ne doit
+pas laisser de notification derrière elle. L'e-mail, lui, part après le
+commit (``services.notify``).
 
 Titres et corps sont des chaînes **paresseuses** (``format_lazy`` sur un
 ``gettext_lazy``) : ``services.notify`` les rend destinataire par
@@ -12,6 +15,7 @@ monde.
 
 import logging
 
+from django.db import transaction
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
@@ -42,9 +46,20 @@ def arbitres():
 
 
 def _safe(action):
-    """Exécute un déclencheur sans jamais propager son échec."""
+    """Exécute un déclencheur sans jamais propager son échec.
+
+    Le déclencheur tourne sous un **point de reprise** (``atomic`` imbriqué)
+    : il est appelé depuis la transaction de l'action qu'il signale, et une
+    erreur de base — un titre trop long pour sa colonne, une contrainte —
+    y laissait la transaction avortée. L'exception, avalée ici, ne disait
+    rien à Django, qui commitait ensuite une transaction que PostgreSQL
+    avait déjà annulée : la transition et sa trace d'audit disparaissaient,
+    l'API répondait 200. Avec le point de reprise, seule la notification
+    est défaite ; l'action et son journal restent acquis.
+    """
     try:
-        return action()
+        with transaction.atomic():
+            return action()
     except Exception:
         logger.exception("Notification non émise")
         return []

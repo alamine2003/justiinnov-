@@ -368,6 +368,7 @@ docker compose exec scheduler python manage.py run_scheduler --once  # tout, tou
 
 | Tâche | Cadence par défaut | Variable |
 |---|---|---|
+| Reprise des e-mails de notification qui ne sont pas partis | toutes les 5 minutes | `SCHEDULE_EMAILS` |
 | Notification des alertes | toutes les heures | `SCHEDULE_ALERTS` |
 | Rapport de rapprochement hebdomadaire | lundi 7 h | `SCHEDULE_WEEKLY_REPORT` |
 | Rapport de rapprochement mensuel | le 1er à 7 h | `SCHEDULE_MONTHLY_REPORT` |
@@ -523,7 +524,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | `587` / — / — / `1` | paramètres SMTP |
 | `DEFAULT_FROM_EMAIL` | `controle-budgetaire@justi-innov.local` | expéditeur des e-mails |
 | `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |
-| `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
+| `SCHEDULE_EMAILS` / `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `*/5 * * * *` / `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
 | `GUNICORN_WORKERS` / `GUNICORN_THREADS` / `GUNICORN_TIMEOUT` | `2` / `4` / `120` | processus, fils par processus et délai (s) du serveur d'application |
 | `PORT` | `8000` (backend), `80` (frontend) | port d'écoute, quand l'hébergeur l'impose (Railway) ; les contrôles de santé le suivent |
 | `NGINX_API_UPSTREAM` / `NGINX_RESOLVER` / `NGINX_RESOLVER_IPV6` / `NGINX_TRUSTED_PROXY` | `http://backend:8000` / résolveur du conteneur / `off` / `127.0.0.1` | image frontend : adresse du backend, résolveur DNS, résolution IPv6 et mandataire public cru pour `X-Forwarded-For` ; `frontend/nginx.conf` est un gabarit rempli au démarrage (`docs/deploiement-railway.md`) |
@@ -624,6 +625,19 @@ s'en détacher.
 Les alertes budgétaires deviennent des notifications persistantes, in-app et
 par e-mail, avec une clé d'unicité qui évite de signaler deux fois le même
 franchissement.
+
+**La notification et son e-mail sont deux choses.** La ligne in-app est
+écrite dans la transaction de l'action qu'elle signale, sous un point de
+reprise : une transition annulée ne laisse pas de notification, et une
+notification impossible (une erreur de base) n'annule jamais la transition
+ni sa trace d'audit — elle est journalisée. L'e-mail part **après** la
+validation de la transaction (`transaction.on_commit`), hors de tout verrou
+métier ; s'il ne part pas (serveur de courrier en panne, processus arrêté
+entre le commit et l'envoi), la ligne reste avec `emailed_at` vide et
+l'ordonnanceur la reprend toutes les cinq minutes (`manage.py
+envoyer_emails`, `SCHEDULE_EMAILS`), jusqu'à cinq essais et pour les
+notifications de moins de trois jours. `emailed_at` n'est posé qu'après
+l'envoi, jamais avant.
 
 ## Import Excel et N°ORDRE
 

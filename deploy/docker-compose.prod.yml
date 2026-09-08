@@ -119,6 +119,7 @@ x-django: &django
   # « Supervision » que s'il vaut 1 — sinon le lien mènerait à un 404.
   SUPERVISION: ${SUPERVISION:-0}
   # --- Ordonnanceur ---
+  SCHEDULE_EMAILS: ${SCHEDULE_EMAILS:-*/5 * * * *}
   SCHEDULE_ALERTS: ${SCHEDULE_ALERTS:-0 * * * *}
   SCHEDULE_WEEKLY_REPORT: ${SCHEDULE_WEEKLY_REPORT:-0 7 * * 1}
   SCHEDULE_MONTHLY_REPORT: ${SCHEDULE_MONTHLY_REPORT:-0 7 1 * *}

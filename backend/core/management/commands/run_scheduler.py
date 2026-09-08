@@ -40,6 +40,15 @@ BATTEMENT_SECONDES = 60
 #: hebdomadaire part le lundi matin, avant que le siège n'ouvre.
 JOBS = [
     {
+        # Les e-mails partent après chaque action ; ceci ne reprend que ce
+        # qui n'est pas parti (``notifications.services``).
+        "id": "envoyer_emails",
+        "label": "Reprise des e-mails de notification",
+        "cron": "SCHEDULE_EMAILS",
+        "default": "*/5 * * * *",
+        "command": ("envoyer_emails", {}),
+    },
+    {
         "id": "notify_alerts",
         "label": "Notification des alertes",
         "cron": "SCHEDULE_ALERTS",
