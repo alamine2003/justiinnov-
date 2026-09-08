@@ -1,0 +1,56 @@
+#!/bin/sh
+# Commande forcée de la clé SSH de livraison — la seule chose que cette
+# clé peut faire sur le serveur.
+#
+# Installée en /usr/local/bin/justi-livrer, propriété de root, exécutée par
+# `sudo -n` depuis la ligne `command="…"` de authorized_keys du compte
+# `deploy` (preparer_serveur.sh, durcir_livraison.sh). Le compte `deploy`
+# n'est PAS membre du groupe docker — ce groupe vaut root — et n'a d'autre
+# droit sudo que celui-ci. La livraison continue (cd.yml) demande :
+#
+#   ssh deploy@<hôte> "livrer <IMAGE_TAG> <BACKEND_IMAGE> <FRONTEND_IMAGE> <APP_DOMAIN> <GHCR_USER>"
+#
+# avec le jeton de registre sur l'entrée standard. sshd ignore la commande
+# demandée et exécute celle-ci, qui la relit dans SSH_ORIGINAL_COMMAND,
+# refuse tout ce qui n'a pas exactement cette forme — chaque valeur est
+# bornée par une expression régulière stricte, les mêmes que dans cd.yml —,
+# puis lance deploy.sh depuis le répertoire d'exploitation, propriété de
+# root. La clé de livraison ne peut donc ni copier un fichier, ni ouvrir
+# un shell, ni remplacer le script qu'elle exécute, ni lire le .env.
+#
+# Mettre à jour deploy.sh, docker-compose.prod.yml ou les scripts de
+# sauvegarde est un acte d'exploitation, fait en root, jamais par la CI
+# (README.md, « Réduire les pouvoirs de la livraison »).
+set -eu
+
+REPERTOIRE="${JUSTI_REPERTOIRE:-/home/deploy/justi-innov}"
+
+refuser() { echo "✘ livraison refusée : $*" >&2; exit 2; }
+
+[ -n "${SSH_ORIGINAL_COMMAND:-}" ] || refuser "aucune commande (cette clé ne sert qu'à livrer)"
+# `set -f` : pas de développement de motif pendant le découpage — un nom
+# de compte GitHub comme dependabot[bot] est un motif valide pour le shell.
+set -f
+# shellcheck disable=SC2086
+set -- $SSH_ORIGINAL_COMMAND
+set +f
+[ "$#" -eq 6 ] || refuser "forme attendue : livrer <IMAGE_TAG> <BACKEND_IMAGE> <FRONTEND_IMAGE> <APP_DOMAIN> <GHCR_USER>"
+[ "$1" = "livrer" ] || refuser "commande inconnue : $1"
+
+verifier() {
+  nom="$1"; valeur="$2"; motif="$3"
+  printf '%s' "$valeur" | grep -Eq "$motif" || refuser "$nom invalide : « $valeur »"
+}
+verifier IMAGE_TAG      "$2" '^sha-[0-9a-f]{12}$'
+verifier BACKEND_IMAGE  "$3" '^ghcr\.io/[a-z0-9._/-]+$'
+verifier FRONTEND_IMAGE "$4" '^ghcr\.io/[a-z0-9._/-]+$'
+verifier APP_DOMAIN     "$5" '^[a-z0-9.-]+$'
+verifier GHCR_USER      "$6" '^[]A-Za-z0-9._[-]+$'
+
+[ -f "$REPERTOIRE/deploy.sh" ] || refuser "$REPERTOIRE/deploy.sh introuvable"
+[ "$(stat -c %U "$REPERTOIRE/deploy.sh")" = "root" ] || refuser "$REPERTOIRE/deploy.sh n'appartient pas à root"
+
+export IMAGE_TAG="$2" BACKEND_IMAGE="$3" FRONTEND_IMAGE="$4" APP_DOMAIN="$5" GHCR_USER="$6"
+cd "$REPERTOIRE"
+# Le jeton de registre est encore sur l'entrée standard : deploy.sh le lit.
+exec ./deploy.sh

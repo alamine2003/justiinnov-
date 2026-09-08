@@ -36,24 +36,25 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 
 1. Une machine Linux avec Docker Engine et le plugin Compose (v2.24 ou plus),
    les ports 80 et 443 ouverts, un enregistrement DNS vers elle.
-2. Un utilisateur dédié, membre du groupe `docker`, avec une clé SSH
-   réservée au déploiement. Sur une Ubuntu neuve, `preparer_serveur.sh`
-   fait tout cela d'un coup — Docker et Compose, l'utilisateur `deploy`,
-   ses clés (celle de déploiement en argument, plus celles déjà autorisées
-   pour root), le pare-feu limité à 22, 80 et 443, les mises à jour de
-   sécurité automatiques, SSH par clé seulement — et se relance sans dégât :
+2. Un compte de livraison `deploy` **sans le groupe `docker`** (ce groupe
+   vaut root), dont la clé SSH ne peut exécuter qu'une commande forcée,
+   `justi-livrer` (« Réduire les pouvoirs de la livraison », plus bas), et
+   un répertoire d'exploitation `/home/deploy/justi-innov` **propriété de
+   root**. Sur une Ubuntu neuve, `preparer_serveur.sh` fait tout cela d'un
+   coup — Docker et Compose, le compte, la commande forcée et son sudo, le
+   pare-feu limité à 22, 80 et 443, les mises à jour de sécurité
+   automatiques, SSH par clé seulement — et se relance sans dégât. Les
+   fichiers d'exploitation partent d'abord, en root :
    ```bash
    ssh-keygen -t ed25519 -N "" -C deploy@justi-innov -f ~/.ssh/justi-innov-deploy
+   rsync -a --exclude .env deploy/ root@<hôte>:/home/deploy/justi-innov/
    ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)'" < deploy/preparer_serveur.sh
    ```
-   À la main, l'équivalent minimal :
-   ```bash
-   sudo adduser --disabled-password deploy && sudo usermod -aG docker deploy
-   sudo -u deploy mkdir -p ~deploy/.ssh ~deploy/justi-innov
-   # ajoutez la clé publique dans ~deploy/.ssh/authorized_keys
-   ```
-3. Le fichier `.env` dans `~deploy/justi-innov/`, d'après `.env.example`,
-   en `chmod 600`. Quatre secrets s'y génèrent, avec
+   Les humains entrent en **root**, avec la clé que l'hébergeur y a posée ;
+   toute l'exploitation (`docker compose`, `restaurer.sh`, `.env`) se fait
+   en root, dans `/home/deploy/justi-innov`.
+3. Le fichier `.env` dans `/home/deploy/justi-innov/`, d'après `.env.example`,
+   `root:root` et `chmod 600`. Quatre secrets s'y génèrent, avec
    `python3 -c "import secrets; print(secrets.token_urlsafe(32))"` :
    `DJANGO_SECRET_KEY` (64 plutôt que 32), `POSTGRES_PASSWORD`,
    `AWS_SECRET_ACCESS_KEY`, `METRICS_TOKEN` ; plus `GRAFANA_ADMIN_PASSWORD`,
@@ -68,12 +69,13 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    journaux sans que personne ne le voie ; une préproduction sans SMTP
    l'acquitte explicitement avec `EMAIL_BACKEND_CONSOLE=1`.
 4. **Un stockage objet hors de la machine pour les sauvegardes**, renseigné
-   dans `SAUVEGARDE_DISTANT_*` : un bucket S3 compatible chez un autre
-   hébergeur ou dans une autre région, avec un compte qui ne peut que lire,
-   écrire et lister ce bucket. C'est **obligatoire avant toute mise en
-   production** (« Copie hors machine », plus bas) ; une préproduction peut
-   s'en passer, `deploy.sh` et les services de sauvegarde le rappellent
-   alors à chaque occasion.
+   dans `SAUVEGARDE_DISTANT_*`, **et une clé de chiffrement**
+   (`SAUVEGARDE_CHIFFREMENT_CLE`, gardée aussi hors du serveur) : un bucket
+   S3 compatible chez un autre hébergeur ou dans une autre région, avec un
+   compte qui ne peut que lire, écrire et lister ce bucket — pas supprimer.
+   C'est **obligatoire avant toute mise en production** (« Copie hors
+   machine », plus bas) ; une préproduction peut s'en passer, `deploy.sh`
+   et les services de sauvegarde le rappellent alors à chaque occasion.
 5. Dans GitHub, un environnement `staging` et un environnement `production`
    (Settings › Environments) portant chacun :
 
@@ -84,7 +86,6 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    | secret | `DEPLOY_SSH_KEY` | clé privée correspondante |
    | secret | `DEPLOY_KNOWN_HOSTS` | sortie de `ssh-keyscan -H <hôte>`, **obligatoire** : le workflow refuse de partir sans, plutôt que d'accepter l'empreinte de n'importe quelle machine au premier contact |
    | variable | `APP_DOMAIN` | domaine public |
-   | variable | `DEPLOY_PATH` | `~/justi-innov` par défaut |
 
    Sur `production`, réglez deux choses — c'est là, et pas dans le workflow,
    que se décide qui déploie quoi :
@@ -99,11 +100,19 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    Sur `staging`, aucune règle : `main` part seule.
 
    Les valeurs transmises au serveur (étiquette, noms d'images, domaine,
-   chemin) sont vérifiées par expression régulière avant tout appel SSH, et
-   passent par un fichier `.deploy-env` lu puis effacé sur le serveur ; le
-   jeton de registre, lui, ne transite que par l'entrée standard. Étiquette
-   et noms d'images sont ensuite réinscrits dans le `.env` par `deploy.sh`
-   (« Commandes d'exploitation », plus bas).
+   compte du registre) sont vérifiées par expression régulière avant
+   l'appel SSH, puis **revérifiées sur le serveur** par la commande forcée
+   de la clé, avec les mêmes motifs ; le jeton de registre, lui, ne transite
+   que par l'entrée standard. Étiquette et noms d'images sont ensuite
+   réinscrits dans le `.env` par `deploy.sh` (« Commandes d'exploitation »,
+   plus bas). La livraison ne copie aucun fichier sur le serveur.
+
+   Sur le dépôt (Settings › Branches), une **règle de protection de
+   `main`** : *Require a pull request before merging*, *Require status
+   checks to pass* avec les cinq travaux d'`Intégration continue`, *Do not
+   allow bypassing the above settings*. Sans elle, une poussée directe sur
+   `main` part en préproduction sans relecture ; avec elle, rien n'entre
+   dans `main` qu'une pull request verte.
 
 ## Ce qui se passe pendant un déploiement
 
@@ -145,9 +154,78 @@ Compose (« Supervision », plus bas) ; il signale, sans bloquer, un
 vide).
 
 Une livraison peut être rejouée sans nouvelle image : `deploy.sh` avec la
-même étiquette recharge la configuration copiée (Caddyfile, Prometheus,
-tableaux de bord Grafana), puisque ces fichiers sont montés depuis ce
-dossier et non copiés dans les images.
+même étiquette recharge la configuration du répertoire d'exploitation
+(Caddyfile, Prometheus, tableaux de bord Grafana), puisque ces fichiers
+sont montés depuis ce dossier et non copiés dans les images.
+
+## Réduire les pouvoirs de la livraison
+
+La clé SSH de livraison, détenue par GitHub, ne peut faire **qu'une chose**
+sur le serveur : demander le déploiement d'une étiquette d'images. Avant
+(audit du 8 septembre 2026, §3.4), le compte `deploy` était membre du
+groupe `docker` — ce qui vaut root —, et la livraison recopiait tout
+`deploy/` depuis le dépôt puis exécutait le `deploy.sh` qu'elle venait
+d'écrire : quiconque poussait sur `main` exécutait du code en root sur le
+serveur, sans approbation. Désormais :
+
+- `deploy` n'est **pas** dans le groupe `docker` et n'a d'autre droit
+  `sudo` que `/usr/local/bin/justi-livrer` (`/etc/sudoers.d/justi-livrer`) ;
+- sa clé porte une **commande forcée** (`command="sudo -n
+  /usr/local/bin/justi-livrer"`, sans pty, sans transfert de port ni
+  d'agent) : sshd ignore la commande demandée et lance celle-ci, qui relit
+  la demande dans `SSH_ORIGINAL_COMMAND`, refuse tout ce qui n'est pas
+  exactement `livrer <IMAGE_TAG> <BACKEND_IMAGE> <FRONTEND_IMAGE>
+  <APP_DOMAIN> <GHCR_USER>` — chaque valeur bornée par les mêmes
+  expressions régulières que `cd.yml` — puis lance le `deploy.sh` du
+  répertoire d'exploitation ;
+- ce répertoire, `deploy.sh`, `docker-compose.prod.yml`, les scripts de
+  sauvegarde et le `.env` appartiennent à **root** : la clé ne peut ni les
+  lire (le `.env`), ni les remplacer, ni copier quoi que ce soit ;
+- la CI ne change donc **jamais** ce qui tourne en root. Les fichiers de
+  `deploy/` se mettent à jour à la main, en root, depuis un dépôt à jour —
+  après avoir relu ce qui change :
+  ```bash
+  git -C ~/justiinnov- diff v1.0.3 HEAD -- deploy/        # ce qui va changer
+  rsync -a --exclude .env --exclude .deployed deploy/ root@<hôte>:/home/deploy/justi-innov/
+  ssh root@<hôte> 'chown -R root:root /home/deploy/justi-innov && chmod 755 /home/deploy/justi-innov/*.sh && install -m 0755 /home/deploy/justi-innov/justi-livrer /usr/local/bin/justi-livrer'
+  ```
+  puis une livraison (ou `deploy.sh` en root) pour que la pile relise les
+  fichiers montés.
+
+**Passer un serveur en service à ce modèle** — l'opération, sa
+vérification et son retour arrière :
+
+1. Poser `justi-livrer` et les fichiers de `deploy/` à jour, en root
+   (`rsync` ci-dessus), puis :
+   ```bash
+   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)'" < deploy/durcir_livraison.sh
+   ```
+   Le script retire `deploy` du groupe `docker`, pose le sudo restreint et
+   la commande forcée, **remplace** `~deploy/.ssh/authorized_keys` par la
+   seule clé de livraison (les clés des humains n'y sont plus : ils entrent
+   en root), passe le répertoire à root et le `.env` en 600.
+2. Vérifier, depuis le poste, que la clé ne peut rien d'autre :
+   ```bash
+   ssh -i ~/.ssh/justi-innov-deploy deploy@<hôte> id          # → « livraison refusée : aucune commande »
+   ssh -i ~/.ssh/justi-innov-deploy deploy@<hôte> 'livrer x'  # → « forme attendue : … »
+   ssh -i ~/.ssh/justi-innov-deploy deploy@<hôte> 'livrer sha-000000000000 ghcr.io/x ghcr.io/y a.b c; id'
+   #                                                            → « GHCR_USER invalide » : rien ne s'enchaîne
+   ssh root@<hôte> 'id deploy; sudo -l -U deploy'             # sans « docker » ; justi-livrer seul
+   ```
+   puis une livraison réelle — Actions › Livraison continue › *Run
+   workflow* sur `staging`, ou le tag suivant — et, dans le journal du
+   travail `Déployer`, la sortie de `deploy.sh` jusqu'à « ✔ … en ligne ».
+3. Retour arrière, si la livraison ne passe pas : le serveur n'a rien
+   perdu, la pile tourne. Rétablir l'ancien modèle le temps de comprendre :
+   ```bash
+   ssh root@<hôte> 'usermod -aG docker deploy && rm -f /etc/sudoers.d/justi-livrer \
+     && printf "%s\n" "$(cat ~/.ssh/justi-innov-deploy.pub)" > /home/deploy/.ssh/authorized_keys \
+     && chown -R deploy:deploy /home/deploy/justi-innov'
+   ```
+   et `git revert` du commit qui a changé `cd.yml` (la livraison recopie
+   alors `deploy/` comme avant). L'un sans l'autre ne marche pas : l'ancien
+   `cd.yml` a besoin d'un `deploy` qui écrit dans le répertoire, le nouveau
+   d'une commande forcée.
 
 ## Commandes d'exploitation
 
@@ -276,6 +354,42 @@ print('parti')
 Rappel : les notifications vont à l'adresse de chaque compte, qui doit
 appartenir à `ALLOWED_EMAIL_DOMAINS`. Si ces boîtes n'existent pas encore
 chez le fournisseur du domaine, les messages partiront et rebondiront.
+
+### Remplacer le compte d'envoi
+
+Le compte d'envoi en service depuis le 7 septembre 2026 est un compte
+Gmail **personnel**, dont le mot de passe d'application a transité en
+clair : **son remplacement est urgent, et sa révocation immédiate après
+bascule**. Le nouveau compte est **dédié** — un Gmail créé pour la
+plateforme (`justi.innov.notifications@gmail.com` ou équivalent, avec
+validation en deux étapes, sans rien d'autre dedans), ou une boîte du
+domaine le jour où il en a — et son mot de passe d'application ne sert qu'à
+`EMAIL_HOST_PASSWORD`. Bascule testée avant révocation :
+
+1. Créer le compte dédié, activer la validation en deux étapes, générer un
+   mot de passe d'application ; le noter dans le gestionnaire de mots de
+   passe, jamais dans un chat ni un e-mail.
+2. Sur le serveur, en root, remplacer `EMAIL_HOST_USER`,
+   `EMAIL_HOST_PASSWORD` et `DEFAULT_FROM_EMAIL` dans `.env` (éditeur, pas
+   `sed` : un mot de passe collé avec ses espaces a déjà cassé une
+   commande), puis relancer :
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --wait backend scheduler
+   ```
+   (`deploy.sh` exporte les secrets absents du `.env` avant `up` ; à la
+   main, exportez-les vides de même : `export METRICS_TOKEN= …`, ou passez
+   par `./deploy.sh` avec l'étiquette en ligne.)
+3. Envoyer le message de contrôle ci-dessus, **vers une adresse d'un
+   compte de la plateforme** : il doit arriver, de la nouvelle adresse.
+4. Seulement alors, dans le compte Google personnel : *Sécurité ›
+   Validation en deux étapes › Mots de passe des applications* → supprimer
+   celui de la plateforme ; puis changer le mot de passe du compte, qui a
+   lui aussi transité.
+5. Refaire le message de contrôle : il part encore (le nouveau compte ne
+   dépend pas de l'ancien). Consigner la date de bascule.
+
+Retour arrière avant l'étape 4 : remettre les trois lignes précédentes du
+`.env` et relancer. Après l'étape 4, il n'y a plus de retour : c'est voulu.
 
 ## Double authentification
 
@@ -466,11 +580,30 @@ POSTGRES_PASSWORD=<MDP_APP>
 il devient le secret Compose `postgres_migration_password`, que
 l'entrypoint lit dans un fichier (« Secrets et variables »).
 
-et `docker compose -f docker-compose.prod.yml up -d --wait` relance la
-pile. Le script est idempotent : le rejouer renouvelle le mot de passe et
-les droits, ce que `restaurer.sh` fait de lui-même après une restauration.
+et `./deploy.sh` avec l'étiquette en ligne (ou `docker compose -f
+docker-compose.prod.yml up -d --wait backend scheduler`, après avoir
+exporté les secrets absents comme le fait `deploy.sh`) relance la pile.
+Le script est idempotent : le rejouer renouvelle le mot de passe et les
+droits, ce que `restaurer.sh` fait de lui-même après une restauration.
 Avec une base désignée par `DATABASE_URL`, `DATABASE_MIGRATION_URL` tient le
 rôle de `POSTGRES_MIGRATION_USER`.
+
+**Vérifier que c'est bien le rôle restreint qui sert** — le fichier `.env`
+ne le prouve pas, la base oui :
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend python manage.py shell -c \
+  "from django.db import connection; c = connection.cursor(); c.execute('SELECT current_user'); print(c.fetchone())"
+# → ('justi_app',)
+docker compose -f docker-compose.prod.yml exec -T db psql -U justi_app -d justi_innov \
+  -c 'CREATE TABLE essai_droits (id int)'
+# → ERROR: permission denied for schema public — c'est le résultat attendu
+```
+
+Un `CREATE TABLE` qui passe signifie que Django tourne encore avec le
+propriétaire : le `.env` n'a pas été relu, ou `POSTGRES_USER` y est resté
+`justi`. **Retour arrière** : remettre les quatre variables à leur valeur
+précédente et relancer ; le rôle `justi_app` peut rester, il ne gêne pas.
 
 ## Sauvegardes et restauration
 
@@ -481,7 +614,7 @@ Trois services de la pile s'en chargent chaque nuit, dans le volume
 |---|---|---|
 | `sauvegarde` | `SAUVEGARDE_HEURE`, 02:00 | `pg_dump -Fc` de la base dans `base/<base>-<horodatage>.dump` ; les dumps quotidiens de plus de `SAUVEGARDE_RETENTION_JOURS` (30) jours sont supprimés ; le premier dump réussi de chaque mois est copié dans `base/mensuel/<base>-<AAAA-MM>.dump` et **n'est jamais supprimé** |
 | `sauvegarde-pieces` | `SAUVEGARDE_PIECES_HEURE`, 02:15 | miroir du bucket des justificatifs dans `pieces/` (`mc mirror --overwrite`, sans suppression : un objet effacé du bucket reste dans la copie) |
-| `sauvegarde-distante` | dans la minute qui suit chaque sauvegarde réussie | copie de `base/`, `base/mensuel/` et `pieces/` vers le stockage objet `SAUVEGARDE_DISTANT_*` (`rclone copy`, incrémental), vérification (`rclone check`), journal « ✔ copie distante » ou « ✘ » (« Copie hors machine », ci-dessous) |
+| `sauvegarde-distante` | dans la minute qui suit chaque sauvegarde réussie | copie **chiffrée** de `base/`, `base/mensuel/` et `pieces/` vers le stockage objet `SAUVEGARDE_DISTANT_*` (`rclone copy` dans un coffre `crypt`, incrémental), vérification (`rclone cryptcheck`), journal « ✔ copie distante » ou « ✘ » (« Copie hors machine », ci-dessous) ; **n'efface rien sur le distant** |
 
 La rétention suit la règle de la plateforme : **rien ne se purge**. Les
 quotidiens servent à revenir à la veille ou à la semaine dernière ; les
@@ -505,6 +638,20 @@ docker compose -f docker-compose.prod.yml run --rm sauvegarde-pieces --une-fois
 docker compose -f docker-compose.prod.yml run --rm sauvegarde-distante --une-fois
 ./restaurer.sh --lister
 ```
+
+**Objectifs, à connaître avant d'ouvrir aux pays.**
+
+| | Objectif | Ce qui le tient |
+|---|---|---|
+| Perte de données maximale (RPO) | **24 h** : ce qui a été saisi depuis la sauvegarde de 02:00 est perdu si le serveur l'est | une sauvegarde par nuit ; à resserrer à 6 h (`SAUVEGARDE_HEURE` ne prend qu'une heure : dupliquer le service dans une surcharge locale) quand les pays saisissent tous les jours |
+| Délai de reprise (RTO) | **4 h** : serveur neuf, pile en ligne, base et pièces restaurées depuis le distant | `preparer_serveur.sh` (~15 min), `deploy.sh` (~10 min), `restaurer.sh --depuis-distant` (le temps de rapatrier, quelques minutes par giga-octet), « Après une restauration » |
+| Sauvegarde vérifiée | chaque matin | `manage.py verifier_sauvegardes` (ordonnanceur, 8 h 30) lit les marqueurs `.derniere-reussite-*` que `sauvegarder.sh` écrit après chaque réussite, et notifie les administrateurs — in-app et par e-mail — de ce qui manque ou date de plus de 26 h |
+| Restauration prouvée | une fois avant l'ouverture, puis chaque trimestre | « Restauration dans un environnement isolé », avec `manage.py verifier_restauration` et un compte rendu daté |
+
+La notification de sauvegarde en défaut est **critique** et se répète chaque
+matin tant que le défaut dure ; son absence, un matin, ne prouve rien si
+l'ordonnanceur lui-même est arrêté — `docker compose ps` doit montrer
+`scheduler` sain.
 
 ### Copie hors machine
 
@@ -536,13 +683,33 @@ le service tourne quand même et le dit, au démarrage et à chaque sauvegarde
 (`✘ copie distante non faite : SAUVEGARDE_DISTANT_ENDPOINT vide`), comme
 `sauvegarde`, `sauvegarde-pieces`, `deploy.sh` et `restaurer.sh --lister`.
 
-Le distant est un bucket S3 compatible (AWS, Scaleway, OVH, Backblaze,
+**Tout ce qui part est chiffré avant de partir.** Un dump contient les
+jetons de session, les secrets TOTP et, par le miroir, tous les
+justificatifs : rien de cela ne se dépose en clair chez un tiers. Le
+service pose un coffre rclone (`crypt`, XSalsa20-Poly1305) sur le bucket,
+clé dérivée de `SAUVEGARDE_CHIFFREMENT_CLE` (secret Compose) et du sel
+facultatif `SAUVEGARDE_CHIFFREMENT_SEL` ; les noms de fichiers restent en
+clair, pour `--lister` et `--rapatrier`, le contenu ne se lit qu'avec la
+clé. Sans clé, **rien ne part** et le journal dit pourquoi
+(`SAUVEGARDE_DISTANT_EN_CLAIR=1` le permet, pour un essai seulement).
+**La clé se garde hors du serveur** — gestionnaire de mots de passe de la
+direction et copie imprimée au coffre, avec le sel s'il y en a un : un
+serveur perdu emporte son `.env`, et sans la clé la copie distante est
+illisible. On ne change pas la clé sans refaire une copie complète : ce
+qui a été chiffré avec l'ancienne ne se lit plus qu'avec elle.
+
+**Le serveur n'efface rien sur le distant.** Un serveur compromis — la clé
+SSH de livraison, une faille — ne doit pas pouvoir emporter les
+sauvegardes avec lui. La rotation des quotidiens n'est donc pas faite d'ici
+(`SAUVEGARDE_DISTANT_ROTATION=0`, défaut) mais par une règle de cycle de
+vie du bucket, et le compte donné au service **n'a pas le droit de
+supprimer**. Un distant sans règle de cycle de vie accepte
+`SAUVEGARDE_DISTANT_ROTATION=1`, en sachant ce qu'on y perd.
+
+Le distant est un bucket S3 compatible (Backblaze B2, AWS, Scaleway, OVH,
 Infomaniak, un MinIO ailleurs…), **chez un autre hébergeur ou dans une
-autre région** que le serveur, avec un compte qui ne peut que lire, écrire
-et lister ce bucket — pas le supprimer. Il est disposé ainsi ; les
-quotidiens y suivent la même rotation que sur la machine
-(`SAUVEGARDE_RETENTION_JOURS`, préfixe `quotidien/` seulement), les
-mensuels et les pièces n'y sont jamais supprimés :
+autre région** que le serveur. Il est disposé ainsi ; les mensuels et les
+pièces n'y sont jamais supprimés, les quotidiens le sont par le bucket :
 
 ```
 <bucket>[/<sous-dossier>]/quotidien/<base>-<horodatage>.dump
@@ -557,6 +724,36 @@ mensuels et les pièces n'y sont jamais supprimés :
 | `SAUVEGARDE_DISTANT_CLE`, `SAUVEGARDE_DISTANT_SECRET` | le compte ; le secret passe par un secret Compose, pas par l'environnement (« Secrets et variables ») |
 | `SAUVEGARDE_DISTANT_REGION` | si le fournisseur l'exige (`eu-west-3`, `fr-par`) ; vide pour MinIO ou OVH |
 | `SAUVEGARDE_DISTANT_FOURNISSEUR` | nom du fournisseur au sens de rclone (`Other` par défaut ; `AWS`, `Scaleway`, `Wasabi`…) |
+| `SAUVEGARDE_CHIFFREMENT_CLE`, `SAUVEGARDE_CHIFFREMENT_SEL` | la clé du coffre (secret Compose, **obligatoire**, gardée aussi hors du serveur) et son sel facultatif |
+| `SAUVEGARDE_DISTANT_ROTATION` | `0` (défaut) : le serveur n'efface rien là-bas, le bucket applique la rétention ; `1` : rotation des quotidiens faite d'ici |
+
+**Backblaze B2, le choix retenu** (10 Go gratuits, sans carte bancaire ;
+décision 51 de `docs/model-de-donnees.md`), pas à pas, dans la console B2 :
+
+1. *Buckets › Create a Bucket* : nom unique (`sauvegardes-justi-innov`),
+   **Private**, *Default Encryption* au choix (le contenu arrive déjà
+   chiffré), *Object Lock* non requis. Notez la région de l'endpoint S3
+   affiché (`s3.eu-central-003.backblazeb2.com` → région `eu-central-003`).
+2. *Lifecycle Settings* du bucket : **Keep all versions** (le défaut :
+   `mensuel/` et `pieces/` ne se suppriment jamais, et un objet écrasé
+   garde sa version précédente — ce qui protège aussi d'un serveur qui
+   réécrirait des dumps corrompus), puis *Use custom lifecycle rules* avec
+   une seule règle, sur le préfixe `quotidien/` : *Days Till Hide* =
+   `SAUVEGARDE_RETENTION_JOURS` (30), *Days Till Delete* = 1. C'est cette
+   règle qui tient la rétention des quotidiens à la place du serveur.
+3. *App Keys › Add a New Application Key* : restreinte **à ce bucket**,
+   capacités `listBuckets, listFiles, readFiles, writeFiles` — **sans
+   `deleteFiles`**. `keyID` → `SAUVEGARDE_DISTANT_CLE`, `applicationKey` →
+   `SAUVEGARDE_DISTANT_SECRET` (affiché une seule fois).
+4. Dans `.env` : `SAUVEGARDE_DISTANT_ENDPOINT=https://s3.<région>.backblazeb2.com`,
+   `SAUVEGARDE_DISTANT_BUCKET=<nom du bucket>`,
+   `SAUVEGARDE_DISTANT_REGION=<région>`, `SAUVEGARDE_DISTANT_FOURNISSEUR=Other`,
+   et la clé de chiffrement : `SAUVEGARDE_CHIFFREMENT_CLE="$(openssl rand -base64 48)"`,
+   aussitôt recopiée hors du serveur.
+
+Restaurer une version antérieure d'un objet écrasé se fait depuis la
+console B2 (*Browse Files › Show all versions*) ; le service, lui, ne voit
+que la version courante.
 
 Après avoir renseigné ces variables, `deploy.sh` (ou `docker compose up -d
 sauvegarde-distante`) recrée le service ; vérifiez sans attendre la nuit :
@@ -597,6 +794,25 @@ Les justificatifs se remettent depuis le miroir, dans le bucket, le cas
 Restaurez la base **et** les pièces d'une même nuit : une dépense dont la
 pièce manque en stockage apparaîtrait justifiée sans preuve.
 
+### Après une restauration
+
+Une base restaurée est **la base d'une autre date**. Elle contient les
+jetons de session et les secrets TOTP de ce jour-là, et ignore tout ce qui
+a été révoqué depuis : un compte désactivé hier revient actif, un jeton
+révoqué hier redevient valable, un mot de passe changé hier redevient
+l'ancien. Après toute restauration de la base **de la pile** :
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend \
+    python manage.py revoquer_sessions --tous --motif "restauration du <dump>"
+```
+
+puis relire l'historique des comptes (`Configuration › Historique`) entre
+la date du dump et la restauration, et rejouer à la main ce qui s'y
+trouvait : désactivations, réinitialisations de mot de passe et de second
+facteur (« Double authentification »). La restauration elle-même est un
+acte d'exploitation à consigner : date, dump, qui, pourquoi.
+
 ### Restaurer depuis la copie hors machine
 
 Quand le serveur est perdu — ou son volume `sauvegardes` — la restauration
@@ -634,48 +850,115 @@ la sauvegarde bien — `pg_dump` accepte l'URL — mais `restaurer.sh` ne
 connaît que le Postgres de la pile : restaurez alors avec `pg_restore` et
 la même URL, depuis le conteneur `sauvegarde`.
 
-### Test de restauration trimestriel
+### Restauration dans un environnement isolé
 
-Une sauvegarde qu'on n'a jamais restaurée n'est qu'un espoir. Chaque
-trimestre, sur le serveur, dans une base jetable — la pile reste en ligne,
-rien n'est arrêté :
+Une sauvegarde qu'on n'a jamais restaurée n'est qu'un espoir ; une
+sauvegarde copiée n'est pas une sauvegarde restaurée. **Une fois avant
+l'ouverture aux pays, puis chaque trimestre**, la restauration se prouve
+de bout en bout, dans une pile jetable qui ne touche ni la base, ni le
+bucket, ni les destinataires de la production. Le compte rendu daté est
+le livrable ; sans lui, rien n'est prouvé.
 
-1. Vérifier que les sauvegardes récentes existent, ont une taille
-   plausible (un dump qui pèse quelques kilo-octets est vide) et sont bien
-   sur le distant — même nom, même taille dans les deux listes, et un
-   « ✔ copie distante » chaque nuit dans le journal :
-   ```bash
-   ./restaurer.sh --lister
-   docker compose -f docker-compose.prod.yml logs --since 72h sauvegarde sauvegarde-pieces sauvegarde-distante
-   ```
-2. Restaurer le dernier dump dans une base jetable — un trimestre sur
-   deux, depuis le distant plutôt que depuis le volume, pour prouver que la
-   copie hors machine se restaure :
-   ```bash
-   ./restaurer.sh justi_innov-<horodatage>.dump --base test_restauration
-   ./restaurer.sh --depuis-distant justi_innov-<horodatage>.dump --base test_restauration
-   ```
-   Le script crée la base, restaure et affiche les comptages. Comparez-les
-   à ceux de la base en service :
-   ```bash
-   docker compose -f docker-compose.prod.yml exec db psql -U justi -d justi_innov \
-       -c 'SELECT count(*) FROM expenses_expense' -c 'SELECT count(*) FROM expenses_proof'
-   ```
-   Le nombre de dépenses restaurées doit être celui de la veille au soir.
-3. Vérifier que les pièces du miroir correspondent aux justificatifs de la
-   base restaurée : le miroir doit contenir au moins autant d'objets que la
-   base compte de justificatifs.
-   ```bash
-   docker compose -f docker-compose.prod.yml run --rm --entrypoint sh sauvegarde \
-       -c 'find /sauvegardes/pieces -type f | wc -l'
-   ```
-4. Supprimer la base jetable :
-   ```bash
-   docker compose -f docker-compose.prod.yml exec db dropdb -U justi test_restauration
-   ```
-5. Noter la date, le dump testé et les comptages obtenus dans le journal
-   d'exploitation. Un écart inexpliqué est un incident, pas une note de bas
-   de page.
+**1. Une pile jetable.** Sur le serveur (ou sur n'importe quelle machine
+avec Docker), un second projet Compose, avec ses propres volumes, le
+courrier en console et un bucket vide :
+
+```bash
+mkdir -p ~/restauration && cd ~/restauration
+cp ~/justi-innov/deploy/docker-compose.prod.yml ~/justi-innov/deploy/{sauvegarder.sh,restaurer.sh,creer_role_applicatif.sql,Caddyfile} .
+cp ~/justi-innov/deploy/.env .env
+# Isolement : mêmes images (BACKEND_IMAGE, FRONTEND_IMAGE, IMAGE_TAG sont
+# dans le .env, écrits par deploy.sh), autres volumes (autre nom de
+# projet), courrier en console, aucun port public.
+sed -i -e '/^EMAIL_BACKEND_CONSOLE=/d' -e 's/^EMAIL_HOST=.*/EMAIL_HOST=/' \
+       -e '/^COMPOSE_PROJECT_NAME=/d' -e '/^COMPOSE_FILE=/d' .env
+cat >> .env <<'EOF'
+EMAIL_BACKEND_CONSOLE=1
+COMPOSE_PROJECT_NAME=justi-restauration
+COMPOSE_FILE=docker-compose.prod.yml:docker-compose.override.yml
+EOF
+cat > docker-compose.override.yml <<'EOF'
+services:
+  caddy:
+    ports: []            # rien n'écoute sur Internet
+EOF
+docker compose up -d --wait db minio backend
+```
+
+Le projet `justi-restauration` a ses volumes (`justi-restauration_pgdata`,
+`justi-restauration_sauvegardes`, …) : rien de commun avec la production.
+Les services de sauvegarde ne sont pas démarrés (`up` ne nomme que `db`,
+`minio` et `backend`) : rien ne repart vers le distant depuis cette pile.
+Ne lancez jamais ici `sauvegarde-distante --une-fois`.
+
+**2. Rapatrier et restaurer, depuis le distant** — c'est le chemin qui
+servira le jour où le serveur est perdu, et le seul qui prouve que le coffre
+se déchiffre avec la clé gardée hors du serveur :
+
+```bash
+docker compose run --rm sauvegarde-distante --lister
+docker compose run --rm sauvegarde-distante --rapatrier justi_innov-<horodatage>.dump
+docker compose run --rm sauvegarde-distante --rapatrier-pieces
+./restaurer.sh justi_innov-<horodatage>.dump          # dans CE projet : la base jetable
+./restaurer.sh --pieces                               # dans le bucket jetable
+```
+
+`restaurer.sh` lit `COMPOSE_PROJECT_NAME` et `COMPOSE_FILE` dans ce `.env`
+: il demande de taper le nom de la base, et c'est la base jetable du projet
+`justi-restauration` qu'il écrase — la production n'est pas touchée.
+`--rapatrier` déchiffre le coffre avec `SAUVEGARDE_CHIFFREMENT_CLE` du
+`.env` copié : pour prouver la clé gardée hors du serveur, remplacez-la
+dans ce `.env` par la copie du gestionnaire de mots de passe. Notez
+l'heure de début et de fin : c'est la mesure du délai de reprise.
+
+**3. Vérifier — la commande dit non si une pièce manque :**
+
+```bash
+docker compose exec backend python manage.py verifier_restauration
+```
+
+Elle refuse de tourner si le courrier n'est pas en console, affiche les
+décomptes (comptes par rôle, pays, dossiers et lignes par statut, entrées
+d'audit et d'historique), **la date de la dernière entrée du journal
+d'audit — la perte de données réelle de cette sauvegarde** —, ouvre
+**chaque** pièce dans le bucket jetable et compare son empreinte SHA-256 à
+la fiche. Code de sortie 0, ou une liste nommée de ce qui manque.
+Comparez les décomptes à ceux de la production au moment du dump.
+
+**4. Ouvrir l'application restaurée**, sans port public : un tunnel SSH
+vers le conteneur (`ssh -L 8443:127.0.0.1:443 …` après avoir remis un
+`ports: ["127.0.0.1:8443:443"]` sur `caddy` dans la surcharge), connexion
+avec un compte du dump, un dossier justifié pris au hasard, sa pièce
+ouverte. Les e-mails que l'application « enverrait » sont dans
+`docker compose logs backend scheduler` — aucun ne part.
+
+**5. Détruire la pile jetable**, volumes compris :
+
+```bash
+docker compose down -v && cd ~ && rm -rf ~/restauration
+```
+
+**6. Consigner** dans le journal d'exploitation (`docs/`, ou le projet
+Claude « JUSTI INNOV ») : date, dump restauré (nom, taille), durée réelle
+de 2 à 4, sortie complète de `verifier_restauration`, écarts constatés,
+limites restantes. Un écart inexpliqué est un incident, pas une note de
+bas de page.
+
+## Après une fuite
+
+Une sauvegarde lue par un tiers, un `.env` copié, un poste d'exploitation
+compromis : ce qui est exposé, et ce qu'il faut faire, dans l'ordre. Deux
+choses n'ouvrent pas les mêmes portes :
+
+| Ce qui a fui | Ce que cela permet | Ce qui le ferme |
+|---|---|---|
+| **Un jeton d'API** (table `authtoken_token`, en clair dans tout dump) | entrer dans l'API **sans mot de passe ni second facteur**, avec les droits du compte, jusqu'à 30 jours après l'émission du jeton (`TOKEN_MAX_AGE_DAYS`) | `manage.py revoquer_sessions --tous --motif "…"` : tous les jetons sont retirés, chaque compte doit se reconnecter, et l'historique le dit |
+| **Un secret TOTP** (`accounts_userprofile.totp_secret`, en clair) | calculer les codes du second facteur — mais **pas** entrer seul : il faut aussi le mot de passe, qui n'est stocké que haché (PBKDF2) | pour chaque compte enrôlé : `reset-2fa` par un administrateur puis réenrôlement par le titulaire (« Double authentification ») ; changer les mots de passe par prudence, un mot de passe faible devenant suffisant |
+| **`.env` du serveur** | tout : base, stockage, courrier, distant, clé de chiffrement des sauvegardes | changer chaque secret, dans cet ordre : distant et clé de chiffrement (puis une copie complète), stockage MinIO (`AWS_*`, puis `ensure_bucket`), courrier (mot de passe d'application), `DJANGO_SECRET_KEY` (invalide les sessions Django, pas les jetons DRF), mot de passe Postgres ; puis `revoquer_sessions --tous` |
+| **La clé SSH de livraison** | ce que peut le compte `deploy` (« Réduire les pouvoirs de la livraison ») | retirer la clé de `authorized_keys`, en générer une autre, remplacer le secret `DEPLOY_SSH_KEY` dans l'environnement GitHub |
+
+Une restauration ancienne **réactive** des accès révoqués depuis : voir
+« Après une restauration ».
 
 ## Supervision (Prometheus et Grafana)
 
