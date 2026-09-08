@@ -267,7 +267,12 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
     def perform_update(self, serializer):
+        # Relecture sous verrou : l'instance validée a été lue sans verrou,
+        # et une soumission a pu passer entre-temps. Écrire depuis l'objet
+        # périmé ramenait le dossier au brouillon sans réouverture ni trace.
+        serializer.instance = transitions.verrouiller(serializer.instance)
         with traduire_les_regles():
+            transitions.exiger_un_brouillon(serializer.instance)
             transitions.exiger_l_auteur_du_brouillon(
                 serializer.instance, get_access(self.request.user)
             )
@@ -346,20 +351,40 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         pas le droit de le voir révélerait son existence et son état.
         """
         self._check_country_scope(serializer)
+        # Le dossier est verrouillé le temps de l'insertion : une soumission
+        # ou un retrait du dossier au même instant attend, puis trouve la
+        # ligne — au lieu d'une ligne en brouillon dans un dossier déclaré
+        # que rien ne soumettrait plus, ou d'un retrait qui bute (§3.7, §4.4).
         with traduire_les_regles():
-            transitions.exiger_un_dossier_ouvert(serializer.validated_data.get("dossier"))
+            transitions.exiger_un_dossier_ouvert(
+                transitions.verrouiller_le_dossier_vise(
+                    serializer.validated_data.get("dossier"), None
+                )
+            )
         serializer.save(created_by=self.request.user.username)
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
     def perform_update(self, serializer):
         self._check_country_scope(serializer)
-        # Déplacer un brouillon vers un dossier déjà déclaré l'y perdrait,
-        # exactement comme l'y créer.
+        # Relecture sous verrou : l'instance validée a été lue sans verrou,
+        # et une soumission a pu passer entre-temps. Écrire depuis l'objet
+        # périmé ramenait la ligne au brouillon, sans imputation, sans
+        # réouverture ni trace — la seule exception à l'irréversibilité
+        # contournée par un double clic.
+        # Le dossier d'abord, la ligne ensuite : le même ordre que la
+        # soumission, qui verrouille le dossier puis ses lignes — l'ordre
+        # inverse pouvait s'interbloquer. Déplacer un brouillon vers un
+        # dossier déjà déclaré l'y perdrait, exactement comme l'y créer.
+        dossier_vise = transitions.verrouiller_le_dossier_vise(
+            serializer.validated_data.get("dossier"), serializer.instance
+        )
+        serializer.instance = transitions.verrouiller(serializer.instance)
         with traduire_les_regles():
+            transitions.exiger_un_brouillon(serializer.instance)
             transitions.exiger_l_auteur_du_brouillon(
                 serializer.instance, get_access(self.request.user)
             )
-            transitions.exiger_un_dossier_ouvert(serializer.validated_data.get("dossier"))
+            transitions.exiger_un_dossier_ouvert(dossier_vise)
         stored = serializer.instance
         previous = {
             "amount": str(stored.amount),
@@ -408,7 +433,19 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     @transaction.atomic
     def perform_create(self, serializer):
         self._check_country_scope(serializer)
-        dossier = serializer.validated_data["dossier"]
+        # Le dossier sous verrou le temps du dépôt : un retrait du brouillon
+        # au même instant attend, puis la pièce ne trouve plus son dossier
+        # (404) au lieu d'une violation de clé étrangère ; une clôture au
+        # même instant est relue avant d'écrire.
+        with traduire_les_regles():
+            dossier = transitions.verrouiller_le_dossier_vise(
+                serializer.validated_data["dossier"], None
+            )
+        if dossier.status in transitions.PROOF_LOCKED_STATUSES:
+            raise ValidationError(
+                _("Le dossier est clôturé : plus aucun justificatif ne peut y être ajouté.")
+            )
+        serializer.validated_data["dossier"] = dossier
         replaced = serializer.validated_data.get("replaces")
         if replaced is not None:
             # Revalidé ici, hors sérialiseur : la pièce remplacée change

@@ -678,6 +678,18 @@ obligatoires.
   Togo et le « 12 » de la Côte d'Ivoire sont deux dossiers. Une ligne rejoint
   le dossier de son pays s'il est encore en brouillon, sinon elle le crée ;
   un entier est lu en texte (« 12 », jamais « 12.0 »).
+- **Une ligne importée n'existe qu'une fois par dossier.** Son identité est
+  l'empreinte de son jour, de son libellé et de son montant
+  (`Expense.import_key`) : la validation la compare aux lignes déjà en
+  base, et la base (`ligne_importee_unique_par_dossier`) tranche ce que la
+  validation ne peut pas voir — un autre import du même classeur écrit au
+  même instant. Le second import est refusé entier, sans rien écrire, et
+  se relance : les lignes déjà présentes sont alors signalées une à une.
+  Une ligne saisie dans l'application n'a pas d'empreinte : deux dépenses
+  identiques saisies à la main sont deux dépenses. Le dossier est relu sous
+  verrou juste avant d'écrire : soumis entre-temps, il ne reçoit rien.
+  `manage.py doublons_importes` liste, sans rien supprimer, les groupes de
+  brouillons en double d'un même dossier.
 - Tout arrive en **brouillon**, sans montant justifié : MONTANT JUSTIFIER,
   ECART et STATUT sont ignorés — le siège constate. La mention de la colonne
   PIECES JUSTIFICATIVES est gardée en remarque de la ligne

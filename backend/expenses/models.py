@@ -389,6 +389,16 @@ class Expense(TimeStampedModel):
     # avait pris soin d'expliquer.
     control_note = models.TextField(_("Motif du contrôle"), blank=True)
     created_by = models.CharField(_("Saisie par"), max_length=180, blank=True)
+    # Identité d'une ligne **importée** : empreinte du jour, du libellé et du
+    # montant, dans son dossier — ce que l'import tient déjà pour « la même
+    # ligne » à la validation. Vide pour une ligne saisie dans l'application
+    # : deux dépenses identiques saisies à la main sont deux dépenses. La
+    # contrainte partielle ci-dessous tranche ce que la validation ne peut
+    # pas voir — deux imports simultanés du même classeur (audit du
+    # 8 septembre 2026, §3.7).
+    import_key = models.CharField(
+        _("Empreinte d'import"), max_length=64, null=True, blank=True, editable=False,
+    )
 
     class Meta:
         ordering = ["-date", "-created_at", "-pk"]
@@ -424,6 +434,13 @@ class Expense(TimeStampedModel):
             models.CheckConstraint(
                 condition=Q(status=Status.DRAFT) | Q(budget__isnull=False),
                 name="depense_declaree_imputee",
+            ),
+            # Une ligne importée n'existe qu'une fois par dossier : la base
+            # tranche deux imports simultanés que la validation ne voit pas.
+            models.UniqueConstraint(
+                fields=["dossier", "import_key"],
+                condition=Q(import_key__isnull=False),
+                name="ligne_importee_unique_par_dossier",
             ),
         ]
         indexes = [

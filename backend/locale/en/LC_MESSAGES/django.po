@@ -2176,3 +2176,11 @@ msgstr "Backup failing — {quoi}"
 #: reporting/management/commands/verifier_sauvegardes.py:131
 msgid "{detail} Vérifiez « docker compose logs sauvegarde{suffixe} » sur le serveur (deploy/README.md, « Sauvegardes et restauration »)."
 msgstr "{detail} Check “docker compose logs sauvegarde{suffixe}” on the server (deploy/README.md, “Backups and restoration”)."
+
+#: expenses/models.py:400
+msgid "Empreinte d'import"
+msgstr "Import fingerprint"
+
+#: reporting/imports.py:640
+msgid "Un autre import vient d'écrire une ou plusieurs de ces lignes : relancez l'import, les lignes déjà présentes seront signalées."
+msgstr "Another import has just written one or more of these lines: run the import again, the lines already present will be reported."

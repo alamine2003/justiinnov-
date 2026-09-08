@@ -36,7 +36,7 @@ from django.utils.translation import gettext_lazy
 from accounts.permissions import COUNTRY_ROLES, exiger_la_capacite
 from budget.models import Budget
 from core.models import WorkflowConfiguration
-from core.regles import PermissionRefusee, RegleViolee
+from core.regles import HorsPerimetre, PermissionRefusee, RegleViolee
 from notifications import triggers
 
 from . import stockage
@@ -126,6 +126,31 @@ def exiger_l_auteur_du_brouillon(objet, acteur):
         raise PermissionRefusee(_("Seul l'auteur d'un brouillon peut le modifier."))
 
 
+#: Ce que dit un refus de modifier une ligne ou un dossier déclaré — les
+#: mêmes phrases que les sérialiseurs, pour que la relecture sous verrou
+#: réponde exactement ce qu'aurait répondu la validation.
+VERROUILLE = {
+    Expense: gettext_lazy(
+        "Cette dépense est déclarée : elle ne peut plus être "
+        "modifiée. Seul un brouillon reste modifiable."
+    ),
+    Dossier: gettext_lazy("Ce dossier est déclaré : il ne peut plus être modifié."),
+}
+
+
+def exiger_un_brouillon(objet):
+    """Un dossier ou une ligne déclarés ne se modifient plus.
+
+    Le sérialiseur le vérifie sur l'instance qu'il a reçue, lue **sans
+    verrou** ; entre cette lecture et l'écriture, une soumission a pu
+    passer. Les vues relisent donc l'objet sous verrou et redemandent ici,
+    juste avant d'écrire : l'état qui compte est celui du verrou, pas
+    celui de la lecture (audit du 8 septembre 2026, §3.6).
+    """
+    if objet.status in LOCKED_STATUSES:
+        raise RegleViolee("non_field_errors", str(VERROUILLE[type(objet)]))
+
+
 def exiger_les_quatre_yeux(objet, action, acteur):
     """Celui qui a saisi ou ouvert ne contrôle pas ce qu'il a saisi.
 
@@ -182,6 +207,36 @@ def _detail(lignes):
     return ", ".join(
         f"{e.title} ({e.get_status_display().lower()})" for e in lignes[:5]
     )
+
+
+# --- Verrous pour les vues de saisie -------------------------------------------
+
+
+def verrouiller(objet):
+    """Relit un dossier ou une ligne sous verrou, avec ses relations.
+
+    Pour les vues de modification : elles reçoivent une instance lue sans
+    verrou par ``get_object`` ; c'est celle-ci qu'elles doivent remplacer
+    avant de vérifier l'état et d'écrire. À appeler dans une transaction.
+    """
+    return _CIRCUITS[type(objet)][0](objet)
+
+
+def verrouiller_le_dossier_vise(dossier, ligne):
+    """Le dossier qu'une ligne rejoint (ou garde), relu sous verrou.
+
+    ``dossier`` est celui de la charge utile, ``None`` si elle n'en donne
+    pas : c'est alors celui de la ligne. Rend ``None`` sans dossier.
+    """
+    vise = dossier if dossier is not None else getattr(ligne, "dossier", None)
+    if vise is None:
+        return None
+    try:
+        return _verrouiller_le_dossier(vise)
+    except Dossier.DoesNotExist:
+        # Retiré par son auteur pendant qu'on attendait son verrou : il
+        # n'existe plus, ni pour cette écriture ni pour personne.
+        raise HorsPerimetre() from None
 
 
 # --- Le dossier ---------------------------------------------------------------
