@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
       // Application installable (Chrome et Edge sur Windows et macOS).
       VitePWA({
         registerType: "autoUpdate",
-        includeAssets: ["favicon.svg", "favicon.png", "icons/apple-touch-icon.png"],
+        includeAssets: ["favicon.png", "icons/apple-touch-icon.png"],
         manifest: {
           name: "JUSTI INNOV",
           short_name: "JUSTI INNOV",

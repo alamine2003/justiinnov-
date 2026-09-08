@@ -14,8 +14,14 @@ export const BRAND = {
   developer: "Al Amine DEV",
   /** Année de première mise en service, pour la mention de copyright. */
   since: 2026,
-  /** Emblème vectoriel : net à toute taille, et le seul fichier d'identité servi. */
-  mark: "/favicon.svg",
+  /**
+   * Emblème de la marque, celui de l'onglet du navigateur : un seul fichier
+   * d'identité servi, pour que l'en-tête, la page de connexion et l'onglet ne
+   * puissent pas montrer trois logos différents. Il n'est pas vectoriel — le
+   * logo n'existe qu'en image —, mais il n'est jamais affiché au-delà de
+   * 44 px (`app-layout.tsx`, `login.tsx`), où 64 px suffisent.
+   */
+  mark: "/favicon.png",
 } as const
 
 /** Mention de copyright, l'année courante si elle dépasse la mise en service. */
