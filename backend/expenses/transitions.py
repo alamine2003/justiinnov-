@@ -39,6 +39,7 @@ from core.models import WorkflowConfiguration
 from core.regles import PermissionRefusee, RegleViolee
 from notifications import triggers
 
+from . import stockage
 from .audit import enregistrer, preparer, record
 from .models import EXPENSE_RELATIONS, ZERO, AuditLog, Dossier, Expense, Proof
 from .services import (
@@ -708,8 +709,15 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
 
     Les lignes sont protégées en base contre la cascade : elles sont
     retirées une à une, chacune laissant sa trace. Rend le nombre de lignes.
+
+    Lignes et pièces sont lues **sous verrou**, comme le dossier : une
+    ligne lue sans verrou pouvait être soumise entre la lecture et le
+    retrait. Les fichiers, eux, ne s'effacent pas ici — un stockage n'a
+    pas de retour arrière — mais après le commit (``stockage``).
     """
-    lignes = list(dossier.expenses.select_related("country"))
+    lignes = list(
+        dossier.expenses.select_for_update(of=("self",)).select_related("country")
+    )
     autrui = [
         ligne for ligne in lignes
         if ligne.created_by and ligne.created_by != acteur.username
@@ -739,7 +747,12 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
 
     # La plus récente d'abord : une nouvelle version référence celle
     # qu'elle remplace, et cette référence est protégée.
-    for piece in dossier.proofs.select_related("dossier__country").order_by("-pk"):
+    pieces = (
+        dossier.proofs.select_for_update(of=("self",))
+        .select_related("dossier__country")
+        .order_by("-pk")
+    )
+    for piece in pieces:
         resultat.audit.append(
             record(
                 trace, AuditLog.Action.DELETED, piece,
@@ -749,8 +762,9 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
             )
         )
         # Le fichier ne doit pas survivre à sa fiche : un stockage qui
-        # garde des pièces orphelines finit par en servir à tort.
-        piece.file.delete(save=False)
+        # garde des pièces orphelines finit par en servir à tort. Mais il
+        # ne s'efface qu'une fois le retrait acquis, après le commit.
+        stockage.programmer_la_suppression(piece, trace=trace, dossier=dossier)
         piece.delete()
     return len(lignes)
 

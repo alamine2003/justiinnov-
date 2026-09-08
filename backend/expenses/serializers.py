@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
+from django.db import IntegrityError
 from django.utils.translation import gettext as _
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -24,6 +25,7 @@ from core.models import (
 from core.serializers import DetailField
 
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, compute_sha256
+from .stockage import effacer_sans_bruit
 from .workflow import (
     LOCKED_STATUSES,
     PROOF_LOCKED_STATUSES,
@@ -302,6 +304,24 @@ class ProofSerializer(serializers.ModelSerializer):
             attrs["content_type"] = self._content_type
             self._check_duplicate(dossier, attrs["sha256"], replaces)
         return attrs
+
+    def create(self, validated_data):
+        """Écrit la fiche ; un ``INSERT`` refusé ne laisse pas de fichier.
+
+        ``FileField`` écrit le fichier dans le stockage **avant** l'insertion
+        de la ligne : deux dépôts simultanés du même contenu passaient tous
+        deux la validation, la contrainte ``piece_unique_par_dossier``
+        refusait le second, et son fichier restait dans le stockage sans
+        fiche. Il est retiré aussitôt ; l'erreur, elle, remonte telle quelle
+        à la vue, qui la traduit.
+        """
+        piece = Proof(**validated_data)
+        try:
+            piece.save()
+        except IntegrityError:
+            effacer_sans_bruit(piece.file)
+            raise
+        return piece
 
     def _verifier_la_mise_a_jour(self):
         """Ce qui reste modifiable sur une pièce déposée : presque rien."""

@@ -369,6 +369,7 @@ docker compose exec scheduler python manage.py run_scheduler --once  # tout, tou
 | Tâche | Cadence par défaut | Variable |
 |---|---|---|
 | Reprise des e-mails de notification qui ne sont pas partis | toutes les 5 minutes | `SCHEDULE_EMAILS` |
+| Reprise des effacements de fichiers (pièces retirées avec un brouillon) | toutes les 5 minutes | `SCHEDULE_SUPPRESSIONS` |
 | Notification des alertes | toutes les heures | `SCHEDULE_ALERTS` |
 | Rapport de rapprochement hebdomadaire | lundi 7 h | `SCHEDULE_WEEKLY_REPORT` |
 | Rapport de rapprochement mensuel | le 1er à 7 h | `SCHEDULE_MONTHLY_REPORT` |
@@ -524,7 +525,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | `587` / — / — / `1` | paramètres SMTP |
 | `DEFAULT_FROM_EMAIL` | `controle-budgetaire@justi-innov.local` | expéditeur des e-mails |
 | `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |
-| `SCHEDULE_EMAILS` / `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `*/5 * * * *` / `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
+| `SCHEDULE_EMAILS` / `SCHEDULE_SUPPRESSIONS` / `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `*/5 * * * *` / `*/5 * * * *` / `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
 | `GUNICORN_WORKERS` / `GUNICORN_THREADS` / `GUNICORN_TIMEOUT` | `2` / `4` / `120` | processus, fils par processus et délai (s) du serveur d'application |
 | `PORT` | `8000` (backend), `80` (frontend) | port d'écoute, quand l'hébergeur l'impose (Railway) ; les contrôles de santé le suivent |
 | `NGINX_API_UPSTREAM` / `NGINX_RESOLVER` / `NGINX_RESOLVER_IPV6` / `NGINX_TRUSTED_PROXY` | `http://backend:8000` / résolveur du conteneur / `off` / `127.0.0.1` | image frontend : adresse du backend, résolveur DNS, résolution IPv6 et mandataire public cru pour `X-Forwarded-For` ; `frontend/nginx.conf` est un gabarit rempli au démarrage (`docs/deploiement-railway.md`) |
@@ -594,7 +595,23 @@ un fichier déjà présent sur le même dossier est refusé, sauf remplacement
 explicite, qui archive la version précédente. Les formats acceptés sont
 limités par liste blanche. Le téléchargement passe par une vue authentifiée
 plutôt que par une URL signée : le périmètre est vérifié à chaque accès et
-chaque téléchargement laisse une trace.
+chaque téléchargement laisse une trace. Cette trace (`downloaded`) dit que
+le serveur a **servi** le fichier — ouvert dans le stockage, remis en flux
+— pas que le client l'a reçu en entier, ce qu'aucun serveur ne peut
+attester ; un fichier introuvable dans le stockage répond 503, est
+journalisé, et ne laisse aucune trace de téléchargement.
+
+**Aucun fichier ne s'efface tant que la transaction peut être annulée.** La
+seule suppression tolérée — les pièces d'un brouillon retiré par son auteur
+— est *demandée* dans la transaction du retrait (`FichierASupprimer`, qui
+n'existe que si le retrait est acquis) et *exécutée* après le commit ; ce
+que le stockage n'a pas effacé est repris par l'ordonnanceur (`manage.py
+supprimer_fichiers`, `SCHEDULE_SUPPRESSIONS`), et jamais un fichier qu'une
+fiche référence encore. Un dépôt refusé par la base après l'écriture du
+fichier (doublon tranché par la contrainte) retire son fichier aussitôt.
+Ce qui resterait malgré tout se voit avec `manage.py pieces_orphelines`,
+qui inventorie sans rien effacer les objets qu'aucune fiche ne référence,
+plus vieux que 24 h (`--age`).
 
 ## Heure locale
 

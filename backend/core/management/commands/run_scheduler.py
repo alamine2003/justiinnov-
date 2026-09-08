@@ -49,6 +49,15 @@ JOBS = [
         "command": ("envoyer_emails", {}),
     },
     {
+        # Les fichiers des pièces retirées avec un brouillon s'effacent
+        # après le commit ; ceci reprend ce que le stockage n'a pas effacé.
+        "id": "supprimer_fichiers",
+        "label": "Reprise des effacements de fichiers",
+        "cron": "SCHEDULE_SUPPRESSIONS",
+        "default": "*/5 * * * *",
+        "command": ("supprimer_fichiers", {}),
+    },
+    {
         "id": "notify_alerts",
         "label": "Notification des alertes",
         "cron": "SCHEDULE_ALERTS",

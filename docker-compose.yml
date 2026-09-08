@@ -101,6 +101,7 @@ services:
       AWS_STORAGE_BUCKET_NAME: "justificatifs"
       # Cadences surchargeables sans reconstruire l'image.
       SCHEDULE_EMAILS: "*/5 * * * *"
+      SCHEDULE_SUPPRESSIONS: "*/5 * * * *"
       SCHEDULE_ALERTS: "0 * * * *"
       SCHEDULE_WEEKLY_REPORT: "0 7 * * 1"
       SCHEDULE_MONTHLY_REPORT: "0 7 1 * *"

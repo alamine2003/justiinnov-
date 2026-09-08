@@ -529,6 +529,52 @@ def compute_sha256(uploaded_file):
     return digest.hexdigest()
 
 
+class FichierASupprimer(models.Model):
+    """Un fichier de justificatif dont la fiche a été retirée avec son brouillon.
+
+    La seule suppression que la plateforme tolère est celle d'un brouillon
+    jamais soumis, par son auteur (``transitions.retirer_brouillon``) : ses
+    pièces partent avec lui. Le fichier, lui, ne s'efface **pas dans la
+    transaction** : un stockage n'a pas de retour arrière, et une
+    transaction défaite après l'effacement — une ligne ajoutée au même
+    instant, ``ProtectedError`` — rendait les fiches sans leurs fichiers
+    (audit du 8 septembre 2026, §4.4). La demande est enregistrée ici, dans
+    la transaction (elle n'existe que si le retrait est acquis), et le
+    fichier s'efface après le commit ; ce qui ne s'efface pas est repris
+    par l'ordonnanceur (``manage.py supprimer_fichiers``). La ligne reste :
+    elle atteste de ce qui a été effacé, quand, et sur quelle demande.
+    """
+
+    name = models.CharField(_("Chemin dans le stockage"), max_length=500, unique=True)
+    sha256 = models.CharField(_("Empreinte SHA-256"), max_length=64, blank=True)
+    dossier_number = models.CharField(_("N° d'ordre du dossier"), max_length=50, blank=True)
+    country = models.ForeignKey(
+        Country, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="+", verbose_name=_("Pays"),
+    )
+    requested_by = models.CharField(_("Demandé par"), max_length=180, blank=True)
+    requested_at = models.DateTimeField(_("Demandé le"), auto_now_add=True)
+    attempted_at = models.DateTimeField(_("Dernier essai le"), null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(_("Essais"), default=0)
+    deleted_at = models.DateTimeField(_("Effacé le"), null=True, blank=True)
+    last_error = models.TextField(_("Dernière erreur"), blank=True)
+
+    class Meta:
+        ordering = ["-requested_at", "-pk"]
+        verbose_name = _("Fichier à supprimer")
+        verbose_name_plural = _("Fichiers à supprimer")
+        indexes = [
+            models.Index(
+                fields=["attempted_at"],
+                name="fichier_a_supprimer_idx",
+                condition=models.Q(deleted_at__isnull=True),
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class AuditLog(models.Model):
     """Journal des actions sensibles (§6) : qui, quoi, quand, depuis où."""
 

@@ -7,15 +7,18 @@ utile, l'appel du service et la réponse. Les règles du circuit — verrous,
 ``expenses.transitions`` (décision 41).
 """
 
+import logging
+
 from django.db import IntegrityError, transaction
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from django.db.models import Prefetch
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import RolePermission, get_access
@@ -50,6 +53,31 @@ from .serializers import (
     TransitionWarningMixin,
 )
 from .workflow import ACTION_CAPACITES
+
+
+logger = logging.getLogger(__name__)
+
+
+class FichierIntrouvable(APIException):
+    """La fiche existe, le fichier n'est plus dans le stockage : une anomalie
+    grave, jamais un simple 404 — le justificatif est censé être là."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = gettext_lazy(
+        "Le fichier de ce justificatif est introuvable dans le stockage : "
+        "l'anomalie est journalisée, prévenez l'administrateur."
+    )
+    default_code = "fichier_introuvable"
+
+
+class StockageIndisponible(APIException):
+    """Le stockage n'a pas répondu : à réessayer, rien n'est perdu."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = gettext_lazy(
+        "Le stockage des justificatifs ne répond pas : réessayez dans un instant."
+    )
+    default_code = "stockage_indisponible"
 
 
 class DossierTransitionResponseSerializer(TransitionWarningMixin, DossierDetailSerializer):
@@ -464,6 +492,22 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         pièce de vingt mégaoctets ne doit pas en coûter vingt au serveur.
         """
         proof = self.get_object()
+        # Le fichier d'abord, la trace ensuite : une entrée « téléchargé »
+        # écrite avant l'ouverture attestait d'un téléchargement qui n'avait
+        # pas eu lieu quand l'objet manquait dans le stockage. La trace dit
+        # que le serveur a **servi** le fichier — pas que le client l'a
+        # reçu en entier, ce qu'aucun serveur ne peut attester.
+        try:
+            contenu = proof.file.open("rb")
+        except FileNotFoundError as exc:
+            logger.error(
+                "Justificatif %s (%s) introuvable dans le stockage : %s",
+                proof.pk, proof.file.name, exc,
+            )
+            raise FichierIntrouvable() from exc
+        except Exception as exc:
+            logger.exception("Stockage des justificatifs injoignable (%s)", proof.file.name)
+            raise StockageIndisponible() from exc
         record(
             request,
             AuditLog.Action.DOWNLOADED,
@@ -472,7 +516,7 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
             sha256=proof.sha256,
         )
         return FileResponse(
-            proof.file.open("rb"),
+            contenu,
             as_attachment=True,
             filename=proof.original_name or proof.file.name.rsplit("/", 1)[-1],
             content_type=proof.content_type or None,
