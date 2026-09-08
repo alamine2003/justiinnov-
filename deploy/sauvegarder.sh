@@ -27,9 +27,28 @@
 #                           rien ne part et le journal le dit à chaque fois.
 #
 # Disposition du distant (bucket, ou bucket/sous-dossier) :
-#   quotidien/<base>-<horodatage>.dump   même rotation que base/
+#   quotidien/<base>-<horodatage>.dump   rotation par le distant lui-même
 #   mensuel/<base>-<AAAA-MM>.dump        jamais supprimé
 #   pieces/…                             miroir des justificatifs
+#
+# Tout ce qui part vers le distant est CHIFFRÉ avant transfert (rclone
+# crypt, SAUVEGARDE_CHIFFREMENT_CLE) : un dump contient les jetons de
+# session, les secrets TOTP et tous les justificatifs, et le stockage
+# distant est chez un tiers. Les noms de fichiers restent en clair, pour
+# --lister et --rapatrier ; le contenu ne se lit qu'avec la clé, à garder
+# hors du serveur (README.md, « Copie hors machine »). Sans clé, rien ne
+# part — sauf SAUVEGARDE_DISTANT_EN_CLAIR=1, réservé à un essai.
+#
+# Le serveur N'EFFACE RIEN sur le distant par défaut : un serveur compromis
+# ne doit pas pouvoir emporter les sauvegardes avec lui. La clé du distant
+# se donne sans droit de suppression, et c'est la règle de cycle de vie du
+# bucket qui applique la rétention (README.md). SAUVEGARDE_DISTANT_ROTATION=1
+# rétablit l'ancienne rotation faite d'ici, pour un distant sans règle.
+#
+# Chaque sauvegarde réussie laisse un marqueur daté dans le volume
+# (.derniere-reussite-base, -pieces, -distant) : l'ordonnanceur de
+# l'application les lit (`manage.py verifier_sauvegardes`) et prévient les
+# administrateurs quand une sauvegarde manque ou vieillit.
 #
 # Sans autre argument, le script tourne indéfiniment : `base` et `pieces` se
 # réveillent chaque jour à SAUVEGARDE_HEURE (UTC, 02:00 par défaut),
@@ -65,6 +84,8 @@ HEURE="${SAUVEGARDE_HEURE:-02:00}"
 RETENTION_JOURS="${SAUVEGARDE_RETENTION_JOURS:-30}"
 DEMANDES="$DESTINATION/.distant"
 DISTANT_ENDPOINT="${SAUVEGARDE_DISTANT_ENDPOINT:-}"
+DISTANT_ROTATION="${SAUVEGARDE_DISTANT_ROTATION:-0}"
+DISTANT_EN_CLAIR="${SAUVEGARDE_DISTANT_EN_CLAIR:-0}"
 # Une copie distante qui a échoué (réseau, quota, clé révoquée) est
 # retentée après ce délai, pas toutes les minutes.
 REESSAI_SECONDES=900
@@ -72,6 +93,18 @@ REESSAI_SECONDES=900
 horodatage() { date -u +%Y-%m-%dT%H%M%SZ; }
 journal() { echo "$(date -u +%FT%TZ) $*"; }
 echec() { journal "✘ $*" >&2; return 1; }
+
+# Marqueur de réussite, lu par `manage.py verifier_sauvegardes` : l'instant
+# UTC de la dernière sauvegarde (ou copie) réussie. Écrit par renommage,
+# jamais à moitié. Un marqueur qui ne s'écrit pas ne remet pas en cause la
+# sauvegarde, qui est faite ; il est signalé.
+marquer_reussite() {
+  if printf '%s\n' "$(date -u +%FT%TZ)" > "$DESTINATION/.derniere-reussite-$1.partiel" \
+      && mv "$DESTINATION/.derniere-reussite-$1.partiel" "$DESTINATION/.derniere-reussite-$1"; then
+    return 0
+  fi
+  journal "⚠ marqueur de réussite non écrit ($1) : verifier_sauvegardes le signalera comme manquant"
+}
 
 # --- Copie hors machine : côté demandeur -----------------------------------
 
@@ -160,6 +193,7 @@ sauvegarder_base() {
   # Restes d'un passage interrompu brutalement (conteneur tué en plein dump).
   rm -f "$DESTINATION"/base/*.partiel
 
+  marquer_reussite base
   demander_copie_distante base
   return 0
 }
@@ -181,6 +215,7 @@ sauvegarder_pieces() {
   fi
   journal "pièces mises en miroir dans $DESTINATION/pieces ($(du -sh "$DESTINATION/pieces" | cut -f1))"
 
+  marquer_reussite pieces
   demander_copie_distante pieces
   return 0
 }
@@ -219,8 +254,66 @@ distant_preparer() {
   export RCLONE_STATS="${RCLONE_STATS:-0}" RCLONE_RETRIES="${RCLONE_RETRIES:-3}"
   export RCLONE_S3_CHUNK_SIZE="${RCLONE_S3_CHUNK_SIZE:-8M}"
   export RCLONE_S3_UPLOAD_CONCURRENCY="${RCLONE_S3_UPLOAD_CONCURRENCY:-2}"
-  CIBLE="distant:${SAUVEGARDE_DISTANT_BUCKET}"
+
+  # Chiffrement avant transfert : le distant reçoit un « coffre » rclone
+  # (crypt) posé sur le bucket. Le contenu est chiffré (XSalsa20-Poly1305,
+  # clé dérivée de SAUVEGARDE_CHIFFREMENT_CLE par scrypt, salée par
+  # SAUVEGARDE_CHIFFREMENT_SEL) ; les noms restent en clair pour que
+  # --lister et --rapatrier restent lisibles. Rien ne part en clair sans le
+  # dire explicitement.
+  cle="${SAUVEGARDE_CHIFFREMENT_CLE:-}"
+  if [ -z "$cle" ] && [ -s /run/secrets/sauvegarde_chiffrement_cle ]; then
+    cle="$(cat /run/secrets/sauvegarde_chiffrement_cle)"
+  fi
+  if [ -n "$cle" ]; then
+    export RCLONE_CONFIG_COFFRE_TYPE=crypt
+    export RCLONE_CONFIG_COFFRE_REMOTE="distant:${SAUVEGARDE_DISTANT_BUCKET}"
+    export RCLONE_CONFIG_COFFRE_FILENAME_ENCRYPTION=off
+    export RCLONE_CONFIG_COFFRE_DIRECTORY_NAME_ENCRYPTION=false
+    RCLONE_CONFIG_COFFRE_PASSWORD="$(rclone obscure "$cle")" || return 1
+    export RCLONE_CONFIG_COFFRE_PASSWORD
+    if [ -n "${SAUVEGARDE_CHIFFREMENT_SEL:-}" ]; then
+      RCLONE_CONFIG_COFFRE_PASSWORD2="$(rclone obscure "$SAUVEGARDE_CHIFFREMENT_SEL")" || return 1
+      export RCLONE_CONFIG_COFFRE_PASSWORD2
+    fi
+    CIBLE="coffre:"
+    CHIFFRE=1
+  elif [ "$DISTANT_EN_CLAIR" = "1" ]; then
+    journal "⚠ COPIE DISTANTE EN CLAIR (SAUVEGARDE_DISTANT_EN_CLAIR=1) : les dumps contiennent les jetons de session et les secrets TOTP. Réservé à un essai." >&2
+    CIBLE="distant:${SAUVEGARDE_DISTANT_BUCKET}"
+    CHIFFRE=0
+  else
+    echec "copie distante refusée : SAUVEGARDE_CHIFFREMENT_CLE est vide. Un dump contient les jetons de session et les secrets TOTP ; il ne part pas en clair chez un tiers. Renseignez la clé (README.md, « Copie hors machine »)."
+    return 1
+  fi
   return 0
+}
+
+# Vérification d'une copie. Sur le coffre chiffré, `rclone check` ne peut
+# pas comparer les sommes (le distant ne connaît que le chiffré) :
+# `cryptcheck` rechiffre localement et compare les sommes des chiffrés,
+# ce qui vaut une vérification complète. Sur un distant en clair, la
+# vérification d'origine.
+verifier_copie() {
+  source="$1"; cible="$2"; shift 2
+  if [ "${CHIFFRE:-0}" != "1" ]; then
+    rclone check --one-way "$source" "$cible" "$@"
+    return $?
+  fi
+  # `--checksum` demande la comparaison des sommes : c'est cryptcheck qui
+  # la fait sur un coffre. Les autres options passent telles quelles ; les
+  # arguments sont refaits un à un pour ne jamais développer un motif
+  # comme '*.dump'.
+  somme=0; n=$#; i=0
+  while [ "$i" -lt "$n" ]; do
+    arg="$1"; shift; i=$((i + 1))
+    if [ "$arg" = "--checksum" ]; then somme=1; else set -- "$@" "$arg"; fi
+  done
+  if [ "$somme" -eq 1 ]; then
+    rclone cryptcheck --one-way "$source" "$cible" "$@"
+  else
+    rclone check --one-way "$source" "$cible" "$@"
+  fi
 }
 
 # Copie puis vérification d'un dossier. rclone copy n'efface jamais rien
@@ -235,7 +328,7 @@ distant_preparer() {
 copier_et_verifier() {
   source="$1"; cible="$2"; shift 2
   rclone copy "$source" "$cible" "$@" || return 1
-  rclone check --one-way "$source" "$cible" "$@" || return 1
+  verifier_copie "$source" "$cible" "$@" || return 1
   return 0
 }
 
@@ -261,12 +354,16 @@ copier_base_distant() {
     fi
   fi
   journal "✔ copie distante (base) : $quotidiens dump(s) quotidien(s) et $mensuels mensuel(s) présents et vérifiés sur $CIBLE"
-  # Même rotation que sur la machine, sur quotidien/ seulement : mensuel/
-  # est un autre préfixe, cette commande ne peut pas y toucher. Elle ne
-  # supprime que ce qui est plus vieux que la rétention : un volume local
-  # vide ou tout neuf ne fait rien effacer là-bas.
-  if ! rclone delete "$CIBLE/quotidien" --min-age "${RETENTION_JOURS}d"; then
-    journal "⚠ rotation distante non faite sur $CIBLE/quotidien : sera retentée à la prochaine copie"
+  # Par défaut, rien ne s'efface d'ici : la rétention des quotidiens est
+  # l'affaire d'une règle de cycle de vie sur le bucket, et la clé du
+  # distant n'a pas le droit de supprimer — un serveur compromis ne peut
+  # alors ni effacer ni raccourcir l'historique. Sur un distant sans règle
+  # de cycle de vie, SAUVEGARDE_DISTANT_ROTATION=1 rétablit la rotation
+  # faite d'ici, sur quotidien/ seulement : mensuel/ est un autre préfixe.
+  if [ "$DISTANT_ROTATION" = "1" ]; then
+    if ! rclone delete "$CIBLE/quotidien" --min-age "${RETENTION_JOURS}d"; then
+      journal "⚠ rotation distante non faite sur $CIBLE/quotidien : sera retentée à la prochaine copie"
+    fi
   fi
   return 0
 }
@@ -303,6 +400,9 @@ traiter_demande() {
   fi
   if "copier_${d}_distant"; then
     rm -f "$DEMANDES/demande-$d"
+    # Le marqueur du distant ne se pose que sur la copie de la base : c'est
+    # elle qui compte pour la fraîcheur, les pièces suivent.
+    [ "$d" = "base" ] && marquer_reussite distant
     return 0
   fi
   return 1
@@ -313,13 +413,19 @@ copier_tout_distant() {
   resultat=0
   copier_base_distant || resultat=1
   copier_pieces_distant || resultat=1
-  [ "$resultat" -eq 0 ] && rm -f "$DEMANDES"/demande-base "$DEMANDES"/demande-pieces
+  if [ "$resultat" -eq 0 ]; then
+    rm -f "$DEMANDES"/demande-base "$DEMANDES"/demande-pieces
+    marquer_reussite distant
+  fi
   return $resultat
 }
 
 lister_distant() {
   distant_configure || { echo "(aucune copie hors machine : SAUVEGARDE_DISTANT_ENDPOINT vide)"; return 0; }
   distant_preparer || return 1
+  if [ "${CHIFFRE:-0}" = "1" ]; then
+    echo "(copie chiffrée : coffre rclone sur distant:${SAUVEGARDE_DISTANT_BUCKET})"
+  fi
   echo "Dumps quotidiens sur $CIBLE/quotidien :"
   rclone lsl "$CIBLE/quotidien" 2>/dev/null | grep . || echo "(aucun)"
   echo "Copies mensuelles sur $CIBLE/mensuel, à désigner par mensuel/<nom> :"

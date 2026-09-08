@@ -65,6 +65,15 @@ JOBS = [
         "command": ("notify_alerts", {}),
     },
     {
+        # Lit les marqueurs de réussite des sauvegardes (volume monté en
+        # lecture seule) ; prévient les administrateurs de ce qui manque.
+        "id": "verifier_sauvegardes",
+        "label": "Contrôle de fraîcheur des sauvegardes",
+        "cron": "SCHEDULE_VERIF_SAUVEGARDES",
+        "default": "30 8 * * *",
+        "command": ("verifier_sauvegardes", {}),
+    },
+    {
         "id": "weekly_report",
         "label": "Rapport de rapprochement hebdomadaire",
         "cron": "SCHEDULE_WEEKLY_REPORT",

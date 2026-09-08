@@ -2148,3 +2148,31 @@ msgstr "The file of this supporting document cannot be found in storage: the ano
 #: expenses/views.py:74
 msgid "Le stockage des justificatifs ne répond pas : réessayez dans un instant."
 msgstr "The supporting document storage is not responding: try again in a moment."
+
+#: reporting/management/commands/verifier_sauvegardes.py:35
+msgid "la sauvegarde de la base"
+msgstr "the database backup"
+
+#: reporting/management/commands/verifier_sauvegardes.py:36
+msgid "le miroir des justificatifs"
+msgstr "the supporting documents mirror"
+
+#: reporting/management/commands/verifier_sauvegardes.py:37
+msgid "la copie hors machine"
+msgstr "the off-site copy"
+
+#: reporting/management/commands/verifier_sauvegardes.py:118
+msgid "Aucune réussite enregistrée : le service ne tourne pas, ou n'a jamais abouti."
+msgstr "No success recorded: the service is not running, or has never completed."
+
+#: reporting/management/commands/verifier_sauvegardes.py:121
+msgid "Dernière réussite le {quand} ; plus de {heures} h sans sauvegarde."
+msgstr "Last success on {quand}; more than {heures} h without a backup."
+
+#: reporting/management/commands/verifier_sauvegardes.py:129
+msgid "Sauvegarde en défaut — {quoi}"
+msgstr "Backup failing — {quoi}"
+
+#: reporting/management/commands/verifier_sauvegardes.py:131
+msgid "{detail} Vérifiez « docker compose logs sauvegarde{suffixe} » sur le serveur (deploy/README.md, « Sauvegardes et restauration »)."
+msgstr "{detail} Check “docker compose logs sauvegarde{suffixe}” on the server (deploy/README.md, “Backups and restoration”)."

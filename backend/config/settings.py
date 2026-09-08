@@ -318,6 +318,13 @@ SPECTACULAR_SETTINGS = {
 # son code à chaque connexion. L'obligation, elle, est une politique :
 # DJANGO_TOTP_REQUIRED=1 ferme la plateforme aux comptes non enrôlés
 # (cf. accounts.middleware). Par défaut, elle n'est pas exigée.
+# Contrôle de fraîcheur des sauvegardes (reporting/management/commands/
+# verifier_sauvegardes.py) : le volume `sauvegardes` de la pile est monté
+# ici en lecture seule, ses marqueurs `.derniere-reussite-*` disent quand
+# chaque sauvegarde a réussi pour la dernière fois. Vide hors production.
+SAUVEGARDES_MARQUEURS = os.environ.get("SAUVEGARDES_MARQUEURS", "")
+SAUVEGARDES_AGE_MAX_HEURES = int(os.environ.get("SAUVEGARDES_AGE_MAX_HEURES", "26"))
+
 TOTP_REQUIRED = os.environ.get("DJANGO_TOTP_REQUIRED", "0") == "1"
 # Nom affiché par l'application d'authentification à côté du compte.
 TOTP_ISSUER = "JUSTI INNOV"

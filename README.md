@@ -370,6 +370,7 @@ docker compose exec scheduler python manage.py run_scheduler --once  # tout, tou
 |---|---|---|
 | Reprise des e-mails de notification qui ne sont pas partis | toutes les 5 minutes | `SCHEDULE_EMAILS` |
 | Reprise des effacements de fichiers (pièces retirées avec un brouillon) | toutes les 5 minutes | `SCHEDULE_SUPPRESSIONS` |
+| Contrôle de fraîcheur des sauvegardes (marqueurs du volume, notification des administrateurs) | 8 h 30 | `SCHEDULE_VERIF_SAUVEGARDES` |
 | Notification des alertes | toutes les heures | `SCHEDULE_ALERTS` |
 | Rapport de rapprochement hebdomadaire | lundi 7 h | `SCHEDULE_WEEKLY_REPORT` |
 | Rapport de rapprochement mensuel | le 1er à 7 h | `SCHEDULE_MONTHLY_REPORT` |
@@ -525,7 +526,8 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | `587` / — / — / `1` | paramètres SMTP |
 | `DEFAULT_FROM_EMAIL` | `controle-budgetaire@justi-innov.local` | expéditeur des e-mails |
 | `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |
-| `SCHEDULE_EMAILS` / `SCHEDULE_SUPPRESSIONS` / `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `*/5 * * * *` / `*/5 * * * *` / `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
+| `SCHEDULE_EMAILS` / `SCHEDULE_SUPPRESSIONS` / `SCHEDULE_VERIF_SAUVEGARDES` / `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `*/5 * * * *` / `*/5 * * * *` / `30 8 * * *` / `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
+| `SAUVEGARDES_MARQUEURS` / `SAUVEGARDES_AGE_MAX_HEURES` | vide / `26` | dossier des marqueurs de réussite des sauvegardes (volume monté dans l'ordonnanceur) et âge au-delà duquel une sauvegarde est en défaut |
 | `GUNICORN_WORKERS` / `GUNICORN_THREADS` / `GUNICORN_TIMEOUT` | `2` / `4` / `120` | processus, fils par processus et délai (s) du serveur d'application |
 | `PORT` | `8000` (backend), `80` (frontend) | port d'écoute, quand l'hébergeur l'impose (Railway) ; les contrôles de santé le suivent |
 | `NGINX_API_UPSTREAM` / `NGINX_RESOLVER` / `NGINX_RESOLVER_IPV6` / `NGINX_TRUSTED_PROXY` | `http://backend:8000` / résolveur du conteneur / `off` / `127.0.0.1` | image frontend : adresse du backend, résolveur DNS, résolution IPv6 et mandataire public cru pour `X-Forwarded-For` ; `frontend/nginx.conf` est un gabarit rempli au démarrage (`docs/deploiement-railway.md`) |

@@ -107,7 +107,7 @@ fi
 # pas de copie hors machine). Une variable absente du .env est donc
 # exportée vide : le fichier sous /run/secrets est vide, ce que les
 # entrypoints savent lire. Une valeur du .env, elle, reste celle du .env.
-for secret in METRICS_TOKEN POSTGRES_MIGRATION_PASSWORD SAUVEGARDE_DISTANT_SECRET; do grep -qE "^${secret}=" .env || export "${secret}="; done
+for secret in METRICS_TOKEN POSTGRES_MIGRATION_PASSWORD SAUVEGARDE_DISTANT_SECRET SAUVEGARDE_CHIFFREMENT_CLE; do grep -qE "^${secret}=" .env || export "${secret}="; done
 
 
 echo "→ Récupération des images ${IMAGE_TAG}…"
