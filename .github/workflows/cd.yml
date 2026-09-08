@@ -128,7 +128,7 @@ jobs:
 
       - name: Métadonnées backend
         id: meta_backend
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.noms.outputs.backend }}
           # Pas de `latest` : une étiquette mouvante ne dit pas quel code
@@ -142,7 +142,7 @@ jobs:
 
       - name: Métadonnées frontend
         id: meta_frontend
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.noms.outputs.frontend }}
           flavor: latest=false
