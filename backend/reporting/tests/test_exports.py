@@ -272,6 +272,20 @@ class FormatsTests(DashboardTestCase):
         self.assertIn(f"Exercice : {self.year}", entete)
         self.assertIn(f"Période : exercice {self.year}", entete)
 
+    def test_un_brouillon_est_liste_mais_ne_compte_pas_dans_le_total(self):
+        """La ligne TOTAL suit la règle des écrans : un brouillon n'est pas
+        une dépense. Il reste listé, avec son statut, pour être retrouvé."""
+        self.make_expense(title="Brouillon en attente", amount="99999.00", status=Status.DRAFT)
+
+        response = self._export("expenses.docx", country=self.togo.pk)
+
+        table = Document(BytesIO(response.content)).tables[0]
+        libelles = [row.cells[5].text for row in table.rows]
+        self.assertIn("Brouillon en attente", libelles)
+        total = [c.text for c in table.rows[-1].cells]
+        self.assertEqual(total[5], "TOTAL")
+        self.assertEqual(total[6], "500 000.00")
+
     def test_le_rapprochement_existe_en_csv_et_en_word(self):
         csv_ = self._export("reconciliation.csv")
         docx = self._export("reconciliation.docx")

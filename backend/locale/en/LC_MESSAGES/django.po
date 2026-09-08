@@ -2184,3 +2184,15 @@ msgstr "Import fingerprint"
 #: reporting/imports.py:640
 msgid "Un autre import vient d'écrire une ou plusieurs de ces lignes : relancez l'import, les lignes déjà présentes seront signalées."
 msgstr "Another import has just written one or more of these lines: run the import again, the lines already present will be reported."
+
+#: budget/serializers.py:180
+msgid "Un taux publié ne se modifie pas : publiez un nouveau taux, daté du jour de son entrée en vigueur."
+msgstr "A published rate cannot be modified: publish a new rate, dated the day it comes into effect."
+
+#: budget/serializers.py:196
+msgid "Les taux se publient dans l'ordre du temps : le dernier taux {currency} est daté du {date}."
+msgstr "Rates are published in chronological order: the latest {currency} rate is dated {date}."
+
+#: budget/serializers.py:218
+msgid "Cette enveloppe porte {count} ligne(s) déclarée(s) : elle ne se désactive pas, ses dépenses disparaîtraient du consommé."
+msgstr "This envelope carries {count} declared line(s): it cannot be deactivated, its expenses would disappear from the consumed total."

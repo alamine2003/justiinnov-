@@ -641,6 +641,21 @@ inhabituelles. Une dépense est jugée inhabituelle par rapport aux **autres**
 dépenses de son pays — s'inclure dans sa propre référence l'empêcherait de
 s'en détacher.
 
+**Les mêmes chiffres partout** (règles en tête de `backend/budget/aggregates.py`,
+décision 54) : engagé, consommé, justifié et disponible se calculent une
+seule fois, pour l'API, les écrans, les exports et les rapports ; un
+brouillon ne compte nulle part, pas même dans la ligne TOTAL de l'export
+des dépenses, où il reste listé avec son statut ; un pays sans enveloppe
+de pays a pour attribué la somme de ses sous-enveloppes. **Un exercice se
+consolide aux taux en vigueur à sa date de référence** — le 31 décembre
+d'un exercice clos, ce jour pour l'exercice en cours — et les taux se
+publient dans l'ordre du temps sans jamais se modifier : un rapport sur
+2024 donne le même chiffre en 2026 qu'en 2025. Relire un exercice clos
+aux taux d'aujourd'hui est une **revalorisation**, un autre chiffre qui se
+demande explicitement (`manage.py consolidation --annee 2024
+--taux-du-jour`) et ne s'affiche sur aucun écran. Une enveloppe qui porte
+des lignes déclarées ne se désactive pas : son consommé disparaîtrait.
+
 Les alertes budgétaires deviennent des notifications persistantes, in-app et
 par e-mail, avec une clé d'unicité qui évite de signaler deux fois le même
 franchissement.

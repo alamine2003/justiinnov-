@@ -11,8 +11,9 @@ from accounts.permissions import get_access
 from core.models import Country, Manager, Project, Team, WorkflowConfiguration
 from core.regles import RegleViolee
 from core.serializers import champ_montant, champ_taux
+from core.statuts import Status
 
-from .aggregates import budget_figures, current_rates
+from .aggregates import budget_figures, current_rates, date_de_reference
 from .models import Budget, BudgetReallocation, ExchangeRate
 from .transitions import exiger_le_disponible, peut_decider
 
@@ -135,22 +136,26 @@ class BudgetSerializer(serializers.ModelSerializer):
     @extend_schema_field(BudgetFiguresSerializer)
     def get_figures(self, budget):
         """Consommation, écart et disponible — calculés côté serveur."""
-        figures = budget_figures(budget, rates=self._rates())
+        figures = budget_figures(budget, rates=self._rates(budget.year))
         return {key: _as_str(value) for key, value in figures.items()}
 
-    def _rates(self):
-        """Taux courants, lus une fois par requête.
+    def _rates(self, year):
+        """Taux en vigueur à la date de référence de l'exercice de l'enveloppe.
 
-        La vue les met dans le contexte ; à défaut (sérialiseur instancié
-        seul), ils sont chargés une fois et mémorisés sur l'instance — qui
-        est partagée par toutes les enveloppes d'une liste.
+        Lus une fois par exercice et par requête : le contexte de la vue
+        porte le mémo (``rates_par_exercice``) ; à défaut (sérialiseur
+        instancié seul), il est tenu sur l'instance — partagée par toutes
+        les enveloppes d'une liste. Une enveloppe 2024 se lit au taux du
+        31 décembre 2024, pas à celui du jour.
         """
-        rates = self.context.get("rates")
-        if rates is None:
-            rates = getattr(self, "_rates_cache", None)
-            if rates is None:
-                rates = self._rates_cache = current_rates()
-        return rates
+        memo = self.context.get("rates_par_exercice")
+        if memo is None:
+            memo = getattr(self, "_rates_cache", None)
+            if memo is None:
+                memo = self._rates_cache = {}
+        if year not in memo:
+            memo[year] = current_rates(on_date=date_de_reference(year))
+        return memo[year]
 
     def validate(self, attrs):
         self._check_figes(attrs)
@@ -195,9 +200,30 @@ class BudgetSerializer(serializers.ModelSerializer):
         return attrs
 
     def _check_figes(self, attrs):
-        """Refuse de déplacer une enveloppe qui porte déjà des dépenses."""
+        """Refuse de déplacer une enveloppe qui porte déjà des dépenses, ou
+        de la désactiver quand elle en porte de déclarées.
+
+        Une enveloppe désactivée sort du suivi (``reporting.scope``) : ses
+        dépenses déclarées disparaissaient du consommé du pays alors
+        qu'elles restaient comptées dans la répartition — deux écrans, deux
+        chiffres (audit du 8 septembre 2026, §4.2). Ce qui est dépensé ne se
+        fait pas disparaître par une case à cocher : une enveloppe ne se
+        désactive que vide de lignes déclarées.
+        """
         if self.instance is None:
             return
+        if attrs.get("is_active") is False and self.instance.is_active:
+            declarees = self.instance.expenses.exclude(status=Status.DRAFT).count()
+            if declarees:
+                raise serializers.ValidationError(
+                    {
+                        "is_active": _(
+                            "Cette enveloppe porte {count} ligne(s) déclarée(s) : elle "
+                            "ne se désactive pas, ses dépenses disparaîtraient du "
+                            "consommé."
+                        ).format(count=declarees)
+                    }
+                )
         modifies = [
             name for name in self.CHAMPS_FIGES
             if name in attrs and attrs[name] != getattr(self.instance, name)
@@ -372,3 +398,40 @@ class ExchangeRateSerializer(serializers.ModelSerializer):
                 _("Un taux ne se publie pas pour une date future.")
             )
         return value
+
+    def validate(self, attrs):
+        """Les taux se publient dans l'ordre du temps et ne se modifient pas.
+
+        Un rapport sur un exercice clos se lit au taux en vigueur à sa
+        clôture : ce taux doit être acquis pour toujours. Modifier un taux
+        publié, ou en glisser un daté d'avant le dernier, déplaçait
+        rétroactivement tous les consolidés passés (audit du 8 septembre
+        2026, §4.1). Une erreur se corrige par un nouveau taux, daté du jour
+        de son entrée en vigueur ; le passé garde ce qui a été publié.
+        """
+        if self.instance is not None:
+            raise serializers.ValidationError(
+                _(
+                    "Un taux publié ne se modifie pas : publiez un nouveau taux, "
+                    "daté du jour de son entrée en vigueur."
+                )
+            )
+        currency = attrs.get("currency")
+        valid_from = attrs.get("valid_from")
+        if currency and valid_from:
+            dernier = (
+                ExchangeRate.objects.filter(currency=currency)
+                .order_by("-valid_from")
+                .values_list("valid_from", flat=True)
+                .first()
+            )
+            if dernier is not None and valid_from < dernier:
+                raise serializers.ValidationError(
+                    {
+                        "valid_from": _(
+                            "Les taux se publient dans l'ordre du temps : le dernier "
+                            "taux {currency} est daté du {date}."
+                        ).format(currency=currency, date=dernier.strftime("%d/%m/%Y"))
+                    }
+                )
+        return attrs

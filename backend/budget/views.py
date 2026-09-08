@@ -18,7 +18,7 @@ from core.mixins import NoDestroyModelViewSet
 from core.regles import traduire_les_regles
 
 from . import transitions
-from .aggregates import consolidation_par_pays, current_rates
+from .aggregates import consolidation_par_pays, current_rates, date_de_reference
 from .models import Budget, BudgetReallocation, ExchangeRate
 from .serializers import (
     BudgetReallocationSerializer,
@@ -55,9 +55,9 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         return self.queryset.visible_par(self.request.user)
 
     def get_serializer_context(self):
-        # Les taux de change sont lus une fois par requête, pas une fois par
-        # enveloppe affichée.
-        return {**super().get_serializer_context(), "rates": current_rates()}
+        # Les taux de change sont lus une fois par exercice et par requête,
+        # pas une fois par enveloppe affichée (``BudgetSerializer._rates``).
+        return {**super().get_serializer_context(), "rates_par_exercice": {}}
 
     @extend_schema(
         parameters=[
@@ -76,10 +76,14 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         années d'un même pays comme s'il s'agissait d'une seule enveloppe.
         """
         budgets = self.filter_queryset(self.get_queryset())
+        year = request.query_params.get("year") or timezone.now().year
         if "year" not in request.query_params:
-            budgets = budgets.filter(year=timezone.now().year)
+            budgets = budgets.filter(year=year)
 
-        rows, consolidated = consolidation_par_pays(budgets, rates=current_rates())
+        # Aux taux en vigueur à la date de référence de l'exercice : un
+        # exercice clos se lit au 31 décembre, pas au taux du jour.
+        rates = current_rates(on_date=date_de_reference(_annee(year)))
+        rows, consolidated = consolidation_par_pays(budgets, rates=rates)
         return Response({
             "countries": [
                 {
@@ -106,6 +110,14 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
 
 def _as_str(value):
     return str(value) if value is not None else None
+
+
+def _annee(valeur):
+    """``year`` en entier ; une valeur illisible vaut l'année en cours."""
+    try:
+        return int(valeur)
+    except (TypeError, ValueError):
+        return timezone.now().year
 
 
 class BudgetReallocationViewSet(
