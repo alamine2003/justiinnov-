@@ -683,20 +683,81 @@ le service tourne quand même et le dit, au démarrage et à chaque sauvegarde
 (`✘ copie distante non faite : SAUVEGARDE_DISTANT_ENDPOINT vide`), comme
 `sauvegarde`, `sauvegarde-pieces`, `deploy.sh` et `restaurer.sh --lister`.
 
-**Tout ce qui part est chiffré avant de partir.** Un dump contient les
-jetons de session, les secrets TOTP et, par le miroir, tous les
-justificatifs : rien de cela ne se dépose en clair chez un tiers. Le
-service pose un coffre rclone (`crypt`, XSalsa20-Poly1305) sur le bucket,
-clé dérivée de `SAUVEGARDE_CHIFFREMENT_CLE` (secret Compose) et du sel
-facultatif `SAUVEGARDE_CHIFFREMENT_SEL` ; les noms de fichiers restent en
-clair, pour `--lister` et `--rapatrier`, le contenu ne se lit qu'avec la
-clé. Sans clé, **rien ne part** et le journal dit pourquoi
-(`SAUVEGARDE_DISTANT_EN_CLAIR=1` le permet, pour un essai seulement).
-**La clé se garde hors du serveur** — gestionnaire de mots de passe de la
-direction et copie imprimée au coffre, avec le sel s'il y en a un : un
-serveur perdu emporte son `.env`, et sans la clé la copie distante est
-illisible. On ne change pas la clé sans refaire une copie complète : ce
-qui a été chiffré avec l'ancienne ne se lit plus qu'avec elle.
+#### Chiffrement : ce qui est protégé de quoi
+
+Une phrase comme « les sauvegardes sont chiffrées » ne veut rien dire tant
+qu'on n'a pas dit **quoi**, **contre qui**, et **où est la clé**. Voici
+l'état exact.
+
+| Ce qui existe | Chiffré ? | Contre quoi cela protège |
+|---|---|---|
+| Volume `sauvegardes` du serveur (`base/`, `base/mensuel/`, `pieces/`) | **Non** par défaut — **oui** avec `SAUVEGARDE_CLE_PUBLIQUE` (dumps seulement) | rien, par défaut : qui lit ce volume lit les dumps, donc les jetons de session et les secrets TOTP |
+| Copie distante (`quotidien/`, `mensuel/`, `pieces/`) | **Oui** (rclone `crypt`, XSalsa20-Poly1305) | le tiers qui héberge le bucket, et quiconque obtient ses clés d'accès |
+| Noms de fichiers sur le distant | **Non**, volontairement (`filename_encryption=off`) | — : c'est ce qui permet `--lister` et `--rapatrier` |
+| Dump rapatrié par `--rapatrier` | **Non** : déchiffré à l'arrivée | — : `pg_restore` attend un dump lisible |
+
+**Où est le secret, et ce que « hors serveur » veut dire.** Le chiffrement
+de la copie distante est **symétrique** : c'est le serveur qui chiffre, il
+lit le secret dans `/run/secrets/sauvegarde_chiffrement_cle` (secret
+Compose alimenté par `SAUVEGARDE_CHIFFREMENT_CLE` du `.env`, `chmod 600`,
+`root:root`). **Le serveur peut donc relire sa propre copie distante** —
+c'est inhérent au procédé. « La clé se garde hors du serveur » signifie
+qu'une **copie de récupération** est conservée ailleurs (gestionnaire de
+mots de passe de la direction, copie imprimée au coffre), pour le jour où
+le serveur est perdu avec son `.env`. Ce n'est pas une protection contre
+un serveur compromis.
+
+**À conserver pour pouvoir restaurer** — sans quoi la copie distante est
+un tas d'octets : la clé, **le sel s'il est posé** (`SAUVEGARDE_CHIFFREMENT_SEL`,
+qui est le second mot de passe du coffre rclone), et les réglages du
+coffre (`filename_encryption=off`, `directory_name_encryption=false`). Un
+coffre recréé avec d'autres réglages ne relira rien. Changer la clé rend
+illisible ce qui a déjà été copié : on ne la change qu'en refaisant une
+copie complète, et on garde l'ancienne tant que d'anciennes copies
+comptent.
+
+**Si l'exigence est que le serveur ne puisse pas déchiffrer** — parce qu'on
+se protège d'un serveur compromis, pas seulement d'un hébergeur curieux —
+le chiffrement symétrique n'y suffit pas, par construction. Posez alors
+`SAUVEGARDE_CLE_PUBLIQUE` : chaque dump est chiffré **à la sortie de
+`pg_dump`**, sur le serveur, avec une clé **publique** ; il n'existe en
+clair nulle part, porte le suffixe `.enc`, et se restaure avec la clé
+**privée**, qui n'est pas sur la machine.
+
+```bash
+# Sur un poste sûr, jamais sur le serveur : la clé privée reste ici.
+openssl req -x509 -newkey rsa:4096 -days 3650 -nodes \
+    -keyout sauvegardes-cle-privee.pem -out sauvegardes-cle-publique.pem \
+    -subj "/CN=Sauvegardes JUSTI INNOV"
+# Seul le certificat public part sur le serveur.
+scp sauvegardes-cle-publique.pem root@<hôte>:/var/lib/docker/volumes/justi-innov_sauvegardes/_data/cle-publique.pem
+# puis dans .env : SAUVEGARDE_CLE_PUBLIQUE=/sauvegardes/cle-publique.pem
+```
+
+La clé privée se garde comme la clé de chiffrement : coffre, et une copie.
+La perdre, c'est perdre toutes les sauvegardes. Un dump `.enc` se déchiffre
+là où elle est :
+
+```bash
+openssl smime -decrypt -binary -inform DER -in <dump>.dump.enc \
+    -inkey sauvegardes-cle-privee.pem -out <dump>.dump
+```
+
+`restaurer.sh` refuse un `.enc` plutôt que de le passer à `pg_restore`, et
+rappelle cette commande. Le miroir des justificatifs, lui, reste en clair
+sur le volume : il vient de MinIO, qui les sert en clair de toute façon —
+c'est le chiffrement de la copie distante qui les protège chez le tiers.
+
+**Les sauvegardes déjà copiées en clair** — celles d'avant la mise en place
+— ne se chiffrent pas rétroactivement : elles sont sur le distant telles
+quelles. Deux choses à faire, dans cet ordre : supprimer depuis la console
+du fournisseur (pas depuis le serveur, qui n'a plus le droit de supprimer)
+les objets antérieurs à la bascule, puis lancer une copie complète pour que
+le distant reparte d'un état entièrement chiffré. Tant que ce n'est pas
+fait, considérez que ce qui est là-bas est lisible par l'hébergeur.
+
+**Sans clé, rien ne part** vers le distant, et le journal dit pourquoi ;
+`SAUVEGARDE_DISTANT_EN_CLAIR=1` lève ce refus, pour un essai seulement.
 
 **Le serveur n'efface rien sur le distant.** Un serveur compromis — la clé
 SSH de livraison, une faille — ne doit pas pouvoir emporter les

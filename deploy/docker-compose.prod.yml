@@ -283,6 +283,9 @@ services:
       SAUVEGARDE_HEURE: ${SAUVEGARDE_HEURE:-02:00}
       SAUVEGARDE_RETENTION_JOURS: ${SAUVEGARDE_RETENTION_JOURS:-30}
       SAUVEGARDE_DISTANT_ENDPOINT: ${SAUVEGARDE_DISTANT_ENDPOINT:-}
+      # Chiffrement à clé publique des dumps, sur place : le certificat est
+      # public, la clé privée reste hors du serveur (.env.example).
+      SAUVEGARDE_CLE_PUBLIQUE: ${SAUVEGARDE_CLE_PUBLIQUE:-}
     volumes:
       - ./sauvegarder.sh:/sauvegarder.sh:ro
       - ./creer_role_applicatif.sql:/creer_role_applicatif.sql:ro

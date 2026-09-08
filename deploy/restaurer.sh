@@ -105,7 +105,7 @@ fi
 
 case "$1" in
   --lister)
-    echo "Dumps quotidiens (gardés SAUVEGARDE_RETENTION_JOURS jours) :"
+    echo "Dumps quotidiens (gardés SAUVEGARDE_RETENTION_JOURS jours ; « .enc » = chiffré à clé publique) :"
     dans_sauvegarde 'ls -lhp /sauvegardes/base/ 2>/dev/null | grep -v "/$" || echo "(aucun)"'
     echo "Copies mensuelles (conservées sans limite), à désigner par mensuel/<nom> :"
     dans_sauvegarde 'ls -lh /sauvegardes/base/mensuel/ 2>/dev/null || echo "(aucune)"'
@@ -164,6 +164,29 @@ if ! dans_sauvegarde "test -f '/sauvegardes/base/$dump'"; then
   echo "✘ Dump introuvable dans le volume : $dump (voir --lister, ou --depuis-distant <nom>)." >&2
   exit 1
 fi
+
+# Dump chiffré à clé publique (SAUVEGARDE_CLE_PUBLIQUE) : la clé privée est
+# hors du serveur, par construction. Le script refuse plutôt que de passer
+# un fichier chiffré à pg_restore, qui répondrait « unrecognized file
+# format » sans dire pourquoi.
+case "$dump" in
+  *.enc)
+    cat >&2 <<AIDE
+✘ $dump est chiffré à clé publique : sa clé privée n'est pas sur ce serveur.
+  Déchiffrez-le là où elle est gardée, puis rapatriez le dump en clair :
+
+    scp <serveur>:/var/lib/docker/volumes/*_sauvegardes/_data/base/$dump .
+    openssl smime -decrypt -binary -inform DER -in $dump \
+        -inkey cle-privee.pem -out ${dump%.enc}
+    scp ${dump%.enc} <serveur>:/tmp/ && docker compose -f docker-compose.prod.yml \
+        run --rm -T -v /tmp/${dump%.enc}:/in.dump --entrypoint sh sauvegarde \
+        -c 'cp /in.dump /sauvegardes/base/${dump%.enc}'
+
+  puis relancez ./restaurer.sh ${dump%.enc} (deploy/README.md, « Chiffrement »).
+AIDE
+    exit 1
+    ;;
+esac
 
 if [ "$base_cible" = "$base_pile" ]; then
   echo "⚠ Cette restauration ÉCRASE la base « $base_pile » de la pile avec le"

@@ -417,6 +417,29 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v --remove-orphans
 
+  exploitation:
+    name: Exploitation — scripts de sauvegarde
+    runs-on: ubuntu-latest
+    # `sauvegarder.sh` ne tourne nulle part ailleurs dans la CI : il vit
+    # dans des conteneurs qui n'existent qu'en production, et son défaut
+    # ne se découvrirait qu'une nuit de panne. Ses tests remplacent
+    # `pg_dump`, `mc` et `rclone` par des doublures et gardent le vrai
+    # `openssl` : ils éprouvent ce qui compte — qu'une sauvegarde ratée
+    # ne pose jamais son marqueur de réussite, et qu'un dump chiffré à
+    # clé publique se déchiffre bien avec la clé privée.
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Syntaxe des scripts
+        run: |
+          for script in deploy/*.sh deploy/justi-livrer deploy/tests/*.sh; do
+            sh -n "$script" || { echo "::error::$script : syntaxe invalide"; exit 1; }
+          done
+
+      - name: Tests de sauvegarder.sh
+        run: sh deploy/tests/test_sauvegarder.sh
+
   audit:
     name: Dépendances vulnérables
     runs-on: ubuntu-latest
