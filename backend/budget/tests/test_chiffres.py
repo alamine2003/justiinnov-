@@ -180,6 +180,35 @@ class EnveloppeDesactiveeTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
 
+class EnveloppesDejaDesactiveesTests(ExpenseTestCase):
+    """L'interdiction ne corrige pas l'existant : ce qui a déjà été
+    désactivé avec des dépenses déclarées doit être trouvable."""
+
+    def test_l_existant_est_inventorie_sans_etre_modifie(self):
+        self.make_expense(status=Status.SUBMITTED, budget=self.budget, amount="70000.00")
+        # Désactivée par un chemin qui ne passe pas par l'API (avant le
+        # correctif, ou par un script) : c'est le cas à rattraper.
+        Budget.objects.filter(pk=self.budget.pk).update(is_active=False)
+        sortie = StringIO()
+
+        call_command("enveloppes_desactivees", stdout=sortie)
+
+        texte = sortie.getvalue()
+        self.assertIn("1 ligne(s) déclarée(s)", texte)
+        self.assertIn("70000.00", texte)
+        self.assertIn("1 enveloppe(s) désactivée(s)", texte)
+        self.budget.refresh_from_db()
+        self.assertFalse(self.budget.is_active, "la commande ne modifie rien")
+
+    def test_une_enveloppe_desactivee_sans_ligne_declaree_n_est_pas_signalee(self):
+        Budget.objects.filter(pk=self.budget.pk).update(is_active=False)
+        sortie = StringIO()
+
+        call_command("enveloppes_desactivees", stdout=sortie)
+
+        self.assertIn("Aucune enveloppe désactivée", sortie.getvalue())
+
+
 class PaysSansEnveloppeDePaysTests(ExpenseTestCase):
     def test_les_sous_enveloppes_sont_l_attribue_du_pays(self):
         projet = Project.objects.create(country=self.ivoire, name="Salon Abidjan")

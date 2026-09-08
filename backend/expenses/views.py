@@ -28,7 +28,7 @@ from core.journal import Trace
 from core.mixins import NoDestroyModelViewSet
 from core.regles import traduire_les_regles
 
-from . import transitions
+from . import stockage, transitions
 from .audit import record
 from .mixins import DraftDeletableViewSet
 from .models import (
@@ -429,6 +429,26 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     # Le contrôle documentaire relève du siège (DF), pas du déposant.
     write_capability = "proofs.upload"
     action_write_capabilities = {"review": "proofs.review"}
+
+    def create(self, request, *args, **kwargs):
+        """Dépose une pièce ; un échec ne laisse pas son fichier derrière lui.
+
+        ``FileField`` écrit le fichier dans le stockage **avant** l'``INSERT``,
+        et l'écriture du fichier n'a pas de retour arrière : si la
+        transaction de la vue est ensuite annulée — trace d'audit
+        impossible, contrainte sur la pièce remplacée, verrou du dossier
+        perdu — la fiche disparaît et le fichier reste. Il est retiré ici,
+        après la sortie du bloc transactionnel, sur le chemin d'erreur
+        (audit du 8 septembre 2026, §4.4 ; le cas du seul ``INSERT`` refusé
+        est traité dans ``ProofSerializer.create``).
+        """
+        with stockage.suivre_les_depots() as deposes:
+            try:
+                return super().create(request, *args, **kwargs)
+            except Exception:
+                for nom in deposes:
+                    stockage.effacer_nom_sans_bruit(nom)
+                raise
 
     @transaction.atomic
     def perform_create(self, serializer):

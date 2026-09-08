@@ -328,6 +328,11 @@ class MeView(APIView):
         return Response(MeSerializer(request.user).data)
 
     @extend_schema(request=MePreferencesSerializer, responses=MeSerializer)
+    # L'historique du profil s'écrit en ``pre_save`` (``accounts.signals``) :
+    # hors transaction, une entrée attestait d'un changement de langue que
+    # l'écriture suivante pouvait ne jamais faire. Même règle que les vues
+    # d'écriture du référentiel (``core.mixins.NoDestroyModelViewSet``).
+    @transaction.atomic
     def patch(self, request):
         profile = _profil_requis(request.user)
         serializer = MePreferencesSerializer(profile, data=request.data, partial=True)

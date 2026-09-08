@@ -215,6 +215,62 @@ class DepotRefuseTests(StockageTestCase):
         self.assertEqual(fichiers, [premiere.file.name.rsplit("/", 1)[-1]])
 
 
+class TransactionExterieureTests(StockageTestCase):
+    """Le fichier est écrit avant l'``INSERT`` et n'a pas de retour arrière :
+    une transaction de vue annulée **après** la création réussie de la fiche
+    ne doit pas laisser l'objet dans le stockage."""
+
+    def _fichiers_du_dossier(self):
+        try:
+            _, fichiers = default_storage.listdir(
+                f"justificatifs/{self.togo.pk}/{self.dossier.pk}"
+            )
+        except FileNotFoundError:
+            return []
+        return fichiers
+
+    def test_une_trace_impossible_n_emporte_ni_la_fiche_ni_le_fichier(self):
+        """La fiche est créée, puis la trace d'audit échoue : la transaction
+        de la vue est annulée, la fiche disparaît — le fichier aussi."""
+        with mock.patch(
+            "expenses.views.record", side_effect=OSError("journal indisponible")
+        ), self.assertRaises(OSError):
+            self.client.post(
+                "/api/proofs/",
+                {"dossier": self.dossier.pk,
+                 "file": SimpleUploadedFile("recu.pdf", PDF, content_type="application/pdf")},
+                format="multipart",
+            )
+
+        self.assertEqual(Proof.objects.count(), 0)
+        self.assertEqual(self._fichiers_du_dossier(), [])
+
+    def test_un_depot_reussi_garde_son_fichier(self):
+        """Le contraire : le chemin nominal ne doit rien effacer."""
+        piece = self.deposer()
+
+        self.assertTrue(default_storage.exists(piece.file.name))
+        self.assertEqual(len(self._fichiers_du_dossier()), 1)
+
+
+class RepriseObservableTests(StockageTestCase):
+    def test_un_effacement_abandonne_est_signale(self):
+        """Après ``ESSAIS_MAX``, la demande n'est plus reprise : la commande
+        doit le dire — sinon le fichier reste et personne ne le sait."""
+        from io import StringIO
+
+        piece = self.deposer()
+        self.retirer()
+        FichierASupprimer.objects.update(attempts=ESSAIS_MAX)
+        erreurs = StringIO()
+
+        with self.assertLogs("expenses.management.commands.supprimer_fichiers", level="ERROR"):
+            call_command("supprimer_fichiers", stderr=erreurs, verbosity=0)
+
+        self.assertIn("n'ont pas pu être effacés", erreurs.getvalue())
+        self.assertTrue(default_storage.exists(piece.file.name))
+
+
 class TelechargementTests(StockageTestCase):
     def test_un_fichier_absent_ne_produit_pas_de_fausse_attestation(self):
         piece = self.deposer()

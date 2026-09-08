@@ -286,6 +286,41 @@ class FormatsTests(DashboardTestCase):
         self.assertEqual(total[5], "TOTAL")
         self.assertEqual(total[6], "500 000.00")
 
+    def test_le_total_de_l_export_est_celui_de_l_ecran(self):
+        """La preuve d'équivalence, sur le **même jeu de données** : ce que
+        la ligne TOTAL additionne est exactement ce que le tableau de bord
+        compte. Chaque statut du circuit est représenté — brouillon, soumis,
+        en contrôle, justifié, non justifié, clôturé — pour que la
+        comparaison porte sur tous, et pas seulement sur l'exclusion des
+        brouillons : une ligne **non justifiée** est un décaissement
+        constaté sans preuve, elle compte des deux côtés."""
+        from expenses.workflow import Status as S
+
+        for statut, montant in (
+            (S.DRAFT, "11.00"), (S.SUBMITTED, "22.00"), (S.IN_REVIEW, "33.00"),
+            (S.JUSTIFIED, "44.00"), (S.UNJUSTIFIED, "55.00"), (S.CLOSED, "66.00"),
+        ):
+            self.make_expense(
+                title=f"Ligne {statut}", amount=montant, status=statut,
+                budget=None if statut == S.DRAFT else self.budget,
+            )
+        self.login(self.doo)
+
+        repartition = self.client.get(
+            "/api/dashboard/breakdown/", {"year": self.year, "country": self.togo.pk}
+        ).data
+        table = Document(BytesIO(self._export("expenses.docx", country=self.togo.pk).content)).tables[0]
+        total_export = Decimal(
+            [c.text for c in table.rows[-1].cells][6].replace(" ", "").replace("\u202f", "")
+        )
+        total_ecran = sum(
+            Decimal(entree["amount"]) for entree in repartition["by_team"]
+        )
+
+        self.assertEqual(total_export, total_ecran)
+        # Et le brouillon figure bien dans le tableau, sans compter.
+        self.assertIn(f"Ligne {S.DRAFT}", [row.cells[5].text for row in table.rows])
+
     def test_le_rapprochement_existe_en_csv_et_en_word(self):
         csv_ = self._export("reconciliation.csv")
         docx = self._export("reconciliation.docx")

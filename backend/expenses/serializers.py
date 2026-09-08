@@ -26,7 +26,7 @@ from core.models import (
 from core.serializers import DetailField
 
 from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, compute_sha256
-from .stockage import effacer_sans_bruit
+from .stockage import effacer_sans_bruit, noter_depot
 from .workflow import (
     LOCKED_STATUSES,
     PROOF_LOCKED_STATUSES,
@@ -328,6 +328,9 @@ class ProofSerializer(serializers.ModelSerializer):
         except IntegrityError:
             effacer_sans_bruit(piece.file)
             raise
+        # Le fichier est écrit ; si la transaction de la vue est annulée
+        # plus loin, c'est elle qui l'effacera (``stockage.suivre_les_depots``).
+        noter_depot(piece.file.name)
         return piece
 
     def _verifier_la_mise_a_jour(self):

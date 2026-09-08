@@ -384,6 +384,46 @@ class CourseSurLImport(CourseSurLeCircuit):
         self.assertIn("autre import", seconde.data["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.filter(title__in=["Taxi", "Hôtel"]).count(), 2)
 
+    def test_les_lignes_anterieures_a_la_migration_ne_bloquent_rien(self):
+        """L'existant : des lignes sans empreinte (``import_key`` nul),
+        y compris deux identiques dans le même dossier — ce que la
+        migration laisse tel quel. La contrainte partielle les ignore, et
+        un import ultérieur reste possible sur d'autres lignes."""
+        dossier = self._dossier("N-0023", "1000.00")
+        for _ in range(2):
+            Expense.objects.create(
+                dossier=dossier, country=self.togo, team=self.team, owner=self.manager,
+                date=timezone.now(), title="Doublon ancien", amount=Decimal("500.00"),
+                created_by=self.owner.username, status=Status.DRAFT, import_key=None,
+            )
+        self.assertEqual(Expense.objects.filter(title="Doublon ancien").count(), 2)
+
+        response = self._importer(self._classeur("N-0023", [("Nouvelle ligne", 300)]))
+
+        self.assertEqual(response.data["lignes_creees"], 1, response.data)
+        # Les anciens doublons sont toujours là : rien n'a été purgé.
+        self.assertEqual(Expense.objects.filter(title="Doublon ancien").count(), 2)
+
+    def test_les_doublons_anciens_sont_inventories_sans_etre_supprimes(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        dossier = self._dossier("N-0024", "1000.00")
+        for _ in range(2):
+            Expense.objects.create(
+                dossier=dossier, country=self.togo, team=self.team, owner=self.manager,
+                date=timezone.now(), title="Taxi ancien", amount=Decimal("500.00"),
+                created_by=self.owner.username, status=Status.DRAFT,
+            )
+        sortie = StringIO()
+
+        call_command("doublons_importes", stdout=sortie)
+
+        self.assertIn("Taxi ancien", sortie.getvalue())
+        self.assertIn("2 lignes", sortie.getvalue())
+        self.assertEqual(Expense.objects.filter(title="Taxi ancien").count(), 2)
+
     def test_un_nouvel_envoi_du_meme_classeur_est_refuse_ligne_par_ligne(self):
         self._dossier("N-0022", "1000.00")
         classeur = self._classeur("N-0022", [("Taxi", 500)])

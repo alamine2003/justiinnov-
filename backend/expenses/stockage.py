@@ -18,7 +18,9 @@ ici (audit du 8 septembre 2026, §4.4) :
   les objets du stockage qu'aucune fiche ne référence, sans rien effacer.
 """
 
+import contextvars
 import logging
+from contextlib import contextmanager
 from datetime import timedelta
 
 from django.core.files.storage import default_storage
@@ -133,6 +135,51 @@ def effacer_sans_bruit(champ_fichier):
         champ_fichier.delete(save=False)
     except Exception:
         logger.exception("Fichier d'un dépôt refusé laissé dans le stockage : %s", nom)
+
+
+def effacer_nom_sans_bruit(nom):
+    """Comme :func:`effacer_sans_bruit`, à partir du seul chemin.
+
+    Sert au chemin d'erreur de la vue de dépôt : la fiche a disparu avec la
+    transaction, il ne reste que le nom du fichier écrit.
+    """
+    if not nom:
+        return
+    try:
+        if default_storage.exists(nom):
+            default_storage.delete(nom)
+    except Exception:
+        logger.exception("Fichier d'un dépôt annulé laissé dans le stockage : %s", nom)
+
+
+#: Fichiers écrits par ``ProofSerializer.create`` pendant le bloc courant.
+#: Un ``ContextVar`` plutôt qu'une variable de module : deux requêtes
+#: servies par deux fils ne partagent pas leur liste.
+_depots_en_cours = contextvars.ContextVar("depots_en_cours", default=None)
+
+
+@contextmanager
+def suivre_les_depots():
+    """Collecte le chemin des fichiers déposés dans le bloc.
+
+    La vue s'en sert pour effacer, **après** la sortie du bloc
+    transactionnel, ce qu'une transaction annulée a laissé dans le
+    stockage : le fichier est écrit avant l'``INSERT`` et n'a pas de
+    retour arrière.
+    """
+    noms = []
+    jeton = _depots_en_cours.set(noms)
+    try:
+        yield noms
+    finally:
+        _depots_en_cours.reset(jeton)
+
+
+def noter_depot(nom):
+    """Signale un fichier écrit, si un bloc :func:`suivre_les_depots` écoute."""
+    noms = _depots_en_cours.get()
+    if noms is not None and nom:
+        noms.append(nom)
 
 
 def _parcourir(prefixe):
