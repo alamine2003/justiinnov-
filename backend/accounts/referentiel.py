@@ -58,10 +58,19 @@ def _cloisonne(serializer_class, **champs):
     voisine (audit du 8 septembre 2026, §4.5). Ici, comme pour les dépenses
     et les enveloppes, un identifiant hors périmètre est un identifiant
     inconnu : même réponse, rien à lire. La classe garde son nom, donc son
-    nom de composant dans le schéma d'API.
+    nom de composant dans le schéma d'API — à la condition, tenue plus bas,
+    que la classe d'origine ne soit plus servie nulle part.
+
+    ``__module__`` n'est pas recopié : la classe est bien définie ici, et
+    c'est ce que doivent dire les messages qui la nomment. Recopié, il
+    faisait dire à drf-spectacular « deux composants de même nom et
+    d'identités différentes ``<class 'core.serializers.TeamSerializer'>`` et
+    ``<class 'core.serializers.TeamSerializer'>`` » — deux fois le même
+    texte pour deux classes distinctes, sans rien qui permette de les
+    distinguer.
     """
     return type(serializer_class.__name__, (serializer_class,), {
-        "__doc__": serializer_class.__doc__, "__module__": serializer_class.__module__, **champs,
+        "__doc__": serializer_class.__doc__, **champs,
     })
 
 
@@ -87,6 +96,30 @@ CountryWriteSerializer = _cloisonne(
         many=True, queryset=Manager.objects.all(), chemin_pays="countries",
         distinct=True, required=False,
     ),
+)
+# Le détail d'un pays imbrique son référentiel. Tant qu'il le tirait de
+# ``core``, deux classes distinctes portaient le même nom — l'originale par
+# ``/api/countries/{id}/``, la cloisonnée par ``/api/teams/`` et ses
+# voisines — et le schéma d'API en gardait une au hasard de l'ordre de
+# parcours, en signalant cinq fois « Encountered 2 components with identical
+# names » (drf_spectacular.W001). C'est ce qui a bloqué la livraison de
+# fcbc991 : ces avertissements sont des contrôles Django, et
+# ``check --deploy --fail-level WARNING`` les refuse — à raison, puisque le
+# schéma en devenait faux.
+#
+# Une seule classe par nom, donc : le détail d'un pays sert les mêmes
+# sérialiseurs que les vues du référentiel. Les champs imbriqués sont en
+# lecture seule, le cloisonnement de leur clé ``country`` ne joue qu'à
+# l'écriture : la réponse ne change pas, et le composant du schéma non plus
+# (``ChampCloisonne`` porte le même libellé « Pays » que la clé étrangère
+# déduite du modèle qu'elle remplace).
+CountryDetailSerializer = _cloisonne(
+    CountryDetailSerializer,
+    teams=TeamSerializer(many=True, read_only=True),
+    cost_centers=CostCenterSerializer(many=True, read_only=True),
+    projects=ProjectSerializer(many=True, read_only=True),
+    expense_titles=ExpenseTitleSerializer(many=True, read_only=True),
+    marketing_categories=MarketingCategorySerializer(many=True, read_only=True),
 )
 
 
