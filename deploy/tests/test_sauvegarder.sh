@@ -79,6 +79,7 @@ DOUBLURE
 
 cat > "$DOUBLURES/mc" <<'DOUBLURE'
 #!/bin/sh
+echo "$*" >> "${JOURNAL_MC:-/dev/null}"
 for arg in "$@"; do
   if [ "$arg" = "mirror" ]; then
     dest=""
@@ -111,8 +112,18 @@ decor() {
   rm -rf "$DESTINATION"
   mkdir -p "$DESTINATION"
   JOURNAL_RCLONE="$BAC/rclone-$1.log"
+  JOURNAL_MC="$BAC/mc-$1.log"
   : > "$JOURNAL_RCLONE"
-  export SAUVEGARDE_DESTINATION="$DESTINATION" JOURNAL_RCLONE
+  : > "$JOURNAL_MC"
+  export SAUVEGARDE_DESTINATION="$DESTINATION" JOURNAL_RCLONE JOURNAL_MC
+  # Le miroir lit ses identifiants dans l'environnement, et `sauvegarder.sh`
+  # tourne sous `set -u` : les laisser au hasard de la machine, c'est ce qui
+  # a fait passer cette suite ici et échouer sur l'exécuteur de la CI, où
+  # AWS_ACCESS_KEY_ID n'existe pas (code 2, « parameter not set »). Le décor
+  # les pose donc lui-même ; le cas qui veut leur absence les retire.
+  export AWS_ACCESS_KEY_ID="cle-de-test" AWS_SECRET_ACCESS_KEY="secret-de-test"
+  export MC_CONFIG_DIR="$BAC/mc-config"
+  unset AWS_S3_ENDPOINT_URL AWS_STORAGE_BUCKET_NAME 2>/dev/null || true
   unset CODE_PGDUMP CONTENU_DUMP CODE_MC CODE_RCLONE CODE_RCLONE_CHECK 2>/dev/null || true
   unset SAUVEGARDE_CLE_PUBLIQUE SAUVEGARDE_DISTANT_ENDPOINT SAUVEGARDE_CHIFFREMENT_CLE 2>/dev/null || true
   unset SAUVEGARDE_DISTANT_BUCKET SAUVEGARDE_DISTANT_CLE SAUVEGARDE_DISTANT_SECRET 2>/dev/null || true
@@ -187,10 +198,32 @@ decor pieces-ok
 lancer pieces
 verifier "un miroir réussi sort en 0" "$CODE" "0"
 verifier "  … pose le marqueur" "$(marqueur pieces)" "oui"
+verifier "  … et transmet bien les identifiants du stockage" \
+  "$(compte 'alias set pile .* cle-de-test secret-de-test' "$JOURNAL_MC")" "1"
 
 decor pieces-echec
 CODE_MC=1 lancer pieces
 verifier "un mc en échec sort en erreur" "$CODE" "1"
+verifier "  … sans marqueur" "$(marqueur pieces)" "non"
+
+# Le défaut qui a bloqué la livraison de fcbc991 : sans identifiants, le
+# script mourait sous `set -u` (code 2) avant d'avoir rien journalisé. Une
+# configuration absente doit être un échec de sauvegarde ordinaire — dit,
+# compté, et sans marqueur.
+decor pieces-sans-identifiants
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+lancer pieces
+verifier "des identifiants absents sont un échec, pas un plantage" "$CODE" "1"
+verifier_au_moins_une_fois "  … et le journal dit lesquels manquent" \
+  "$(printf '%s' "$SORTIE" | compte 'identifiants du stockage objet absents')"
+verifier "  … sans marqueur" "$(marqueur pieces)" "non"
+verifier "  … et sans avoir rien tenté sur le stockage" \
+  "$(compte . "$JOURNAL_MC")" "0"
+
+decor pieces-identifiant-vide
+export AWS_ACCESS_KEY_ID="" AWS_SECRET_ACCESS_KEY="secret-de-test"
+lancer pieces
+verifier "un identifiant vide vaut un identifiant absent" "$CODE" "1"
 verifier "  … sans marqueur" "$(marqueur pieces)" "non"
 
 echo "Copie hors machine"
