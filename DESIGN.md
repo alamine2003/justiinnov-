@@ -194,6 +194,42 @@ Ces éléments relèvent des règles du produit, pas du goût : leur emplacement
 et leur comportement sont fixés ici, et l'écran qui les porte doit s'y
 conformer.
 
+### Identité : logo, emblème, version
+
+Le logo — l'emblème « J » en document coché, suivi du nom « JUSTI INNOV » —
+est celui fourni par INNOV PHARMA (`docs/identite/logo-justi-innov.png`,
+la source). Dans l'interface il n'existe qu'en vectoriel, tracé en
+`currentColor` : `BrandLogo` (`components/layout/brand-logo.tsx`, emblème et
+nom) et `BrandMark` (`brand-mark.tsx`, l'emblème seul). Il prend la couleur
+du texte qui l'entoure, donc le thème — jamais une couleur en dur, jamais
+une image PNG. Le logo complet va dans l'en-tête (`h-7`, lien vers
+l'accueil) et sur l'écran de connexion (`h-9`, clair sur le panneau
+sombre) ; l'emblème seul partout où 40 px ne suffiraient pas à lire le nom
+(titre du panneau replié). Le nom fait partie du dessin : `BrandLogo` le
+porte en `aria-label`, et il n'est pas répété en texte à côté.
+
+L'icône d'onglet et d'application installée (`public/favicon.svg`,
+`favicon.png`, `public/icons/`) est l'emblème blanc sur un carré sombre à
+coins arrondis, lisible sur une barre d'onglets claire comme sombre ; la
+version « maskable » garde l'emblème dans la zone sûre.
+
+La **version** (pied de page, pastille de l'en-tête, écran de connexion)
+vient de `BRAND.version`, figée à la construction : celle du tag `v*`
+livré, sinon celle de `package.json` (`vite.config.ts`, `define`). On ne
+l'écrit nulle part ailleurs ; poser un tag suffit.
+
+### Bouton « Retour »
+
+En haut de chaque page sauf l'accueil, avant le `PageHeader` : un bouton
+`ghost` de taille `sm`, icône `ArrowLeft`, libellé « Retour »
+(`components/layout/back-button.tsx`, monté par `AppLayout`, masqué quand la
+plateforme est fermée — mot de passe provisoire, enrôlement exigé). Il
+revient à l'écran précédent quand la navigation a commencé dans
+l'application, sinon à la liste de la section (`lib/navigation.ts`,
+`parentPath` : `/dossiers/12` → `/dossiers`, `/dossiers` → `/`). Une page
+ne rajoute pas son propre lien « Retour aux… » : il y en a un, au même
+endroit partout.
+
 ### Sélecteur de langue
 
 Dans le menu du compte (en haut à droite, à côté du sélecteur de thème),

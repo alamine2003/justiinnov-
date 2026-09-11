@@ -1,8 +1,7 @@
 import { useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import {
   AlertTriangle,
-  ArrowLeft,
   FileText,
   Loader2,
   Pencil,
@@ -196,7 +195,6 @@ export function DossierDetailPage() {
   if (!dossier) {
     return (
       <div className="space-y-4">
-        <BackLink />
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>{t("dossiers.detail.introuvable_titre")}</AlertTitle>
@@ -246,8 +244,6 @@ export function DossierDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink />
-
       {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -543,18 +539,5 @@ export function DossierDetailPage() {
         lockedTeam={dossier.team}
       />
     </div>
-  )
-}
-
-function BackLink() {
-  const { t } = useTranslation()
-  return (
-    <Link
-      to="/dossiers"
-      className="inline-flex items-center rounded text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-      {t("dossiers.detail.retour")}
-    </Link>
   )
 }

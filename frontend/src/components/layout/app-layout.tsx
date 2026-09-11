@@ -26,6 +26,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { AppFooter } from "@/components/layout/app-footer"
+import { BackButton } from "@/components/layout/back-button"
+import { BrandLogo } from "@/components/layout/brand-logo"
 import { BrandMark } from "@/components/layout/brand-mark"
 import { LanguageToggle } from "@/components/layout/language-toggle"
 import { NotificationBell } from "@/components/layout/notification-bell"
@@ -127,16 +129,15 @@ export function AppLayout() {
         <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6">
           <Link
             to="/"
-            className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={BRAND.name}
+            className="flex min-w-0 items-center gap-3 rounded-lg text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <BrandMark className="h-10 w-10 shrink-0" />
+            {/* Le logo porte le nom : il n'est pas répété en texte. */}
+            <BrandLogo className="h-7 w-auto" />
             <div className="min-w-0 leading-tight">
-              <p className="flex items-center gap-1.5 font-semibold tracking-tight text-foreground">
-                {BRAND.name}
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  v{BRAND.version}
-                </span>
-              </p>
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                v{BRAND.version}
+              </span>
               <p className="truncate text-xs text-muted-foreground">{scope}</p>
             </div>
           </Link>
@@ -172,7 +173,10 @@ export function AppLayout() {
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="w-72">
           <SheetHeader>
-            <SheetTitle>{BRAND.name}</SheetTitle>
+            <SheetTitle className="flex items-center gap-2">
+              <BrandMark className="h-6 w-6" />
+              {BRAND.name}
+            </SheetTitle>
             <SheetDescription>
               {me ? [me.username, me.role_display].filter(Boolean).join(" · ") : scope}
             </SheetDescription>
@@ -228,6 +232,9 @@ export function AppLayout() {
       {/* `min-h-0 flex-1` maintient le pied de page en bas même sur un écran
           court, sans le coller au contenu sur un écran long. */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+        {/* Retour en haut de chaque page, sauf l'accueil ; pas quand la
+            plateforme est fermée — il n'y a alors nulle part où revenir. */}
+        {!closed && <BackButton />}
         {notice && (
           <Alert className="mb-6">
             <Info className="h-4 w-4" />

@@ -41,6 +41,7 @@
     "separateur_libelle": " : "
   },
   "nav": {
+    "retour": "Retour",
     "principale": "Navigation principale",
     "pilotage": "Pilotage",
     "dossiers": "Dossiers",
@@ -362,8 +363,7 @@
       "saisie_par": "saisie par {{nom}}",
       "heure_fuseau": "heure {{fuseau}}",
       "modifier_aria": "Modifier {{titre}}",
-      "supprimer_aria": "Supprimer le brouillon {{titre}}",
-      "retour": "Retour aux dossiers"
+      "supprimer_aria": "Supprimer le brouillon {{titre}}"
     },
     "reouverture": {
       "rouvrir": "Rouvrir",
@@ -770,7 +770,6 @@
       "actualisation": "Actualisation",
       "introuvable_titre": "Pays introuvable",
       "introuvable_texte": "Ce pays n'existe pas ou n'est pas dans votre périmètre.",
-      "retour": "Retour aux pays",
       "budget": "Budget",
       "budget_devise": "Budget ({{devise}})",
       "budget_nombre": "Le budget doit être un nombre.",

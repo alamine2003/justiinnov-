@@ -41,6 +41,7 @@
     "separateur_libelle": ": "
   },
   "nav": {
+    "retour": "Back",
     "principale": "Main navigation",
     "pilotage": "Overview",
     "dossiers": "Files",
@@ -362,8 +363,7 @@
       "saisie_par": "entered by {{nom}}",
       "heure_fuseau": "{{fuseau}} time",
       "modifier_aria": "Edit {{titre}}",
-      "supprimer_aria": "Delete the draft {{titre}}",
-      "retour": "Back to files"
+      "supprimer_aria": "Delete the draft {{titre}}"
     },
     "reouverture": {
       "rouvrir": "Reopen",
@@ -770,7 +770,6 @@
       "actualisation": "Refreshing",
       "introuvable_titre": "Country not found",
       "introuvable_texte": "This country does not exist or is not within your scope.",
-      "retour": "Back to countries",
       "budget": "Budget",
       "budget_devise": "Budget ({{devise}})",
       "budget_nombre": "The budget must be a number.",
