@@ -97,8 +97,8 @@ Cinq rôles, calqués sur l'organisation du groupe :
 | `manager` | Manager (pays) | responsable dans une filiale | son pays, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | saisir ses dépenses, déposer les justificatifs, **soumettre** (déclarer) ; le référentiel de son pays est tenu par la RH |
 | `dm` | DM — directeur manager (siège) | au siège | tous pays, **restrictible** à certains | **mettre en contrôle** une dépense soumise (`expenses.review`) ; lire l'historique du référentiel de son périmètre |
 | `df` | DF — directeur financier (siège) | au siège | tous pays, **restrictible** à certains | mettre en contrôle, contrôler les pièces (`proofs.review`), **justifier ou non** (`expenses.validate`), clôturer (`expenses.close`) ; lire l'historique du référentiel de son périmètre |
-| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | tout le circuit, comptes et rôles, pays et référentiel de tous les pays, **journal d'audit**, **imports et exports**, **réouverture** d'un dossier, **décision sur une rectification** de constat, réinitialisation de la double authentification |
-| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, et seul à écrire **les enveloppes, les réallocations et les taux de change** ; seul à régler ces lignes de la matrice des droits |
+| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | **tout** : le circuit, les comptes et rôles, les pays et le référentiel de tous les pays, les **enveloppes, réallocations et taux de change**, le **journal d'audit**, les **imports et exports**, la **réouverture** d'un dossier, la **décision sur une rectification**, la double authentification — et **la matrice des droits**, qu'il règle ligne par ligne pour attribuer chaque droit à qui il veut (décision 58) |
+| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, à égalité avec l'administrateur ; les deux rôles ne se distinguent que par leur libellé et ne peuvent se voir retirer aucun droit |
 
 Il n'y a ni « direction des opérations » ni « auditeur » distincts : la DO
 est super administratrice, l'audit revient à la RH.
@@ -108,9 +108,9 @@ décision du produit : ils ne sont ni administrateurs ni super
 administrateurs. Ils gardent leurs fonctions de contrôle (`expenses.review`
 pour le DM ; `expenses.validate`, `expenses.close`, `proofs.review` pour
 le DF) et la lecture de l'historique du référentiel (`history.read`).
-Comptes, pays, référentiel, fichiers, réouverture et journal d'audit
-relèvent de la RH et de la direction ; enveloppes, réallocations, taux de
-change et validation d'un dépassement, de la direction seule.
+Comptes, pays, référentiel, fichiers, réouverture, journal d'audit,
+enveloppes, réallocations, taux de change et validation d'un dépassement
+relèvent des administrateurs — RH et direction à égalité (décision 58).
 
 **La matrice des droits se règle dans l'application.** Chaque action de
 l'API est une capacité nommée — `users.create`, `referentiel.update`,
@@ -124,8 +124,9 @@ appliquée avec, pour chaque capacité, `roles`, `default_roles`,
 `fixed_roles`, `locked_roles`) ; le choix est gardé dans
 `WorkflowConfiguration.capability_roles`, journalisé avec l'avant et
 l'après, et s'applique à la requête suivante. Deux verrous ne se règlent
-pas : le super administrateur garde tout, et le pays ne reçoit jamais le
-contrôle, l'administration ni l'arbitrage des enveloppes. `/api/me/`
+pas : les administrateurs — `admin` et `super_admin` — gardent tout et
+règlent toute la matrice, et le pays ne reçoit jamais le contrôle,
+l'administration ni l'arbitrage des enveloppes. `/api/me/`
 traduit la matrice en capacités que l'interface se contente de lire, et
 chaque dossier ou ligne porte `allowed_actions` — saisie et circuit —
 calculées par le serveur.

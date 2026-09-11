@@ -920,7 +920,7 @@
       "annuler": "Discard changes",
       "enregistre": "Rights saved: they apply from now on.",
       "erreur": "Could not save",
-      "direction_seule": "Set by management only"
+      "hors_de_votre_role": "Cannot be set from your role"
     },
     "utilisateurs": {
       "titre": "Accounts",

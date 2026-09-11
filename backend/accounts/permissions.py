@@ -13,7 +13,10 @@ administrateurs dans « Configuration › Permissions »), sinon du défaut
 inscrit ici (décision 43). Deux verrous ne se configurent pas, parce qu'ils
 tiennent la raison d'être de l'application :
 
-- le super administrateur a toujours toutes les capacités (``fixes``) ;
+- les administrateurs — ``admin`` et ``super_admin`` — ont toujours toutes
+  les capacités (``fixes``) et règlent toute la matrice, l'argent compris :
+  l'administrateur attribue chaque droit à qui il veut, et personne ne
+  peut le lui retirer (décision 58) ;
 - le pays ne contrôle jamais ce qu'il déclare, n'administre rien (comptes,
   configuration, journal d'audit, ouverture ou modification d'un pays) et ne
   fixe pas ses propres enveloppes (``verrouillees``) ; les comptes et la
@@ -106,7 +109,6 @@ COUNTRY_ROLES = frozenset({Role.MANAGER})
 # --- Matrice des capacités ---------------------------------------------------
 
 _ADMINISTRATEURS = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
-_DIRECTION = frozenset({Role.SUPER_ADMIN})
 _SIEGE = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
 _CONTROLE = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
 _PAYS_ET_ADMINISTRATEURS = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER})
@@ -126,13 +128,13 @@ class Capacite:
     #: Rôles qui ne peuvent jamais la recevoir, quelle que soit la
     #: configuration : la case reste vide et grisée.
     verrouillees: frozenset = frozenset()
-    #: Rôles qui l'ont toujours : le super administrateur, partout — sinon
-    #: une configuration malheureuse n'aurait plus personne pour la défaire.
-    fixes: frozenset = _DIRECTION
-    #: Rôles qui peuvent modifier cette ligne de la matrice. La RH règle
-    #: tout, sauf ce qui touche à l'argent : attribuer, arbitrer, tenir les
-    #: taux se règlent par la direction seule (« la RH tient les comptes,
-    #: pas l'argent »).
+    #: Rôles qui l'ont toujours : les administrateurs, partout — sinon une
+    #: configuration malheureuse n'aurait plus personne pour la défaire, et
+    #: l'administrateur, qui attribue les droits, ne peut pas se voir
+    #: retirer les siens (décision 58).
+    fixes: frozenset = _ADMINISTRATEURS
+    #: Rôles qui peuvent modifier cette ligne de la matrice : les
+    #: administrateurs, sur toutes les lignes, l'argent compris.
     reglable_par: frozenset = _ADMINISTRATEURS
 
     def roles_effectifs(self, choix):
@@ -167,8 +169,8 @@ _JAMAIS_HORS_ADMINISTRATEURS = _TOUS - _ADMINISTRATEURS
 
 #: Matrice des capacités, source unique, dans l'ordre où l'interface les
 #: présente. Les défauts sont les décisions du produit : le DM et le DF
-#: n'administrent rien, les enveloppes sont à la direction, les fichiers
-#: aux administrateurs.
+#: n'administrent rien, les enveloppes, les fichiers et l'administration
+#: sont aux administrateurs — RH et direction à égalité.
 CAPACITES = (
     Capacite(
         "users.read", GROUPE_ADMINISTRATION,
@@ -198,7 +200,7 @@ CAPACITES = (
             "Lire la configuration, régler la politique du circuit et cette "
             "matrice. Réservé aux administrateurs, sans exception."
         ),
-        _ADMINISTRATEURS, verrouillees=_TOUS - _ADMINISTRATEURS, fixes=_ADMINISTRATEURS,
+        _ADMINISTRATEURS, verrouillees=_TOUS - _ADMINISTRATEURS,
     ),
     Capacite(
         "audit.read", GROUPE_ADMINISTRATION,
@@ -260,7 +262,7 @@ CAPACITES = (
         "budgets.create", GROUPE_ENVELOPPES,
         _("Attribuer une enveloppe"),
         _("Créer une enveloppe annuelle ou une sous-enveloppe."),
-        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS, reglable_par=_DIRECTION,
+        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
     Capacite(
         "budgets.update", GROUPE_ENVELOPPES,
@@ -269,25 +271,25 @@ CAPACITES = (
             "Changer le montant, la politique de dépassement, désactiver ; "
             "valider une dépense qui dépasse son enveloppe."
         ),
-        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS, reglable_par=_DIRECTION,
+        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
     Capacite(
         "reallocations.request", GROUPE_ENVELOPPES,
         _("Demander une réallocation"),
         _("Proposer un transfert entre deux enveloppes."),
-        _DIRECTION, reglable_par=_DIRECTION,
+        _ADMINISTRATEURS,
     ),
     Capacite(
         "reallocations.decide", GROUPE_ENVELOPPES,
         _("Arbitrer une réallocation"),
         _("Approuver ou refuser un transfert. Jamais le sien."),
-        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS, reglable_par=_DIRECTION,
+        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
     Capacite(
         "rates.manage", GROUPE_ENVELOPPES,
         _("Tenir les taux de change"),
         _("Ajouter ou corriger un taux vers la devise de consolidation."),
-        _DIRECTION, verrouillees=_JAMAIS_LE_PAYS, reglable_par=_DIRECTION,
+        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
     Capacite(
         "expenses.create", GROUPE_DECLARATION,

@@ -349,14 +349,18 @@ class MatriceEtServicesTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
     def test_rouvrir_suit_la_matrice(self):
+        """Par défaut le DF ne rouvre pas ; la matrice le lui ouvre, et le
+        service le lit. (Les administrateurs, eux, gardent tout : la
+        matrice ne leur retire rien, décision 58.)"""
         self.make_expense()
         self.submit_dossier()
-        self._regler(**{"dossiers.reopen": ["super_admin", "df"]})
 
         with self.assertRaises(PermissionRefusee):
             transitions.rouvrir(
-                self.dossier, get_access(self.admin), "Ligne douteuse", trace(self.admin)
+                self.dossier, get_access(self.controller), "Ligne douteuse",
+                trace(self.controller),
             )
+        self._regler(**{"dossiers.reopen": ["super_admin", "admin", "df"]})
         resultat = transitions.rouvrir(
             self.dossier, get_access(self.controller), "Ligne douteuse",
             trace(self.controller),

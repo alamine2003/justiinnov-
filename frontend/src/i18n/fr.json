@@ -920,7 +920,7 @@
       "annuler": "Annuler les modifications",
       "enregistre": "Droits enregistrés : ils s'appliquent dès maintenant.",
       "erreur": "Enregistrement impossible",
-      "direction_seule": "Se règle par la direction seule"
+      "hors_de_votre_role": "Ne se règle pas depuis votre rôle"
     },
     "utilisateurs": {
       "titre": "Comptes",

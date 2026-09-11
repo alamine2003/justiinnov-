@@ -440,9 +440,9 @@ class BackOfficeTests(ScopingTestCase):
         # La RH tient le référentiel de tous les pays, pas le manager.
         self.assertIn(Role.ADMIN, capacites["referentiel.update"])
         self.assertNotIn(Role.MANAGER, capacites["referentiel.update"])
-        # Le DM et le DF n'administrent rien : les enveloppes sont à la
-        # direction seule, le journal d'audit à la RH et à la direction.
-        self.assertEqual(capacites["budgets.update"], [Role.SUPER_ADMIN])
+        # Le DM et le DF n'administrent rien : les enveloppes comme le
+        # journal d'audit sont aux administrateurs, RH et direction.
+        self.assertEqual(sorted(capacites["budgets.update"]), [Role.ADMIN, Role.SUPER_ADMIN])
         self.assertEqual(sorted(capacites["audit.read"]), [Role.ADMIN, Role.SUPER_ADMIN])
         for capacite in ("users.update", "countries.create", "referentiel.update",
                          "budgets.update", "audit.read", "data.export", "dossiers.reopen",

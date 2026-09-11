@@ -50,8 +50,8 @@ class BudgetTestCase(APITestCase):
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
         )
-        # La direction seule attribue et arbitre (``budgets.create`` =
-        # super administrateurs). Deux comptes distincts : celui qui demande
+        # Les administrateurs attribuent et arbitrent (``budgets.create`` =
+        # admin, super_admin). Deux comptes distincts : celui qui demande
         # une réallocation ne peut pas la décider.
         cls.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
         cls.doo = make_user("do.innov", Role.SUPER_ADMIN)
@@ -165,9 +165,9 @@ class BudgetAccessTests(BudgetTestCase):
         self.budget_togo.refresh_from_db()
         self.assertEqual(self.budget_togo.amount, Decimal("10000000.00"))
 
-    def test_la_rh_n_attribue_pas_d_enveloppe(self):
-        """L'administrateur tient les comptes et le référentiel ; l'argent
-        est l'affaire de la direction."""
+    def test_la_rh_attribue_une_enveloppe_comme_la_direction(self):
+        """Décision 58 : l'administrateur a tous les droits, l'argent
+        compris — il attribue une enveloppe comme la direction."""
         self.login(make_user("rh.innov", Role.ADMIN))
 
         response = self.client.post(
@@ -175,7 +175,7 @@ class BudgetAccessTests(BudgetTestCase):
             {"country": self.togo.pk, "year": 2027, "amount": "1.00"},
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
     def test_manager_doit_etre_rattache_au_pays(self):
         """Un manager n'a pas de pays propre : c'est ``Country.managers``
@@ -515,12 +515,11 @@ class ExchangeRateTests(BudgetTestCase):
         tolerance = origine * Decimal("0.0000005") + CENTS
         self.assertLessEqual(abs(rejoue - converti), tolerance, (rejoue, converti))
 
-    def test_seule_la_direction_saisit_un_taux(self):
+    def test_seuls_les_administrateurs_saisissent_un_taux(self):
         """Un taux change la valeur consolidée de toutes les enveloppes : il
-        relève de ceux qui les attribuent. Le DF et la RH lisent les taux,
-        n'en posent aucun."""
-        rh = make_user("rh.innov", Role.ADMIN)
-        for compte in (self.df, self.df_togo, rh):
+        relève de ceux qui les attribuent — les administrateurs. Le DF lit
+        les taux, n'en pose aucun."""
+        for compte in (self.df, self.df_togo):
             with self.subTest(compte=compte.username):
                 self.login(compte)
 

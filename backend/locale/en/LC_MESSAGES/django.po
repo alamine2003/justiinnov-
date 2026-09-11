@@ -433,8 +433,8 @@ msgid "Capacité inconnue."
 msgstr "Unknown capability."
 
 #: accounts/serializers.py:166
-msgid "Ce droit se règle par la direction seule."
-msgstr "This right is set by management only."
+msgid "Ce droit ne se règle pas depuis votre rôle."
+msgstr "This right cannot be set from your role."
 
 #: accounts/serializers.py:168
 #, python-brace-format
@@ -521,8 +521,8 @@ msgid "Vous ne pouvez pas retirer vos propres droits d'administration."
 msgstr "You cannot remove your own administration rights."
 
 #: accounts/views.py:627
-msgid "Les droits s'appliquent à chaque requête, dès l'enregistrement. Le super administrateur garde tout ; un pays ne contrôle jamais ce qu'il déclare, n'administre rien et n'arbitre pas ses enveloppes."
-msgstr "Rights apply to every request as soon as they are saved. The super administrator keeps everything; a country never reviews what it declares, administers nothing and does not arbitrate its own budgets."
+msgid "Les droits s'appliquent à chaque requête, dès l'enregistrement. Les administrateurs gardent tout ; un pays ne contrôle jamais ce qu'il déclare, n'administre rien et n'arbitre pas ses enveloppes."
+msgstr "Rights apply to every request as soon as they are saved. Administrators keep everything; a country never controls what it declares, administers nothing and does not arbitrate its own envelopes."
 
 #: budget/models.py:29 core/models.py:306
 msgid "Bloquer"

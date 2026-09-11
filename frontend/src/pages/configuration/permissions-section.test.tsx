@@ -39,7 +39,7 @@ function matrice(overrides: Partial<PermissionMatrix> = {}): PermissionMatrix {
         description: "Télécharger le registre.",
         roles: ["admin", "super_admin"],
         default_roles: ["admin", "super_admin"],
-        fixed_roles: ["super_admin"],
+        fixed_roles: ["admin", "super_admin"],
         locked_roles: [],
         settable_by_roles: ["admin", "super_admin"],
       },
@@ -50,12 +50,12 @@ function matrice(overrides: Partial<PermissionMatrix> = {}): PermissionMatrix {
         description: "Constater.",
         roles: ["admin", "df", "super_admin"],
         default_roles: ["admin", "df", "super_admin"],
-        fixed_roles: ["super_admin"],
+        fixed_roles: ["admin", "super_admin"],
         locked_roles: ["manager"],
         settable_by_roles: ["admin", "super_admin"],
       },
     ],
-    note: "Le super administrateur garde tout.",
+    note: "Les administrateurs gardent tout.",
     ...overrides,
   }
 }
@@ -69,9 +69,12 @@ describe("MatriceDesDroits", () => {
   it("fige les cases verrouillées et laisse les autres basculer", () => {
     render(<MatriceDesDroits matrix={matrice()} onSaved={() => {}} />)
 
-    // Le super administrateur a tout : aucun interrupteur pour lui.
+    // Les administrateurs ont tout : aucun interrupteur pour eux.
     expect(
       screen.queryByRole("switch", { name: "Exporter pour Super administrateur" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("switch", { name: "Exporter pour Administrateur (RH)" }),
     ).not.toBeInTheDocument()
     // Le pays ne justifie jamais : pas d'interrupteur non plus.
     expect(

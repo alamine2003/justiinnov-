@@ -80,19 +80,20 @@ l'application.
   « Configuration › Permissions » (`PATCH /api/permissions/`, stocké dans
   `WorkflowConfiguration.capability_roles`, journalisé) ; le réglage
   s'applique à la requête suivante, côté vues, services, notifications et
-  `allowed_actions`. **Deux verrous ne se règlent pas** : le super
-  administrateur garde toutes les capacités, et le `manager` ne reçoit
+  `allowed_actions`. **Deux verrous ne se règlent pas** : les
+  administrateurs — `admin` et `super_admin`, à égalité — gardent toutes
+  les capacités et règlent toute la matrice, l'argent compris
+  (décision 58 : l'administrateur attribue chaque droit à qui il veut, et
+  personne ne peut lui retirer les siens) ; et le `manager` ne reçoit
   jamais le contrôle (mise en contrôle, justification, clôture, contrôle
-  d'une pièce, réouverture), l'administration (comptes, configuration,
-  journal d'audit, ouverture ou modification d'un pays) ni l'arbitrage des
-  enveloppes ; les comptes et la configuration ne s'ouvrent qu'aux
-  administrateurs, jamais au DM ni au DF, qui pourraient sinon se créer un
-  administrateur. Le référentiel d'un pays et la demande de réallocation,
-  eux, restent ouvrables au pays par choix d'organisation. Les lignes qui
-  touchent à l'argent (`budgets.*`, `reallocations.*`, `rates.manage`) ne
-  se règlent que par un `super_admin` (`reglable_par`). Les verrous
-  s'appliquent à la lecture de la matrice, pas seulement à
-  l'enregistrement.
+  d'une pièce, réouverture, décision sur une rectification),
+  l'administration (comptes, configuration, journal d'audit, ouverture ou
+  modification d'un pays) ni l'arbitrage des enveloppes ; les comptes et la
+  configuration ne s'ouvrent qu'aux administrateurs, jamais au DM ni au
+  DF, qui pourraient sinon se créer un administrateur. Le référentiel d'un
+  pays et la demande de réallocation, eux, restent ouvrables au pays par
+  choix d'organisation. Les verrous s'appliquent à la lecture de la
+  matrice, pas seulement à l'enregistrement.
 - **Par défaut, le DM et le DF n'ont aucun droit d'administration.**
   Décision du produit : ils ne sont ni administrateurs ni super
   administrateurs. Ils gardent leurs fonctions de contrôle — `dm` sur
@@ -103,13 +104,19 @@ l'application.
   référentiel, ni enveloppes, ni fichiers, ni réouverture, ni journal
   d'audit. Un administrateur peut leur en ouvrir une depuis la matrice ;
   c'est une décision tracée, pas un défaut.
-- **Par défaut, les enveloppes sont l'affaire des super administrateurs.**
+- **L'administrateur a tous les droits, et les attribue.** `admin` et
+  `super_admin` sont fixes sur chaque capacité (`Capacite.fixes`) et
+  règlent chaque ligne de la matrice (`reglable_par`), l'argent compris :
+  il n'y a plus de ligne « direction seule ». Ce qui les distingue est un
+  libellé, pas un droit ; la matrice garde les deux rôles pour que les
+  comptes disent qui est RH et qui est direction.
+- **Par défaut, les enveloppes sont l'affaire des administrateurs.**
   Attribuer une enveloppe, demander, approuver ou refuser une réallocation,
   tenir les taux de change, valider un dépassement : `budgets.create`,
   `budgets.update`, `reallocations.request`, `reallocations.decide`,
-  `rates.manage` sont à `super_admin` seul. Le DF constate ce qui a été
-  dépensé, il ne fixe pas ce qui peut l'être ; la RH tient les comptes, pas
-  l'argent.
+  `rates.manage` sont à `admin` et `super_admin` (décision 58 ; avant
+  elle, à `super_admin` seul). Le DF constate ce qui a été dépensé, il ne
+  fixe pas ce qui peut l'être.
 - **Le journal d'audit est l'affaire de la RH et de la direction.**
   `audit.read` = `admin`, `super_admin` par défaut ; jamais le pays. Le
   journal relit les décisions du DM et du DF autant que celles des pays :

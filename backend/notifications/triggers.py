@@ -178,7 +178,7 @@ ALERT_KINDS = {
 #: Qui doit être averti, selon la nature de l'alerte : le siège entier
 #: (super administrateurs, RH, DF, DM), et le manager pour les alertes de
 #: son pays.
-#: L'enveloppe : la direction l'arbitre, le contrôle la surveille, et le
+#: L'enveloppe : les administrateurs l'arbitrent, le contrôle la surveille, et le
 #: pays reste averti de son état même s'il ne la justifie pas lui-même. Un
 #: justificatif manquant concerne d'abord ceux qui peuvent le fournir — le
 #: pays — autant que ceux qui devront le contrôler.
