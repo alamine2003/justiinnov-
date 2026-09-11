@@ -19,9 +19,12 @@ export const BRAND = {
   developer: "Al Amine dev",
   /** Année de première mise en service, pour la mention de copyright. */
   since: 2026,
-  /** Emblème vectoriel : net à toute taille, et le seul fichier d'identité servi. */
-  mark: "/favicon.svg",
 } as const
+
+// L'emblème et le logo sont des composants (`components/layout/brand-mark.tsx`,
+// `brand-logo.tsx`), tracés depuis `docs/identite/logo-justi-innov.png` ;
+// l'icône d'onglet et d'application installée — l'emblème blanc sur un carré
+// sombre — vit dans `public/favicon.svg` et `public/icons/`.
 
 /** Mention de copyright, l'année courante si elle dépasse la mise en service. */
 export function copyright(): string {
