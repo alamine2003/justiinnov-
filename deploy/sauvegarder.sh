@@ -266,9 +266,21 @@ sauvegarder_base() {
 sauvegarder_pieces() {
   mkdir -p "$DESTINATION/pieces" || return 1
   export MC_CONFIG_DIR="${MC_CONFIG_DIR:-/tmp/mc}"
+  # Les identifiants du stockage objet viennent de l'environnement du
+  # conteneur. Absents, `set -u` tuait le script ici même : dash sort en 2
+  # sur « AWS_ACCESS_KEY_ID: parameter not set », avant `echec` — donc sans
+  # ligne de journal, sans marqueur, et sans que rien ne dise pourquoi le
+  # miroir a cessé de se faire. Une configuration manquante est un échec de
+  # sauvegarde comme un autre : elle se dit, et elle se compte.
+  cle_stockage="${AWS_ACCESS_KEY_ID:-}"
+  secret_stockage="${AWS_SECRET_ACCESS_KEY:-}"
+  if [ -z "$cle_stockage" ] || [ -z "$secret_stockage" ]; then
+    echec "identifiants du stockage objet absents (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) : miroir non fait"
+    return 1
+  fi
   bucket="pile/${AWS_STORAGE_BUCKET_NAME:-justificatifs}"
   if ! mc --quiet alias set pile "${AWS_S3_ENDPOINT_URL:-http://minio:9000}" \
-      "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null; then
+      "$cle_stockage" "$secret_stockage" >/dev/null; then
     echec "stockage injoignable (${AWS_S3_ENDPOINT_URL:-http://minio:9000}) : miroir non fait"
     return 1
   fi

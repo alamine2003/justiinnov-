@@ -10,7 +10,7 @@ from django.db.models import Q
 from django.utils.translation import gettext_lazy
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
-from rest_framework import filters, viewsets
+from rest_framework import filters, serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -58,10 +58,19 @@ def _cloisonne(serializer_class, **champs):
     voisine (audit du 8 septembre 2026, §4.5). Ici, comme pour les dépenses
     et les enveloppes, un identifiant hors périmètre est un identifiant
     inconnu : même réponse, rien à lire. La classe garde son nom, donc son
-    nom de composant dans le schéma d'API.
+    nom de composant dans le schéma d'API — à la condition, tenue plus bas,
+    que la classe d'origine ne soit plus servie nulle part.
+
+    ``__module__`` n'est pas recopié : la classe est bien définie ici, et
+    c'est ce que doivent dire les messages qui la nomment. Recopié, il
+    faisait dire à drf-spectacular « deux composants de même nom et
+    d'identités différentes ``<class 'core.serializers.TeamSerializer'>`` et
+    ``<class 'core.serializers.TeamSerializer'>`` » — deux fois le même
+    texte pour deux classes distinctes, sans rien qui permette de les
+    distinguer.
     """
     return type(serializer_class.__name__, (serializer_class,), {
-        "__doc__": serializer_class.__doc__, "__module__": serializer_class.__module__, **champs,
+        "__doc__": serializer_class.__doc__, **champs,
     })
 
 
@@ -78,15 +87,72 @@ CostCenterSerializer = _cloisonne(CostCenterSerializer, country=_pays_cloisonne(
 ProjectSerializer = _cloisonne(ProjectSerializer, country=_pays_cloisonne())
 ExpenseTitleSerializer = _cloisonne(ExpenseTitleSerializer, country=_pays_cloisonne())
 MarketingCategorySerializer = _cloisonne(MarketingCategorySerializer, country=_pays_cloisonne())
-# Un manager n'a pas de pays propre : c'est le pays qui le rattache. Un rôle
-# restreint doté de ``countries.update`` ne rattache que des managers de
-# son périmètre — ou des managers encore sans pays, qu'il peut accueillir.
-CountryWriteSerializer = _cloisonne(
-    CountryWriteSerializer,
-    managers=ChampCloisonne(
-        many=True, queryset=Manager.objects.all(), chemin_pays="countries",
-        distinct=True, required=False,
+
+
+def _exiger_un_pays_du_perimetre(self, attrs):
+    """Un compte pays n'inscrit pas un responsable hors de son pays, ni sans pays.
+
+    Le champ ``countries`` ne lui propose déjà que les siens
+    (``ChampCloisonne``) ; il reste à refuser l'absence. Sans rattachement,
+    le responsable sortirait du périmètre à peine créé — ``ManagerViewSet``
+    ne montre que ceux d'un pays du demandeur — et son auteur ne le
+    reverrait plus. C'est la règle des dépenses sans équipe
+    (``expenses.serializers._exiger_une_equipe_du_perimetre``), appliquée au
+    rattachement d'un responsable. Les rôles globaux gardent le champ
+    facultatif : le siège inscrit un responsable avant de savoir où il ira.
+    """
+    access = get_access(getattr(self.context.get("request"), "user", None))
+    if access is not None and not access.has_global_scope:
+        fourni = "countries" in attrs
+        if (self.instance is None and not attrs.get("countries")) or (
+            fourni and not attrs["countries"]
+        ):
+            raise serializers.ValidationError(
+                {"countries": gettext_lazy("Indiquez le pays de ce responsable.")}
+            )
+    return attrs
+
+
+ManagerSerializer = _cloisonne(
+    ManagerSerializer,
+    countries=ChampCloisonne(
+        many=True, queryset=Country.objects.all(), chemin_pays="pk",
+        label=gettext_lazy("Pays"), required=False,
     ),
+    validate=_exiger_un_pays_du_perimetre,
+)
+# Le détail d'un pays imbrique son référentiel. Tant qu'il le tirait de
+# ``core``, deux classes distinctes portaient le même nom — l'originale par
+# ``/api/countries/{id}/``, la cloisonnée par ``/api/teams/`` et ses
+# voisines — et le schéma d'API en gardait une au hasard de l'ordre de
+# parcours, en signalant cinq fois « Encountered 2 components with identical
+# names » (drf_spectacular.W001). C'est ce qui a bloqué la livraison de
+# fcbc991 : ces avertissements sont des contrôles Django, et
+# ``check --deploy --fail-level WARNING`` les refuse — à raison, puisque le
+# schéma en devenait faux.
+#
+# Une seule classe par nom, donc : le détail d'un pays sert les mêmes
+# sérialiseurs que les vues du référentiel. Les champs imbriqués sont en
+# lecture seule, le cloisonnement de leur clé ``country`` ne joue qu'à
+# l'écriture : la réponse ne change pas, et le composant du schéma non plus
+# (``ChampCloisonne`` porte le même libellé « Pays » que la clé étrangère
+# déduite du modèle qu'elle remplace).
+#
+# La liste des pays imbrique ses responsables : elle est clonée pour la même
+# raison, et ``CountryDetailSerializer`` redéclare ``managers`` plutôt que de
+# l'hériter de l'originale de ``core``.
+CountryListSerializer = _cloisonne(
+    CountryListSerializer,
+    managers=ManagerSerializer(many=True, read_only=True),
+)
+CountryDetailSerializer = _cloisonne(
+    CountryDetailSerializer,
+    managers=ManagerSerializer(many=True, read_only=True),
+    teams=TeamSerializer(many=True, read_only=True),
+    cost_centers=CostCenterSerializer(many=True, read_only=True),
+    projects=ProjectSerializer(many=True, read_only=True),
+    expense_titles=ExpenseTitleSerializer(many=True, read_only=True),
+    marketing_categories=MarketingCategorySerializer(many=True, read_only=True),
 )
 
 
@@ -100,7 +166,9 @@ class CountryViewSet(ScopedViewSet):
     """CRUD des pays + activation/désactivation + historique."""
 
     queryset = Country.objects.prefetch_related(
-        "managers", "teams", "cost_centers", "projects",
+        # ``managers__countries`` : le responsable porte maintenant ses pays,
+        # une requête par responsable sans ce préchargement.
+        "managers", "managers__countries", "teams", "cost_centers", "projects",
         "expense_titles", "marketing_categories",
     ).all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -148,12 +216,19 @@ class CountryViewSet(ScopedViewSet):
 
 
 class ManagerViewSet(ScopedViewSet):
-    queryset = Manager.objects.all().order_by("name")
+    """Les responsables, et leur rattachement aux pays.
+
+    Capacités propres (``managers.*``), et non celles du pays : inscrire un
+    responsable dans sa filiale se délègue au pays, changer la devise de
+    cette filiale ne se délègue pas.
+    """
+
+    queryset = Manager.objects.prefetch_related("countries").all().order_by("name")
     serializer_class = ManagerSerializer
     filterset_fields = ["is_active"]
     search_fields = ["name", "email", "title"]
-    write_capability = "countries.update"
-    action_write_capabilities = {"create": "countries.create"}
+    write_capability = "managers.update"
+    action_write_capabilities = {"create": "managers.create"}
     # Un manager est rattaché à ses pays par une relation multiple.
     country_lookup = "countries"
     country_field = None

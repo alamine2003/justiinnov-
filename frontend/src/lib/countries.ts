@@ -32,9 +32,6 @@ export function updateCountry(id: number, data: unknown) {
   return apiPatch<CountrySummary>(`/countries/${id}/`, data)
 }
 
-export function updateCountryManagers(id: number, managerIds: number[]) {
-  return apiPatch<CountrySummary>(`/countries/${id}/`, { managers: managerIds })
-}
 
 // ---------------------------------------------------------------------------
 // Managers
@@ -45,6 +42,15 @@ export function createManager(data: unknown) {
 
 export function updateManager(id: number, data: unknown) {
   return apiPatch<Manager>(`/managers/${id}/`, data)
+}
+
+// Le rattachement d'un responsable à ses pays s'écrit sur le responsable, et
+// nulle part ailleurs : il passait par la fiche du pays, donc par
+// `countries.update` — la capacité qui change aussi la devise et le fuseau,
+// et que le pays ne reçoit jamais. Il relève maintenant de `managers.update`,
+// qui se délègue au pays.
+export function updateManagerCountries(id: number, countryIds: number[]) {
+  return apiPatch<Manager>(`/managers/${id}/`, { countries: countryIds })
 }
 
 // ---------------------------------------------------------------------------

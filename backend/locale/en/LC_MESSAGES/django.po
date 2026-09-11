@@ -219,20 +219,46 @@ msgid "Lire qui a modifié quoi dans le référentiel, sur son périmètre."
 msgstr "See who changed what in the reference data, within one's scope."
 
 #: accounts/permissions.py:217
-msgid "Ouvrir un pays ou un manager"
-msgstr "Open a country or a manager"
+msgid "Ouvrir un pays"
+msgstr "Open a country"
 
 #: accounts/permissions.py:218
-msgid "Créer un pays parmi les filiales du groupe, ou un manager."
-msgstr "Create a country among the group's subsidiaries, or a manager."
+msgid "Créer un pays parmi les filiales du groupe."
+msgstr "Create a country among the group's subsidiaries."
 
 #: accounts/permissions.py:223
-msgid "Modifier un pays ou un manager"
-msgstr "Edit a country or a manager"
+msgid "Modifier un pays"
+msgstr "Edit a country"
 
 #: accounts/permissions.py:224
-msgid "Changer la devise, le fuseau, les managers ; activer ou désactiver."
-msgstr "Change the currency, time zone or managers; activate or deactivate."
+msgid "Changer la devise, le fuseau ; activer ou désactiver le pays."
+msgstr "Change the currency or time zone; activate or deactivate the country."
+
+#: accounts/permissions.py
+msgid "Créer un responsable"
+msgstr "Create a manager"
+
+#: accounts/permissions.py
+msgid ""
+"Inscrire un responsable : celui à qui s'imputent une enveloppe et des "
+"dépenses."
+msgstr "Register a manager: the person a budget and its expenses are charged to."
+
+#: accounts/permissions.py
+msgid "Modifier un responsable et son rattachement"
+msgstr "Edit a manager and the countries they belong to"
+
+#: accounts/permissions.py
+msgid ""
+"Changer son nom, sa fonction, son activité ; le rattacher à un pays ou l'en "
+"retirer."
+msgstr ""
+"Change their name, role or status; attach them to a country or remove them "
+"from it."
+
+#: accounts/referentiel.py
+msgid "Indiquez le pays de ce responsable."
+msgstr "Name the country this manager belongs to."
 
 #: accounts/permissions.py:229
 msgid "Créer dans le référentiel"

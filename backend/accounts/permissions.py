@@ -214,15 +214,35 @@ CAPACITES = (
     ),
     Capacite(
         "countries.create", GROUPE_REFERENTIEL,
-        _("Ouvrir un pays ou un manager"),
-        _("Créer un pays parmi les filiales du groupe, ou un manager."),
+        _("Ouvrir un pays"),
+        _("Créer un pays parmi les filiales du groupe."),
         _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
     Capacite(
         "countries.update", GROUPE_REFERENTIEL,
-        _("Modifier un pays ou un manager"),
-        _("Changer la devise, le fuseau, les managers ; activer ou désactiver."),
+        _("Modifier un pays"),
+        _("Changer la devise, le fuseau ; activer ou désactiver le pays."),
         _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
+    ),
+    # Le responsable était tenu par les mêmes deux capacités que le pays
+    # lui-même. Un pays ne pouvait donc pas inscrire ses propres
+    # responsables sans recevoir du même coup la devise, le fuseau et
+    # l'activation de sa filiale — ce que le verrou du pays refuse, à
+    # raison : la devise est ce qui donne son sens à chaque montant déjà
+    # saisi. Les deux actes sont séparés depuis, et celui-ci n'est pas
+    # verrouillé : il s'ouvre au pays depuis « Configuration ›
+    # Permissions », comme le reste du référentiel.
+    Capacite(
+        "managers.create", GROUPE_REFERENTIEL,
+        _("Créer un responsable"),
+        _("Inscrire un responsable : celui à qui s'imputent une enveloppe et des dépenses."),
+        _ADMINISTRATEURS,
+    ),
+    Capacite(
+        "managers.update", GROUPE_REFERENTIEL,
+        _("Modifier un responsable et son rattachement"),
+        _("Changer son nom, sa fonction, son activité ; le rattacher à un pays ou l'en retirer."),
+        _ADMINISTRATEURS,
     ),
     Capacite(
         "referentiel.create", GROUPE_REFERENTIEL,

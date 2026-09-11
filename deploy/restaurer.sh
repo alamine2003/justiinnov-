@@ -127,6 +127,10 @@ case "$1" in
     compose run --rm -T --entrypoint sh sauvegarde-pieces -c '
       set -eu
       export MC_CONFIG_DIR=/tmp/mc
+      # Sans ces deux variables, set -u sortirait en 2 sur « parameter not
+      # set » au milieu de la restauration : on dit laquelle manque.
+      : "${AWS_ACCESS_KEY_ID:?identifiant du stockage objet absent : justificatifs non restaures}"
+      : "${AWS_SECRET_ACCESS_KEY:?secret du stockage objet absent : justificatifs non restaures}"
       mc --quiet alias set pile "${AWS_S3_ENDPOINT_URL:-http://minio:9000}" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null
       mc mb --ignore-existing "pile/${AWS_STORAGE_BUCKET_NAME:-justificatifs}"
       mc mirror --overwrite /sauvegardes/pieces "pile/${AWS_STORAGE_BUCKET_NAME:-justificatifs}"

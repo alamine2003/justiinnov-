@@ -2,6 +2,16 @@
 mal formé ne provoque pas de 500.
 
 Audit du 8 septembre 2026, §3.5 et §6 (TOTP non-ASCII).
+
+**Les mots de passe écrits ici sont faux, et c'est le sujet du test.** Les
+comptes de test reçoivent leur mot de passe de ``make_user``
+(``accounts/tests/test_scoping.py``) ; « faux-mot-de-passe » et « faux »
+n'ouvrent donc rien, nulle part, et sont là pour provoquer les 400 puis le
+429 qu'on veut voir. « jeton-inexistant » n'est le jeton d'aucun compte.
+Un détecteur de secrets qui signale ces littéraux voit un mot de passe en
+dur — il a raison sur la forme, et il n'y a pourtant aucun identifiant à
+révoquer : la qualification se règle dans le tableau de bord du détecteur,
+pas en réécrivant le test.
 """
 
 from unittest import mock

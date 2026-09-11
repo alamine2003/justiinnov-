@@ -71,9 +71,29 @@ def champ_taux(**kwargs):
 
 
 class ManagerSerializer(serializers.ModelSerializer):
+    """Un responsable, et les pays auxquels il est rattaché.
+
+    **Le rattachement s'écrit ici, et nulle part ailleurs.** Il était un
+    champ de ``CountryWriteSerializer`` : inscrire un responsable dans son
+    pays exigeait donc ``countries.update``, la capacité qui change aussi la
+    devise, le fuseau et l'activation de la filiale — et que le verrou du
+    pays refuse au principal intéressé. Les deux actes ne se délèguent pas
+    de la même façon ; ils ont chacun leur porte depuis, et la relation un
+    seul chemin d'écriture. Le rattachement reste journalisé du côté du
+    pays : ``core.signals._track_country_managers`` traite déjà le sens
+    inverse (``manager.countries.set(...)``).
+    """
+
+    countries = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Country.objects.all(), required=False
+    )
+
     class Meta:
         model = Manager
-        fields = ["id", "name", "email", "title", "is_active", "created_at", "updated_at"]
+        fields = [
+            "id", "name", "email", "title", "is_active", "countries",
+            "created_at", "updated_at",
+        ]
 
 
 class TeamSerializer(serializers.ModelSerializer):
@@ -188,16 +208,15 @@ class CountryDetailSerializer(CountryListSerializer):
 
 
 class CountryWriteSerializer(serializers.ModelSerializer):
-    managers = serializers.PrimaryKeyRelatedField(
-        many=True, queryset=Manager.objects.all(), required=False
-    )
+    """Le pays lui-même. Ses responsables s'écrivent par ``ManagerSerializer``."""
+
     id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Country
         fields = [
             "id", "name", "code", "country_ref", "currency", "currency_symbol",
-            "timezone", "is_active", "managers",
+            "timezone", "is_active",
         ]
 
     def validate_code(self, value):

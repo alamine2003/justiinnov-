@@ -613,7 +613,7 @@ Trois services de la pile s'en chargent chaque nuit, dans le volume
 | Service | Quand (UTC) | Quoi |
 |---|---|---|
 | `sauvegarde` | `SAUVEGARDE_HEURE`, 02:00 | `pg_dump -Fc` de la base dans `base/<base>-<horodatage>.dump` ; les dumps quotidiens de plus de `SAUVEGARDE_RETENTION_JOURS` (30) jours sont supprimés ; le premier dump réussi de chaque mois est copié dans `base/mensuel/<base>-<AAAA-MM>.dump` et **n'est jamais supprimé** |
-| `sauvegarde-pieces` | `SAUVEGARDE_PIECES_HEURE`, 02:15 | miroir du bucket des justificatifs dans `pieces/` (`mc mirror --overwrite`, sans suppression : un objet effacé du bucket reste dans la copie) |
+| `sauvegarde-pieces` | `SAUVEGARDE_PIECES_HEURE`, 02:15 | miroir du bucket des justificatifs dans `pieces/` (`mc mirror --overwrite`, sans suppression : un objet effacé du bucket reste dans la copie). Lit `AWS_ACCESS_KEY_ID` et `AWS_SECRET_ACCESS_KEY` dans son environnement ; absentes ou vides, le miroir est **refusé** avec « identifiants du stockage objet absents » et sans marqueur de réussite — `verifier_sauvegardes` le signale dès le lendemain |
 | `sauvegarde-distante` | dans la minute qui suit chaque sauvegarde réussie | copie **chiffrée** de `base/`, `base/mensuel/` et `pieces/` vers le stockage objet `SAUVEGARDE_DISTANT_*` (`rclone copy` dans un coffre `crypt`, incrémental), vérification (`rclone cryptcheck`), journal « ✔ copie distante » ou « ✘ » (« Copie hors machine », ci-dessous) ; **n'efface rien sur le distant** |
 
 La rétention suit la règle de la plateforme : **rien ne se purge**. Les
