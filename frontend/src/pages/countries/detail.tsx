@@ -199,7 +199,7 @@ export function CountryDetailPage() {
                 countryId={countryId}
                 managers={country.managers}
                 onRefresh={refresh}
-                canManage={can("countries.update")}
+                canManage={can("managers.create") && can("managers.update")}
               />
             </CardContent>
           </Card>

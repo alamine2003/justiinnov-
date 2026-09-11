@@ -14,6 +14,8 @@ export const PERMISSIONS_DU_PAYS: Permissions = {
   "history.read": false,
   "countries.create": false,
   "countries.update": false,
+  "managers.create": false,
+  "managers.update": false,
   "referentiel.create": false,
   "referentiel.update": false,
   "budgets.create": false,

@@ -104,22 +104,100 @@ class CloisonnementDuReferentielTests(ScopingTestCase):
         reponse = self._creer("teams/", {"country": self.togo.pk, "name": "Équipe Kara"})
         self.assertEqual(reponse.status_code, status.HTTP_201_CREATED, reponse.data)
 
-    def test_un_manager_voisin_ne_se_rattache_pas_a_mon_pays(self):
-        """Le rattachement de managers à un pays (``CountryWriteSerializer``)
-        ne prend qu'un manager du périmètre — ou sans pays."""
+
+class ResponsablesDuPaysTests(ScopingTestCase):
+    """Un pays inscrit ses propres responsables, et seulement les siens.
+
+    ``managers.create`` et ``managers.update`` sont séparées des capacités du
+    pays : elles s'ouvrent au pays, celles du pays non. Le rattachement
+    s'écrit sur le responsable (``/api/managers/``), plus par la fiche du
+    pays — une relation, un seul chemin d'écriture, une seule capacité.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.rh = make_user("rh.responsables", Role.ADMIN)
+        cls.manager_ci = Manager.objects.create(name="Responsable Abidjan")
+        cls.ivoire.managers.add(cls.manager_ci)
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
         self.login(self.rh)
-        self.client.patch(
+        reponse = self.client.patch(
             "/api/permissions/",
-            {"capabilities": {"countries.update": ["super_admin", "admin", "manager"]}},
+            {"capabilities": {
+                "managers.create": ["super_admin", "admin", "manager"],
+                "managers.update": ["super_admin", "admin", "manager"],
+            }},
             format="json",
         )
-        manager_ci = Manager.objects.create(name="Manager Abidjan")
-        self.ivoire.managers.add(manager_ci)
+        self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
         self.login(self.rep_togo)
 
-        reponse = self.client.patch(
-            f"/api/countries/{self.togo.pk}/", {"managers": [manager_ci.pk]}, format="json"
+    def test_le_pays_inscrit_son_responsable_et_le_retrouve(self):
+        reponse = self.client.post(
+            "/api/managers/",
+            {"name": "Kofi Mensah", "countries": [self.togo.pk]},
+            format="json",
+        )
+
+        self.assertEqual(reponse.status_code, status.HTTP_201_CREATED, reponse.data)
+        cree = Manager.objects.get(pk=reponse.data["id"])
+        self.assertIn(self.togo, cree.countries.all())
+        # Créé dans son pays, donc relisible : c'est tout l'objet de
+        # l'exigence d'un pays à l'inscription.
+        liste = self.client.get("/api/managers/")
+        self.assertIn(cree.pk, [ligne["id"] for ligne in liste.data["results"]])
+
+    def test_un_responsable_sans_pays_est_refuse_au_pays(self):
+        """Sans rattachement, il sortirait du périmètre à peine créé."""
+        reponse = self.client.post("/api/managers/", {"name": "Sans pays"}, format="json")
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST, reponse.data)
+        self.assertIn("countries", reponse.data)
+        self.assertFalse(Manager.objects.filter(name="Sans pays").exists())
+
+    def test_le_pays_du_voisin_n_est_pas_proposable(self):
+        reponse = self.client.post(
+            "/api/managers/",
+            {"name": "Chez le voisin", "countries": [self.ivoire.pk]},
+            format="json",
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST, reponse.data)
-        self.assertNotIn(manager_ci, self.togo.managers.all())
+        self.assertFalse(Manager.objects.filter(name="Chez le voisin").exists())
+
+    def test_le_responsable_du_voisin_n_existe_pas(self):
+        """404, jamais 403 : son existence ne doit pas fuiter."""
+        reponse = self.client.patch(
+            f"/api/managers/{self.manager_ci.pk}/", {"title": "Détourné"}, format="json"
+        )
+
+        self.assertEqual(reponse.status_code, status.HTTP_404_NOT_FOUND, reponse.data)
+        self.manager_ci.refresh_from_db()
+        self.assertNotEqual(self.manager_ci.title, "Détourné")
+
+    def test_le_pays_ne_se_rattache_pas_le_responsable_du_voisin(self):
+        """Même en le nommant directement : le champ ne propose que son pays,
+        et le responsable visé est hors de sa vue."""
+        reponse = self.client.patch(
+            f"/api/managers/{self.manager_ci.pk}/",
+            {"countries": [self.togo.pk]},
+            format="json",
+        )
+
+        self.assertEqual(reponse.status_code, status.HTTP_404_NOT_FOUND, reponse.data)
+        self.assertNotIn(self.manager_ci, self.togo.managers.all())
+
+    def test_les_capacites_du_pays_restent_fermees(self):
+        """Ouvrir le responsable n'ouvre pas la devise : c'est la raison
+        d'être de la scission."""
+        reponse = self.client.patch(
+            f"/api/countries/{self.togo.pk}/", {"currency": "EUR"}, format="json"
+        )
+
+        self.assertEqual(reponse.status_code, status.HTTP_403_FORBIDDEN, reponse.data)
+        self.togo.refresh_from_db()
+        self.assertNotEqual(self.togo.currency, "EUR")

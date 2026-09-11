@@ -26,8 +26,8 @@ import {
 } from "@/components/ui/table"
 import {
   createManager,
-  updateCountryManagers,
   updateManager,
+  updateManagerCountries,
 } from "@/lib/countries"
 import { STATUS_TONES } from "@/lib/status-styles"
 import type { Manager } from "@/lib/types"
@@ -36,7 +36,7 @@ interface ManageManagersProps {
   countryId: number
   managers: Manager[]
   onRefresh: () => void | Promise<void>
-  /** Le référentiel des managers relève du siège. */
+  /** `managers.create` et `managers.update` : ouvrables au pays. */
   canManage: boolean
 }
 
@@ -55,9 +55,9 @@ export function ManageManagers({
     setBusyId(manager.id)
     setError(null)
     try {
-      await updateCountryManagers(
-        countryId,
-        managers.filter((m) => m.id !== manager.id).map((m) => m.id),
+      await updateManagerCountries(
+        manager.id,
+        manager.countries.filter((id) => id !== countryId),
       )
       await onRefresh()
     } catch (e) {
@@ -172,7 +172,6 @@ export function ManageManagers({
           key={editing === "nouveau" ? "nouveau" : editing.id}
           manager={editing === "nouveau" ? null : editing}
           countryId={countryId}
-          managers={managers}
           onClose={() => setEditing(null)}
           onSaved={onRefresh}
         />
@@ -184,13 +183,11 @@ export function ManageManagers({
 function ManagerDialog({
   manager,
   countryId,
-  managers,
   onClose,
   onSaved,
 }: {
   manager: Manager | null
   countryId: number
-  managers: Manager[]
   onClose: () => void
   onSaved: () => void | Promise<void>
 }) {
@@ -211,11 +208,10 @@ function ManagerDialog({
       if (manager) {
         await updateManager(manager.id, payload)
       } else {
-        const created = await createManager(payload)
-        await updateCountryManagers(countryId, [
-          ...managers.map((m) => m.id),
-          created.id,
-        ])
+        // Une seule requête : le rattachement part avec l'inscription. En
+        // deux temps, un second appel qui échouait laissait un responsable
+        // sans pays — invisible à qui venait de le créer.
+        await createManager({ ...payload, countries: [countryId] })
       }
       await onSaved()
       onClose()
