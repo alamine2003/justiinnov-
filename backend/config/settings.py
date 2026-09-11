@@ -291,6 +291,7 @@ SPECTACULAR_SETTINGS = {
         "NotificationKindEnum": "notifications.models.Notification.Kind",
         "NotificationLevelEnum": "notifications.models.Notification.Level",
         "ReallocationStatusEnum": "budget.models.BudgetReallocation.Status",
+        "RectificationStatusEnum": "expenses.models.Rectification.Status",
         "OverrunPolicyEnum": "budget.models.OverrunPolicy",
         "ProjectStatusEnum": "core.models.Project.STATUS_CHOICES",
         "ChangeLogActionEnum": "core.models.ChangeLog.Actions",

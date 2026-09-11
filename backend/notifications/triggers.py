@@ -45,6 +45,12 @@ def arbitres():
     return roles_pour("reallocations.decide")
 
 
+def decideurs_de_rectification():
+    """Qui tranche une demande de rectification : les administrateurs par
+    défaut, jamais le pays (``rectifications.decide``)."""
+    return roles_pour("rectifications.decide")
+
+
 def _safe(action):
     """Exécute un déclencheur sans jamais propager son échec.
 
@@ -254,5 +260,100 @@ def reallocation_requested(reallocation, actor):
             link="/budgets",
             country=country,
             dedup_key=f"reallocation:{reallocation.pk}",
+        )
+    )
+
+
+def rectification_requested(rectification, actor):
+    """Prévient ceux qui peuvent trancher qu'un constat est contesté.
+
+    Seconde exception à l'irréversibilité (``expenses.workflow``) : une
+    ligne justifiée ou clôturée l'aurait été à tort. La demande attend un
+    administrateur ; le motif figure dans le message, avec ce qu'elle
+    remet en cause — l'état et le montant justifié —, pour qu'il puisse
+    juger sans ouvrir la fiche.
+    """
+    expense = rectification.expense
+    return _safe(
+        lambda: notify(
+            _sauf(
+                recipients_for(decideurs_de_rectification(), expense.country, expense.team),
+                actor,
+            ),
+            kind=Notification.Kind.RECTIFICATION_REQUESTED,
+            level=Notification.Level.INFO,
+            title=format_lazy(
+                _("Demande de rectification — {title}"), title=expense.title
+            ),
+            body=format_lazy(
+                _(
+                    "Dossier {number} · constat « {status} », {amount} {currency} "
+                    "justifié(s). Motif : {motive}"
+                ),
+                number=expense.dossier.number,
+                status=rectification.get_previous_status_display(),
+                amount=rectification.previous_justified_amount,
+                currency=expense.country.currency,
+                motive=rectification.motif,
+            ),
+            link=f"/dossiers/{expense.dossier_id}",
+            country=expense.country,
+            dedup_key=f"rectification_requested:{rectification.pk}",
+        )
+    )
+
+
+def rectification_decided(rectification, actor):
+    """Prévient le demandeur et le contrôle de la décision — et le pays,
+    quand la ligne revient en contrôle.
+
+    Approuvée, la ligne est de nouveau à trancher : le contrôle doit le
+    savoir, et le pays apprend que son constat a bougé. Refusée, seuls le
+    demandeur et le contrôle sont prévenus : rien n'a changé pour le pays.
+    Le demandeur est prévenu même s'il ne porte plus le rôle concerné —
+    c'est sa demande.
+    """
+    from django.contrib.auth.models import User
+    from django.db.models import Q
+
+    expense = rectification.expense
+    # La valeur, pas l'énumération : ``notifications`` précède ``expenses``
+    # dans l'ordre des applications et n'importe pas ses modèles.
+    approuvee = rectification.status == "approved"
+    roles = controleurs() | (PROVIDERS if approuvee else frozenset())
+    concernes = recipients_for(roles, expense.country, expense.team)
+    qui = Q(pk__in=concernes.values("pk"))
+    if rectification.requested_by:
+        qui |= Q(username=rectification.requested_by, is_active=True)
+    destinataires = User.objects.filter(qui).distinct()
+    if approuvee:
+        titre = _("Rectification approuvée — {title}")
+        corps = _(
+            "Dossier {number} : la ligne revient en contrôle, le constat "
+            "« {status} » ({amount} {currency} justifié(s)) est défait. "
+            "Motif : {motive}"
+        )
+    else:
+        titre = _("Rectification refusée — {title}")
+        corps = _(
+            "Dossier {number} : le constat « {status} » tient. Motif du refus : {motive}"
+        )
+    return _safe(
+        lambda: notify(
+            _sauf(destinataires, actor),
+            kind=Notification.Kind.RECTIFICATION_DECIDED,
+            level=Notification.Level.WARNING if approuvee else Notification.Level.INFO,
+            title=format_lazy(titre, title=expense.title),
+            body=format_lazy(
+                corps,
+                number=expense.dossier.number,
+                status=rectification.get_previous_status_display(),
+                amount=rectification.previous_justified_amount,
+                currency=expense.country.currency,
+                motive=rectification.decision_note if not approuvee else rectification.motif,
+            ),
+            link=f"/dossiers/{expense.dossier_id}",
+            country=expense.country,
+            dedup_key=f"rectification_decided:{rectification.pk}",
         )
     )

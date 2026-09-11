@@ -44,6 +44,11 @@ class Notification(models.Model):
         #: Seule exception à l'irréversibilité : le siège rouvre un dossier
         #: déclaré pour demander des comptes, et le pays doit le savoir.
         DOSSIER_REOPENED = "dossier_reopened", _("Dossier rouvert")
+        #: Seconde exception : une demande de rectification d'un constat
+        #: attend un administrateur ; puis sa décision revient au demandeur,
+        #: au contrôle et au pays.
+        RECTIFICATION_REQUESTED = "rectification_requested", _("Demande de rectification")
+        RECTIFICATION_DECIDED = "rectification_decided", _("Décision sur une rectification")
 
     class Level(models.TextChoices):
         INFO = "info", _("Information")

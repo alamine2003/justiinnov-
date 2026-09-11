@@ -280,8 +280,21 @@ EXPENSE_RELATIONS = (
 )
 
 
+class ExpenseQuerySet(models.QuerySet):
+    def with_rectification(self):
+        """Annote ``rectification_en_attente`` : une demande de rectification
+        attend-elle sur la ligne ? Lu par ``allowed_actions`` sans une
+        requête par ligne (``workflow.peut_demander_une_rectification``)."""
+        en_attente = Rectification.objects.filter(
+            expense=OuterRef("pk"), status=Rectification.Status.PENDING
+        )
+        return self.annotate(rectification_en_attente=models.Exists(en_attente))
+
+
 class Expense(TimeStampedModel):
     """Une ligne de dépense, rattachée à un dossier."""
+
+    objects = ExpenseQuerySet.as_manager()
 
     class PaymentMethod(models.TextChoices):
         CASH = "cash", _("Espèces")
@@ -464,6 +477,75 @@ class Expense(TimeStampedModel):
         return self.country.currency
 
 
+class Rectification(TimeStampedModel):
+    """Demande de rectification d'un constat : la seconde exception à
+    l'irréversibilité (``workflow``).
+
+    Le siège a justifié ou clôturé une ligne, et s'est trompé. N'importe qui
+    peut le dire — avec un motif — ; un administrateur, jamais l'auteur de
+    la demande, tranche. Approuvée, la ligne revient en contrôle
+    (``transitions.approuver_rectification``). La demande garde l'état et le
+    montant justifié qu'elle a défaits : ce que le journal dit, la fiche le
+    dit aussi.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("En attente")
+        APPROVED = "approved", _("Approuvée")
+        REFUSED = "refused", _("Refusée")
+
+    expense = models.ForeignKey(
+        Expense, on_delete=models.PROTECT, related_name="rectifications",
+        verbose_name=_("Dépense"),
+    )
+    status = models.CharField(
+        _("Statut"), max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    motif = models.TextField(_("Motif de la demande"))
+    requested_by = models.CharField(_("Demandée par"), max_length=180, blank=True)
+    decided_by = models.CharField(_("Décidée par"), max_length=180, blank=True)
+    decided_at = models.DateTimeField(_("Décidée le"), null=True, blank=True)
+    decision_note = models.TextField(_("Motif de la décision"), blank=True)
+    # Ce que la rectification défait, relevé à la demande : l'état de la
+    # ligne et son montant justifié. Ils restent lisibles après coup, même
+    # quand la ligne a été tranchée à nouveau.
+    # Les états d'une ligne (``core.statuts.Status``), pas ceux de la
+    # demande : ``Status`` désigne ici l'énumération ci-dessus.
+    previous_status = models.CharField(
+        _("État avant rectification"), max_length=20,
+        choices=Expense._meta.get_field("status").choices,
+    )
+    previous_justified_amount = models.DecimalField(
+        _("Montant justifié avant rectification"), max_digits=16, decimal_places=2
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = _("Demande de rectification")
+        verbose_name_plural = _("Demandes de rectification")
+        constraints = [
+            # Une seule demande en attente par ligne : deux demandes ouvertes
+            # se trancheraient l'une l'autre.
+            models.UniqueConstraint(
+                fields=["expense"],
+                condition=Q(status="pending"),
+                name="rectification_une_en_attente_par_ligne",
+            ),
+            # Une décision sans date n'est pas une décision.
+            models.CheckConstraint(
+                condition=Q(status="pending") | Q(decided_at__isnull=False),
+                name="rectification_decision_datee",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_status_display()} : {self.expense}"
+
+    @property
+    def country(self):
+        return self.expense.country
+
+
 class Proof(TimeStampedModel):
     """Pièce justificative, rattachée au **dossier** (§5.4)."""
 
@@ -616,6 +698,13 @@ class AuditLog(models.Model):
         # dossier déclaré au brouillon pour demander des comptes. L'entrée
         # porte le motif ; en la cherchant, on relit toute l'histoire.
         REOPENED = "reopened", _("Réouverture")
+        # Seconde exception : un constat rectifié sur décision d'un
+        # administrateur, après une demande motivée. ``rectified`` porte la
+        # transition de la ligne (et du dossier qui la suit) ; la demande et
+        # la décision ont chacune leur entrée.
+        RECTIFICATION_REQUESTED = "rectification_requested", _("Demande de rectification")
+        RECTIFICATION_DECIDED = "rectification_decided", _("Décision sur une rectification")
+        RECTIFIED = "rectified", _("Rectification d'un constat")
         PROOF_UPLOADED = "proof_uploaded", _("Dépôt de justificatif")
         PROOF_REPLACED = "proof_replaced", _("Remplacement de justificatif")
         DOWNLOADED = "downloaded", _("Téléchargement")

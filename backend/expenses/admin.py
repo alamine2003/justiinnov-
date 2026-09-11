@@ -9,7 +9,7 @@ from django.contrib import admin
 
 from core.statuts import LOCKED_STATUSES, Status
 
-from .models import AuditLog, Beneficiary, Dossier, Expense, Proof
+from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, Rectification
 
 
 class SansSuppressionMixin:
@@ -112,6 +112,23 @@ class AuditLogAdmin(SansSuppressionMixin, admin.ModelAdmin):
     list_filter = ("action", "object_type", "country")
     search_fields = ("user", "label")
     readonly_fields = tuple(f.name for f in AuditLog._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Rectification)
+class RectificationAdmin(SansSuppressionMixin, admin.ModelAdmin):
+    """Une demande se consulte ; elle se dépose et se tranche par l'API,
+    qui seule verrouille, journalise et remet la ligne en contrôle."""
+
+    list_display = ("created_at", "expense", "status", "requested_by", "decided_by")
+    list_filter = ("status",)
+    search_fields = ("requested_by", "decided_by", "motif")
+    readonly_fields = tuple(f.name for f in Rectification._meta.fields)
 
     def has_add_permission(self, request):
         return False

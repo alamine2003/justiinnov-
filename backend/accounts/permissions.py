@@ -349,6 +349,23 @@ CAPACITES = (
         _("Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui."),
         _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
+    # La seconde exception à l'irréversibilité (``expenses.workflow``) : un
+    # constat se rectifie sur demande motivée et décision d'un
+    # administrateur. Demander est ouvert à tous — le pays voit l'erreur le
+    # premier ; décider ne l'est jamais au pays, et le service refuse en
+    # outre l'auteur de la demande.
+    Capacite(
+        "rectifications.request", GROUPE_CONTROLE,
+        _("Demander la rectification d'un constat"),
+        _("Signaler, motif à l'appui, qu'une ligne justifiée ou clôturée l'a été à tort."),
+        _TOUS,
+    ),
+    Capacite(
+        "rectifications.decide", GROUPE_CONTROLE,
+        _("Décider d'une rectification"),
+        _("Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne."),
+        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
+    ),
     Capacite(
         "data.export", GROUPE_FICHIERS,
         _("Exporter"),

@@ -10,6 +10,7 @@ import type {
   Paginated,
   Proof,
   ProofStatus,
+  Rectification,
   RegisterEntry,
   TransitionName,
 } from "@/lib/types"
@@ -97,6 +98,31 @@ export function transitionExpense(
     payload.justified_amount = data.justified_amount
   }
   return apiPost<Expense & { warning?: string }>(`/expenses/${id}/${action}/`, payload)
+}
+
+// ---------------------------------------------------------------------------
+// Rectifications d'un constat
+// ---------------------------------------------------------------------------
+export function fetchRectifications(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<Rectification>>("/rectifications/", params, signal)
+}
+
+/**
+ * Demande la rectification d'une ligne justifiée ou clôturée, motif à
+ * l'appui. La ligne ne bouge pas : un administrateur décidera.
+ */
+export function requestRectification(expenseId: number, motif: string) {
+  return apiPost<Rectification>("/rectifications/", { expense: expenseId, motif })
+}
+
+/** Approuve : la ligne revient en contrôle, le dossier la suit. */
+export function approveRectification(id: number, note = "") {
+  return apiPost<Rectification>(`/rectifications/${id}/approve/`, { note })
+}
+
+/** Refuse : le constat tient. Le motif est obligatoire. */
+export function refuseRectification(id: number, note: string) {
+  return apiPost<Rectification>(`/rectifications/${id}/refuse/`, { note })
 }
 
 // ---------------------------------------------------------------------------

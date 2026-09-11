@@ -289,6 +289,42 @@ Quand une ligne est justifiée ou clôturée, le bouton n'apparaît pas : le
 serveur refuserait, et un bouton qui mène à un refus n'a rien à faire à
 l'écran.
 
+### Rectification d'un constat
+
+Là où la réouverture s'arrête — une ligne justifiée ou clôturée — commence
+la rectification, en deux temps et à deux personnes. Sur chaque ligne du
+détail d'un dossier, un bouton **« Rectifier »** (`outline`, icône
+`Undo2`, `components/expenses/request-rectification.tsx`), à côté des
+actions du circuit, rendu **seulement** si `allowed_actions` de la ligne
+contient `request_rectification` — le serveur le dit : droit
+(`rectifications.request`, tous les rôles par défaut), ligne justifiée ou
+clôturée, aucune demande déjà en attente. Il ouvre un dialogue au titre
+affirmatif (« Demander la rectification — Hôtel… »), dont la description
+dit la conséquence : un administrateur décidera ; s'il approuve, la ligne
+revient en contrôle, son montant justifié est remis à zéro et le siège
+tranche à nouveau, le dossier la suit ; le motif est obligatoire et
+conservé dans le journal. Champ « Motif » (`motif`), validé à la
+soumission ; un refus du serveur sur la ligne (`400` sur `expense` ou
+`status`) s'affiche en `<FormError>` dans le dialogue, un refus sur le
+motif sous le champ. Bouton principal « Demander », en `default`.
+
+Les demandes du dossier s'affichent dans une carte **« Demandes de
+rectification »** (`components/expenses/rectification-panel.tsx`), entre
+les lignes et les pièces, **seulement s'il y en a** : la ligne contestée,
+le constat contesté (badge de l'état d'avant, `WORKFLOW_STYLE`, et le
+montant justifié défait), le motif, le statut de la demande
+(`RECTIFICATION_STYLE` : en attente `ATTENTE`, approuvée `SUCCES`,
+refusée `DANGER`), la décision et son auteur. Deux boutons icône,
+**Approuver** (`Check`, teinte succès) et **Refuser** (`X`, destructive),
+rendus seulement si `can_decide` — calculé par le serveur : demande en
+attente, rôle décideur (`rectifications.decide` : administrateurs, jamais
+le pays), pas l'auteur de la demande. Approuver agit en un geste ;
+refuser ouvre un dialogue au motif obligatoire, bouton `destructive`
+« Refuser ». Après une décision, la page relit le dossier et ses lignes.
+Dans le journal d'audit : `rectification_requested`, `rectified` (la
+ligne, et le dossier qui la suit), `rectification_decided` ; dans les
+notifications, l'icône `Undo2`.
+
 ### Menu d'export
 
 Les exports et l'import sont réservés aux administrateurs : le menu

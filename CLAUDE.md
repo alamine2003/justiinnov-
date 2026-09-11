@@ -125,7 +125,18 @@ l'application.
   aux `dm` et `manager` du pays — elle sert à demander des comptes, jamais
   à corriger en silence. Les lignes reviennent en brouillon sans
   imputation. Un dossier dont une ligne est justifiée ou clôturée ne se
-  rouvre pas : le siège a constaté.
+  rouvre pas : le siège a constaté. **La seconde exception, la
+  rectification, commence là** : une ligne justifiée ou clôturée à tort se
+  *demande* à rectifier (`rectifications.request`, tous les rôles par
+  défaut, motif obligatoire, une demande en attente par ligne) et un
+  administrateur *qui n'est pas le demandeur* approuve ou refuse
+  (`rectifications.decide` : `admin`, `super_admin`, jamais le pays).
+  Approuvée, la ligne revient **en contrôle** — jamais au brouillon : elle
+  reste déclarée et imputée —, montant justifié à zéro, et le dossier
+  constaté la suit ; tout est tracé (`rectification_requested`,
+  `rectified`, `rectification_decided`) et notifié. Il n'y a pas de route
+  `rectify` : un constat ne se défait qu'en approuvant une demande
+  (`transitions.approuver_rectification`).
 - **Un brouillon appartient à son auteur.** Il ne se retire que par lui,
   et ne se modifie que par lui ou par le siège, jamais par un collègue du
   pays (`transitions.exiger_l_auteur_du_brouillon`, décision 46).
@@ -218,8 +229,8 @@ l'application.
 |---|---|
 | Modèle de données et décisions prises (référence, tenue à jour) | `docs/model-de-donnees.md` |
 | États du circuit (`Status` et ses ensembles) | `backend/core/statuts.py` |
-| Circuit de justification, réouverture | `backend/expenses/workflow.py` (états, prédicats), `backend/expenses/transitions.py` (services) |
-| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce) | `backend/expenses/transitions.py` |
+| Circuit de justification, réouverture, rectification | `backend/expenses/workflow.py` (états, prédicats), `backend/expenses/transitions.py` (services) |
+| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce, demander et décider une rectification) | `backend/expenses/transitions.py` |
 | Services de réallocation (demander, approuver, refuser) | `backend/budget/transitions.py` |
 | Refus métier (`RegleViolee`, `PermissionRefusee`, `HorsPerimetre`) et leur traduction HTTP | `backend/core/regles.py` |
 | Capacités et leurs défauts, périmètres, équipes, double authentification, authentification | `backend/accounts/` (`permissions.py`, `perimetre.py`, `scoping.py`, `views.py`) ; matrice réglée dans `WorkflowConfiguration.capability_roles` |

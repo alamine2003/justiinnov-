@@ -187,6 +187,9 @@
       "rejected": "Rejet d'un justificatif",
       "downloaded": "Téléchargement",
       "reopened": "Réouverture",
+      "rectification_requested": "Demande de rectification",
+      "rectification_decided": "Décision sur une rectification",
+      "rectified": "Rectification d'un constat",
       "proof_incomplete": "Justificatif incomplet",
       "proof_to_review": "Justificatif à contrôler",
       "imported": "Import"
@@ -439,6 +442,34 @@
       "note_partiel": "Note (obligatoire si le montant est partiel)",
       "note_facultative": "Note (facultative)",
       "note_placeholder": "Facture n° 123 pour 80 %, reste sans pièce…"
+    },
+    "rectification": {
+      "rectifier": "Rectifier",
+      "titre": "Demander la rectification — {{titre}}",
+      "description": "La ligne a été justifiée ou clôturée à tort ? Un administrateur décidera. S'il approuve, la ligne revient en contrôle, son montant justifié est remis à zéro et le siège tranche à nouveau ; le dossier la suit. Le motif est obligatoire et conservé dans le journal d'audit.",
+      "motif": "Motif",
+      "motif_placeholder": "Montant justifié erroné, pièce prise pour une autre…",
+      "motif_requis": "Une rectification doit être motivée.",
+      "envoyer": "Demander",
+      "impossible": "Demande impossible",
+      "chargement_impossible": "Demandes de rectification indisponibles",
+      "panneau_titre": "Demandes de rectification",
+      "panneau_description": "Un constat contesté, motif à l'appui ; un administrateur approuve ou refuse, jamais l'auteur de la demande.",
+      "colonnes": {
+        "constat": "Constat contesté",
+        "motif": "Motif"
+      },
+      "justifie_avant": "{{montant}} justifié(s)",
+      "par": "par {{auteur}}",
+      "decision": "Décision : {{note}}",
+      "approuver": "Approuver la rectification",
+      "refuser": "Refuser",
+      "approbation_impossible": "Approbation impossible",
+      "refus_titre": "Refuser la rectification — {{titre}}",
+      "refus_description": "Le constat tient ; le demandeur sera prévenu de votre motif.",
+      "motif_refus": "Motif du refus",
+      "motif_refus_requis": "Un refus doit être motivé.",
+      "refus_impossible": "Refus impossible"
     }
   },
   "pieces": {

@@ -382,13 +382,56 @@ brouillon   soumis     en contrôle └▶ unjustified ┘
   comptes — une ligne mal imputée, une pièce qui ne correspond pas —, jamais
   à corriger en silence : le motif est conservé sur le dossier et dans
   `AuditLog`, sur le dossier et sur chaque ligne.
+- `rectify` : **rectification d'un constat**, la seconde exception, là où
+  la réouverture s'arrête. Une ligne **justifiée ou clôturée** l'a été à
+  tort (montant justifié faux, pièce prise pour une autre) : n'importe qui
+  le **demande** (`POST /api/rectifications/ {expense, motif}`,
+  `rectifications.request`, tous les rôles par défaut — le pays voit
+  l'erreur le premier), une seule demande en attente par ligne
+  (contrainte `rectification_une_en_attente_par_ligne`) ; un
+  administrateur **décide** (`POST /api/rectifications/{id}/approve/` ou
+  `/refuse/ {note}`, `rectifications.decide` : `admin`, `super_admin`,
+  jamais le pays) — **jamais l'auteur de la demande** (403), comme pour
+  une réallocation. Approuvée, la ligne **revient en contrôle**
+  (`in_review`), son `justified_amount` remis à zéro, son imputation
+  conservée — elle reste déclarée et pèse toujours sur l'enveloppe, en
+  engagé plutôt qu'en consommé — et le motif de la demande devient sa
+  `control_note` ; le dossier, s'il avait été constaté (justifié, non
+  justifié ou clôturé), revient en contrôle avec elle, ses notes
+  intactes. Refusée, le constat tient ; le refus est motivé. La demande
+  garde `previous_status` et `previous_justified_amount` ; `AuditLog`
+  reçoit `rectification_requested`, `rectified` (sur la ligne, et sur le
+  dossier qui la suit) et `rectification_decided` ; les administrateurs
+  sont prévenus de la demande, le demandeur, le contrôle et — à
+  l'approbation — le pays de la décision. `rectify` n'a pas de route sur
+  la ligne : il ne se joue qu'en approuvant une demande
+  (`transitions.approuver_rectification`). Verrous dans l'ordre du
+  circuit : la demande, le dossier, puis la ligne.
 
 **Une dépense soumise est irréversible** : elle ne revient pas au brouillon,
 ne se modifie plus, ne se supprime pas. Seul un brouillon peut être retiré,
-par son auteur, et ce retrait est journalisé. La réouverture est l'unique
-exception, et elle est tracée, motivée et bornée comme ci-dessus. Le statut
-n'est jamais modifiable par écriture de champ ; seules ces transitions le
-font évoluer, et chacune écrit une entrée `AuditLog`.
+par son auteur, et ce retrait est journalisé. La réouverture et la
+rectification sont les deux seules exceptions, et chacune est tracée,
+motivée, à deux personnes et bornée comme ci-dessus. Le statut n'est jamais
+modifiable par écriture de champ ; seules ces transitions le font évoluer,
+et chacune écrit une entrée `AuditLog`.
+
+### 5.5 bis `Rectification` — demande de rectification d'un constat
+
+| Champ | Type | Notes |
+|---|---|---|
+| `expense` | FK → Expense (PROTECT) | la ligne contestée |
+| `status` | Char(20) | `pending`, `approved`, `refused` |
+| `motif` | Text | obligatoire |
+| `requested_by`, `decided_by` | Char(180) | identités en texte (décision 10) |
+| `decided_at` | DateTime (null) | contrainte `rectification_decision_datee` : une décision est datée |
+| `decision_note` | Text | obligatoire au refus |
+| `previous_status` | Char(20) | état de la ligne à la demande (`justified` ou `closed`) |
+| `previous_justified_amount` | Decimal(16,2) | ce que l'approbation défait |
+
+Ni modification ni suppression (`PUT`, `PATCH`, `DELETE` → 405) : un motif
+changé après coup ferait mentir le journal. Périmètre : celui de la ligne
+(`expense__country`, `expense__team`).
 
 ### 5.6 `AuditLog` — journal des actions sensibles
 
@@ -399,7 +442,7 @@ leurs décisions.
 | Champ | Type | Notes |
 |---|---|---|
 | `user` | Char(180) | identité en texte |
-| `action` | Char(32) | `created`, `updated`, `submitted`, `reviewed`, `justified`, `unjustified`, `approved` / `rejected` (contrôle d'une pièce), `deleted` (brouillon), `closed`, `reopened` (réouverture, avec le motif ; sur le dossier et sur chaque ligne), `proof_uploaded`, `proof_replaced`, `proof_to_review`, `downloaded` (pièce, ou export avec `detail = {year, month, country, format}`), `imported` (Excel) |
+| `action` | Char(32) | `created`, `updated`, `submitted`, `reviewed`, `justified`, `unjustified`, `approved` / `rejected` (contrôle d'une pièce), `deleted` (brouillon), `closed`, `reopened` (réouverture, avec le motif ; sur le dossier et sur chaque ligne), `rectification_requested`, `rectification_decided`, `rectified` (rectification d'un constat : la demande, la décision, la ligne et le dossier remis en contrôle, avec le motif et le montant justifié défait), `proof_uploaded`, `proof_replaced`, `proof_to_review`, `downloaded` (pièce, ou export avec `detail = {year, month, country, format}`), `imported` (Excel) |
 | `object_type` / `object_id` | Char(64) / Integer | cible |
 | `label` | Char(250) | |
 | `country` | FK → Country (null) | pour le cloisonnement du journal |
@@ -418,7 +461,7 @@ Index : `(object_type, object_id)`, `(created_at)`, `(country, created_at)`,
 | Champ | Type | Notes |
 |---|---|---|
 | `recipient` | FK → User | |
-| `kind` | Char(32) | `budget_threshold`, `budget_overrun`, `expense_submitted`, `expense_rejected`, `dossier_reopened` (aux comptes qui suivent le pays), `proof_missing`, `proof_incomplete`, `reallocation_requested`, `storage_error` |
+| `kind` | Char(32) | `budget_threshold`, `budget_overrun`, `expense_submitted`, `expense_rejected`, `dossier_reopened` (aux comptes qui suivent le pays), `proof_missing`, `proof_incomplete`, `reallocation_requested`, `rectification_requested` (aux administrateurs), `rectification_decided` (au demandeur et au contrôle ; au pays aussi quand la ligne revient en contrôle), `storage_error` |
 | `level` | Char | `info`, `warning`, `critical` |
 | `title`, `body`, `link` | | |
 | `country` | FK → Country (null) | |
@@ -503,6 +546,7 @@ AuditLog, ChangeLog, Notification ─▶ Country (null)
 | 54 | Règles de calcul, une seule fois | **Les mêmes règles pour l'API, les écrans, les exports et les rapports** (`budget/aggregates.py`, en tête de module) : engagé = soumis ou en contrôle ; consommé = justifié, non justifié ou clôturé ; **un brouillon ne compte nulle part** — la ligne TOTAL de l'export des dépenses l'exclut désormais, comme l'écran ; attribué d'un pays = son enveloppe de pays, **à défaut la somme de ses sous-enveloppes** (un attribué à zéro donnait un disponible négatif) ; disponible = attribué − consommé − engagé. **Un exercice se consolide aux taux en vigueur à sa date de référence** (`date_de_reference` : le 31 décembre d'un exercice clos, ce jour pour l'exercice en cours), partout — `/api/budgets/summary/`, `/api/dashboard/`, la liste des enveloppes (chaque exercice à sa date), le rapport périodique. **Les taux se publient dans l'ordre du temps et ne se modifient pas** (`ExchangeRateSerializer`) : le taux « au 31 décembre 2024 » est acquis pour toujours, et un rapport sur 2024 donne le même chiffre en 2026 qu'en 2025 ; une erreur se corrige par un nouveau taux daté du jour. **La revalorisation** — relire un exercice clos aux taux d'aujourd'hui — est un autre calcul, demandé explicitement (`manage.py consolidation --taux-du-jour`), jamais celui des écrans. **Une enveloppe ne se désactive pas tant qu'elle porte des lignes déclarées** : désactivée, elle sortait du suivi et son consommé disparaissait d'un écran sans disparaître de l'autre. **Un taux croisé s'applique exact** (montant × taux source ÷ taux cible, arrondi au centime à la fin) ; le taux figé sur la ligne, à six décimales, est indicatif — vers le FCFA les deux coïncident. Tests : `budget/tests/test_chiffres.py`, `reporting/tests/test_exports.py` |
 | 55 | Protections de l'API resserrées | **La limite anti-bourrage ne se contourne plus avec un jeton** : `ThrottledObtainAuthToken` n'authentifie plus rien (`authentication_classes = []`) et `LoginRateThrottle` dérive de `SimpleRateThrottle`, comptant toujours par adresse — un jeton valide dans l'en-tête levait la limite `AnonRateThrottle` et permettait de pulvériser un mot de passe sur tous les comptes (audit §3.5). Le **référentiel de `core`** (équipes, projets, centres de coûts, intitulés, catégories, bénéficiaires) passe par `ChampCloisonne` (`accounts.referentiel._cloisonne`, `BeneficiarySerializer`) : un pays hors périmètre est un pays inconnu, et le validateur d'unicité `(country, nom)` ne trahit plus l'existence d'une entité voisine par la différence entre 400 « existe déjà » et 403 « hors périmètre » (§4.5). Le **point de santé** (`/api/health/`), qui exécute un `SELECT`, a sa limite par adresse (`HealthRateThrottle`, et une zone nginx dédiée) : il n'est plus un amplificateur anonyme (§4.6). Un **code TOTP non-ASCII** (`.isdigit()` vrai, `compare_digest` en exception) ne provoque plus de 500 (`compteur_du_code`, garde `isascii()`). Tests : `accounts/tests/test_protection_connexion.py`, `accounts/tests/test_cloisonnement_referentiel.py` |
 | 56 | Chiffrement : ce qui est protégé de quoi | **Le volume `sauvegardes` du serveur reste en clair** par défaut : `rclone crypt` chiffre ce qu'il **envoie**, pas ce qui reste sur la machine. La copie distante, elle, est chiffrée (le tiers ne lit rien), noms de fichiers en clair pour `--lister`/`--rapatrier`. Le secret est **symétrique et présent sur le serveur** — « clé hors serveur » désigne une **copie de récupération** gardée ailleurs, pas un serveur qui en serait dépourvu : le serveur peut relire sa propre copie distante. À conserver pour restaurer : la clé, **le sel** (second mot de passe du coffre) et les réglages du coffre. **Pour que le serveur ne puisse pas déchiffrer**, `SAUVEGARDE_CLE_PUBLIQUE` chiffre chaque dump à la sortie de `pg_dump` avec une clé publique (`openssl smime`, AES-256, suffixe `.enc`) : le dump n'existe en clair nulle part et la clé privée reste hors machine ; `restaurer.sh` refuse un `.enc` en rappelant la commande de déchiffrement. Les copies **déjà envoyées en clair** ne se chiffrent pas rétroactivement : à supprimer depuis la console du fournisseur, puis copie complète. Tests exécutés : `deploy/tests/test_sauvegarder.sh` (39 contrôles, doublures de `pg_dump`/`mc`/`rclone`, vrai `openssl`), joué par la CI (travail « Exploitation ») |
+| 57 | Rectification d'un constat | **Seconde exception à l'irréversibilité**, là où la réouverture s'arrête (§5.5, `Rectification`) : une ligne justifiée ou clôturée à tort se **demande** à rectifier — n'importe quel rôle, motif obligatoire, une demande en attente par ligne — et un **administrateur qui n'est pas le demandeur** approuve ou refuse (`rectifications.request` = tous, `rectifications.decide` = `admin`, `super_admin`, verrouillée hors du pays). Approuvée, la ligne **revient en contrôle** — jamais au brouillon : la dépense reste déclarée, imputée, en engagé — montant justifié à zéro, motif en `control_note`, et le dossier constaté la suit ; l'état et le montant défaits restent sur la demande et dans `AuditLog` (`rectification_requested`, `rectified`, `rectification_decided`). Aucune route `rectify` : le constat ne se défait qu'en approuvant une demande. Tests : `expenses/tests/test_rectification.py` |
 
 ### Décisions contraires au cadrage initial, assumées
 

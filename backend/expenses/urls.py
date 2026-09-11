@@ -10,6 +10,7 @@ router.register("beneficiaries", views.BeneficiaryViewSet, basename="beneficiary
 router.register("dossiers", views.DossierViewSet, basename="dossier")
 router.register("expenses", views.ExpenseViewSet, basename="expense")
 router.register("proofs", views.ProofViewSet, basename="proof")
+router.register("rectifications", views.RectificationViewSet, basename="rectification")
 router.register("audit", views.AuditLogViewSet, basename="audit")
 
 urlpatterns = [path("", include(router.urls))]

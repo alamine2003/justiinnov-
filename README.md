@@ -97,7 +97,7 @@ Cinq rôles, calqués sur l'organisation du groupe :
 | `manager` | Manager (pays) | responsable dans une filiale | son pays, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | saisir ses dépenses, déposer les justificatifs, **soumettre** (déclarer) ; le référentiel de son pays est tenu par la RH |
 | `dm` | DM — directeur manager (siège) | au siège | tous pays, **restrictible** à certains | **mettre en contrôle** une dépense soumise (`expenses.review`) ; lire l'historique du référentiel de son périmètre |
 | `df` | DF — directeur financier (siège) | au siège | tous pays, **restrictible** à certains | mettre en contrôle, contrôler les pièces (`proofs.review`), **justifier ou non** (`expenses.validate`), clôturer (`expenses.close`) ; lire l'historique du référentiel de son périmètre |
-| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | tout le circuit, comptes et rôles, pays et référentiel de tous les pays, **journal d'audit**, **imports et exports**, **réouverture** d'un dossier, réinitialisation de la double authentification |
+| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | tout le circuit, comptes et rôles, pays et référentiel de tous les pays, **journal d'audit**, **imports et exports**, **réouverture** d'un dossier, **décision sur une rectification** de constat, réinitialisation de la double authentification |
 | `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, et seul à écrire **les enveloppes, les réallocations et les taux de change** ; seul à régler ces lignes de la matrice des droits |
 
 Il n'y a ni « direction des opérations » ni « auditeur » distincts : la DO
@@ -115,7 +115,8 @@ change et validation d'un dépassement, de la direction seule.
 **La matrice des droits se règle dans l'application.** Chaque action de
 l'API est une capacité nommée — `users.create`, `referentiel.update`,
 `budgets.create`, `expenses.delete`, `proofs.upload`, `dossiers.submit`,
-`expenses.review`, `dossiers.reopen`, `data.export`… — dont les rôles par
+`expenses.review`, `dossiers.reopen`, `rectifications.decide`,
+`data.export`… — dont les rôles par
 défaut sont dans `accounts/permissions.py` (`CAPACITES`). Les
 administrateurs les modifient case par case dans « Configuration ›
 Permissions » (`GET`/`PATCH /api/permissions/`, réponse : la matrice
@@ -563,18 +564,23 @@ preuve**. D'où « justifié » plutôt que « validé ».
 
 ```
 brouillon → soumis → en contrôle → justifié / non justifié → clôturé
-    ↑          │           │              │ (non justifié)
-    └──────────┴───────────┴──────────────┘  réouverture (administrateur, motif)
+    ↑          │           │    ▲         │ (non justifié)      │
+    └──────────┴───────────┘    │         ┘                     │
+      réouverture (administrateur, motif)                      │
+                                └───────────────────────────────┘
+      rectification d'un constat (demande motivée de n'importe qui,
+      décision d'un administrateur qui n'est pas le demandeur)
 ```
 
 Les règles — déclarer tient en une action, une dépense soumise est
 irréversible, une dépense non justifiée pèse quand même sur l'enveloppe,
-un rejet exige un motif, la réouverture est l'unique exception et prévient
-les managers du pays — sont énoncées dans [`CLAUDE.md`](CLAUDE.md) et
-détaillées, transition par transition, dans
-[`docs/model-de-donnees.md`](docs/model-de-donnees.md) (§5.5 et décision
-20) ; les états et prédicats sont dans `backend/expenses/workflow.py`, les
-services de transition dans `backend/expenses/transitions.py` (décision 41).
+un rejet exige un motif, la réouverture et la rectification sont les deux
+seules exceptions, chacune motivée, tracée et à deux personnes — sont
+énoncées dans [`CLAUDE.md`](CLAUDE.md) et détaillées, transition par
+transition, dans [`docs/model-de-donnees.md`](docs/model-de-donnees.md)
+(§5.5 et décisions 20 et 57) ; les états et prédicats sont dans
+`backend/expenses/workflow.py`, les services de transition dans
+`backend/expenses/transitions.py` (décision 41).
 
 Ce que l'API garantit en plus, calculé côté serveur :
 

@@ -42,6 +42,28 @@ Elle n'est pas une correction silencieuse, et le circuit le garantit :
 
 Le dossier rouvert libère l'engagement de ses lignes sur l'enveloppe : elles
 ne sont plus déclarées, elles ne pèsent plus. Le journal, lui, garde tout.
+
+**La rectification est la seconde exception, pour le constat lui-même.**
+La réouverture s'arrête là où le siège a constaté : une ligne justifiée ou
+clôturée ne se rouvre pas. Mais le siège se trompe aussi — un montant
+justifié faux, une pièce prise pour une autre. Se corriger en silence
+serait pire que l'erreur ; c'est pourquoi la rectification se fait en deux
+temps, à deux personnes :
+
+- **n'importe qui demande** (``rectifications.request``, tous les rôles
+  par défaut) : une ligne justifiée ou clôturée, un motif obligatoire, une
+  seule demande en attente par ligne ;
+- **un administrateur décide** (``rectifications.decide`` : RH et
+  direction, jamais le pays) — et jamais l'auteur de la demande : demander
+  et trancher sont deux regards, comme pour une réallocation ;
+- approuvée, la ligne **revient en contrôle** (``rectify``), son montant
+  justifié remis à zéro, pour que la direction financière tranche à
+  nouveau — elle ne revient jamais au brouillon, la dépense reste déclarée
+  et pèse toujours sur l'enveloppe ; le dossier, s'il avait été constaté,
+  revient en contrôle avec elle, puisqu'il ne dit jamais autre chose que
+  ses lignes ;
+- l'état et le montant justifié d'avant sont gardés sur la demande et dans
+  le journal ; le demandeur, le contrôle et le pays sont prévenus.
 """
 
 from django.utils.translation import gettext_lazy as _
@@ -84,11 +106,20 @@ TRANSITIONS = {
         {Status.SUBMITTED, Status.IN_REVIEW, Status.UNJUSTIFIED},
         Status.DRAFT,
     ),
+    # Rectification approuvée (voir le module) : la ligne constatée revient
+    # en contrôle. Sur un dossier, ``unjustified`` en fait partie — un
+    # dossier constaté non justifié peut porter une ligne justifiée, et il
+    # suit sa ligne. Cette transition n'a pas de route dans l'API : elle ne
+    # s'exécute qu'à l'approbation d'une demande (``transitions``).
+    "rectify": (
+        {Status.JUSTIFIED, Status.UNJUSTIFIED, Status.CLOSED},
+        Status.IN_REVIEW,
+    ),
 }
 
 #: Actions qui exigent un motif : un rejet et une réouverture se justifient
 #: auprès de celui qui les subit.
-MOTIVATED_ACTIONS = frozenset({"reject", "reopen"})
+MOTIVATED_ACTIONS = frozenset({"reject", "reopen", "rectify"})
 
 #: Capacité exigée pour chaque action du circuit (``accounts.permissions``).
 #: Par défaut, le pays (manager) soumet ; au siège, le DM met en contrôle et
@@ -104,7 +135,18 @@ ACTION_CAPACITES = {
     "reject": "expenses.validate",
     "close": "expenses.close",
     "reopen": "dossiers.reopen",
+    "rectify": "rectifications.decide",
 }
+
+#: Ce que le pays ou le siège peut demander à rectifier : un constat. Une
+#: ligne non justifiée n'en est pas un — elle se justifie encore, c'est son
+#: chemin de rattrapage ordinaire ; une ligne en cours n'a rien à rectifier.
+RECTIFIABLE_STATUSES = frozenset({Status.JUSTIFIED, Status.CLOSED})
+
+#: L'action de saisie qui ouvre une rectification, telle que l'interface la
+#: reçoit dans ``allowed_actions``. Ce n'est pas une transition : la ligne
+#: ne change pas d'état à la demande, seulement à la décision.
+REQUEST_RECTIFICATION = "request_rectification"
 
 #: Actions de saisie et leur capacité. Elles ne sont pas des transitions —
 #: l'état ne change pas — mais l'interface les propose au même endroit que
@@ -298,7 +340,27 @@ def expense_allowed_actions(expense, *, role, username, configuration=None):
             and not breaks_four_eyes(action, expense.created_by, username)
         ):
             actions.append(action)
+    if peut_demander_une_rectification(expense, role=role, configuration=configuration):
+        actions.append(REQUEST_RECTIFICATION)
     return actions
+
+
+def peut_demander_une_rectification(expense, *, role, configuration=None):
+    """Une rectification peut-elle être demandée sur cette ligne ?
+
+    Capacité, constat (justifié ou clôturé), et aucune demande déjà en
+    attente. Ce dernier point se lit sur ``expense.rectification_en_attente``
+    quand la liste l'a annoté (``ExpenseQuerySet.with_rectification``), et
+    par une requête sinon — une fiche, pas une liste.
+    """
+    if role not in roles_pour("rectifications.request", configuration):
+        return False
+    if expense.status not in RECTIFIABLE_STATUSES:
+        return False
+    en_attente = getattr(expense, "rectification_en_attente", None)
+    if en_attente is None:
+        en_attente = expense.rectifications.filter(status="pending").exists()
+    return not en_attente
 
 
 def dossier_allowed_actions(dossier, *, role, username, configuration=None):

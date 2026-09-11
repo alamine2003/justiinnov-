@@ -2222,3 +2222,91 @@ msgstr "Rates are published in chronological order: the latest {currency} rate i
 #: budget/serializers.py:218
 msgid "Cette enveloppe porte {count} ligne(s) déclarée(s) : elle ne se désactive pas, ses dépenses disparaîtraient du consommé."
 msgstr "This envelope carries {count} declared line(s): it cannot be deactivated, its expenses would disappear from the consumed total."
+
+#: accounts/permissions.py
+msgid "Demander la rectification d'un constat"
+msgstr "Request the rectification of a finding"
+
+#: accounts/permissions.py
+msgid "Signaler, motif à l'appui, qu'une ligne justifiée ou clôturée l'a été à tort."
+msgstr "Report, with a reason, that a justified or closed line was ruled on by mistake."
+
+#: accounts/permissions.py
+msgid "Décider d'une rectification"
+msgstr "Decide on a rectification"
+
+#: accounts/permissions.py
+msgid "Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne."
+msgstr "Approve — the line goes back to review — or refuse a request. Never one's own."
+
+#: expenses/models.py
+msgid "Motif de la demande"
+msgstr "Reason for the request"
+
+#: expenses/models.py
+msgid "État avant rectification"
+msgstr "Status before rectification"
+
+#: expenses/models.py
+msgid "Montant justifié avant rectification"
+msgstr "Justified amount before rectification"
+
+#: expenses/models.py notifications/models.py
+msgid "Demande de rectification"
+msgstr "Rectification request"
+
+#: expenses/models.py
+msgid "Demandes de rectification"
+msgstr "Rectification requests"
+
+#: expenses/models.py notifications/models.py
+msgid "Décision sur une rectification"
+msgstr "Decision on a rectification"
+
+#: expenses/models.py
+msgid "Rectification d'un constat"
+msgstr "Rectification of a finding"
+
+#: expenses/serializers.py expenses/transitions.py
+msgid "Une rectification doit être motivée : le siège doit savoir ce qu'il a constaté à tort."
+msgstr "A rectification must be motivated: head office must know what it ruled on by mistake."
+
+#: expenses/transitions.py
+msgid "Cette demande de rectification a déjà été traitée."
+msgstr "This rectification request has already been processed."
+
+#: expenses/transitions.py
+msgid "Vous ne pouvez pas décider d'une rectification que vous avez demandée."
+msgstr "You cannot decide on a rectification you requested yourself."
+
+#: expenses/transitions.py
+msgid "Une demande de rectification est déjà en attente sur cette ligne."
+msgstr "A rectification request is already pending on this line."
+
+#: expenses/transitions.py
+msgid "Seule une ligne justifiée ou clôturée se rectifie : celle-ci est « {status} »."
+msgstr "Only a justified or closed line can be rectified: this one is “{status}”."
+
+#: notifications/triggers.py
+msgid "Demande de rectification — {title}"
+msgstr "Rectification request — {title}"
+
+#: notifications/triggers.py
+msgid "Dossier {number} · constat « {status} », {amount} {currency} justifié(s). Motif : {motive}"
+msgstr "Dossier {number} · finding “{status}”, {amount} {currency} justified. Reason: {motive}"
+
+#: notifications/triggers.py
+msgid "Rectification approuvée — {title}"
+msgstr "Rectification approved — {title}"
+
+#: notifications/triggers.py
+msgid "Dossier {number} : la ligne revient en contrôle, le constat « {status} » ({amount} {currency} justifié(s)) est défait. Motif : {motive}"
+msgstr "Dossier {number}: the line goes back to review, the finding “{status}” ({amount} {currency} justified) is undone. Reason: {motive}"
+
+#: notifications/triggers.py
+msgid "Rectification refusée — {title}"
+msgstr "Rectification refused — {title}"
+
+#: notifications/triggers.py
+msgid "Dossier {number} : le constat « {status} » tient. Motif du refus : {motive}"
+msgstr "Dossier {number}: the finding “{status}” stands. Reason for refusal: {motive}"

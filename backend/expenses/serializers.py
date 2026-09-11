@@ -25,12 +25,22 @@ from core.models import (
 )
 from core.serializers import DetailField
 
-from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, compute_sha256
+from .models import (
+    AuditLog,
+    Beneficiary,
+    Dossier,
+    Expense,
+    Proof,
+    Rectification,
+    compute_sha256,
+)
 from .stockage import effacer_sans_bruit, noter_depot
+from .transitions import peut_decider_rectification
 from .workflow import (
     LOCKED_STATUSES,
     PROOF_LOCKED_STATUSES,
     PROOF_TRANSITIONS,
+    REQUEST_RECTIFICATION,
     dossier_allowed_actions,
     expense_allowed_actions,
 )
@@ -87,12 +97,15 @@ PROOF_FINAL_STATUSES = frozenset(
 
 #: Actions qu'une dépense ou un dossier peut se voir proposer, pour le
 #: schéma (``allowed_actions``) : la saisie (modifier, ajouter une ligne,
-#: déposer une pièce, supprimer) puis les transitions du circuit.
+#: déposer une pièce, supprimer), les transitions du circuit, puis la
+#: demande de rectification d'un constat — qui n'est pas une transition :
+#: la ligne ne bouge qu'à la décision (``workflow.REQUEST_RECTIFICATION``).
 TRANSITION_CHOICES = [
     (name, name)
     for name in (
         "edit", "add_line", "upload", "delete",
         "submit", "review", "justify", "reject", "close", "reopen",
+        REQUEST_RECTIFICATION,
     )
 ]
 
@@ -879,6 +892,80 @@ class ExpenseTransitionSerializer(TransitionSerializer):
         max_digits=16, decimal_places=2, required=False,
         min_value=Decimal("0"),
     )
+
+
+class RectificationSerializer(serializers.ModelSerializer):
+    """Demande de rectification d'un constat (seconde exception à
+    l'irréversibilité, ``workflow``).
+
+    À la création, ``expense`` et ``motif`` suffisent : le service relève
+    l'état et le montant justifié qu'elle remet en cause, et les garde. Le
+    reste — statut, signatures, décision — s'écrit par les actions
+    ``approve`` et ``refuse``, jamais par ``PATCH``.
+    """
+
+    expense = ChampCloisonne(
+        queryset=Expense.objects.select_related("dossier", "country"),
+        chemin_pays="country", chemin_equipe="team",
+        label=gettext_lazy("Dépense"),
+    )
+    expense_title = serializers.CharField(source="expense.title", read_only=True)
+    expense_amount = serializers.DecimalField(
+        source="expense.amount", max_digits=16, decimal_places=2, read_only=True
+    )
+    expense_status = serializers.CharField(source="expense.status", read_only=True)
+    dossier = serializers.IntegerField(source="expense.dossier_id", read_only=True)
+    dossier_number = serializers.CharField(source="expense.dossier.number", read_only=True)
+    country = serializers.IntegerField(source="expense.country_id", read_only=True)
+    currency = serializers.CharField(source="expense.country.currency", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    previous_status_display = serializers.CharField(
+        source="get_previous_status_display", read_only=True
+    )
+    can_decide = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Rectification
+        fields = [
+            "id", "expense", "expense_title", "expense_amount", "expense_status",
+            "dossier", "dossier_number", "country", "currency",
+            "status", "status_display", "motif",
+            "previous_status", "previous_status_display", "previous_justified_amount",
+            "requested_by", "decided_by", "decided_at", "decision_note",
+            "can_decide", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "status", "previous_status", "previous_justified_amount",
+            "requested_by", "decided_by", "decided_at", "decision_note",
+        ]
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_decide(self, rectification):
+        """Le demandeur peut-il approuver ou refuser cette demande ?
+
+        Les mêmes conditions que ``approuver_rectification`` et
+        ``refuser_rectification`` (``transitions.verifier_la_decision_de_rectification``),
+        pour que l'interface n'ait pas à les recopier : demande encore en
+        attente, rôle décideur, pas celui qui l'a demandée. Faux hors
+        requête.
+        """
+        return peut_decider_rectification(
+            rectification, _acces(self), _configuration(self)
+        )
+
+    def validate_motif(self, value):
+        if not value.strip():
+            raise serializers.ValidationError(
+                _("Une rectification doit être motivée : le siège doit savoir ce "
+                  "qu'il a constaté à tort.")
+            )
+        return value.strip()
+
+
+class RectificationDecisionSerializer(serializers.Serializer):
+    """Motif accompagnant une décision ; obligatoire en cas de refus."""
+
+    note = serializers.CharField(required=False, allow_blank=True)
 
 
 class ProofReviewSerializer(serializers.Serializer):
