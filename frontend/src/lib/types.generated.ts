@@ -891,10 +891,10 @@ export interface paths {
         /**
          * @description État de la plateforme, pour Docker et la livraison continue.
          *
-         *     Ni compte, ni jeton, ni limitation de débit : le contrôle de santé du
-         *     conteneur l'interroge toutes les trente secondes, et un déploiement n'est
-         *     déclaré réussi que lorsqu'il répond. Il ne dit que deux choses — le
-         *     serveur répond, la base est joignable — et rien sur ce qu'elle contient.
+         *     Ni compte, ni jeton : le contrôle de santé du conteneur l'interroge
+         *     toutes les trente secondes, et un déploiement n'est déclaré réussi que
+         *     lorsqu'il répond. Il ne dit que deux choses — le serveur répond, la base
+         *     est joignable — et rien sur ce qu'elle contient.
          */
         get: operations["health_retrieve"]
         put?: never
@@ -996,10 +996,22 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les responsables, et leur rattachement aux pays.
+         *
+         *     Capacités propres (``managers.*``), et non celles du pays : inscrire un
+         *     responsable dans sa filiale se délègue au pays, changer la devise de
+         *     cette filiale ne se délègue pas.
+         */
         get: operations["managers_list"]
         put?: never
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les responsables, et leur rattachement aux pays.
+         *
+         *     Capacités propres (``managers.*``), et non celles du pays : inscrire un
+         *     responsable dans sa filiale se délègue au pays, changer la devise de
+         *     cette filiale ne se délègue pas.
+         */
         post: operations["managers_create"]
         delete?: never
         options?: never
@@ -1014,15 +1026,33 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les responsables, et leur rattachement aux pays.
+         *
+         *     Capacités propres (``managers.*``), et non celles du pays : inscrire un
+         *     responsable dans sa filiale se délègue au pays, changer la devise de
+         *     cette filiale ne se délègue pas.
+         */
         get: operations["managers_retrieve"]
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les responsables, et leur rattachement aux pays.
+         *
+         *     Capacités propres (``managers.*``), et non celles du pays : inscrire un
+         *     responsable dans sa filiale se délègue au pays, changer la devise de
+         *     cette filiale ne se délègue pas.
+         */
         put: operations["managers_update"]
         post?: never
         delete?: never
         options?: never
         head?: never
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les responsables, et leur rattachement aux pays.
+         *
+         *     Capacités propres (``managers.*``), et non celles du pays : inscrire un
+         *     responsable dans sa filiale se délègue au pays, changer la devise de
+         *     cette filiale ne se délègue pas.
+         */
         patch: operations["managers_partial_update"]
         trace?: never
     }
@@ -1329,7 +1359,18 @@ export interface paths {
         /** @description Pièces justificatives, rattachées au dossier. */
         get: operations["proofs_list"]
         put?: never
-        /** @description Pièces justificatives, rattachées au dossier. */
+        /**
+         * @description Dépose une pièce ; un échec ne laisse pas son fichier derrière lui.
+         *
+         *     ``FileField`` écrit le fichier dans le stockage **avant** l'``INSERT``,
+         *     et l'écriture du fichier n'a pas de retour arrière : si la
+         *     transaction de la vue est ensuite annulée — trace d'audit
+         *     impossible, contrainte sur la pièce remplacée, verrou du dossier
+         *     perdu — la fiche disparaît et le fichier reste. Il est retiré ici,
+         *     après la sortie du bloc transactionnel, sur le chemin d'erreur
+         *     (audit du 8 septembre 2026, §4.4 ; le cas du seul ``INSERT`` refusé
+         *     est traité dans ``ProofSerializer.create``).
+         */
         post: operations["proofs_create"]
         delete?: never
         options?: never
@@ -2214,6 +2255,7 @@ export interface components {
              */
             readonly updated_at: string
         }
+        /** @description Le pays lui-même. Ses responsables s'écrivent par ``ManagerSerializer``. */
         CountryWrite: {
             readonly id: number
             /** Nom */
@@ -2242,8 +2284,8 @@ export interface components {
             timezone: string
             /** Actif */
             is_active: boolean
-            managers: number[]
         }
+        /** @description Le pays lui-même. Ses responsables s'écrivent par ``ManagerSerializer``. */
         CountryWriteRequest: {
             /** Nom */
             name: string
@@ -2271,7 +2313,6 @@ export interface components {
             timezone?: string
             /** Actif */
             is_active?: boolean
-            managers?: number[]
         }
         Dashboard: {
             readonly year: number
@@ -2965,6 +3006,19 @@ export interface components {
          * @enum {string}
          */
         LanguageEnum: "fr" | "en"
+        /**
+         * @description Un responsable, et les pays auxquels il est rattaché.
+         *
+         *     **Le rattachement s'écrit ici, et nulle part ailleurs.** Il était un
+         *     champ de ``CountryWriteSerializer`` : inscrire un responsable dans son
+         *     pays exigeait donc ``countries.update``, la capacité qui change aussi la
+         *     devise, le fuseau et l'activation de la filiale — et que le verrou du
+         *     pays refuse au principal intéressé. Les deux actes ne se délèguent pas
+         *     de la même façon ; ils ont chacun leur porte depuis, et la relation un
+         *     seul chemin d'écriture. Le rattachement reste journalisé du côté du
+         *     pays : ``core.signals._track_country_managers`` traite déjà le sens
+         *     inverse (``manager.countries.set(...)``).
+         */
         Manager: {
             readonly id: number
             /** Nom */
@@ -2975,6 +3029,8 @@ export interface components {
             title: string
             /** Actif */
             is_active: boolean
+            /** Pays */
+            countries: number[]
             /**
              * Créé le
              * Format: date-time
@@ -2986,6 +3042,19 @@ export interface components {
              */
             readonly updated_at: string
         }
+        /**
+         * @description Un responsable, et les pays auxquels il est rattaché.
+         *
+         *     **Le rattachement s'écrit ici, et nulle part ailleurs.** Il était un
+         *     champ de ``CountryWriteSerializer`` : inscrire un responsable dans son
+         *     pays exigeait donc ``countries.update``, la capacité qui change aussi la
+         *     devise, le fuseau et l'activation de la filiale — et que le verrou du
+         *     pays refuse au principal intéressé. Les deux actes ne se délèguent pas
+         *     de la même façon ; ils ont chacun leur porte depuis, et la relation un
+         *     seul chemin d'écriture. Le rattachement reste journalisé du côté du
+         *     pays : ``core.signals._track_country_managers`` traite déjà le sens
+         *     inverse (``manager.countries.set(...)``).
+         */
         ManagerRequest: {
             /** Nom */
             name: string
@@ -2995,6 +3064,8 @@ export interface components {
             title?: string
             /** Actif */
             is_active?: boolean
+            /** Pays */
+            countries?: number[]
         }
         /** @description Forme documentaire de ``/api/notifications/read-all/``. */
         MarkedRead: {
@@ -3451,6 +3522,7 @@ export interface components {
             /** Actif */
             is_active?: boolean
         }
+        /** @description Le pays lui-même. Ses responsables s'écrivent par ``ManagerSerializer``. */
         PatchedCountryWriteRequest: {
             /** Nom */
             name?: string
@@ -3478,7 +3550,6 @@ export interface components {
             timezone?: string
             /** Actif */
             is_active?: boolean
-            managers?: number[]
         }
         PatchedDossierRequest: {
             /** N° d'ordre */
@@ -3561,6 +3632,19 @@ export interface components {
             /** Actif */
             is_active?: boolean
         }
+        /**
+         * @description Un responsable, et les pays auxquels il est rattaché.
+         *
+         *     **Le rattachement s'écrit ici, et nulle part ailleurs.** Il était un
+         *     champ de ``CountryWriteSerializer`` : inscrire un responsable dans son
+         *     pays exigeait donc ``countries.update``, la capacité qui change aussi la
+         *     devise, le fuseau et l'activation de la filiale — et que le verrou du
+         *     pays refuse au principal intéressé. Les deux actes ne se délèguent pas
+         *     de la même façon ; ils ont chacun leur porte depuis, et la relation un
+         *     seul chemin d'écriture. Le rattachement reste journalisé du côté du
+         *     pays : ``core.signals._track_country_managers`` traite déjà le sens
+         *     inverse (``manager.countries.set(...)``).
+         */
         PatchedManagerRequest: {
             /** Nom */
             name?: string
@@ -3570,6 +3654,8 @@ export interface components {
             title?: string
             /** Actif */
             is_active?: boolean
+            /** Pays */
+            countries?: number[]
         }
         PatchedMarketingCategoryRequest: {
             /** Pays */
@@ -3743,10 +3829,14 @@ export interface components {
             readonly "audit.read": boolean
             /** @description Lire qui a modifié quoi dans le référentiel, sur son périmètre. */
             readonly "history.read": boolean
-            /** @description Créer un pays parmi les filiales du groupe, ou un manager. */
+            /** @description Créer un pays parmi les filiales du groupe. */
             readonly "countries.create": boolean
-            /** @description Changer la devise, le fuseau, les managers ; activer ou désactiver. */
+            /** @description Changer la devise, le fuseau ; activer ou désactiver le pays. */
             readonly "countries.update": boolean
+            /** @description Inscrire un responsable : celui à qui s'imputent une enveloppe et des dépenses. */
+            readonly "managers.create": boolean
+            /** @description Changer son nom, sa fonction, son activité ; le rattacher à un pays ou l'en retirer. */
+            readonly "managers.update": boolean
             /** @description Ajouter une équipe, un centre de coûts, un projet, un intitulé, une catégorie, un bénéficiaire. */
             readonly "referentiel.create": boolean
             /** @description Renommer, rattacher, activer ou désactiver une entité du référentiel. */

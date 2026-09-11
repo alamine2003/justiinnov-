@@ -4108,7 +4108,7 @@
         "/api/health/": {
             "get": {
                 "operationId": "health_retrieve",
-                "description": "État de la plateforme, pour Docker et la livraison continue.\n\nNi compte, ni jeton, ni limitation de débit : le contrôle de santé du\nconteneur l'interroge toutes les trente secondes, et un déploiement n'est\ndéclaré réussi que lorsqu'il répond. Il ne dit que deux choses — le\nserveur répond, la base est joignable — et rien sur ce qu'elle contient.",
+                "description": "État de la plateforme, pour Docker et la livraison continue.\n\nNi compte, ni jeton : le contrôle de santé du conteneur l'interroge\ntoutes les trente secondes, et un déploiement n'est déclaré réussi que\nlorsqu'il répond. Il ne dit que deux choses — le serveur répond, la base\nest joignable — et rien sur ce qu'elle contient.",
                 "tags": [
                     "health"
                 ],
@@ -4369,7 +4369,7 @@
         "/api/managers/": {
             "get": {
                 "operationId": "managers_list",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les responsables, et leur rattachement aux pays.\n\nCapacités propres (``managers.*``), et non celles du pays : inscrire un\nresponsable dans sa filiale se délègue au pays, changer la devise de\ncette filiale ne se délègue pas.",
                 "parameters": [
                     {
                         "in": "query",
@@ -4441,7 +4441,7 @@
             },
             "post": {
                 "operationId": "managers_create",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les responsables, et leur rattachement aux pays.\n\nCapacités propres (``managers.*``), et non celles du pays : inscrire un\nresponsable dans sa filiale se délègue au pays, changer la devise de\ncette filiale ne se délègue pas.",
                 "tags": [
                     "managers"
                 ],
@@ -4490,7 +4490,7 @@
         "/api/managers/{id}/": {
             "get": {
                 "operationId": "managers_retrieve",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les responsables, et leur rattachement aux pays.\n\nCapacités propres (``managers.*``), et non celles du pays : inscrire un\nresponsable dans sa filiale se délègue au pays, changer la devise de\ncette filiale ne se délègue pas.",
                 "parameters": [
                     {
                         "in": "path",
@@ -4528,7 +4528,7 @@
             },
             "put": {
                 "operationId": "managers_update",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les responsables, et leur rattachement aux pays.\n\nCapacités propres (``managers.*``), et non celles du pays : inscrire un\nresponsable dans sa filiale se délègue au pays, changer la devise de\ncette filiale ne se délègue pas.",
                 "parameters": [
                     {
                         "in": "path",
@@ -4586,7 +4586,7 @@
             },
             "patch": {
                 "operationId": "managers_partial_update",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les responsables, et leur rattachement aux pays.\n\nCapacités propres (``managers.*``), et non celles du pays : inscrire un\nresponsable dans sa filiale se délègue au pays, changer la devise de\ncette filiale ne se délègue pas.",
                 "parameters": [
                     {
                         "in": "path",
@@ -5861,7 +5861,7 @@
             },
             "post": {
                 "operationId": "proofs_create",
-                "description": "Pièces justificatives, rattachées au dossier.",
+                "description": "Dépose une pièce ; un échec ne laisse pas son fichier derrière lui.\n\n``FileField`` écrit le fichier dans le stockage **avant** l'``INSERT``,\net l'écriture du fichier n'a pas de retour arrière : si la\ntransaction de la vue est ensuite annulée — trace d'audit\nimpossible, contrainte sur la pièce remplacée, verrou du dossier\nperdu — la fiche disparaît et le fichier reste. Il est retiré ici,\naprès la sortie du bloc transactionnel, sur le chemin d'erreur\n(audit du 8 septembre 2026, §4.4 ; le cas du seul ``INSERT`` refusé\nest traité dans ``ProofSerializer.create``).",
                 "tags": [
                     "proofs"
                 ],
@@ -8794,6 +8794,7 @@
             },
             "CountryWrite": {
                 "type": "object",
+                "description": "Le pays lui-même. Ses responsables s'écrivent par ``ManagerSerializer``.",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -8837,12 +8838,6 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
-                    },
-                    "managers": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
                     }
                 },
                 "required": [
@@ -8853,12 +8848,12 @@
                     "currency",
                     "currency_symbol",
                     "timezone",
-                    "is_active",
-                    "managers"
+                    "is_active"
                 ]
             },
             "CountryWriteRequest": {
                 "type": "object",
+                "description": "Le pays lui-même. Ses responsables s'écrivent par ``ManagerSerializer``.",
                 "properties": {
                     "name": {
                         "type": "string",
@@ -8902,12 +8897,6 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
-                    },
-                    "managers": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
                     }
                 },
                 "required": [
@@ -10937,6 +10926,7 @@
             },
             "Manager": {
                 "type": "object",
+                "description": "Un responsable, et les pays auxquels il est rattaché.\n\n**Le rattachement s'écrit ici, et nulle part ailleurs.** Il était un\nchamp de ``CountryWriteSerializer`` : inscrire un responsable dans son\npays exigeait donc ``countries.update``, la capacité qui change aussi la\ndevise, le fuseau et l'activation de la filiale — et que le verrou du\npays refuse au principal intéressé. Les deux actes ne se délèguent pas\nde la même façon ; ils ont chacun leur porte depuis, et la relation un\nseul chemin d'écriture. Le rattachement reste journalisé du côté du\npays : ``core.signals._track_country_managers`` traite déjà le sens\ninverse (``manager.countries.set(...)``).",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -10970,6 +10960,14 @@
                         "type": "boolean",
                         "title": "Actif"
                     },
+                    "countries": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "title": "Pays"
+                        },
+                        "title": "Pays"
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -10989,12 +10987,14 @@
                     "email",
                     "title",
                     "is_active",
+                    "countries",
                     "created_at",
                     "updated_at"
                 ]
             },
             "ManagerRequest": {
                 "type": "object",
+                "description": "Un responsable, et les pays auxquels il est rattaché.\n\n**Le rattachement s'écrit ici, et nulle part ailleurs.** Il était un\nchamp de ``CountryWriteSerializer`` : inscrire un responsable dans son\npays exigeait donc ``countries.update``, la capacité qui change aussi la\ndevise, le fuseau et l'activation de la filiale — et que le verrou du\npays refuse au principal intéressé. Les deux actes ne se délèguent pas\nde la même façon ; ils ont chacun leur porte depuis, et la relation un\nseul chemin d'écriture. Le rattachement reste journalisé du côté du\npays : ``core.signals._track_country_managers`` traite déjà le sens\ninverse (``manager.countries.set(...)``).",
                 "properties": {
                     "name": {
                         "type": "string",
@@ -11024,6 +11024,14 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
+                    },
+                    "countries": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "title": "Pays"
+                        },
+                        "title": "Pays"
                     }
                 },
                 "required": [
@@ -12126,6 +12134,7 @@
             },
             "PatchedCountryWriteRequest": {
                 "type": "object",
+                "description": "Le pays lui-même. Ses responsables s'écrivent par ``ManagerSerializer``.",
                 "properties": {
                     "name": {
                         "type": "string",
@@ -12169,12 +12178,6 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
-                    },
-                    "managers": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
                     }
                 }
             },
@@ -12349,6 +12352,7 @@
             },
             "PatchedManagerRequest": {
                 "type": "object",
+                "description": "Un responsable, et les pays auxquels il est rattaché.\n\n**Le rattachement s'écrit ici, et nulle part ailleurs.** Il était un\nchamp de ``CountryWriteSerializer`` : inscrire un responsable dans son\npays exigeait donc ``countries.update``, la capacité qui change aussi la\ndevise, le fuseau et l'activation de la filiale — et que le verrou du\npays refuse au principal intéressé. Les deux actes ne se délèguent pas\nde la même façon ; ils ont chacun leur porte depuis, et la relation un\nseul chemin d'écriture. Le rattachement reste journalisé du côté du\npays : ``core.signals._track_country_managers`` traite déjà le sens\ninverse (``manager.countries.set(...)``).",
                 "properties": {
                     "name": {
                         "type": "string",
@@ -12378,6 +12382,14 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
+                    },
+                    "countries": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "title": "Pays"
+                        },
+                        "title": "Pays"
                     }
                 }
             },
@@ -12784,12 +12796,22 @@
                     "countries.create": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Créer un pays parmi les filiales du groupe, ou un manager."
+                        "description": "Créer un pays parmi les filiales du groupe."
                     },
                     "countries.update": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Changer la devise, le fuseau, les managers ; activer ou désactiver."
+                        "description": "Changer la devise, le fuseau ; activer ou désactiver le pays."
+                    },
+                    "managers.create": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Inscrire un responsable : celui à qui s'imputent une enveloppe et des dépenses."
+                    },
+                    "managers.update": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Changer son nom, sa fonction, son activité ; le rattacher à un pays ou l'en retirer."
                     },
                     "referentiel.create": {
                         "type": "boolean",
@@ -12896,6 +12918,8 @@
                     "history.read",
                     "countries.create",
                     "countries.update",
+                    "managers.create",
+                    "managers.update",
                     "referentiel.create",
                     "referentiel.update",
                     "budgets.create",
