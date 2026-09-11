@@ -444,7 +444,13 @@ nouvelle pile ne devient pas saine. Le déploiement n'est déclaré réussi que
 lorsque tous les conteneurs passent leur contrôle de santé et que
 `/api/health/` répond depuis l'extérieur. Le dossier `deploy/` est copié en
 entier sur le serveur : pile, Caddyfile, scripts de sauvegarde et de
-restauration, configuration Prometheus et provisioning Grafana. La
+restauration, configuration Prometheus et provisioning Grafana. **La
+version affichée dans l'interface** (pied de page et en-tête) est figée à
+la construction de l'image frontend (`APP_VERSION`, `frontend/Dockerfile`,
+`vite.config.ts`) : sur un tag `v1.0.6`, elle vaut `1.0.6` ; sur une
+livraison de `main`, celle de `frontend/package.json` suivie du SHA court.
+Un nouveau tag suffit donc à la changer ; `package.json` n'est mis à jour
+qu'à la version suivante, pour que le développement local l'affiche. La
 préparation du serveur, les secrets attendus, la coupure pendant les
 migrations, le retour arrière, le rôle Postgres à moindre privilège, la
 supervision et les sauvegardes sont décrits dans
