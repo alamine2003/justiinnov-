@@ -33,6 +33,17 @@ PDF = b"%PDF-1.4 recu de mission"
 class StockageTestCase(ExpenseTestCase):
     def setUp(self):
         super().setUp()
+        # Un stockage vide par test. Le stockage en mémoire n'est pas
+        # transactionnel : la base est rendue à chaque test, pas lui, et ce
+        # qu'un test y écrit restait pour les suivants de la même classe —
+        # ``recu.pdf`` déposé par un test « nominal » réapparaissait dans
+        # l'inventaire des orphelins du test d'après, un second
+        # ``egare.pdf`` devenait ``egare_XXXXXXX.pdf`` (CI #25, trois échecs
+        # pour une seule cause). Réappliquer le réglage recrée le stockage :
+        # c'est ce que Django fait lui-même sur ``setting_changed``.
+        stockage_vide = self.settings(**in_memory_storage.options)
+        stockage_vide.enable()
+        self.addCleanup(stockage_vide.disable)
         self.login(self.owner)
 
     def deposer(self, nom="recu.pdf", contenu=PDF, dossier=None):
@@ -311,8 +322,10 @@ class TelechargementTests(StockageTestCase):
 class InventaireTests(StockageTestCase):
     def test_un_objet_sans_fiche_est_inventorie_sans_etre_efface(self):
         piece = self.deposer()
-        egare = f"justificatifs/{self.togo.pk}/{self.dossier.pk}/egare.pdf"
-        default_storage.save(egare, SimpleUploadedFile("egare.pdf", PDF))
+        egare = default_storage.save(
+            f"justificatifs/{self.togo.pk}/{self.dossier.pk}/egare.pdf",
+            SimpleUploadedFile("egare.pdf", PDF),
+        )
 
         orphelins = stockage.pieces_orphelines(age_minimal=timedelta(0))
 
@@ -321,8 +334,10 @@ class InventaireTests(StockageTestCase):
         self.assertTrue(default_storage.exists(piece.file.name))
 
     def test_un_depot_en_cours_n_est_pas_un_orphelin(self):
-        egare = f"justificatifs/{self.togo.pk}/{self.dossier.pk}/en-cours.pdf"
-        default_storage.save(egare, SimpleUploadedFile("en-cours.pdf", PDF))
+        default_storage.save(
+            f"justificatifs/{self.togo.pk}/{self.dossier.pk}/en-cours.pdf",
+            SimpleUploadedFile("en-cours.pdf", PDF),
+        )
 
         self.assertEqual(stockage.pieces_orphelines(age_minimal=timedelta(hours=24)), [])
 
@@ -336,8 +351,10 @@ class InventaireTests(StockageTestCase):
     def test_la_commande_liste_sans_effacer(self):
         from io import StringIO
 
-        egare = f"justificatifs/{self.togo.pk}/{self.dossier.pk}/egare.pdf"
-        default_storage.save(egare, SimpleUploadedFile("egare.pdf", PDF))
+        egare = default_storage.save(
+            f"justificatifs/{self.togo.pk}/{self.dossier.pk}/egare.pdf",
+            SimpleUploadedFile("egare.pdf", PDF),
+        )
         sortie = StringIO()
 
         call_command("pieces_orphelines", age=0, stdout=sortie)

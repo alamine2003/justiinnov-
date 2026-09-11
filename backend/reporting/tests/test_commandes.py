@@ -32,6 +32,13 @@ from notifications.models import Notification
 from reporting.tests.test_dashboard import DashboardTestCase
 
 
+# La tâche par son identifiant, jamais par sa position : la reprise des
+# e-mails et celle des effacements ont été ajoutées en tête de la liste, et
+# son premier élément désignait alors une autre variable que celle du
+# message attendu (SCHEDULE_EMAILS pour SCHEDULE_ALERTS).
+ALERTES = next(job for job in JOBS if job["id"] == "notify_alerts")
+
+
 class OrdonnanceurTests(TestCase):
     def test_la_connexion_est_rafraichie_avant_et_apres_chaque_tache(self):
         """L'ordonnanceur vit des jours : une connexion fermée par le serveur
@@ -41,7 +48,7 @@ class OrdonnanceurTests(TestCase):
         ) as fermer, mock.patch(
             "core.management.commands.run_scheduler.call_command"
         ) as appel:
-            run_job(JOBS[0])
+            run_job(ALERTES)
 
         self.assertEqual(fermer.call_count, 2)
         appel.assert_called_once()
@@ -53,7 +60,7 @@ class OrdonnanceurTests(TestCase):
             "core.management.commands.run_scheduler.call_command",
             side_effect=OSError("SMTP injoignable"),
         ), self.assertLogs("scheduler", level="ERROR"):
-            run_job(JOBS[0])
+            run_job(ALERTES)
 
         self.assertEqual(fermer.call_count, 2)
 
@@ -61,13 +68,13 @@ class OrdonnanceurTests(TestCase):
         """Une expression fautive dans l'environnement doit dire quelle
         variable corriger, pas une trace apscheduler."""
         with self.assertRaises(CommandError) as capture:
-            declencheur(JOBS[0], "chaque lundi")
+            declencheur(ALERTES, "chaque lundi")
 
         self.assertIn("SCHEDULE_ALERTS", str(capture.exception))
         self.assertIn("chaque lundi", str(capture.exception))
 
     def test_une_cadence_valide_donne_un_declencheur(self):
-        self.assertIsNotNone(declencheur(JOBS[0], "*/5 * * * *"))
+        self.assertIsNotNone(declencheur(ALERTES, "*/5 * * * *"))
 
 
 class NotifyAlertsTests(DashboardTestCase):

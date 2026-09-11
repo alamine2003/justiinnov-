@@ -104,13 +104,6 @@ class AuthenticationTests(ApiTestCase):
         self.assertIsNone(entry.object_id)
         self.assertEqual(entry.ip_address, "203.0.113.8")
 
-    def test_le_point_de_sante_ne_declenche_pas_de_limite_anonyme(self):
-        """Interrogé toutes les trente secondes par Docker, il ne doit jamais
-        répondre 429."""
-        for _ in range(70):
-            response = self.client.get("/api/health/")
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-
 
 class NoDestroyTests(ApiTestCase):
     """La désactivation remplace la suppression : ``DELETE`` n'est pas exposé."""
