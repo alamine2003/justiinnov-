@@ -31,7 +31,15 @@ from expenses.services import committed_total
 from expenses.workflow import Status
 
 
-class CourseSurLeCircuit(TransactionTestCase):
+class CourseTestCase(TransactionTestCase):
+    """Décor et outils des courses, **sans test** : une classe de tests qui
+    en hérite reçoit le décor, pas les tests de ses sœurs. Tant que
+    ``CourseSurLaSaisie`` et ``CourseSurLImport`` héritaient de
+    ``CourseSurLeCircuit``, chaque test du circuit tournait trois fois — et
+    dans ``CourseSurLImport``, dont le décor crée déjà ``rh.innov``,
+    ``test_deux_reouvertures_simultanees`` le recréait : IntegrityError
+    (CI #25)."""
+
     def setUp(self):
         self.togo = Country.objects.create(
             name="Togo", code="TG", country_ref="TG-02",
@@ -45,14 +53,31 @@ class CourseSurLeCircuit(TransactionTestCase):
             country=self.togo, year=self.year, amount=Decimal("1000000.00"),
             overrun_policy=OverrunPolicy.BLOCK,
         )
-        self.owner = make_user("owner.togo", Role.MANAGER, [self.togo])
-        self.df = make_user("df.innov", Role.DF)
-        self.df_bis = make_user("df2.innov", Role.DF)
+        self.owner = self._compte("owner.togo", Role.MANAGER, [self.togo])
+        self.df = self._compte("df.innov", Role.DF)
+        self.df_bis = self._compte("df2.innov", Role.DF)
+
+    def _compte(self, username, role, countries=()):
+        """Un compte **et son jeton**, créés avant la course, donc validés.
+
+        ``_client`` créait le jeton à la demande — dans la première requête,
+        c'est-à-dire dans la transaction ouverte par ``_en_course``. Quand
+        les deux requêtes portaient le même compte, la seconde attendait
+        sur l'index unique du jeton (une insertion concurrente sur une
+        clé unique attend la transaction adverse), pas sur le verrou
+        applicatif : ``_attendre_une_session_bloquee`` voyait bien une
+        session bloquée, la course se jouait pourtant **après** le commit.
+        Trois tests passaient pour cette raison-là et deux échouaient pour
+        elle (CI #25 : « autre import » jamais atteint, 400 pour 404). Le
+        jeton existe désormais avant, et ``_client`` n'écrit rien.
+        """
+        user = make_user(username, role, countries)
+        Token.objects.get_or_create(user=user)
+        return user
 
     def _client(self, user):
         client = APIClient()
-        token, _ = Token.objects.get_or_create(user=user)
-        client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
         return client
 
     def _dossier(self, numero, montant, statut=Status.DRAFT):
@@ -105,6 +130,8 @@ class CourseSurLeCircuit(TransactionTestCase):
         self.assertTrue(resultats["bloquee"], "la seconde requête aurait dû attendre le verrou")
         return resultats["premiere"], resultats["seconde"]
 
+
+class CourseSurLeCircuit(CourseTestCase):
     def test_deux_soumissions_ne_franchissent_pas_l_enveloppe(self):
         """Deux dossiers de 600 000 sur une enveloppe de 1 000 000 qui
         bloque : le premier passe, le second attend le verrou puis est
@@ -191,8 +218,8 @@ class CourseSurLeCircuit(TransactionTestCase):
     def test_deux_reouvertures_simultanees(self):
         """Deux administrateurs rouvrent le même dossier : une réouverture,
         une notification, une trace par ligne."""
-        admin = make_user("rh.innov", Role.ADMIN)
-        admin_bis = make_user("rh2.innov", Role.ADMIN)
+        admin = self._compte("rh.innov", Role.ADMIN)
+        admin_bis = self._compte("rh2.innov", Role.ADMIN)
         dossier = self._dossier("N-0006", "100000.00", statut=Status.SUBMITTED)
         url = f"/api/dossiers/{dossier.pk}/reopen/"
 
@@ -227,7 +254,7 @@ class CourseSurLeCircuit(TransactionTestCase):
         self.assertEqual(Proof.objects.filter(dossier=dossier).count(), 1)
 
 
-class CourseSurLaSaisie(CourseSurLeCircuit):
+class CourseSurLaSaisie(CourseTestCase):
     """Audit du 8 septembre 2026, §3.6 et §3.7 : les écritures de saisie —
     modification d'une ligne ou d'un dossier, import — relisent l'état sous
     verrou avant d'écrire. Une modification validée sur un objet lu sans
@@ -309,14 +336,14 @@ class CourseSurLaSaisie(CourseSurLeCircuit):
         self.assertFalse(Expense.objects.filter(title="Ajout tardif").exists())
 
 
-class CourseSurLImport(CourseSurLeCircuit):
+class CourseSurLImport(CourseTestCase):
     """Deux imports du même classeur, ou un import pendant une soumission :
     la base et le verrou du dossier tranchent ce que la validation ne peut
     pas voir."""
 
     def setUp(self):
         super().setUp()
-        self.admin = make_user("rh.innov", Role.ADMIN)
+        self.admin = self._compte("rh.innov", Role.ADMIN)
 
     def _classeur(self, numero, lignes):
         from io import BytesIO

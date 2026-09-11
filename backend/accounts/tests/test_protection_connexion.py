@@ -17,10 +17,10 @@ pas en réécrivant le test.
 from unittest import mock
 
 from django.core.cache import cache
-from django.test import override_settings
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 
 from accounts import totp
 from accounts.models import Role
@@ -28,23 +28,24 @@ from accounts.tests.test_scoping import make_user
 
 # Limites resserrées : deux tentatives par adresse et par compte suffisent à
 # prouver le comptage sans lancer des dizaines de requêtes.
-THROTTLE = override_settings(
-    REST_FRAMEWORK={
-        "DEFAULT_AUTHENTICATION_CLASSES": [
-            "accounts.authentication.JetonAuthentication",
-            "rest_framework.authentication.SessionAuthentication",
-        ],
-        "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.UserRateThrottle"],
-        "DEFAULT_THROTTLE_RATES": {
-            "user": "2000/hour", "login": "2/min", "login_user": "50/min",
-            "password": "10/min", "health": "60/min",
-        },
-        "NUM_PROXIES": 0,
-    }
-)
+#
+# **Pas par ``override_settings(REST_FRAMEWORK=…)``.** DRF lie les cadences
+# à l'import — ``SimpleRateThrottle.THROTTLE_RATES =
+# api_settings.DEFAULT_THROTTLE_RATES``, un attribut de classe (throttling.py,
+# 3.17.2) — et ``get_rate()`` lit cet attribut, jamais les réglages courants.
+# Surcharger ``REST_FRAMEWORK`` recharge ``api_settings`` mais ne rebranche
+# pas l'attribut : les quatre tests de ce fichier tournaient avec les
+# cadences réelles (10/min, 5/min) et la troisième tentative n'était jamais
+# refusée — « 400 != 429 », première exécution, CI #25. On remplace donc
+# l'attribut lui-même, sur la classe de base dont héritent les deux limites.
+def cadences(**taux):
+    return mock.patch.object(
+        SimpleRateThrottle, "THROTTLE_RATES",
+        {"user": "2000/hour", "password": "10/min", "health": "60/min", **taux},
+    )
 
 
-@THROTTLE
+@cadences(login="2/min", login_user="50/min")
 class LimiteDeConnexionTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
@@ -91,18 +92,7 @@ class LimiteDeConnexionTests(APITestCase):
         )
 
 
-@override_settings(REST_FRAMEWORK={
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "accounts.authentication.JetonAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
-    ],
-    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.UserRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {
-        "user": "2000/hour", "login": "50/min", "login_user": "2/min",
-        "password": "10/min", "health": "60/min",
-    },
-    "NUM_PROXIES": 0,
-})
+@cadences(login="50/min", login_user="2/min")
 class LimiteParCompteTests(APITestCase):
     """``login_user`` (par nom de compte) protège un compte visé depuis
     plusieurs adresses : la limite par nom est serrée, l'adresse varie."""

@@ -8,6 +8,7 @@ répondre sans compte, sans jeton, et dire vrai sur la base.
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.db import OperationalError
 from django.test import override_settings
 from rest_framework import status
@@ -49,6 +50,25 @@ class HealthTests(APITestCase):
         response = self.client.get("/api/health/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_la_sonde_reste_loin_de_la_limite_et_l_abus_est_refuse(self):
+        """Docker interroge toutes les trente secondes, la livraison quelques
+        fois : jamais un 429 pour eux. Mais ce point fait un ``SELECT`` sans
+        compte, et il se compte par adresse (audit du 8 septembre 2026,
+        §4.6, ``HealthRateThrottle``, 60/min) : la soixante-et-unième requête
+        de la minute est refusée — en JSON, comme toute réponse de l'API.
+
+        Remplace « ne déclenche pas de limite anonyme » (70 requêtes, toutes
+        en 200), écrit avant cette limite et contredit par elle.
+        """
+        cache.clear()
+        for _ in range(60):
+            self.assertEqual(self.client.get("/api/health/").status_code, status.HTTP_200_OK)
+
+        refus = self.client.get("/api/health/")
+
+        self.assertEqual(refus.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(refus["Content-Type"].split(";")[0], "application/json")
 
     @override_settings(SECURE_SSL_REDIRECT=True)
     def test_n_est_pas_redirige_vers_https(self):

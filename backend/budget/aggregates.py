@@ -207,9 +207,11 @@ def convert(amount, from_currency, to_currency, on_date=None, rates=None):
     faute de taux connu — jamais zéro, qui ferait disparaître la dépense d'un
     total sans que rien ne le signale.
 
-    Le taux est arrondi **avant** la multiplication : c'est lui qui est figé
-    sur la dépense, et rejouer « montant d'origine × taux figé » doit
-    redonner exactement le montant enregistré.
+    Le montant est calculé sur le rapport **exact** des deux taux, arrondi
+    au centime à la fin (décision 54) ; le taux rendu, figé sur la ligne à
+    six décimales, est indicatif. Rejouer « montant d'origine × taux figé »
+    redonne le montant à la précision du taux près — jamais mieux : c'est le
+    montant qui pèse sur l'enveloppe, et il est exact.
     """
     if amount is None:
         return None, None

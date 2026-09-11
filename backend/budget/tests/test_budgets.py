@@ -442,9 +442,20 @@ class ExchangeRateTests(BudgetTestCase):
 
     def test_la_liste_ne_relit_pas_les_taux_par_enveloppe(self):
         """Régression N+1 : chaque enveloppe hors FCFA interrogeait deux fois
-        la table des taux."""
+        la table des taux.
+
+        Depuis l'audit du 8 septembre 2026 (§4.1), une enveloppe se lit au
+        taux de la date de référence de **son** exercice — celle de 2024 au
+        31 décembre 2024, pas au taux du jour — et les taux se lisent une fois
+        par exercice et par requête (``BudgetSerializer._rates``). La mesure
+        distingue donc les deux : des enveloppes de plus dans le même
+        exercice ne coûtent aucune requête ; des exercices de plus coûtent
+        exactement une lecture chacun, jamais une par enveloppe. La version
+        d'avant ajoutait trois exercices et attendait zéro requête de plus :
+        elle mesurait la règle d'avant.
+        """
         ExchangeRate.objects.create(
-            currency="MAD", rate_to_xof=Decimal("60"), valid_from=date(2026, 1, 1)
+            currency="MAD", rate_to_xof=Decimal("60"), valid_from=date(2023, 1, 1)
         )
         self.ivoire.currency = "MAD"
         self.ivoire.save()
@@ -457,24 +468,51 @@ class ExchangeRateTests(BudgetTestCase):
             return len(captured.captured_queries)
 
         peu = requetes()
+
+        for nom in ("Salon Abidjan", "Congrès Yamoussoukro", "Tournée Bouaké"):
+            projet = Project.objects.create(country=self.ivoire, name=nom)
+            Budget.objects.create(
+                country=self.ivoire, year=self.year, amount=Decimal("1.00"), project=projet
+            )
+        self.assertEqual(requetes(), peu, "même exercice : pas une requête de plus")
+
         for year in (2023, 2024, 2025):
             Budget.objects.create(country=self.ivoire, year=year, amount=Decimal("1.00"))
-        self.assertEqual(requetes(), peu)
+        self.assertEqual(requetes(), peu + 3, "un exercice de plus : une lecture des taux")
 
-    def test_le_taux_fige_est_celui_reellement_applique(self):
-        """Rejouer « montant d'origine × taux figé » doit redonner le montant
-        enregistré : le taux est arrondi avant la multiplication."""
+    def test_le_taux_fige_rejoue_le_montant_a_sa_precision_pres(self):
+        """Le montant est calculé sur le rapport exact des taux (décision 54,
+        ``TauxCroiseTests``) ; le taux figé, à six décimales, est indicatif.
+        Rejouer « montant d'origine × taux figé » doit retomber sur le montant
+        à la précision du taux près — un demi-millionième du montant, plus le
+        centime d'arrondi — et pas plus loin : c'est ce qui rend le taux
+        figé relisible sans qu'il commande le montant.
+
+        La version d'avant exigeait l'égalité exacte, c'est-à-dire un taux
+        arrondi **avant** la multiplication : jusqu'à 0,5 % d'écart sur une
+        devise faible convertie vers une devise forte. Sur cet exemple, les
+        deux règles diffèrent d'un centime (132108,13 exact contre 132108,14
+        par le taux arrondi) ; c'est l'exact qui pèse sur l'enveloppe.
+        """
         ExchangeRate.objects.create(
             currency="EUR", rate_to_xof=Decimal("655.957"), valid_from=date(2026, 1, 1)
         )
         ExchangeRate.objects.create(
             currency="MAD", rate_to_xof=Decimal("61.3"), valid_from=date(2026, 1, 1)
         )
+        origine = Decimal("12345.67")
 
-        converti, taux = convert(Decimal("12345.67"), "EUR", "MAD")
+        converti, taux = convert(origine, "EUR", "MAD")
 
         self.assertEqual(taux, Decimal("10.700767"))
-        self.assertEqual(converti, (Decimal("12345.67") * taux).quantize(CENTS))
+        self.assertEqual(
+            converti,
+            (origine * Decimal("655.957") / Decimal("61.3")).quantize(CENTS),
+        )
+        self.assertEqual(converti, Decimal("132108.13"))
+        rejoue = origine * taux
+        tolerance = origine * Decimal("0.0000005") + CENTS
+        self.assertLessEqual(abs(rejoue - converti), tolerance, (rejoue, converti))
 
     def test_seule_la_direction_saisit_un_taux(self):
         """Un taux change la valeur consolidée de toutes les enveloppes : il
