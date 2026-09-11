@@ -472,7 +472,8 @@ class ExchangeRateTests(BudgetTestCase):
         for nom in ("Salon Abidjan", "Congrès Yamoussoukro", "Tournée Bouaké"):
             projet = Project.objects.create(country=self.ivoire, name=nom)
             Budget.objects.create(
-                country=self.ivoire, year=self.year, amount=Decimal("1.00"), project=projet
+                country=self.ivoire, year=self.budget_ivoire.year,
+                amount=Decimal("1.00"), project=projet,
             )
         self.assertEqual(requetes(), peu, "même exercice : pas une requête de plus")
 
