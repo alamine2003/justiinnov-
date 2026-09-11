@@ -449,3 +449,60 @@ class TraceEtNotificationTests(RectificationTestCase):
         self.assertIn("refusée", recue.title)
         self.assertIn("La facture fait bien 250 000.", recue.body)
         self.assertFalse(decisions.filter(recipient=self.admin).exists())
+
+
+class ApresRectificationTests(RectificationTestCase):
+    """Rectifiée, la ligne est de nouveau en contrôle : le dossier peut
+    être rouvert — plus rien n'y est constaté — et la ligne revenir au
+    brouillon. Mais elle a une histoire, et la demande la référence : elle
+    ne se retire plus, elle se corrige et se resoumet."""
+
+    def setUp(self):
+        super().setUp()
+        self.approuver(self.demander().data["id"])
+        self.login(self.admin)
+        rouvert = self.client.post(
+            f"/api/dossiers/{self.dossier.pk}/reopen/", {"note": "Tout à reprendre."}
+        )
+        self.assertEqual(rouvert.status_code, status.HTTP_200_OK, rouvert.data)
+        self.ligne.refresh_from_db()
+        self.assertEqual(self.ligne.status, Status.DRAFT)
+
+    def test_la_ligne_rectifiee_ne_se_retire_plus(self):
+        self.login(self.owner)
+
+        supprime = self.client.delete(f"/api/expenses/{self.ligne.pk}/")
+
+        self.assertEqual(supprime.status_code, status.HTTP_400_BAD_REQUEST, supprime.data)
+        self.assertIn("rectification", str(supprime.data["status"]))
+        self.assertTrue(Rectification.objects.filter(expense=self.ligne).exists())
+        # L'autre ligne, jamais contestée, se retire comme tout brouillon.
+        autre = self.client.delete(f"/api/expenses/{self.autre_ligne.pk}/")
+        self.assertEqual(autre.status_code, status.HTTP_204_NO_CONTENT, autre.data)
+
+    def test_le_dossier_qui_la_porte_ne_se_retire_plus(self):
+        self.login(self.owner)
+
+        supprime = self.client.delete(f"/api/dossiers/{self.dossier.pk}/")
+
+        self.assertEqual(supprime.status_code, status.HTTP_400_BAD_REQUEST, supprime.data)
+        self.assertIn("rectification", str(supprime.data["expenses"]))
+        self.ligne.refresh_from_db()
+
+    def test_la_ligne_ne_propose_plus_le_retrait(self):
+        actions = self.ligne_api()["allowed_actions"]
+        autre = self.client.get(f"/api/expenses/{self.autre_ligne.pk}/").data["allowed_actions"]
+
+        self.assertIn("edit", actions)
+        self.assertNotIn("delete", actions)
+        self.assertIn("delete", autre)
+
+    def test_elle_se_corrige_et_se_resoumet(self):
+        self.login(self.owner)
+        corrige = self.client.patch(f"/api/expenses/{self.ligne.pk}/", {"amount": "200000.00"})
+        resoumis = self.submit_dossier()
+
+        self.assertEqual(corrige.status_code, status.HTTP_200_OK, corrige.data)
+        self.assertEqual(resoumis.status_code, status.HTTP_200_OK, resoumis.data)
+        self.ligne.refresh_from_db()
+        self.assertEqual(self.ligne.status, Status.SUBMITTED)

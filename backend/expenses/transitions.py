@@ -72,6 +72,7 @@ from .workflow import (
     RECTIFIABLE_STATUSES,
     REOPEN_BLOCKING_STATUSES,
     Status,
+    a_ete_rectifiee,
     breaks_four_eyes,
     next_proof_status,
     next_status,
@@ -192,6 +193,24 @@ def exiger_les_quatre_yeux(objet, action, acteur):
             )
         raise PermissionRefusee(
             _("Vous avez saisi cette dépense : son contrôle revient à quelqu'un d'autre.")
+        )
+
+
+def exiger_une_ligne_jamais_rectifiee(ligne):
+    """Une ligne qui a fait l'objet d'une rectification ne se retire plus.
+
+    Revenue au brouillon par une réouverture, elle garde son histoire — un
+    constat du siège, contesté, défait ou maintenu — et la demande la
+    référence : l'effacer effacerait cette histoire, ou échouerait en base
+    sur un message qui n'explique rien. Elle se corrige et se resoumet.
+    """
+    if a_ete_rectifiee(ligne):
+        raise RegleViolee(
+            "status",
+            _(
+                "Cette ligne a fait l'objet d'une demande de rectification : "
+                "elle ne se supprime plus, elle se corrige et se resoumet."
+            ),
         )
 
 
@@ -774,6 +793,7 @@ def retirer_brouillon(objet, acteur, trace):
 
     resultat = Resultat(instance)
     if isinstance(instance, Expense):
+        exiger_une_ligne_jamais_rectifiee(instance)
         resultat.audit.append(
             record(
                 trace, AuditLog.Action.DELETED, instance,
@@ -823,6 +843,15 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
         raise RegleViolee(
             "expenses",
             _("Ce dossier contient une ligne déclarée : il ne peut plus être supprimé."),
+        )
+    # Une requête pour toutes les lignes, pas une par ligne.
+    if Rectification.objects.filter(expense__in=lignes).exists():
+        raise RegleViolee(
+            "expenses",
+            _(
+                "Ce dossier contient une ligne qui a fait l'objet d'une demande "
+                "de rectification : il ne se supprime plus."
+            ),
         )
 
     for ligne in lignes:
@@ -954,7 +983,9 @@ def _verrouiller_la_demande(rectification, acteur):
     défaisaient le constat deux fois.
     """
     verrouillee = (
-        Rectification.objects.select_related("expense__country", "expense__dossier")
+        Rectification.objects.select_related(
+            "expense__country", "expense__dossier", "expense__team"
+        )
         .select_for_update(of=("self",))
         .get(pk=rectification.pk)
     )

@@ -282,13 +282,19 @@ EXPENSE_RELATIONS = (
 
 class ExpenseQuerySet(models.QuerySet):
     def with_rectification(self):
-        """Annote ``rectification_en_attente`` : une demande de rectification
-        attend-elle sur la ligne ? Lu par ``allowed_actions`` sans une
-        requête par ligne (``workflow.peut_demander_une_rectification``)."""
-        en_attente = Rectification.objects.filter(
-            expense=OuterRef("pk"), status=Rectification.Status.PENDING
+        """Annote la ligne de son histoire de rectification, pour
+        ``allowed_actions`` sans une requête par ligne :
+        ``rectification_en_attente`` — une demande attend-elle ?
+        (``workflow.peut_demander_une_rectification``) — et
+        ``rectifiee`` — la ligne a-t-elle jamais fait l'objet d'une demande ?
+        (``workflow.peut_saisir`` : elle ne se retire plus)."""
+        demandes = Rectification.objects.filter(expense=OuterRef("pk"))
+        return self.annotate(
+            rectification_en_attente=models.Exists(
+                demandes.filter(status=Rectification.Status.PENDING)
+            ),
+            rectifiee=models.Exists(demandes),
         )
-        return self.annotate(rectification_en_attente=models.Exists(en_attente))
 
 
 class Expense(TimeStampedModel):

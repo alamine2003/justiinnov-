@@ -2310,3 +2310,11 @@ msgstr "Rectification refused — {title}"
 #: notifications/triggers.py
 msgid "Dossier {number} : le constat « {status} » tient. Motif du refus : {motive}"
 msgstr "Dossier {number}: the finding “{status}” stands. Reason for refusal: {motive}"
+
+#: expenses/transitions.py
+msgid "Cette ligne a fait l'objet d'une demande de rectification : elle ne se supprime plus, elle se corrige et se resoumet."
+msgstr "This line has been the subject of a rectification request: it can no longer be deleted; correct it and resubmit."
+
+#: expenses/transitions.py
+msgid "Ce dossier contient une ligne qui a fait l'objet d'une demande de rectification : il ne se supprime plus."
+msgstr "This dossier contains a line that has been the subject of a rectification request: it can no longer be deleted."

@@ -302,7 +302,11 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
         return False
     auteur_ou_anonyme = not objet.created_by or objet.created_by == username
     if action == "delete":
-        return objet.status in DELETABLE_STATUSES and auteur_ou_anonyme
+        return (
+            objet.status in DELETABLE_STATUSES
+            and auteur_ou_anonyme
+            and not a_ete_rectifiee(objet)
+        )
     if action == "edit":
         # Le siège corrige à découvert ; un collègue du pays, non.
         return objet.status not in LOCKED_STATUSES and (
@@ -343,6 +347,26 @@ def expense_allowed_actions(expense, *, role, username, configuration=None):
     if peut_demander_une_rectification(expense, role=role, configuration=configuration):
         actions.append(REQUEST_RECTIFICATION)
     return actions
+
+
+def a_ete_rectifiee(objet):
+    """La ligne a-t-elle jamais fait l'objet d'une demande de rectification ?
+
+    Une telle ligne a une histoire — constatée, contestée — et ne se retire
+    plus, même revenue au brouillon par une réouverture : la demande la
+    référence (``transitions.retirer_brouillon``). Un dossier n'en a pas ;
+    le service lit ses lignes. Se lit sur ``expense.rectifiee`` quand la
+    liste l'a annoté (``ExpenseQuerySet.with_rectification``), et par une
+    requête sinon.
+    """
+    # Le descripteur se lit sur la classe : un dossier n'en a pas, et une
+    # ligne pas encore écrite n'a pas de relation à interroger.
+    if not hasattr(type(objet), "rectifications") or getattr(objet, "pk", None) is None:
+        return False
+    rectifiee = getattr(objet, "rectifiee", None)
+    if rectifiee is None:
+        rectifiee = objet.rectifications.exists()
+    return rectifiee
 
 
 def peut_demander_une_rectification(expense, *, role, configuration=None):

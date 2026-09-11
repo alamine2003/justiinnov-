@@ -136,7 +136,9 @@ l'application.
   constaté la suit ; tout est tracé (`rectification_requested`,
   `rectified`, `rectification_decided`) et notifié. Il n'y a pas de route
   `rectify` : un constat ne se défait qu'en approuvant une demande
-  (`transitions.approuver_rectification`).
+  (`transitions.approuver_rectification`). Une ligne contestée un jour ne
+  se retire plus, même rouverte au brouillon : elle se corrige et se
+  resoumet.
 - **Un brouillon appartient à son auteur.** Il ne se retire que par lui,
   et ne se modifie que par lui ou par le siège, jamais par un collègue du
   pays (`transitions.exiger_l_auteur_du_brouillon`, décision 46).
