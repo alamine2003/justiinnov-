@@ -21,7 +21,7 @@ COPY . .
 RUN npm run build
 
 # Étape finale : service des fichiers par nginx, en production.
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 # `nginx.conf` est un gabarit : l'entrypoint de l'image le passe par
 # `envsubst` au démarrage et n'y remplace que les `${NGINX_*}` (le filtre
