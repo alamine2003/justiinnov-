@@ -161,7 +161,10 @@ services:
     logging: *journal
 
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # Registre de MinIO (quay.io), sans limite de téléchargement anonyme —
+    # Docker Hub refusait l'image aux runners de la CI ; même étiquette,
+    # même image (docker-compose.yml).
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data
     mem_limit: 512m
     environment:
@@ -264,7 +267,7 @@ services:
   # un `pg_dump -Fc` par nuit, gardé 30 jours, plus une copie mensuelle
   # conservée pour toujours, et un miroir du bucket des justificatifs. Trois
   # services parce que trois outils : pg_dump vient de l'image postgres, mc
-  # de l'image minio/mc, et rclone de la sienne pour la copie hors machine
+  # de l'image quay.io/minio/mc, et rclone de la sienne pour la copie hors machine
   # (`sauvegarde-distante`, plus bas), sans laquelle une sauvegarde brûle
   # avec le serveur ; restaurer.sh fait le chemin inverse. Chacun ne reçoit
   # que ce qu'il lui faut : la base pour l'un, le stockage pour l'autre, le
@@ -298,8 +301,8 @@ services:
 
   sauvegarde-pieces:
     # Étiquette épinglée, comme celle de MinIO : `latest` changerait sous nos
-    # pieds à chaque `pull`.
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    # pieds à chaque `pull`. Même registre que MinIO (quay.io).
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
     mem_limit: 128m
     entrypoint: ["/sauvegarder.sh", "pieces"]
     environment:

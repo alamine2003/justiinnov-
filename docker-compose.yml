@@ -19,8 +19,12 @@ services:
       - "127.0.0.1:5433:5432"
 
   minio:
-    # La même version qu'en production (deploy/docker-compose.prod.yml).
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # La même version qu'en production (deploy/docker-compose.prod.yml),
+    # tirée du registre de MinIO (quay.io) : Docker Hub refuse les
+    # téléchargements anonymes de cette image depuis les adresses partagées
+    # des runners de la CI (« pull access denied »), alors que les images
+    # officielles (postgres, caddy) passent par son miroir.
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: justi_minio
     command: server /data --console-address ":9001"
     environment:
