@@ -1,7 +1,7 @@
 # Étape « deps » : Node et les dépendances, sans le build.
 # C'est l'image utilisée en développement, où le code est monté en volume et
 # recompilé à la volée par Vite.
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 # `npm ci` seul : il installe exactement le fichier de verrouillage et
