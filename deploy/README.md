@@ -35,7 +35,12 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 ## Préparer un serveur
 
 1. Une machine Linux avec Docker Engine et le plugin Compose (v2.24 ou plus),
-   les ports 80 et 443 ouverts, un enregistrement DNS vers elle.
+   les ports 80 et 443 ouverts, un enregistrement DNS vers elle. Le serveur
+   tire ses images de trois registres, tous en sortie HTTPS : `ghcr.io`
+   (backend et frontend, avec le jeton de livraison), Docker Hub (Postgres,
+   Caddy, les exporteurs) et `quay.io` (MinIO et son client `mc` — le
+   registre de l'éditeur, sans limite de téléchargement anonyme, là où
+   Docker Hub refuse cette image aux runners de la CI).
 2. Un compte de livraison `deploy` **sans le groupe `docker`** (ce groupe
    vaut root), dont la clé SSH ne peut exécuter qu'une commande forcée,
    `justi-livrer` (« Réduire les pouvoirs de la livraison », plus bas), et
