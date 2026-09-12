@@ -28,6 +28,9 @@
                                 "proof_replaced",
                                 "proof_to_review",
                                 "proof_uploaded",
+                                "rectification_decided",
+                                "rectification_requested",
+                                "rectified",
                                 "rejected",
                                 "reopened",
                                 "reviewed",
@@ -36,7 +39,7 @@
                                 "updated"
                             ]
                         },
-                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
+                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
                     },
                     {
                         "in": "query",
@@ -5154,10 +5157,12 @@
                                 "proof_incomplete",
                                 "proof_missing",
                                 "reallocation_requested",
+                                "rectification_decided",
+                                "rectification_requested",
                                 "storage_error"
                             ]
                         },
-                        "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert"
+                        "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification"
                     },
                     {
                         "in": "query",
@@ -5376,7 +5381,7 @@
         "/api/permissions/": {
             "get": {
                 "operationId": "permissions_retrieve",
-                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous :\nle super administrateur garde tout, le pays ne reçoit jamais le droit de\ncontrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
+                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous :\nles administrateurs gardent tout, le pays ne reçoit jamais le droit de\ncontrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
                 "tags": [
                     "permissions"
                 ],
@@ -5403,7 +5408,7 @@
             },
             "patch": {
                 "operationId": "permissions_partial_update",
-                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous :\nle super administrateur garde tout, le pays ne reçoit jamais le droit de\ncontrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
+                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous :\nles administrateurs gardent tout, le pays ne reçoit jamais le droit de\ncontrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
                 "tags": [
                     "permissions"
                 ],
@@ -6453,6 +6458,313 @@
                 }
             }
         },
+        "/api/rectifications/": {
+            "get": {
+                "operationId": "rectifications_list",
+                "description": "Demandes de rectification d'un constat (``transitions``).\n\nUne demande ne se réécrit pas : elle se dépose, puis s'approuve ou se\nrefuse. ``PUT``, ``PATCH`` et ``DELETE`` répondent 405 : un motif\nchangé après la décision ferait mentir le journal. Le périmètre est\ncelui de la ligne visée — pays, et équipes pour un manager qui y est\nrestreint — : une demande hors périmètre n'existe pas (404).",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "expense",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "expense__country",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "expense__dossier",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "ordering",
+                        "required": false,
+                        "in": "query",
+                        "description": "Quel champ utiliser pour classer les résultats.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un numéro de page de l'ensemble des résultats.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page_size",
+                        "required": false,
+                        "in": "query",
+                        "description": "Nombre de résultats à retourner par page.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un terme de recherche.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "status",
+                        "schema": {
+                            "type": "string",
+                            "title": "Statut",
+                            "enum": [
+                                "approved",
+                                "pending",
+                                "refused"
+                            ]
+                        },
+                        "description": "* `pending` - En attente\n* `approved` - Approuvée\n* `refused` - Refusée"
+                    }
+                ],
+                "tags": [
+                    "rectifications"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedRectificationList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "rectifications_create",
+                "description": "Demandes de rectification d'un constat (``transitions``).\n\nUne demande ne se réécrit pas : elle se dépose, puis s'approuve ou se\nrefuse. ``PUT``, ``PATCH`` et ``DELETE`` répondent 405 : un motif\nchangé après la décision ferait mentir le journal. Le périmètre est\ncelui de la ligne visée — pays, et équipes pour un manager qui y est\nrestreint — : une demande hors périmètre n'existe pas (404).",
+                "tags": [
+                    "rectifications"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Rectification"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/rectifications/{id}/": {
+            "get": {
+                "operationId": "rectifications_retrieve",
+                "description": "Demandes de rectification d'un constat (``transitions``).\n\nUne demande ne se réécrit pas : elle se dépose, puis s'approuve ou se\nrefuse. ``PUT``, ``PATCH`` et ``DELETE`` répondent 405 : un motif\nchangé après la décision ferait mentir le journal. Le périmètre est\ncelui de la ligne visée — pays, et équipes pour un manager qui y est\nrestreint — : une demande hors périmètre n'existe pas (404).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Demande de rectification.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "rectifications"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Rectification"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/rectifications/{id}/approve/": {
+            "post": {
+                "operationId": "rectifications_approve_create",
+                "description": "Approuve : la ligne revient en contrôle, le dossier la suit.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Demande de rectification.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "rectifications"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Rectification"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/rectifications/{id}/refuse/": {
+            "post": {
+                "operationId": "rectifications_refuse_create",
+                "description": "Refuse : le constat tient. Le motif est obligatoire.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Demande de rectification.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "rectifications"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Rectification"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/teams/": {
             "get": {
                 "operationId": "teams_list",
@@ -7270,13 +7582,16 @@
                     "deleted",
                     "closed",
                     "reopened",
+                    "rectification_requested",
+                    "rectification_decided",
+                    "rectified",
                     "proof_uploaded",
                     "proof_replaced",
                     "downloaded",
                     "imported"
                 ],
                 "type": "string",
-                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
+                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
             },
             "AuditLog": {
                 "type": "object",
@@ -11375,10 +11690,12 @@
                     "proof_incomplete",
                     "reallocation_requested",
                     "storage_error",
-                    "dossier_reopened"
+                    "dossier_reopened",
+                    "rectification_requested",
+                    "rectification_decided"
                 ],
                 "type": "string",
-                "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert"
+                "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification"
             },
             "NotificationLevelEnum": {
                 "enum": [
@@ -11960,6 +12277,39 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/Proof"
+                        }
+                    }
+                }
+            },
+            "PaginatedRectificationList": {
+                "type": "object",
+                "required": [
+                    "count",
+                    "next",
+                    "previous",
+                    "results"
+                ],
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "example": 123
+                    },
+                    "next": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=4"
+                    },
+                    "previous": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=2"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Rectification"
                         }
                     }
                 }
@@ -12898,6 +13248,16 @@
                         "readOnly": true,
                         "description": "Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui."
                     },
+                    "rectifications.request": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Signaler, motif à l'appui, qu'une ligne justifiée ou clôturée l'a été à tort."
+                    },
+                    "rectifications.decide": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne."
+                    },
                     "data.export": {
                         "type": "boolean",
                         "readOnly": true,
@@ -12937,6 +13297,8 @@
                     "expenses.close",
                     "proofs.review",
                     "dossiers.reopen",
+                    "rectifications.request",
+                    "rectifications.decide",
                     "data.export",
                     "data.import"
                 ]
@@ -13273,6 +13635,186 @@
                 ],
                 "type": "string",
                 "description": "* `pending` - En attente\n* `approved` - Approuvée\n* `rejected` - Refusée"
+            },
+            "Rectification": {
+                "type": "object",
+                "description": "Demande de rectification d'un constat (seconde exception à\nl'irréversibilité, ``workflow``).\n\nÀ la création, ``expense`` et ``motif`` suffisent : le service relève\nl'état et le montant justifié qu'elle remet en cause, et les garde. Le\nreste — statut, signatures, décision — s'écrit par les actions\n``approve`` et ``refuse``, jamais par ``PATCH``.",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "expense": {
+                        "type": "integer",
+                        "title": "Dépense"
+                    },
+                    "expense_title": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "expense_amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true
+                    },
+                    "expense_status": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "dossier": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "dossier_number": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "country": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "currency": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "status": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RectificationStatusEnum"
+                            }
+                        ],
+                        "readOnly": true,
+                        "title": "Statut"
+                    },
+                    "status_display": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "motif": {
+                        "type": "string",
+                        "title": "Motif de la demande"
+                    },
+                    "previous_status": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WorkflowStatusEnum"
+                            }
+                        ],
+                        "readOnly": true,
+                        "title": "État avant rectification"
+                    },
+                    "previous_status_display": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "previous_justified_amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "title": "Montant justifié avant rectification"
+                    },
+                    "requested_by": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Demandée par"
+                    },
+                    "decided_by": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Décidée par"
+                    },
+                    "decided_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Décidée le"
+                    },
+                    "decision_note": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Motif de la décision"
+                    },
+                    "can_decide": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Créé le"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Modifié le"
+                    }
+                },
+                "required": [
+                    "id",
+                    "expense",
+                    "expense_title",
+                    "expense_amount",
+                    "expense_status",
+                    "dossier",
+                    "dossier_number",
+                    "country",
+                    "currency",
+                    "status",
+                    "status_display",
+                    "motif",
+                    "previous_status",
+                    "previous_status_display",
+                    "previous_justified_amount",
+                    "requested_by",
+                    "decided_by",
+                    "decided_at",
+                    "decision_note",
+                    "can_decide",
+                    "created_at",
+                    "updated_at"
+                ]
+            },
+            "RectificationDecisionRequest": {
+                "type": "object",
+                "description": "Motif accompagnant une décision ; obligatoire en cas de refus.",
+                "properties": {
+                    "note": {
+                        "type": "string"
+                    }
+                }
+            },
+            "RectificationRequest": {
+                "type": "object",
+                "description": "Demande de rectification d'un constat (seconde exception à\nl'irréversibilité, ``workflow``).\n\nÀ la création, ``expense`` et ``motif`` suffisent : le service relève\nl'état et le montant justifié qu'elle remet en cause, et les garde. Le\nreste — statut, signatures, décision — s'écrit par les actions\n``approve`` et ``refuse``, jamais par ``PATCH``.",
+                "properties": {
+                    "expense": {
+                        "type": "integer",
+                        "title": "Dépense"
+                    },
+                    "motif": {
+                        "type": "string",
+                        "minLength": 1,
+                        "title": "Motif de la demande"
+                    }
+                },
+                "required": [
+                    "expense",
+                    "motif"
+                ]
+            },
+            "RectificationStatusEnum": {
+                "enum": [
+                    "pending",
+                    "approved",
+                    "refused"
+                ],
+                "type": "string",
+                "description": "* `pending` - En attente\n* `approved` - Approuvée\n* `refused` - Refusée"
             },
             "RoleEnum": {
                 "enum": [
@@ -13616,10 +14158,11 @@
                     "justify",
                     "reject",
                     "close",
-                    "reopen"
+                    "reopen",
+                    "request_rectification"
                 ],
                 "type": "string",
-                "description": "* `edit` - edit\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen"
+                "description": "* `edit` - edit\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen\n* `request_rectification` - request_rectification"
             },
             "TransitionRequest": {
                 "type": "object",

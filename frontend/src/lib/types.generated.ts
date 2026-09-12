@@ -1290,7 +1290,7 @@ export interface paths {
          *
          *     Lue dans la même table que celle appliquée par ``RolePermission``, et
          *     modifiable par les administrateurs, case par case — sauf les verrous :
-         *     le super administrateur garde tout, le pays ne reçoit jamais le droit de
+         *     les administrateurs gardent tout, le pays ne reçoit jamais le droit de
          *     contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
          *     Chaque modification est journalisée avec l'avant et l'après.
          */
@@ -1305,7 +1305,7 @@ export interface paths {
          *
          *     Lue dans la même table que celle appliquée par ``RolePermission``, et
          *     modifiable par les administrateurs, case par case — sauf les verrous :
-         *     le super administrateur garde tout, le pays ne reçoit jamais le droit de
+         *     les administrateurs gardent tout, le pays ne reçoit jamais le droit de
          *     contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
          *     Chaque modification est journalisée avec l'avant et l'après.
          */
@@ -1532,6 +1532,99 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/rectifications/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description Demandes de rectification d'un constat (``transitions``).
+         *
+         *     Une demande ne se réécrit pas : elle se dépose, puis s'approuve ou se
+         *     refuse. ``PUT``, ``PATCH`` et ``DELETE`` répondent 405 : un motif
+         *     changé après la décision ferait mentir le journal. Le périmètre est
+         *     celui de la ligne visée — pays, et équipes pour un manager qui y est
+         *     restreint — : une demande hors périmètre n'existe pas (404).
+         */
+        get: operations["rectifications_list"]
+        put?: never
+        /**
+         * @description Demandes de rectification d'un constat (``transitions``).
+         *
+         *     Une demande ne se réécrit pas : elle se dépose, puis s'approuve ou se
+         *     refuse. ``PUT``, ``PATCH`` et ``DELETE`` répondent 405 : un motif
+         *     changé après la décision ferait mentir le journal. Le périmètre est
+         *     celui de la ligne visée — pays, et équipes pour un manager qui y est
+         *     restreint — : une demande hors périmètre n'existe pas (404).
+         */
+        post: operations["rectifications_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/rectifications/{id}/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description Demandes de rectification d'un constat (``transitions``).
+         *
+         *     Une demande ne se réécrit pas : elle se dépose, puis s'approuve ou se
+         *     refuse. ``PUT``, ``PATCH`` et ``DELETE`` répondent 405 : un motif
+         *     changé après la décision ferait mentir le journal. Le périmètre est
+         *     celui de la ligne visée — pays, et équipes pour un manager qui y est
+         *     restreint — : une demande hors périmètre n'existe pas (404).
+         */
+        get: operations["rectifications_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/rectifications/{id}/approve/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        /** @description Approuve : la ligne revient en contrôle, le dossier la suit. */
+        post: operations["rectifications_approve_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/rectifications/{id}/refuse/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        /** @description Refuse : le constat tient. Le motif est obligatoire. */
+        post: operations["rectifications_refuse_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/teams/": {
         parameters: {
             query?: never
@@ -1727,13 +1820,16 @@ export interface components {
          *     * `deleted` - Suppression d'un brouillon
          *     * `closed` - Clôture
          *     * `reopened` - Réouverture
+         *     * `rectification_requested` - Demande de rectification
+         *     * `rectification_decided` - Décision sur une rectification
+         *     * `rectified` - Rectification d'un constat
          *     * `proof_uploaded` - Dépôt de justificatif
          *     * `proof_replaced` - Remplacement de justificatif
          *     * `downloaded` - Téléchargement
          *     * `imported` - Import Excel
          * @enum {string}
          */
-        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported"
+        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported"
         AuditLog: {
             readonly id: number
             /** Utilisateur */
@@ -3178,9 +3274,11 @@ export interface components {
          *     * `reallocation_requested` - Demande de réallocation
          *     * `storage_error` - Anomalie de stockage
          *     * `dossier_reopened` - Dossier rouvert
+         *     * `rectification_requested` - Demande de rectification
+         *     * `rectification_decided` - Décision sur une rectification
          * @enum {string}
          */
-        NotificationKindEnum: "budget_threshold" | "budget_overrun" | "expense_submitted" | "expense_rejected" | "proof_missing" | "proof_incomplete" | "reallocation_requested" | "storage_error" | "dossier_reopened"
+        NotificationKindEnum: "budget_threshold" | "budget_overrun" | "expense_submitted" | "expense_rejected" | "proof_missing" | "proof_incomplete" | "reallocation_requested" | "storage_error" | "dossier_reopened" | "rectification_requested" | "rectification_decided"
         /**
          * @description * `info` - Information
          *     * `warning` - Avertissement
@@ -3451,6 +3549,21 @@ export interface components {
              */
             previous: string | null
             results: components["schemas"]["Proof"][]
+        }
+        PaginatedRectificationList: {
+            /** @example 123 */
+            count: number
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next: string | null
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous: string | null
+            results: components["schemas"]["Rectification"][]
         }
         PaginatedTeamList: {
             /** @example 123 */
@@ -3871,6 +3984,10 @@ export interface components {
             readonly "proofs.review": boolean
             /** @description Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui. */
             readonly "dossiers.reopen": boolean
+            /** @description Signaler, motif à l'appui, qu'une ligne justifiée ou clôturée l'a été à tort. */
+            readonly "rectifications.request": boolean
+            /** @description Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne. */
+            readonly "rectifications.decide": boolean
             /** @description Télécharger le registre en Excel, CSV, Word ou PDF. */
             readonly "data.export": boolean
             /** @description Charger un classeur de dépenses en brouillons. */
@@ -4012,6 +4129,89 @@ export interface components {
          * @enum {string}
          */
         ReallocationStatusEnum: "pending" | "approved" | "rejected"
+        /**
+         * @description Demande de rectification d'un constat (seconde exception à
+         *     l'irréversibilité, ``workflow``).
+         *
+         *     À la création, ``expense`` et ``motif`` suffisent : le service relève
+         *     l'état et le montant justifié qu'elle remet en cause, et les garde. Le
+         *     reste — statut, signatures, décision — s'écrit par les actions
+         *     ``approve`` et ``refuse``, jamais par ``PATCH``.
+         */
+        Rectification: {
+            readonly id: number
+            /** Dépense */
+            expense: number
+            readonly expense_title: string
+            /** Format: decimal */
+            readonly expense_amount: string
+            readonly expense_status: string
+            readonly dossier: number
+            readonly dossier_number: string
+            readonly country: number
+            readonly currency: string
+            /** Statut */
+            readonly status: components["schemas"]["RectificationStatusEnum"]
+            readonly status_display: string
+            /** Motif de la demande */
+            motif: string
+            /** État avant rectification */
+            readonly previous_status: components["schemas"]["WorkflowStatusEnum"]
+            readonly previous_status_display: string
+            /**
+             * Montant justifié avant rectification
+             * Format: decimal
+             */
+            readonly previous_justified_amount: string
+            /** Demandée par */
+            readonly requested_by: string
+            /** Décidée par */
+            readonly decided_by: string
+            /**
+             * Décidée le
+             * Format: date-time
+             */
+            readonly decided_at: string | null
+            /** Motif de la décision */
+            readonly decision_note: string
+            readonly can_decide: boolean
+            /**
+             * Créé le
+             * Format: date-time
+             */
+            readonly created_at: string
+            /**
+             * Modifié le
+             * Format: date-time
+             */
+            readonly updated_at: string
+        }
+        /** @description Motif accompagnant une décision ; obligatoire en cas de refus. */
+        RectificationDecisionRequest: {
+            note?: string
+        }
+        /**
+         * @description Demande de rectification d'un constat (seconde exception à
+         *     l'irréversibilité, ``workflow``).
+         *
+         *     À la création, ``expense`` et ``motif`` suffisent : le service relève
+         *     l'état et le montant justifié qu'elle remet en cause, et les garde. Le
+         *     reste — statut, signatures, décision — s'écrit par les actions
+         *     ``approve`` et ``refuse``, jamais par ``PATCH``.
+         */
+        RectificationRequest: {
+            /** Dépense */
+            expense: number
+            /** Motif de la demande */
+            motif: string
+        }
+        /**
+         * @description * `pending` - En attente
+         *     * `approved` - Approuvée
+         *     * `refused` - Refusée
+         * @enum {string}
+         */
+        RectificationStatusEnum: "pending" | "approved" | "refused"
         /**
          * @description * `super_admin` - Super administrateur (DG, DO, CEO, DEV)
          *     * `admin` - Administrateur (RH)
@@ -4169,9 +4369,10 @@ export interface components {
          *     * `reject` - reject
          *     * `close` - close
          *     * `reopen` - reopen
+         *     * `request_rectification` - request_rectification
          * @enum {string}
          */
-        TransitionEnum: "edit" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen"
+        TransitionEnum: "edit" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen" | "request_rectification"
         /**
          * @description Motif accompagnant une transition ; obligatoire pour un rejet (§5.5)
          *     et pour une réouverture.
@@ -4347,12 +4548,15 @@ export interface operations {
                  *     * `deleted` - Suppression d'un brouillon
                  *     * `closed` - Clôture
                  *     * `reopened` - Réouverture
+                 *     * `rectification_requested` - Demande de rectification
+                 *     * `rectification_decided` - Décision sur une rectification
+                 *     * `rectified` - Rectification d'un constat
                  *     * `proof_uploaded` - Dépôt de justificatif
                  *     * `proof_replaced` - Remplacement de justificatif
                  *     * `downloaded` - Téléchargement
                  *     * `imported` - Import Excel
                  */
-                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "rejected" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
+                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
                 country?: number
                 object_type?: string
                 /** @description Quel champ utiliser pour classer les résultats. */
@@ -6746,8 +6950,10 @@ export interface operations {
                  *     * `reallocation_requested` - Demande de réallocation
                  *     * `storage_error` - Anomalie de stockage
                  *     * `dossier_reopened` - Dossier rouvert
+                 *     * `rectification_requested` - Demande de rectification
+                 *     * `rectification_decided` - Décision sur une rectification
                  */
-                kind?: "budget_overrun" | "budget_threshold" | "dossier_reopened" | "expense_rejected" | "expense_submitted" | "proof_incomplete" | "proof_missing" | "reallocation_requested" | "storage_error"
+                kind?: "budget_overrun" | "budget_threshold" | "dossier_reopened" | "expense_rejected" | "expense_submitted" | "proof_incomplete" | "proof_missing" | "reallocation_requested" | "rectification_decided" | "rectification_requested" | "storage_error"
                 /**
                  * @description * `info` - Information
                  *     * `warning` - Avertissement
@@ -7378,6 +7584,146 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["BudgetReallocation"]
+                }
+            }
+        }
+    }
+    rectifications_list: {
+        parameters: {
+            query?: {
+                expense?: number
+                expense__country?: number
+                expense__dossier?: number
+                /** @description Quel champ utiliser pour classer les résultats. */
+                ordering?: string
+                /** @description Un numéro de page de l'ensemble des résultats. */
+                page?: number
+                /** @description Nombre de résultats à retourner par page. */
+                page_size?: number
+                /** @description Un terme de recherche. */
+                search?: string
+                /**
+                 * @description * `pending` - En attente
+                 *     * `approved` - Approuvée
+                 *     * `refused` - Refusée
+                 */
+                status?: "approved" | "pending" | "refused"
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["PaginatedRectificationList"]
+                }
+            }
+        }
+    }
+    rectifications_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RectificationRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["RectificationRequest"]
+                "multipart/form-data": components["schemas"]["RectificationRequest"]
+            }
+        }
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Rectification"]
+                }
+            }
+        }
+    }
+    rectifications_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Demande de rectification. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Rectification"]
+                }
+            }
+        }
+    }
+    rectifications_approve_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Demande de rectification. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RectificationDecisionRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["RectificationDecisionRequest"]
+                "multipart/form-data": components["schemas"]["RectificationDecisionRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Rectification"]
+                }
+            }
+        }
+    }
+    rectifications_refuse_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Demande de rectification. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RectificationDecisionRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["RectificationDecisionRequest"]
+                "multipart/form-data": components["schemas"]["RectificationDecisionRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Rectification"]
                 }
             }
         }

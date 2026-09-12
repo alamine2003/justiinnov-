@@ -3,6 +3,7 @@ import type {
   ProjectStatus,
   ProofStatus,
   ReallocationStatus,
+  RectificationStatus,
   WorkflowStatus,
 } from "@/lib/types"
 
@@ -51,6 +52,12 @@ export const REALLOCATION_STYLE: Record<ReallocationStatus, string> = {
   rejected: DANGER,
 }
 
+export const RECTIFICATION_STYLE: Record<RectificationStatus, string> = {
+  pending: ATTENTE,
+  approved: SUCCES,
+  refused: DANGER,
+}
+
 export const ALERT_LEVEL_STYLE: Record<AlertLevel, string> = {
   info: INFO,
   warning: ATTENTE,
@@ -78,5 +85,8 @@ export const ACTION_STYLE: Record<string, string> = {
   rejected: DANGER,
   downloaded: ARCHIVE,
   reopened: ATTENTE,
+  rectification_requested: ATTENTE,
+  rectification_decided: INFO,
+  rectified: ATTENTE,
   imported: INFO,
 }

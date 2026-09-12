@@ -1,8 +1,7 @@
 import { useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import {
   AlertTriangle,
-  ArrowLeft,
   FileText,
   Loader2,
   Pencil,
@@ -29,7 +28,9 @@ import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { ExpenseForm } from "@/components/expenses/expense-form"
 import { ProofPanel } from "@/components/expenses/proof-panel"
 import { OriginalAmount } from "@/components/expenses/original-amount"
+import { RectificationPanel } from "@/components/expenses/rectification-panel"
 import { ReopenDossier } from "@/components/expenses/reopen-dossier"
+import { RequestRectification } from "@/components/expenses/request-rectification"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
 import { useAuth } from "@/context/use-auth"
@@ -38,7 +39,9 @@ import {
   deleteExpenseDraft,
   fetchBeneficiaries,
   fetchDossier,
+  fetchRectifications,
   reopenDossier,
+  requestRectification,
   transitionDossier,
   transitionExpense,
   updateExpense,
@@ -67,6 +70,14 @@ export function DossierDetailPage() {
   )
   const dossier = query.data
   const countryId = dossier?.country
+
+  // Les demandes de rectification du dossier : une par ligne au plus en
+  // attente, les tranchées restent lisibles. Relues avec le dossier après
+  // une demande ou une décision, puisque les deux changent la ligne.
+  const rectifications = useQuery(
+    `rectifications:${dossierId}`,
+    (signal) => fetchRectifications({ expense__dossier: dossierId, page_size: 100 }, signal),
+  )
 
   // Le référentiel du pays vient de sa fiche, mise en cache : une transition
   // ne recharge que le dossier, pas les équipes et projets.
@@ -135,6 +146,25 @@ export function DossierDetailPage() {
     query.reload()
   }
 
+  // La rectification n'est pas une transition : la ligne ne bouge qu'à la
+  // décision d'un administrateur. Le dialogue affiche lui-même les refus
+  // par champ, d'où l'erreur relancée ; la fiche est relue au succès
+  // (`allowed_actions` de la ligne change : plus de nouvelle demande).
+  const requestLineRectification = async (expense: Expense, motif: string) => {
+    setActionError(null)
+    setNotice(null)
+    await requestRectification(expense.id, motif)
+    query.reload()
+    rectifications.reload()
+  }
+
+  const afterRectificationDecided = async () => {
+    setActionError(null)
+    setNotice(null)
+    query.reload()
+    rectifications.reload()
+  }
+
   const removeDraft = async (expense: Expense) => {
     setDeletingId(expense.id)
     setActionError(null)
@@ -165,7 +195,6 @@ export function DossierDetailPage() {
   if (!dossier) {
     return (
       <div className="space-y-4">
-        <BackLink />
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>{t("dossiers.detail.introuvable_titre")}</AlertTitle>
@@ -215,8 +244,6 @@ export function DossierDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink />
-
       {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -229,6 +256,13 @@ export function DossierDetailPage() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>{t("dossiers.detail.referentiel_indisponible")}</AlertTitle>
           <AlertDescription>{country.error}</AlertDescription>
+        </Alert>
+      )}
+      {rectifications.error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>{t("depenses.rectification.chargement_impossible")}</AlertTitle>
+          <AlertDescription>{rectifications.error}</AlertDescription>
         </Alert>
       )}
       {notice && (
@@ -442,6 +476,10 @@ export function DossierDetailPage() {
                             }
                             onError={setActionError}
                           />
+                          <RequestRectification
+                            expense={expense}
+                            onRequest={(motif) => requestLineRectification(expense, motif)}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -452,6 +490,18 @@ export function DossierDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {(rectifications.data?.results.length ?? 0) > 0 && (
+        <Card className="border-border/60 shadow-sm">
+          <CardContent className="pt-6">
+            <RectificationPanel
+              rows={rectifications.data?.results ?? []}
+              currency={currencySymbol}
+              onDecided={afterRectificationDecided}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-border/60 shadow-sm">
         <CardContent className="pt-6">
@@ -489,18 +539,5 @@ export function DossierDetailPage() {
         lockedTeam={dossier.team}
       />
     </div>
-  )
-}
-
-function BackLink() {
-  const { t } = useTranslation()
-  return (
-    <Link
-      to="/dossiers"
-      className="inline-flex items-center rounded text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-      {t("dossiers.detail.retour")}
-    </Link>
   )
 }

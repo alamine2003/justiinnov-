@@ -608,7 +608,7 @@ class PermissionMatrixView(APIView):
 
     Lue dans la même table que celle appliquée par ``RolePermission``, et
     modifiable par les administrateurs, case par case — sauf les verrous :
-    le super administrateur garde tout, le pays ne reçoit jamais le droit de
+    les administrateurs gardent tout, le pays ne reçoit jamais le droit de
     contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
     Chaque modification est journalisée avec l'avant et l'après.
     """
@@ -647,7 +647,7 @@ class PermissionMatrixView(APIView):
             ],
             "note": _(
                 "Les droits s'appliquent à chaque requête, dès l'enregistrement. "
-                "Le super administrateur garde tout ; un pays ne contrôle jamais "
+                "Les administrateurs gardent tout ; un pays ne contrôle jamais "
                 "ce qu'il déclare, n'administre rien et n'arbitre pas ses enveloppes."
             ),
         }

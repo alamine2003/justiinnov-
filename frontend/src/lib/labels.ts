@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next"
-import { RotateCcw, type LucideIcon } from "lucide-react"
+import { RotateCcw, Undo2, type LucideIcon } from "lucide-react"
 import type {
   AlertLevel,
   OverrunPolicy,
@@ -87,6 +87,9 @@ export const AUDIT_ACTIONS = [
   "rejected",
   "downloaded",
   "reopened",
+  "rectification_requested",
+  "rectification_decided",
+  "rectified",
   "imported",
 ] as const
 
@@ -102,6 +105,8 @@ export function auditActionLabel(t: TFunction, action: string): string {
  */
 const NOTIFICATION_KIND_ICONS: Record<string, LucideIcon> = {
   dossier_reopened: RotateCcw,
+  rectification_requested: Undo2,
+  rectification_decided: Undo2,
 }
 
 export function notificationKindIcon(kind: string): LucideIcon | undefined {

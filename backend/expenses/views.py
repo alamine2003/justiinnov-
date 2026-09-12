@@ -16,7 +16,7 @@ from django.db.models import Prefetch
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
@@ -38,6 +38,7 @@ from .models import (
     Dossier,
     Expense,
     Proof,
+    Rectification,
 )
 from .serializers import (
     AuditLogSerializer,
@@ -49,6 +50,8 @@ from .serializers import (
     ExpenseTransitionSerializer,
     ProofReviewSerializer,
     ProofSerializer,
+    RectificationDecisionSerializer,
+    RectificationSerializer,
     TransitionSerializer,
     TransitionWarningMixin,
 )
@@ -223,7 +226,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         prefetch : la règle n'est pas récrite ici.
         """
         return filtrer(
-            Expense.objects.select_related(*EXPENSE_RELATIONS),
+            Expense.objects.select_related(*EXPENSE_RELATIONS).with_rectification(),
             get_access(self.request.user),
             pays=ExpenseViewSet.country_lookup,
             equipe=ExpenseViewSet.team_lookup,
@@ -295,7 +298,9 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     ne se déclare donc jamais seule.
     """
 
-    queryset = Expense.objects.select_related(*EXPENSE_RELATIONS).all()
+    # ``with_rectification`` : ``allowed_actions`` dit si une rectification
+    # peut être demandée sans une requête par ligne.
+    queryset = Expense.objects.select_related(*EXPENSE_RELATIONS).with_rectification()
     serializer_class = ExpenseSerializer
     transition_serializer_class = ExpenseTransitionSerializer
     permission_classes = [RolePermission]
@@ -578,6 +583,72 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
             filename=proof.original_name or proof.file.name.rsplit("/", 1)[-1],
             content_type=proof.content_type or None,
         )
+
+
+class RectificationViewSet(
+    CountryScopedMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Demandes de rectification d'un constat (``transitions``).
+
+    Une demande ne se réécrit pas : elle se dépose, puis s'approuve ou se
+    refuse. ``PUT``, ``PATCH`` et ``DELETE`` répondent 405 : un motif
+    changé après la décision ferait mentir le journal. Le périmètre est
+    celui de la ligne visée — pays, et équipes pour un manager qui y est
+    restreint — : une demande hors périmètre n'existe pas (404).
+    """
+
+    queryset = Rectification.objects.select_related(
+        "expense__country", "expense__dossier", "expense__team"
+    ).all()
+    serializer_class = RectificationSerializer
+    permission_classes = [RolePermission]
+    write_capability = "rectifications.decide"
+    action_write_capabilities = {"create": "rectifications.request"}
+    filterset_fields = ["status", "expense", "expense__dossier", "expense__country"]
+    ordering_fields = ["created_at", "decided_at"]
+    country_lookup = "expense__country"
+    team_lookup = "expense__team"
+    country_field = None
+
+    def perform_create(self, serializer):
+        donnees = serializer.validated_data
+        with traduire_les_regles():
+            resultat = transitions.demander_rectification(
+                donnees["expense"], get_access(self.request.user),
+                donnees["motif"], Trace.depuis_requete(self.request),
+            )
+        serializer.instance = resultat.instance
+
+    def _decider(self, request, service):
+        """Approbation ou refus : périmètre, motif, service, réponse."""
+        visible = self.get_object()
+        serializer = RectificationDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with traduire_les_regles():
+            resultat = service(
+                visible, get_access(request.user),
+                serializer.validated_data.get("note", ""),
+                Trace.depuis_requete(request),
+            )
+        # Relue par le queryset : la décision a changé la ligne et le
+        # dossier, et la réponse doit les montrer tels qu'ils sont.
+        return Response(self.get_serializer(self.get_queryset().get(pk=resultat.instance.pk)).data)
+
+    @extend_schema(request=RectificationDecisionSerializer, responses=RectificationSerializer)
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        """Approuve : la ligne revient en contrôle, le dossier la suit."""
+        return self._decider(request, transitions.approuver_rectification)
+
+    @extend_schema(request=RectificationDecisionSerializer, responses=RectificationSerializer)
+    @action(detail=True, methods=["post"])
+    def refuse(self, request, pk=None):
+        """Refuse : le constat tient. Le motif est obligatoire."""
+        return self._decider(request, transitions.refuser_rectification)
 
 
 class AuditLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):

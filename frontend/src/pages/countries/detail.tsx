@@ -1,5 +1,5 @@
-import { Link, useParams } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, Loader2 } from "lucide-react"
+import { useParams } from "react-router-dom"
+import { AlertTriangle, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -90,7 +90,6 @@ export function CountryDetailPage() {
   if (!country) {
     return (
       <div className="space-y-4">
-        <BackLink />
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>{t("pays.fiche.introuvable_titre")}</AlertTitle>
@@ -137,8 +136,6 @@ export function CountryDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink />
-
       {query.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -396,21 +393,6 @@ export function CountryDetailPage() {
           <CaretHistory countryId={countryId} />
         </TabsContent>
       </Tabs>
-    </div>
-  )
-}
-
-function BackLink() {
-  const { t } = useTranslation()
-  return (
-    <div className="flex">
-      <Link
-        to="/countries"
-        className="inline-flex items-center rounded text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-        {t("pays.fiche.retour")}
-      </Link>
     </div>
   )
 }

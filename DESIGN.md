@@ -194,6 +194,43 @@ Ces éléments relèvent des règles du produit, pas du goût : leur emplacement
 et leur comportement sont fixés ici, et l'écran qui les porte doit s'y
 conformer.
 
+### Identité : logo, emblème, version
+
+Le logo — l'emblème « J » en document coché, suivi du nom « JUSTI INNOV » —
+est celui fourni par INNOV PHARMA (`docs/identite/logo-justi-innov.png`,
+la source). Dans l'interface il n'existe qu'en vectoriel, tracé en
+`currentColor` : `BrandLogo` (`components/layout/brand-logo.tsx`, emblème et
+nom) et `BrandMark` (`brand-mark.tsx`, l'emblème seul). Il prend la couleur
+du texte qui l'entoure, donc le thème — jamais une couleur en dur, jamais
+une image PNG. Le logo complet va dans l'en-tête (`h-7`, lien vers
+l'accueil) et sur l'écran de connexion (`h-9`, clair sur le panneau
+sombre) ; l'emblème seul partout où 40 px ne suffiraient pas à lire le nom
+(titre du panneau replié). Le nom fait partie du dessin : `BrandLogo` le
+redit aux lecteurs d'écran par un texte masqué (`sr-only`), et il n'est
+pas répété en texte visible à côté.
+
+L'icône d'onglet et d'application installée (`public/favicon.svg`,
+`favicon.png`, `public/icons/`) est l'emblème blanc sur un carré sombre à
+coins arrondis, lisible sur une barre d'onglets claire comme sombre ; la
+version « maskable » garde l'emblème dans la zone sûre.
+
+La **version** (pied de page, pastille de l'en-tête, écran de connexion)
+vient de `BRAND.version`, figée à la construction : celle du tag `v*`
+livré, sinon celle de `package.json` (`vite.config.ts`, `define`). On ne
+l'écrit nulle part ailleurs ; poser un tag suffit.
+
+### Bouton « Retour »
+
+En haut de chaque page sauf l'accueil, avant le `PageHeader` : un bouton
+`ghost` de taille `sm`, icône `ArrowLeft`, libellé « Retour »
+(`components/layout/back-button.tsx`, monté par `AppLayout`, masqué quand la
+plateforme est fermée — mot de passe provisoire, enrôlement exigé). Il
+revient à l'écran précédent quand la navigation a commencé dans
+l'application, sinon à la liste de la section (`lib/navigation.ts`,
+`parentPath` : `/dossiers/12` → `/dossiers`, `/dossiers` → `/`). Une page
+ne rajoute pas son propre lien « Retour aux… » : il y en a un, au même
+endroit partout.
+
 ### Sélecteur de langue
 
 Dans le menu du compte (en haut à droite, à côté du sélecteur de thème),
@@ -288,6 +325,42 @@ nouveau ; et la ligne `reopened` figure dans le journal d'audit du dossier.
 Quand une ligne est justifiée ou clôturée, le bouton n'apparaît pas : le
 serveur refuserait, et un bouton qui mène à un refus n'a rien à faire à
 l'écran.
+
+### Rectification d'un constat
+
+Là où la réouverture s'arrête — une ligne justifiée ou clôturée — commence
+la rectification, en deux temps et à deux personnes. Sur chaque ligne du
+détail d'un dossier, un bouton **« Rectifier »** (`outline`, icône
+`Undo2`, `components/expenses/request-rectification.tsx`), à côté des
+actions du circuit, rendu **seulement** si `allowed_actions` de la ligne
+contient `request_rectification` — le serveur le dit : droit
+(`rectifications.request`, tous les rôles par défaut), ligne justifiée ou
+clôturée, aucune demande déjà en attente. Il ouvre un dialogue au titre
+affirmatif (« Demander la rectification — Hôtel… »), dont la description
+dit la conséquence : un administrateur décidera ; s'il approuve, la ligne
+revient en contrôle, son montant justifié est remis à zéro et le siège
+tranche à nouveau, le dossier la suit ; le motif est obligatoire et
+conservé dans le journal. Champ « Motif » (`motif`), validé à la
+soumission ; un refus du serveur sur la ligne (`400` sur `expense` ou
+`status`) s'affiche en `<FormError>` dans le dialogue, un refus sur le
+motif sous le champ. Bouton principal « Demander », en `default`.
+
+Les demandes du dossier s'affichent dans une carte **« Demandes de
+rectification »** (`components/expenses/rectification-panel.tsx`), entre
+les lignes et les pièces, **seulement s'il y en a** : la ligne contestée,
+le constat contesté (badge de l'état d'avant, `WORKFLOW_STYLE`, et le
+montant justifié défait), le motif, le statut de la demande
+(`RECTIFICATION_STYLE` : en attente `ATTENTE`, approuvée `SUCCES`,
+refusée `DANGER`), la décision et son auteur. Deux boutons icône,
+**Approuver** (`Check`, teinte succès) et **Refuser** (`X`, destructive),
+rendus seulement si `can_decide` — calculé par le serveur : demande en
+attente, rôle décideur (`rectifications.decide` : administrateurs, jamais
+le pays), pas l'auteur de la demande. Approuver agit en un geste ;
+refuser ouvre un dialogue au motif obligatoire, bouton `destructive`
+« Refuser ». Après une décision, la page relit le dossier et ses lignes.
+Dans le journal d'audit : `rectification_requested`, `rectified` (la
+ligne, et le dossier qui la suit), `rectification_decided` ; dans les
+notifications, l'icône `Undo2`.
 
 ### Menu d'export
 

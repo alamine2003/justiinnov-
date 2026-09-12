@@ -1,8 +1,9 @@
 """Matrice des droits configurable (décision 43).
 
 Les administrateurs règlent, case par case, quel rôle porte quelle
-capacité ; les verrous, eux, ne se règlent pas : le super administrateur
-garde tout, le pays ne contrôle jamais ce qu'il déclare.
+capacité — l'argent compris (décision 58) ; les verrous, eux, ne se règlent
+pas : les administrateurs gardent tout, le pays ne contrôle jamais ce
+qu'il déclare.
 """
 
 from django.core.cache import cache
@@ -43,7 +44,9 @@ class MatriceDesDroitsTests(ScopingTestCase):
             with self.subTest(capacite=capacite.key):
                 self.assertEqual(matrice[capacite.key]["roles"], sorted(capacite.defaut))
                 self.assertEqual(matrice[capacite.key]["default_roles"], sorted(capacite.defaut))
-                self.assertIn(Role.SUPER_ADMIN, matrice[capacite.key]["fixed_roles"])
+                self.assertEqual(
+                    matrice[capacite.key]["fixed_roles"], [Role.ADMIN, Role.SUPER_ADMIN]
+                )
 
     def test_un_droit_accorde_s_applique_a_la_requete_suivante(self):
         """Le DM reçoit l'export : la route qui lui répondait 403 s'ouvre,
@@ -132,29 +135,32 @@ class MatriceDesDroitsTests(ScopingTestCase):
         self.login(self.siege)
         self.assertEqual(self.client.get("/api/permissions/").status_code, status.HTTP_200_OK)
 
-    def test_l_argent_se_regle_par_la_direction_seule(self):
-        """La RH règle la matrice, sauf les enveloppes, les réallocations et
-        les taux : « la RH tient les comptes, pas l'argent ». La matrice le
-        dit (``settable_by_roles``) et le refuse."""
+    def test_l_administrateur_a_l_argent_et_le_regle(self):
+        """Décision 58 : l'administrateur a tous les droits, enveloppes,
+        réallocations et taux compris, et règle ces lignes comme les autres
+        — il les attribue à qui il veut. La matrice le dit
+        (``settable_by_roles``)."""
         for cle in ("budgets.create", "budgets.update", "reallocations.request",
                     "reallocations.decide", "rates.manage"):
             with self.subTest(cle=cle):
-                refus = self._regler(self.rh, **{cle: ["super_admin", "admin"]})
-                self.assertEqual(refus.status_code, status.HTTP_400_BAD_REQUEST, refus.data)
-                self.assertNotIn(Role.ADMIN, roles_pour(cle))
-                self.assertEqual(self._matrice()[cle]["settable_by_roles"], ["super_admin"])
-        # La direction, elle, peut ouvrir l'attribution à la RH — et cela se voit.
-        accord = self._regler(self.siege, **{"budgets.create": ["super_admin", "admin"]})
-        self.assertEqual(accord.status_code, status.HTTP_200_OK, accord.data)
-        self.assertIn(Role.ADMIN, roles_pour("budgets.create"))
-        self.assertEqual(self._matrice()["data.export"]["settable_by_roles"], ["admin", "super_admin"])
+                self.assertIn(Role.ADMIN, roles_pour(cle))
+                self.assertEqual(
+                    self._matrice()[cle]["settable_by_roles"], ["admin", "super_admin"]
+                )
+                accord = self._regler(self.rh, **{cle: ["super_admin", "admin", "df"]})
+                self.assertEqual(accord.status_code, status.HTTP_200_OK, accord.data)
+                self.assertIn(Role.DF, roles_pour(cle))
 
-    def test_le_super_administrateur_garde_tout(self):
-        response = self._regler(self.siege, **{"data.export": ["admin"]})
+    def test_les_administrateurs_gardent_tout(self):
+        """Ni le super administrateur ni l'administrateur ne se retirent un
+        droit : celui qui attribue les droits ne peut pas perdre les siens."""
+        sans_direction = self._regler(self.siege, **{"data.export": ["admin"]})
+        sans_rh = self._regler(self.siege, **{"data.export": ["super_admin"]})
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("data.export", response.data["capabilities"])
-        self.assertIn(Role.SUPER_ADMIN, roles_pour("data.export"))
+        for response in (sans_direction, sans_rh):
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertIn("data.export", response.data["capabilities"])
+        self.assertEqual(sorted(roles_pour("data.export")), ["admin", "super_admin"])
 
     def test_la_configuration_reste_aux_administrateurs(self):
         """Ni ouverte au DF, ni retirée à la RH : sinon plus personne pour
@@ -176,7 +182,7 @@ class MatriceDesDroitsTests(ScopingTestCase):
         }
         configuration.save()
 
-        self.assertEqual(roles_pour("expenses.validate"), {Role.SUPER_ADMIN})
+        self.assertEqual(roles_pour("expenses.validate"), {Role.SUPER_ADMIN, Role.ADMIN})
         self.login(self.rep_togo)
         self.assertFalse(self.client.get("/api/me/").data["permissions"]["expenses.validate"])
 
@@ -200,10 +206,10 @@ class MatriceDesDroitsTests(ScopingTestCase):
     def test_un_choix_enregistre_se_lit_dans_roles_pour(self):
         """Le défaut reste dans le code, le choix dans la base : ``roles_pour``
         rend le second (les services sont éprouvés dans ``expenses``)."""
-        response = self._regler(self.siege, **{"dossiers.reopen": ["super_admin"]})
+        response = self._regler(self.siege, **{"dossiers.reopen": ["super_admin", "admin", "df"]})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        self.assertEqual(roles_pour("dossiers.reopen"), {Role.SUPER_ADMIN})
+        self.assertEqual(roles_pour("dossiers.reopen"), {Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
         self.assertEqual(CAPACITES_PAR_CLE["dossiers.reopen"].defaut, {Role.SUPER_ADMIN, Role.ADMIN})
 
 

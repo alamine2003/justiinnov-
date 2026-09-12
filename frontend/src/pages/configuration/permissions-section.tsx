@@ -203,8 +203,8 @@ export function MatriceDesDroits({
                             {matrix.roles.map((role) => {
                               const toujours = capability.fixed_roles.includes(role.value)
                               const jamais = capability.locked_roles.includes(role.value)
-                              // L'argent se règle par la direction seule : la RH voit la
-                              // ligne, ne la change pas.
+                              // Le serveur dit qui règle chaque ligne (`settable_by_roles`) :
+                              // une case hors de portée se voit, ne se change pas.
                               const reglable = me?.role != null && capability.settable_by_roles.includes(me.role)
                               const accorde = choix[capability.key].includes(role.value)
                               const aria = t("configuration.permissions.case_aria", {
@@ -242,7 +242,7 @@ export function MatriceDesDroits({
                                       size="sm"
                                       checked={accorde}
                                       disabled={!reglable}
-                                      title={reglable ? undefined : t("configuration.permissions.direction_seule")}
+                                      title={reglable ? undefined : t("configuration.permissions.hors_de_votre_role")}
                                       aria-label={aria}
                                       onCheckedChange={(valeur) =>
                                         basculer(capability.key, role.value, valeur)

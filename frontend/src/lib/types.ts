@@ -84,8 +84,18 @@ export type WorkflowStatus = Schema<"WorkflowStatusEnum">
  */
 type EditAction = "edit" | "add_line" | "upload" | "delete"
 
+/**
+ * Demande de rectification d'un constat : proposée dans `allowed_actions`
+ * d'une ligne justifiée ou clôturée, mais ce n'est pas une transition — la
+ * ligne ne bouge qu'à la décision d'un administrateur.
+ */
+export const REQUEST_RECTIFICATION = "request_rectification"
+
 /** Transitions d'un dossier ; ses lignes partent avec lui à la soumission. */
-export type TransitionName = Exclude<Schema<"TransitionEnum">, "reopen" | EditAction>
+export type TransitionName = Exclude<
+  Schema<"TransitionEnum">,
+  "reopen" | EditAction | typeof REQUEST_RECTIFICATION
+>
 
 /** Une ligne ne se soumet jamais seule : c'est le dossier qu'on soumet. */
 export type ExpenseTransitionName = Exclude<TransitionName, "submit">
@@ -98,6 +108,8 @@ export type ProofStatus = Schema<"ProofStatusEnum">
 export type Proof = Schema<"Proof">
 export type RegisterEntry = Schema<"ExpenseRegister">
 export type Beneficiary = Schema<"Beneficiary">
+export type RectificationStatus = Schema<"RectificationStatusEnum">
+export type Rectification = Schema<"Rectification">
 
 
 // ---------------------------------------------------------------------------

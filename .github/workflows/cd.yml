@@ -115,8 +115,22 @@ jobs:
       - name: Étiquette déployée
         id: tag
         # Le SHA court identifie le code sans ambiguïté ; le nom du tag,
-        # quand il y en a un, sert aux humains.
-        run: echo "tag=sha-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+        # quand il y en a un, sert aux humains. La version affichée dans
+        # l'interface (`version`) est celle du tag `v*` sans son « v » ;
+        # une livraison de `main` n'en a pas et montre celle du
+        # `package.json`, suivie du SHA court pour la distinguer.
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          SUR_UN_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          sha="$(git rev-parse --short=12 HEAD)"
+          echo "tag=sha-${sha}" >> "$GITHUB_OUTPUT"
+          if [ "$SUR_UN_TAG" = "true" ]; then
+            echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            paquet="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' frontend/package.json | head -n 1)"
+            echo "version=${paquet}+${sha}" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
@@ -167,6 +181,11 @@ jobs:
         with:
           context: frontend
           target: runtime
+          # La version affichée en pied de page vient d'ici (voir
+          # `frontend/Dockerfile`) : un nouveau tag, une nouvelle version,
+          # sans rien écrire dans le code.
+          build-args: |
+            APP_VERSION=${{ steps.tag.outputs.version }}
           push: true
           tags: ${{ steps.meta_frontend.outputs.tags }}
           labels: ${{ steps.meta_frontend.outputs.labels }}

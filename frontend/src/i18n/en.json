@@ -41,6 +41,7 @@
     "separateur_libelle": ": "
   },
   "nav": {
+    "retour": "Back",
     "principale": "Main navigation",
     "pilotage": "Overview",
     "dossiers": "Files",
@@ -187,6 +188,9 @@
       "rejected": "Proof rejected",
       "downloaded": "Download",
       "reopened": "Reopening",
+      "rectification_requested": "Rectification request",
+      "rectification_decided": "Decision on a rectification",
+      "rectified": "Rectification of a finding",
       "proof_incomplete": "Incomplete document",
       "proof_to_review": "Document to review",
       "imported": "Import"
@@ -359,8 +363,7 @@
       "saisie_par": "entered by {{nom}}",
       "heure_fuseau": "{{fuseau}} time",
       "modifier_aria": "Edit {{titre}}",
-      "supprimer_aria": "Delete the draft {{titre}}",
-      "retour": "Back to files"
+      "supprimer_aria": "Delete the draft {{titre}}"
     },
     "reouverture": {
       "rouvrir": "Reopen",
@@ -439,6 +442,34 @@
       "note_partiel": "Note (mandatory if the amount is partial)",
       "note_facultative": "Note (optional)",
       "note_placeholder": "Invoice No. 123 for 80%, remainder without proof…"
+    },
+    "rectification": {
+      "rectifier": "Rectify",
+      "titre": "Request a rectification — {{titre}}",
+      "description": "Was this line justified or closed by mistake? An administrator will decide. If approved, the line goes back to review, its justified amount is reset to zero and head office rules again; the dossier follows. The reason is mandatory and kept in the audit log.",
+      "motif": "Reason",
+      "motif_placeholder": "Wrong justified amount, document mistaken for another…",
+      "motif_requis": "A rectification must be motivated.",
+      "envoyer": "Request",
+      "impossible": "Request failed",
+      "chargement_impossible": "Rectification requests unavailable",
+      "panneau_titre": "Rectification requests",
+      "panneau_description": "A disputed finding, with its reason; an administrator approves or refuses, never the requester.",
+      "colonnes": {
+        "constat": "Disputed finding",
+        "motif": "Reason"
+      },
+      "justifie_avant": "{{montant}} justified",
+      "par": "by {{auteur}}",
+      "decision": "Decision: {{note}}",
+      "approuver": "Approve the rectification",
+      "refuser": "Refuse",
+      "approbation_impossible": "Approval failed",
+      "refus_titre": "Refuse the rectification — {{titre}}",
+      "refus_description": "The finding stands; the requester will be told your reason.",
+      "motif_refus": "Reason for refusal",
+      "motif_refus_requis": "A refusal must be motivated.",
+      "refus_impossible": "Refusal failed"
     }
   },
   "pieces": {
@@ -739,7 +770,6 @@
       "actualisation": "Refreshing",
       "introuvable_titre": "Country not found",
       "introuvable_texte": "This country does not exist or is not within your scope.",
-      "retour": "Back to countries",
       "budget": "Budget",
       "budget_devise": "Budget ({{devise}})",
       "budget_nombre": "The budget must be a number.",
@@ -890,7 +920,7 @@
       "annuler": "Discard changes",
       "enregistre": "Rights saved: they apply from now on.",
       "erreur": "Could not save",
-      "direction_seule": "Set by management only"
+      "hors_de_votre_role": "Cannot be set from your role"
     },
     "utilisateurs": {
       "titre": "Accounts",

@@ -76,12 +76,15 @@ class ActionsDeLigneTests(ExpenseTestCase):
 
         self.assertEqual(self._actions(self.controller, anonyme), [])
 
-    def test_une_ligne_justifiee_ne_propose_que_la_cloture(self):
+    def test_une_ligne_justifiee_ne_propose_que_la_cloture_et_la_rectification(self):
+        """Constatée, la ligne se clôt (DF) ; et n'importe qui peut demander
+        à rectifier le constat — le DM aussi, qui ne tranche rien d'autre."""
         self.login(self.controller)
         self.client.post(f"/api/expenses/{self.ligne.pk}/justify/")
 
-        self.assertEqual(self._actions(self.controller), ["close"])
-        self.assertEqual(self._actions(self.dm), [])
+        self.assertEqual(self._actions(self.controller), ["close", "request_rectification"])
+        self.assertEqual(self._actions(self.dm), ["request_rectification"])
+        self.assertEqual(self._actions(self.owner), ["request_rectification"])
 
     def test_le_registre_les_expose_aussi(self):
         self.login(self.controller)
@@ -235,7 +238,9 @@ class TransitionRenvoieLeDetailTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["expenses"][0]["status"], Status.JUSTIFIED)
-        self.assertEqual(response.data["expenses"][0]["allowed_actions"], ["close"])
+        self.assertEqual(
+            response.data["expenses"][0]["allowed_actions"], ["close", "request_rectification"]
+        )
         self.assertEqual(response.data["allowed_actions"], ["close"])
 
 
@@ -344,14 +349,18 @@ class MatriceEtServicesTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
     def test_rouvrir_suit_la_matrice(self):
+        """Par défaut le DF ne rouvre pas ; la matrice le lui ouvre, et le
+        service le lit. (Les administrateurs, eux, gardent tout : la
+        matrice ne leur retire rien, décision 58.)"""
         self.make_expense()
         self.submit_dossier()
-        self._regler(**{"dossiers.reopen": ["super_admin", "df"]})
 
         with self.assertRaises(PermissionRefusee):
             transitions.rouvrir(
-                self.dossier, get_access(self.admin), "Ligne douteuse", trace(self.admin)
+                self.dossier, get_access(self.controller), "Ligne douteuse",
+                trace(self.controller),
             )
+        self._regler(**{"dossiers.reopen": ["super_admin", "admin", "df"]})
         resultat = transitions.rouvrir(
             self.dossier, get_access(self.controller), "Ligne douteuse",
             trace(self.controller),

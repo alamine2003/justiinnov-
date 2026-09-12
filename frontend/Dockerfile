@@ -12,6 +12,11 @@ RUN npm ci
 
 # Étape « build » : compilation des fichiers statiques.
 FROM deps AS build
+# Version affichée dans l'interface (`vite.config.ts`, `define`) : la CI
+# passe le tag livré (`--build-arg APP_VERSION=1.0.6`) ; sans lui — une
+# construction locale, la préproduction — c'est celle de `package.json`.
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
 COPY . .
 RUN npm run build
 

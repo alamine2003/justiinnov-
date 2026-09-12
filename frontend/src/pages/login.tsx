@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { BrandMark } from "@/components/layout/brand-mark"
+import { BrandLogo } from "@/components/layout/brand-logo"
 import { LanguageToggle } from "@/components/layout/language-toggle"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
 import { useAuth } from "@/context/use-auth"
@@ -105,16 +105,10 @@ export function LoginPage() {
           className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-primary-foreground/5"
         />
 
-        <div className="relative flex items-center gap-3">
-          {/* Fond clair : l'emblème est en couleur, il disparaîtrait sur le
-              panneau sombre. */}
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-foreground p-1.5">
-            <BrandMark className="h-full w-full" />
-          </div>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold tracking-tight">{BRAND.name}</p>
-            <p className="text-xs text-primary-foreground/60">{t("app.tagline")}</p>
-          </div>
+        <div className="relative space-y-2">
+          {/* Le logo suit la couleur du texte du panneau : clair sur sombre. */}
+          <BrandLogo className="h-9 w-auto" />
+          <p className="text-xs text-primary-foreground/60">{t("app.tagline")}</p>
         </div>
 
         <div className="relative flex flex-1 flex-col justify-center py-12">
@@ -158,12 +152,9 @@ export function LoginPage() {
       <main className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
           {/* Reprend l'identité sur mobile, où le panneau est masqué. */}
-          <div className="mb-10 flex items-center gap-3 lg:hidden">
-            <BrandMark className="h-11 w-11" />
-            <div className="leading-tight">
-              <p className="font-semibold tracking-tight">{BRAND.name}</p>
-              <p className="text-xs text-muted-foreground">{t("app.tagline")}</p>
-            </div>
+          <div className="mb-10 space-y-2 lg:hidden">
+            <BrandLogo className="h-9 w-auto" />
+            <p className="text-xs text-muted-foreground">{t("app.tagline")}</p>
           </div>
 
           <div className="mb-8">

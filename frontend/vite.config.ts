@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import path from "path"
 /// <reference types="vitest/config" />
 import { defineConfig, loadEnv } from "vite"
@@ -7,10 +8,22 @@ import { VitePWA } from "vite-plugin-pwa"
 import { NAVIGATE_FALLBACK_DENYLIST } from "./src/lib/service-worker.ts"
 
 // https://vite.dev/config/
+/** Version déclarée du paquet, affichée quand rien ne la remplace. */
+const { version: versionDuPaquet } = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+) as { version: string }
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
   const proxyTarget = env.VITE_PROXY_TARGET || "http://localhost:8000"
   return {
+    // La version affichée dans l'interface est figée à la construction :
+    // celle du tag livré (`APP_VERSION`, posée par la CI et le Dockerfile),
+    // sinon celle de `package.json` — en développement et en préproduction.
+    // Le code ne la recopie nulle part : un nouveau tag suffit.
+    define: {
+      __APP_VERSION__: JSON.stringify(env.APP_VERSION || versionDuPaquet),
+    },
     plugins: [
       react(),
       tailwindcss(),

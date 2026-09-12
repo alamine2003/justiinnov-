@@ -33,6 +33,8 @@ export const PERMISSIONS_DU_PAYS: Permissions = {
   "expenses.close": false,
   "proofs.review": false,
   "dossiers.reopen": false,
+  "rectifications.request": true,
+  "rectifications.decide": false,
   "data.export": false,
   "data.import": false,
 }
