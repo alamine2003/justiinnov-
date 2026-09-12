@@ -33,7 +33,8 @@ from core.models import (
     Project,
     Team,
 )
-from expenses.models import AuditLog, Beneficiary, Dossier, Expense, Proof
+from core.statuts import Status
+from expenses.models import AuditLog, Beneficiary, Dossier, Expense, Proof, Rectification
 from expenses.tests.base import in_memory_storage
 from notifications.models import Notification
 
@@ -139,6 +140,14 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
             )
             for cle, d in dossiers.items()
         }
+        # Une demande de rectification suit sa ligne : même pays, même équipe.
+        rectifications = {
+            cle: Rectification.objects.create(
+                expense=e, motif="Constat contesté", requested_by="seed",
+                previous_status=Status.JUSTIFIED, previous_justified_amount=e.amount,
+            )
+            for cle, e in depenses.items()
+        }
         pieces = {
             cle: Proof.objects.create(
                 dossier=d, file=ContentFile(b"%PDF-1.4", name=f"{cle}.pdf"),
@@ -188,6 +197,7 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
             Beneficiary: par_pays(Beneficiary, name="Client"),
             Dossier: dossiers,
             Expense: depenses,
+            Rectification: rectifications,
             Proof: pieces,
             AuditLog: journaux,
             # Une notification appartient à une personne : le « mien » du DF
@@ -227,6 +237,7 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
                 "manager": pk(Manager), "owner": pk(Manager), "dossier": pk(Dossier),
                 "budget": pk(Budget), "source": pk(Budget), "target": pk(Budget),
                 "replaces": pk(Proof), "beneficiary": pk(Beneficiary),
+                "expense": pk(Expense),
                 "countries": [pk(Country)], "teams": [pk(Team)],
             }.items() if valeur not in (None, [None])
         }

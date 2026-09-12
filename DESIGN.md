@@ -206,7 +206,8 @@ une image PNG. Le logo complet va dans l'en-tête (`h-7`, lien vers
 l'accueil) et sur l'écran de connexion (`h-9`, clair sur le panneau
 sombre) ; l'emblème seul partout où 40 px ne suffiraient pas à lire le nom
 (titre du panneau replié). Le nom fait partie du dessin : `BrandLogo` le
-porte en `aria-label`, et il n'est pas répété en texte à côté.
+redit aux lecteurs d'écran par un texte masqué (`sr-only`), et il n'est
+pas répété en texte visible à côté.
 
 L'icône d'onglet et d'application installée (`public/favicon.svg`,
 `favicon.png`, `public/icons/`) est l'emblème blanc sur un carré sombre à

@@ -11,19 +11,22 @@ const LOGO =
  * En `currentColor`, comme l'emblème (`BrandMark`) : il prend la couleur du
  * texte qui l'entoure, dans les deux thèmes et sur le panneau sombre de la
  * connexion. Le nom fait partie du dessin ; le composant le redit aux
- * lecteurs d'écran (`role="img"`), qui ne lisent pas un tracé.
+ * lecteurs d'écran par un texte masqué, puisqu'ils ne lisent pas un tracé.
  */
 export function BrandLogo({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 1508 297"
-      role="img"
-      aria-label={BRAND.name}
-      fill="currentColor"
-      className={cn("shrink-0", className)}
-    >
-      <path d={LOGO} />
-    </svg>
+    <>
+      <svg
+        viewBox="0 0 1508 297"
+        aria-hidden
+        focusable="false"
+        fill="currentColor"
+        className={cn("shrink-0", className)}
+      >
+        <path d={LOGO} />
+      </svg>
+      <span className="sr-only">{BRAND.name}</span>
+    </>
   )
 }
 
