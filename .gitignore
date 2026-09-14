@@ -28,3 +28,5 @@ media/
 # Copies générées par d'autres outils à partir de .claude/ : jamais versionnées.
 .codex/
 .agents/
+.claude/feature-state.json
+PLAN.md

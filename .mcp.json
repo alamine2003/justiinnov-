@@ -3,9 +3,28 @@
     "coderabbitai": {
       "command": "npx",
       "args": ["-y", "coderabbitai-mcp@latest"],
-      "env": {
-        "GITHUB_PAT": "${GITHUB_PAT}"
-      }
+      "env": { "GITHUB_PAT": "${GITHUB_PAT}" }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PAT}" }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--headless"]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "${JUSTI_DATABASE_URL}"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "semgrep": {
+      "command": "uvx",
+      "args": ["semgrep-mcp"]
     }
   }
 }

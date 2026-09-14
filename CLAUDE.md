@@ -249,6 +249,7 @@ l'application.
 | Calculs budgétaires | `backend/budget/aggregates.py` |
 | Interface | `DESIGN.md` |
 | Serveur, supervision Grafana, sauvegardes | `deploy/README.md` |
+| Scénarios d'usage réel (mise en service, charge à 30 utilisateurs) | `simulation/README.md` |
 
 ## Conventions
 
@@ -274,7 +275,27 @@ façon ; servez-vous-en plutôt que de repartir de zéro.
 | Comprendre le code sans le modifier | agent `explorateur-code` |
 | Cadrer une évolution | agent `analyste-architecture` |
 | Tout vérifier | skill `verifier` |
+| Livrer une fonctionnalité de bout en bout | commande `/feature`, voir ci-dessous |
 | Commiter, pousser, livrer | skill `livrer` |
+
+### L'équipe `/feature`
+
+`/feature <description>` lance une boucle où le Chef (la conversation
+principale) fait travailler des agents spécialisés jusqu'à la pull request :
+`architecte` (PLAN.md, contrats, scopes de fichiers), `dev-database`,
+`dev-backend`, `dev-frontend`, `dev-design-system` (chacun sur son scope,
+en parallèle), `testeur-unitaire`, `testeur-integration`, `expert-scalabilite`,
+`pentester`, `simulateur`, `intercepteur-erreurs` (cause racine et
+réassignation), `git-pusher` (branche `feat/*`, commits par lots, PR),
+`ci-runner` (pipeline et CodeRabbit). Skills associés : `database`,
+`scalabilite`, `pentest` (les devs réutilisent `backend-django`,
+`frontend-react`, `design-system`). Les hooks de `.claude/settings.json`
+lintent chaque fichier touché, bloquent `git push` hors `feat/*`, `--force`,
+`DROP`, un tag `v*` et `rm -r` hors des dossiers temporaires tant que le
+propriétaire n'a pas posé `"go": true` dans `.claude/feature-state.json`,
+et relancent la boucle à l'arrêt (huit cycles au plus). Les scénarios
+d'usage réel (mise en service d'une filiale, 30 utilisateurs) sont dans
+`simulation/`.
 
 Les agents vivent dans `.claude/agents/`, les skills dans `.claude/skills/`.
 `.claudeignore` tient hors de vue dépendances, artefacts, données locales et
