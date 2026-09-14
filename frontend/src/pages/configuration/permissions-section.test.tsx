@@ -117,6 +117,12 @@ describe("MatriceDesDroits", () => {
     expect(screen.queryByText("Enregistrement impossible")).not.toBeInTheDocument()
   })
 
+  it("affiche la confirmation que le parent lui transmet après remontage", () => {
+    render(<MatriceDesDroits matrix={matrice()} enregistre onSaved={() => {}} />)
+
+    expect(screen.getByText("Droits enregistrés : ils s'appliquent dès maintenant.")).toBeInTheDocument()
+  })
+
   it("rétablit le défaut d'une ligne écartée", () => {
     const base = matrice()
     const ecartee = matrice({

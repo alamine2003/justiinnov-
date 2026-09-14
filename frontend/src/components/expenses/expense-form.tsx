@@ -55,6 +55,12 @@ interface ExpenseFormProps {
    * présélectionnée et verrouillée. `null` ou absente, le choix est libre.
    */
   lockedTeam?: number | null
+  /**
+   * Manager du dossier : une ligne nouvelle le reprend, puisque le dossier
+   * le porte déjà ; sans lui, chaque ligne repartait « sans manager » et la
+   * soumission butait dessus.
+   */
+  defaultOwner?: number | null
 }
 
 /**
@@ -97,6 +103,7 @@ function ExpenseFormBody({
   timezone,
   teamRequired = false,
   lockedTeam = null,
+  defaultOwner = null,
 }: Omit<ExpenseFormProps, "open">) {
   const { t } = useTranslation()
   const [title, setTitle] = useState(editing?.title ?? "")
@@ -111,7 +118,7 @@ function ExpenseFormBody({
   const [montantDevise, setMontantDevise] = useState(editing?.original_amount ?? "")
   const [team, setTeam] = useState<number | "">(lockedTeam ?? editing?.team ?? "")
   const [project, setProject] = useState<number | "">(editing?.project ?? "")
-  const [owner, setOwner] = useState<number | "">(editing?.owner ?? "")
+  const [owner, setOwner] = useState<number | "">(editing?.owner ?? defaultOwner ?? "")
   const [expenseTitle, setExpenseTitle] = useState<number | "">(editing?.expense_title ?? "")
   const [category, setCategory] = useState<number | "">(editing?.marketing_category ?? "")
   const [beneficiary, setBeneficiary] = useState<number | "">(editing?.beneficiary ?? "")
