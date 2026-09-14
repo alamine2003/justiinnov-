@@ -97,7 +97,7 @@ describe("ExpenseForm — manager du dossier", () => {
   it("une ligne nouvelle reprend le manager du dossier", () => {
     afficher({
       managers: [
-        { id: 7, name: "Kodjo Mensah", email: "", title: "", is_active: true, created_at: "", updated_at: "" },
+        { id: 7, name: "Kodjo Mensah", email: "", title: "", is_active: true, countries: [1], created_at: "", updated_at: "" },
       ],
       defaultOwner: 7,
     })
