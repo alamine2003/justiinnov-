@@ -177,6 +177,16 @@ Ce que le code garantit, en bref :
   soit le chemin — API, `seed_users` ou admin Django ;
 - `GET /api/me/` donne, pour chaque pays du périmètre (`countries[]`), son
   `timezone` et sa `currency`, que l'interface se contente d'afficher ;
+- `GET /api/me/` expose aussi `api_version`, la version du serveur qui
+  répond (`APP_VERSION`, `dev` par défaut), affichée dans le menu du
+  compte — réservée aux comptes du siège (`dm`, `df`, `admin`,
+  `super_admin`) sans verrou actif (mot de passe provisoire,
+  double authentification exigée et non confirmée), par défense en
+  profondeur et parce qu'elle nomme le serveur qui a traité la requête —
+  pas parce qu'elle serait secrète : le SHA du client, lui, se lit déjà sur
+  l'écran de connexion ; vide sinon. Le back-office la retrouve dans
+  `systeme.version_api` (`GET /api/configuration/`), déjà réservé aux
+  administrateurs ;
 - `/admin/` applique les mêmes verrous que l'API : mot de passe provisoire,
   double authentification si elle est exigée.
 
@@ -515,6 +525,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `METRICS_TOKEN` | — | jeton que Prometheus présente sur `/metrics` (`Authorization: Bearer`) ; vide, le point de collecte répond 404 |
 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | `admin` / — | compte d'administration de Grafana (pile de production) ; le mot de passe est **obligatoire**. Les comptes « direction » et « technique » se créent depuis lui (`deploy/README.md`) |
 | `DJANGO_TIME_ZONE` | `UTC` | fuseau de référence du serveur |
+| `APP_VERSION` | `dev` | version affichée dans le menu du compte (`GET /api/me/`, `api_version`, comptes du siège sans verrou actif seulement) et en back-office (`GET /api/configuration/`, `systeme.version_api`, administrateurs seulement) ; posée par le déploiement (étiquette d'image, `IMAGE_TAG` en production) — jamais un repère interne |
 | `DJANGO_CREATE_SUPERUSER` | `0` | `1` crée un compte d'amorçage au démarrage, profil `super_admin` et mot de passe provisoire |
 | `DJANGO_SUPERUSER_USERNAME` / `_EMAIL` / `_PASSWORD` | `admin` / — / — | identité de ce compte ; sans mot de passe, rien n'est créé |
 | `POSTGRES_HOST` / `_PORT` / `_DB` / `_USER` / `_PASSWORD` | `db` / `5432` / `justi_innov` / `justi` / `justi` | connexion à la base (le mot de passe est **obligatoire** hors mode debug) |

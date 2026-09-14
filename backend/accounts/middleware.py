@@ -38,6 +38,27 @@ EXEMPT_URL_NAMES = TOUJOURS_OUVERTES | {"me", "change-password"}
 TOTP_EXEMPT_URL_NAMES = EXEMPT_URL_NAMES | {"totp-enrol", "totp-confirm"}
 
 
+def verrou_actif(profile):
+    """Vrai si l'un des trois verrous transverses retient ce compte.
+
+    Prédicat pur, sans notion de route : un profil absent, un mot de passe
+    encore provisoire, ou une double authentification exigée par la
+    politique (``settings.TOTP_REQUIRED``) et non confirmée. Partagé par
+    ``ProvisionalPasswordMiddleware.process_view`` — qui y ajoute les
+    exemptions par route (``EXEMPT_URL_NAMES``, ``TOTP_EXEMPT_URL_NAMES``)
+    pour décider ce qui reste joignable — et par
+    ``accounts.serializers.MeSerializer.get_api_version``, pour qui aucune
+    route n'entre en jeu : la version du serveur ne doit pas fuiter tant
+    que l'un des trois tient, sans quoi elle divergerait du verrou réel au
+    premier changement de l'un des deux côtés.
+    """
+    if profile is None:
+        return True
+    if profile.must_change_password:
+        return True
+    return bool(settings.TOTP_REQUIRED and not profile.totp_confirmed)
+
+
 class ProvisionalPasswordMiddleware:
     """Ferme la plateforme aux comptes sans profil, au mot de passe provisoire
     ou sans double authentification confirmée.
@@ -88,6 +109,10 @@ class ProvisionalPasswordMiddleware:
             # Anonyme ou jeton refusé : DRF répondra 401 avec le bon motif.
             return None
         profile = getattr(user, "profile", None)
+        if not verrou_actif(profile):
+            # Aucun des trois verrous ne tient : inutile d'examiner les
+            # exemptions par route.
+            return None
         if profile is None:
             return JsonResponse(
                 {

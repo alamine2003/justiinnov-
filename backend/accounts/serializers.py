@@ -12,7 +12,8 @@ from rest_framework import serializers
 
 from core.models import Country, Team, WorkflowConfiguration
 
-from .models import DEFAULT_LANGUAGE, Role, UserProfile, aligner_drapeaux
+from .middleware import verrou_actif
+from .models import DEFAULT_LANGUAGE, HEADQUARTERS_ROLES, Role, UserProfile, aligner_drapeaux
 from .permissions import CAPACITES, CAPACITES_PAR_CLE, capacites_du_role
 from .validators import valider_email_professionnel
 
@@ -214,6 +215,7 @@ class MeSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
     workflow = serializers.SerializerMethodField()
     supervision = serializers.SerializerMethodField()
+    api_version = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -221,7 +223,7 @@ class MeSerializer(serializers.ModelSerializer):
             "id", "username", "first_name", "last_name", "email",
             "role", "role_display", "countries", "teams", "has_global_scope",
             "must_change_password", "totp_required", "totp_confirmed", "language",
-            "permissions", "workflow", "supervision",
+            "permissions", "workflow", "supervision", "api_version",
         ]
 
     def _role(self, user):
@@ -317,6 +319,31 @@ class MeSerializer(serializers.ModelSerializer):
         compte ne propose « Supervision » que là où Grafana existe.
         """
         return bool(settings.SUPERVISION)
+
+    @extend_schema_field(serializers.CharField())
+    def get_api_version(self, user):
+        """Version du serveur qui répond (``APP_VERSION``), siège seulement.
+
+        Ce n'est pas un secret : le SHA en service se lit déjà sur l'écran
+        de connexion, tiré du client (``origin/main``, commit 59caa2b). La
+        réserver au siège est une défense en profondeur — un rang de moins
+        pour qui n'a pas prouvé son identité — et une question d'identité
+        du répondant, pas de confidentialité : cette valeur nomme le
+        serveur qui a traité la requête, une information de service, pas
+        celle d'un pays. ``verrou_actif`` (``accounts.middleware``) est le
+        même prédicat que celui qui ferme la plateforme ailleurs : mot de
+        passe encore provisoire, ou double authentification exigée et non
+        confirmée ne doivent pas laisser ``api_version`` fuiter au prétexte
+        que ``/api/me/`` reste, lui, accessible pendant qu'un verrou
+        s'applique. Toujours une chaîne, jamais absente : vide quand un
+        verrou tient ou hors du siège.
+        """
+        profile = getattr(user, "profile", None)
+        if profile is None or profile.role not in HEADQUARTERS_ROLES:
+            return ""
+        if verrou_actif(profile):
+            return ""
+        return settings.APP_VERSION
 
 
 class MePreferencesSerializer(serializers.Serializer):

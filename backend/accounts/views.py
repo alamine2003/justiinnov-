@@ -245,6 +245,7 @@ class ConfigurationView(APIView):
                 "systeme": {
                     "fuseau": settings.TIME_ZONE,
                     "mode_debug": settings.DEBUG,
+                    "version_api": settings.APP_VERSION,
                 },
                 "workflow": WorkflowConfigurationSerializer(configuration).data,
                 # Réglage de déploiement : la pile expose-t-elle Grafana ?

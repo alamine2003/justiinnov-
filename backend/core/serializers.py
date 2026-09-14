@@ -372,6 +372,10 @@ class ConfigurationNotificationsSerializer(serializers.Serializer):
 class ConfigurationSystemeSerializer(serializers.Serializer):
     fuseau = serializers.CharField(read_only=True)
     mode_debug = serializers.BooleanField(read_only=True)
+    version_api = serializers.CharField(
+        read_only=True,
+        help_text=_("Version du serveur en service (``APP_VERSION``, ``dev`` par défaut)."),
+    )
 
 
 class ConfigurationSerializer(serializers.Serializer):

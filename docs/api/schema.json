@@ -8669,11 +8669,17 @@
                     "mode_debug": {
                         "type": "boolean",
                         "readOnly": true
+                    },
+                    "version_api": {
+                        "type": "string",
+                        "readOnly": true,
+                        "description": "Version du serveur en service (``APP_VERSION``, ``dev`` par défaut)."
                     }
                 },
                 "required": [
                     "fuseau",
-                    "mode_debug"
+                    "mode_debug",
+                    "version_api"
                 ]
             },
             "ConsolidatedXof": {
@@ -11556,6 +11562,10 @@
                     "supervision": {
                         "type": "boolean",
                         "readOnly": true
+                    },
+                    "api_version": {
+                        "type": "string",
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -11575,7 +11585,8 @@
                     "language",
                     "permissions",
                     "workflow",
-                    "supervision"
+                    "supervision",
+                    "api_version"
                 ]
             },
             "MeWorkflow": {
