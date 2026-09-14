@@ -119,8 +119,15 @@ def main():
     s, sous, _ = api("POST", "/api/budgets/", siege, {"country": togo["id"], "year": annee, "team": ids["teams"],
                                                      "amount": "300000.00", "overrun_policy": "block"})
     etape("3. sous-enveloppe par équipe (bloquante)", 201, s, sous)
-    s, rep, _ = api("POST", "/api/budgets/", admin, {"country": togo["id"], "year": annee, "project": ids["projects"], "amount": "1.00"})
-    etape("3. la RH n'attribue pas d'enveloppe", 403, s, rep)
+    # Décision 58 : la RH attribue aussi des enveloppes. Sur un projet dédié,
+    # pour ne pas détourner l'imputation des lignes de l'étape 4.
+    s, projet_verif, _ = api("POST", "/api/projects/", admin, {"country": togo["id"], "name": f"Projet enveloppe {suffixe}"})
+    etape("3. projet dédié au contrôle d'enveloppe", 201, s, projet_verif)
+    s, rep, _ = api("POST", "/api/budgets/", admin, {"country": togo["id"], "year": annee,
+                                                    "project": projet_verif["id"], "amount": "1.00"})
+    etape("3. la RH attribue une enveloppe (décision 58)", 201, s, rep)
+    s, rep, _ = api("POST", "/api/budgets/", manager, {"country": togo["id"], "year": annee, "amount": "1.00"})
+    etape("3. le manager n'attribue pas d'enveloppe", 403, s, rep)
     s, rep, _ = api("POST", "/api/exchange-rates/", siege, {"currency": "EUR", "rate_to_xof": "655.9570", "valid_from": f"{annee}-01-01"})
     etape("3. taux de change EUR", (201, 400), s, rep)
 
@@ -274,6 +281,12 @@ def main():
     etape("11. notify_alerts : " + (alertes.stdout.strip().splitlines() or ["(silencieux)"])[-1][:100], 0,
           alertes.returncode, alertes.stderr[-200:])
 
+    return imprimer()
+
+
+def imprimer():
+    """Le journal s'imprime même si une étape a levé : un crash ne doit pas
+    masquer ce qui a été joué avant lui."""
     ko = [r for r in rapport if r[1] == "KO"]
     for nom, verdict, statut, attendu, detail in rapport:
         print(f"{verdict}  {nom}" + ("" if verdict == "OK" else f"  → {statut} (attendu {attendu}) {detail}"))
@@ -282,4 +295,11 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        print(f"\nARRÊT : {type(exc).__name__}: {exc}")
+        imprimer()
+        sys.exit(2)
