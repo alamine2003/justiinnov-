@@ -24,6 +24,7 @@ function profil(overrides: Partial<Me>): Me {
       ...PERMISSIONS_DU_PAYS,
     },
     workflow: { require_review_step: false },
+    api_version: "dev",
     ...overrides,
   }
 }

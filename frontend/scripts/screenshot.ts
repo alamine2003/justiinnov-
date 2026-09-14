@@ -96,6 +96,18 @@ async function supervisionAnnoncee(page: Page): Promise<boolean> {
   return me.supervision === true
 }
 
+/** La version de l'API que le serveur rend sur ce compte (`GET /api/me/` → `api_version`). */
+async function versionAnnoncee(page: Page): Promise<string | null> {
+  const token = await page.evaluate(() => localStorage.getItem("justi_token"))
+  if (!token) return null
+  const response = await page.request.get(`${BASE}/api/me/`, {
+    headers: { Authorization: `Token ${token}` },
+  })
+  if (!response.ok()) return null
+  const me = (await response.json()) as { api_version?: string }
+  return me.api_version ?? null
+}
+
 async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${OUT}/shot_${name}.png`, fullPage: false })
 }
@@ -145,6 +157,15 @@ async function main() {
   expect(
     ((await hq.getByRole("menu").textContent()) ?? "").includes("2FA active"),
     "le menu du compte montre la pastille « 2FA active » d'un compte enrôlé",
+  )
+  // La version vient du serveur qui répond (`/api/me/`) : `dev` sur la pile
+  // de CI, un identifiant d'image en déploiement — l'attente reste vraie
+  // partout.
+  const versionApi = await versionAnnoncee(hq)
+  expect(
+    versionApi !== null &&
+      ((await hq.getByRole("menu").textContent()) ?? "").includes(versionApi),
+    "le menu du compte affiche la version de l'API",
   )
   await shot(hq, "menu_compte")
   await hq.keyboard.press("Escape")
@@ -295,6 +316,13 @@ async function main() {
     (await rep.getByRole("menuitem", { name: "Déconnexion" }).count()) === 1 &&
       (await rep.getByRole("menuitem", { name: "Supervision" }).count()) === 0,
     "le pays ne voit pas « Supervision »",
+  )
+  // La version de l'API (`api_version`) n'est rendue qu'au siège, sans
+  // verrou : un manager de pays ne doit ni la lire ni la voir affichée.
+  const menuTextePays = (await rep.getByRole("menu").textContent()) ?? ""
+  expect(
+    !menuTextePays.includes("Version de l'API") && !menuTextePays.includes("API version"),
+    "le pays ne voit pas la version de l'API dans le menu du compte",
   )
   await rep.keyboard.press("Escape")
   await goto(rep, "/dossiers")

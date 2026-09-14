@@ -62,6 +62,15 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
             </DropdownMenuLabel>
           </DropdownMenuGroup>
         )}
+        {/* La version du serveur qui répond, pas celle du client (BRAND.version,
+            déjà affichée ailleurs) : un simple repère, rien à cliquer. */}
+        {me?.api_version && (
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              {t("nav.version_api", { version: me.api_version })}
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
+        )}
         {/* Un manager rattaché à des équipes ne saisit que pour elles :
             les nommer ici lève toute ambiguïté sur son périmètre. */}
         {me?.teams && me.teams.length > 0 && (
