@@ -1,9 +1,8 @@
 import { useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { AlertTriangle, FileWarning, Paperclip, Search } from "lucide-react"
+import { AlertTriangle, FileWarning, FileX2, Paperclip, Search } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -328,21 +327,28 @@ export function RegisterPage() {
                       >
                         {formatAmount(entry.gap)}
                       </TableCell>
+                      {/* La preuve est ce qu'on vient chercher ici : elle se
+                          lit d'un mot, en bout de ligne, et son absence se
+                          voit à la teinte sans avoir à comparer deux
+                          colonnes de montants. */}
                       <TableCell>
                         {entry.has_proof ? (
-                          <div className="flex items-center gap-1 text-xs">
-                            <Paperclip className="h-3 w-3 text-muted-foreground" aria-hidden />
-                            {t("registre.pieces", { count: entry.proofs.length })}
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                            <span className="text-marque-fort">
+                              {t("registre.pieces", { count: entry.proofs.length })}
+                            </span>
                             {entry.proofs.some((p) => !p.is_complete) && (
-                              <Badge variant="outline" className="ml-1 text-[10px]">
-                                {t("registre.incomplet")}
-                              </Badge>
+                              <span className="text-statut-attente">
+                                {` · ${t("registre.incomplet")}`}
+                              </span>
                             )}
                           </div>
                         ) : (
-                          <Badge variant="outline" className="text-destructive">
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+                            <FileX2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                             {t("registre.aucune")}
-                          </Badge>
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>

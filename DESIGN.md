@@ -21,7 +21,7 @@ découlent :
 
 ## Couleurs
 
-Palette **monochrome**, définie en `oklch` dans `frontend/src/index.css`, avec
+Palette **neutre**, définie en `oklch` dans `frontend/src/index.css`, avec
 un thème clair et un thème sombre. **N'écrivez jamais une couleur en dur** pour
 un fond, un texte ou une bordure.
 
@@ -36,6 +36,31 @@ un fond, un texte ou une bordure.
 | Fond discret, survol | `bg-muted`, `hover:bg-accent` |
 | Erreur, danger | `text-destructive`, `bg-destructive/10`, `border-destructive/20` |
 | Anneau de focus | `focus-visible:ring-ring` |
+
+### Couleurs de la marque — liste close
+
+L'identité d'INNOV PHARMA porte un azur, un corail, un ambre et un marine.
+Ils ne remplacent pas les neutres — le gris reste la matière de l'écran —
+mais ils donnent leur teinte aux **chiffres** : ce que montre une jauge, une
+courbe ou une barre, et rien d'autre. **N'ajoutez aucune autre teinte** et
+n'employez pas celles-ci pour du texte courant ou une grande surface.
+
+| Sens | Jeton |
+|---|---|
+| Azur de la marque : trait de courbe, anneau de jauge, part consommée | `bg-marque`, `text-marque`, `fill-marque`, `stroke-marque` |
+| Azur foncé : texte et lien lisibles sur fond clair | `text-marque-fort`, `bg-marque-fort text-marque-fort-foreground` |
+| Azur clair : part engagée, seconde série | `bg-marque-clair` |
+| Marine : le bandeau consolidé du Pilotage | `bg-banniere text-banniere-foreground` |
+| Sur le marine : étiquette, chiffre mis en avant, filet | `text-banniere-muted`, `text-banniere-accent`, `bg-banniere-bordure` |
+
+Le corail et l'ambre n'ont pas de jeton à eux : ce sont désormais
+`--destructive` (écart, dépassement, non justifié) et `--statut-attente`
+(en contrôle, incomplet, en attente) dans `index.css`. Une teinte de plus
+aurait dit la même chose deux fois. L'ambre s'encre de marine
+(`--statut-attente-foreground`) : le blanc n'y tenait pas le contraste.
+
+Les cinq `--chart-*` descendent l'azur : une même famille se lit comme une
+même grandeur à des intensités différentes.
 
 ### Couleurs de statut — liste close
 
@@ -134,6 +159,50 @@ Titre affirmatif, description qui dit la conséquence. Actions en bas à droite 
 `outline` pour annuler, puis l'action principale. Un formulaire long prend
 `max-h-[90vh] overflow-y-auto`.
 
+### Graphiques
+
+Un chiffre se lit ; une proportion se voit. Là où le lecteur cherche un
+rapport — consommé contre enveloppe, justifié contre dépensé, un pays
+contre les autres —, le graphique passe avant le tableau. Les primitives
+vivent dans `components/ui/charts.tsx` ; n'en dessinez pas d'autres dans
+une page.
+
+| Primitive | Ce qu'elle montre | Où |
+|---|---|---|
+| `JaugeDouble` | Exécution et justification en deux anneaux, sur le bandeau marine | Pilotage |
+| `Jauge` | Le taux d'une sous-enveloppe, teinté par le seuil franchi | Budgets |
+| `CourbeMensuelle` | Dépensé en aire, justifié en pointillé, sur douze mois | Pilotage |
+| `BarreEnveloppe` | Un pays contre son enveloppe, à échelle commune, dépassement en corail | Pilotage, Budgets |
+| `RailEnveloppe` | Une enveloppe et ses seuils d'alerte gradués | Budgets |
+| `BarreEcart` | La part justifiée d'une dépense, et son écart | Dossier — détail |
+| `Legende` | Pastille et libellé d'une série ; `dashed` pour un repère en pointillé | toutes |
+
+Trois règles s'y appliquent :
+
+- **Elles ne calculent que des longueurs.** Largeur de barre, longueur
+  d'arc, coordonnée d'un point : de la géométrie. Un taux affiché vient du
+  serveur et passe par `formatRate` — jamais d'un `a / b` écrit dans la
+  page. C'est la règle « rien ne se calcule dans l'interface », appliquée à
+  la lettre : `ratio()` (`lib/utils.ts`) borne une part à son tout pour le
+  dessin, et rien d'autre.
+- **Le dessin ne remplace pas les chiffres.** Chaque graphique est
+  accompagné des montants en texte : la barre donne la forme, la ligne
+  d'à côté donne les nombres. Le SVG lui-même est `aria-hidden` et porte
+  son `title` en `sr-only` — un graphique n'est jamais la seule source
+  d'une information.
+- **Aucune couleur en dur.** Les séries prennent `marque`, `marque-clair`,
+  `banniere-accent` ; l'écart et le dépassement prennent `destructive` ;
+  le seuil d'alerte prend `statut-attente`.
+
+### Filtres à bascule
+
+`<FilterChips>` (`components/ui/filter-chips.tsx`) remplace une liste
+déroulante quand les valeurs sont peu nombreuses et qu'on gagne à les voir
+toutes — les six statuts du circuit, sur la liste des dossiers. Chaque
+pastille est un `<button>` qui expose `aria-pressed`, dans un `<fieldset>`
+dont la `<legend>` en `sr-only` dit ce qui est filtré. Au-delà de six ou
+sept valeurs, revenez au `NativeSelect`.
+
 ---
 
 ## États
@@ -146,7 +215,7 @@ Titre affirmatif, description qui dit la conséquence. Actions en bas à droite 
 | Erreur de formulaire | `<FormError message={…} />` (`role="alert"`) |
 | Erreur de rendu | `<ErrorBoundary>` autour du layout (`components/ui/error-boundary.tsx`) |
 | Avertissement métier | `<Alert>` neutre |
-| Indicateur chiffré | `<StatCard label value hint />` (`components/ui/stat-card.tsx`) |
+| Indicateur chiffré | `<StatCard label value hint />` (`components/ui/stat-card.tsx`) ; `tone="danger"` pour un écart, `children` pour une barre sous le chiffre |
 | Liste plafonnée par le serveur | `<TruncatedNotice count shown />` dès que `count > results.length` |
 
 Le chargement des données passe par `useQuery(clé, fetcher)` (annulation de la
@@ -302,6 +371,19 @@ Un code refusé s'affiche en `<FormError>` sans vider le champ ; on ne
 désactive pas le bouton pour un champ vide (règle d'accessibilité
 ci-dessous). Aucune option « se souvenir de cet appareil » : le code est
 demandé à chaque connexion d'un compte enrôlé.
+
+### Le circuit en frise
+
+Le détail d'un dossier ouvre sur `<FriseDuCircuit>`
+(`components/expenses/workflow-frieze.tsx`), avant les chiffres : cinq
+étapes — brouillon, soumis, en contrôle, justifié, clôturé — franchies,
+courante ou à venir. L'ordre vient de `CIRCUIT` (`lib/labels.ts`), qui suit
+`backend/core/statuts.py` ; il ne se recopie pas dans une page. Le constat
+de non-justification **n'est pas une sixième étape** : il prend la place de
+« justifié », en corail. La frise dit l'état et rien d'autre — les actions
+restent celles d'`allowed_actions`, dans `PageHeader` et sur chaque ligne.
+Elle n'affiche ni date ni auteur par étape : cela vit dans le journal
+d'audit, réservé aux administrateurs, qu'un DF lisant cet écran n'a pas.
 
 ### Réouverture d'un dossier
 
