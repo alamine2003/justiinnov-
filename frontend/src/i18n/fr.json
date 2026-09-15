@@ -1128,5 +1128,65 @@
     "periode_aria": "Période de l'export",
     "exercice_entier": "Exercice entier",
     "impossible": "Export impossible"
+  },
+  "filiales": {
+    "BF": "Burkina Faso",
+    "BJ": "Bénin",
+    "CD": "République démocratique du Congo",
+    "CG": "Congo",
+    "CI": "Côte d'Ivoire",
+    "CM": "Cameroun",
+    "DJ": "Djibouti",
+    "GA": "Gabon",
+    "GM": "Gambie",
+    "GN": "Guinée",
+    "MG": "Madagascar",
+    "ML": "Mali",
+    "MR": "Mauritanie",
+    "NE": "Niger",
+    "SN": "Sénégal",
+    "TD": "Tchad",
+    "TG": "Togo"
+  },
+  "accueil": {
+    "circuit": {
+      "sur_titre": "Circuit de justification",
+      "titre": "Le manager déclare, le DM contrôle, le DF constate.",
+      "texte": "Une dépense soumise est irréversible ; une dépense non justifiée pèse quand même sur l'enveloppe ; un rejet exige un motif. Celui qui a saisi ne décide jamais : il faut deux personnes.",
+      "etapes": {
+        "brouillon": {
+          "acteur": "Manager",
+          "titre": "Brouillon",
+          "texte": "Le pays saisit ses dépenses et dépose ses justificatifs. Une ligne se modifie ou se retire tant qu'elle n'est pas soumise."
+        },
+        "soumis": {
+          "acteur": "Manager",
+          "titre": "Soumis",
+          "texte": "Déclarer tient en une action. La dépense est définitive : seul le siège peut rouvrir le dossier, motif à l'appui."
+        },
+        "controle": {
+          "acteur": "DM",
+          "titre": "En contrôle",
+          "texte": "Le directeur manager met la dépense en contrôle et vérifie les pièces reçues."
+        },
+        "justifie": {
+          "acteur": "DF",
+          "titre": "Justifié",
+          "ou_non": "ou non",
+          "texte": "Le directeur financier constate ce que les pièces attestent. Un constat contesté se rectifie, à deux personnes."
+        },
+        "cloture": {
+          "acteur": "DF",
+          "titre": "Clôturé",
+          "texte": "Le dossier est fermé. Rien n'est jamais purgé : dossier, pièce et journal restent lisibles."
+        }
+      }
+    },
+    "perimetre": {
+      "sur_titre": "Périmètre",
+      "titre": "Dix-sept filiales du groupe INNOV PHARMA",
+      "texte": "Chaque pays porte sa devise, son fuseau horaire et son référentiel. Un compte de pays ne voit que le sien.",
+      "legende": "Chaque filiale entre dans le dispositif à son tour ; le siège l'ouvre depuis la Configuration."
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ThemeProvider } from "@/context/theme"
@@ -118,5 +118,32 @@ describe("connexion avec double authentification", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("code")
     expect(login).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("page d'accueil", () => {
+  it("raconte le circuit et nomme les dix-sept filiales", () => {
+    afficher()
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Savoir où va chaque franc")
+    expect(
+      screen.getByRole("heading", { name: "Le manager déclare, le DM contrôle, le DF constate." }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Justifié ou non" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Clôturé" })).toBeInTheDocument()
+
+    const filiales = screen.getByRole("list", { name: "Périmètre" })
+    expect(within(filiales).getAllByRole("listitem")).toHaveLength(17)
+    expect(within(filiales).getByText("Côte d'Ivoire")).toBeInTheDocument()
+    expect(within(filiales).getByText("République démocratique du Congo")).toBeInTheDocument()
+  })
+
+  it("propose les deux langues côte à côte et mentionne la version", () => {
+    afficher()
+
+    const langues = screen.getByRole("group", { name: "Langue de l'interface" })
+    expect(within(langues).getByRole("button", { name: "Français" })).toHaveAttribute("aria-pressed", "true")
+    expect(within(langues).getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "false")
+    expect(screen.getByText(/Version/)).toBeInTheDocument()
   })
 })

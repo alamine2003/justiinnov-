@@ -10,16 +10,50 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { LANGUAGES, isLanguage } from "@/i18n"
 import { useLanguage } from "@/i18n/use-language"
+import { cn } from "@/lib/utils"
 
 /**
  * Sélecteur de langue, jumeau du sélecteur de thème.
  *
  * `persistOnServer` : dans l'application, le choix est aussi enregistré sur
  * le profil ; sur l'écran de connexion, il n'y a pas encore de session.
+ * `segmented` : les deux langues côte à côte, pour la page d'accueil, où
+ * un visiteur ne cherchera pas la sienne derrière une icône.
  */
-export function LanguageToggle({ persistOnServer = false }: { persistOnServer?: boolean }) {
+export function LanguageToggle({
+  persistOnServer = false,
+  segmented = false,
+}: {
+  persistOnServer?: boolean
+  segmented?: boolean
+}) {
   const { t } = useTranslation()
   const { language, setLanguage } = useLanguage({ persistOnServer })
+
+  if (segmented) {
+    return (
+      <fieldset className="inline-flex rounded-lg bg-banniere-bordure p-1">
+        <legend className="sr-only">{t("layout.langue_bouton")}</legend>
+        {LANGUAGES.map((valeur) => (
+          <button
+            key={valeur}
+            type="button"
+            lang={valeur}
+            aria-pressed={language === valeur}
+            onClick={() => void setLanguage(valeur)}
+            className={cn(
+              "rounded-md px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              language === valeur
+                ? "bg-card text-card-foreground shadow-sm"
+                : "text-banniere-foreground/85 hover:text-banniere-foreground",
+            )}
+          >
+            {t(`libelles.langue.${valeur}`)}
+          </button>
+        ))}
+      </fieldset>
+    )
+  }
 
   return (
     <DropdownMenu>

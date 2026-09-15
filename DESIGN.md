@@ -32,9 +32,9 @@ un fond, un texte ou une bordure.
 | Texte principal | `text-foreground` |
 | Texte secondaire, légendes | `text-muted-foreground` |
 | Bordures | `border-border`, le plus souvent `border-border/60` |
-| Action principale | `bg-primary text-primary-foreground` |
+| Action principale | `bg-primary text-primary-foreground` (l'azur d'action) |
 | Fond discret, survol | `bg-muted`, `hover:bg-accent` |
-| Erreur, danger | `text-destructive`, `bg-destructive/10`, `border-destructive/20` |
+| Erreur, danger | `text-destructive`, `bg-destructive/10`, `border-destructive/20` (le corail) |
 | Anneau de focus | `focus-visible:ring-ring` |
 
 ### Couleurs de la marque — liste close
@@ -50,7 +50,7 @@ n'employez pas celles-ci pour du texte courant ou une grande surface.
 | Azur de la marque : trait de courbe, anneau de jauge, part consommée | `bg-marque`, `text-marque`, `fill-marque`, `stroke-marque` |
 | Azur foncé : texte et lien lisibles sur fond clair | `text-marque-fort`, `bg-marque-fort text-marque-fort-foreground` |
 | Azur clair : part engagée, seconde série | `bg-marque-clair` |
-| Marine : le bandeau consolidé du Pilotage | `bg-banniere text-banniere-foreground` |
+| Marine : le bandeau de l'accueil et le bandeau consolidé du Pilotage | `bg-banniere text-banniere-foreground` |
 | Sur le marine : étiquette, chiffre mis en avant, filet | `text-banniere-muted`, `text-banniere-accent`, `bg-banniere-bordure` |
 
 Le corail et l'ambre n'ont pas de jeton à eux : ce sont désormais
@@ -271,9 +271,9 @@ la source). Dans l'interface il n'existe qu'en vectoriel, tracé en
 `currentColor` : `BrandLogo` (`components/layout/brand-logo.tsx`, emblème et
 nom) et `BrandMark` (`brand-mark.tsx`, l'emblème seul). Il prend la couleur
 du texte qui l'entoure, donc le thème — jamais une couleur en dur, jamais
-une image PNG. Le logo complet va dans l'en-tête (`h-7`, lien vers
-l'accueil) et sur l'écran de connexion (`h-9`, clair sur le panneau
-sombre) ; l'emblème seul partout où 40 px ne suffiraient pas à lire le nom
+une image PNG. Le logo complet va dans l'en-tête (`h-7`, en couleur de
+texte, lien vers l'accueil) et sur la page d'accueil (`h-8`, clair sur le bandeau
+marine `bg-banniere`) ; l'emblème seul partout où 40 px ne suffiraient pas à lire le nom
 (titre du panneau replié). Le nom fait partie du dessin : `BrandLogo` le
 redit aux lecteurs d'écran par un texte masqué (`sr-only`), et il n'est
 pas répété en texte visible à côté.
@@ -287,6 +287,42 @@ La **version** (pied de page, pastille de l'en-tête, écran de connexion)
 vient de `BRAND.version`, figée à la construction : celle du tag `v*`
 livré, sinon celle de `package.json` (`vite.config.ts`, `define`). On ne
 l'écrit nulle part ailleurs ; poser un tag suffit.
+
+### Page d'accueil et connexion
+
+`/login` (`pages/login.tsx`) est la page d'accueil : la seule que voit
+qui n'a pas de session. Elle tient en quatre bandes, sur toute la largeur.
+
+- **Le bandeau**, marine, sous le trait tricolore : à gauche le logo
+  (clair sur `bg-banniere`), la signature, le slogan (`auth.slogan_*`), l'introduction et
+  les trois promesses (enveloppe, dépense justifiée, rien ne se perd) en
+  ligne, chacune sous une pastille du filet du bandeau ; à droite, la **carte de
+  connexion** (`bg-card`, `rounded-2xl`, ombre portée) — identifiant, mot
+  de passe avec bouton d'affichage, code de double authentification
+  facultatif et son aide, lien « Je n'ai plus accès », bouton principal
+  « Se connecter », mention « Mot de passe oublié ? », note d'installation.
+  En haut à droite, le sélecteur de langue en **segments** (« Français »
+  et « English » côte à côte, `LanguageToggle segmented`, `aria-pressed`)
+  et le sélecteur de thème.
+- **Le circuit** (`accueil.circuit.*`) : sur-titre en azur foncé
+  (`text-marque-fort`), titre « Le
+  manager déclare, le DM contrôle, le DF constate. », un paragraphe qui
+  dit les règles, puis les cinq états en colonnes — Brouillon, Soumis,
+  En contrôle, Justifié *ou non*, Clôturé — chacun sous un trait de la
+  couleur de son badge (`WORKFLOW_STYLE`), avec l'acteur et deux phrases.
+  L'ordre et la composition viennent de `CIRCUIT` (`lib/labels.ts`) ; la
+  page ne recopie aucune liste d'états.
+- **Le périmètre** (`accueil.perimetre.*`) : les dix-sept filiales en
+  pastilles, dans l'ordre alphabétique de la langue affichée. La liste
+  vient de `lib/perimetre.ts`, copie des codes de
+  `backend/core/africa.py` que `perimetre.test.ts` vérifie ; les noms sont
+  traduits (`filiales.<code>`). La page s'affiche sans session, donc sans
+  l'API : elle ne dit pas quelles filiales sont déjà ouvertes.
+- **Le pied de page**, marine : logo, « Accès réservé… », copyright et
+  version (`BRAND.version`).
+
+Le mécanisme de connexion (double authentification, mot de passe
+provisoire) est décrit plus bas ; la page n'en change rien.
 
 ### Bouton « Retour »
 

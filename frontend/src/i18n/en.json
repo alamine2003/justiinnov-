@@ -1128,5 +1128,65 @@
     "periode_aria": "Export period",
     "exercice_entier": "Whole year",
     "impossible": "Export failed"
+  },
+  "filiales": {
+    "BF": "Burkina Faso",
+    "BJ": "Benin",
+    "CD": "Democratic Republic of the Congo",
+    "CG": "Congo",
+    "CI": "Ivory Coast",
+    "CM": "Cameroon",
+    "DJ": "Djibouti",
+    "GA": "Gabon",
+    "GM": "Gambia",
+    "GN": "Guinea",
+    "MG": "Madagascar",
+    "ML": "Mali",
+    "MR": "Mauritania",
+    "NE": "Niger",
+    "SN": "Senegal",
+    "TD": "Chad",
+    "TG": "Togo"
+  },
+  "accueil": {
+    "circuit": {
+      "sur_titre": "Justification workflow",
+      "titre": "The manager declares, the DM reviews, the DF certifies.",
+      "texte": "A submitted expense is irreversible; an unjustified expense still weighs on the envelope; a rejection requires a reason. Whoever entered it never decides: it takes two people.",
+      "etapes": {
+        "brouillon": {
+          "acteur": "Manager",
+          "titre": "Draft",
+          "texte": "The country enters its expenses and files its supporting documents. A line can be edited or withdrawn until it is submitted."
+        },
+        "soumis": {
+          "acteur": "Manager",
+          "titre": "Submitted",
+          "texte": "Declaring takes one action. The expense is final: only headquarters can reopen the dossier, with a reason."
+        },
+        "controle": {
+          "acteur": "DM",
+          "titre": "Under review",
+          "texte": "The manager director puts the expense under review and checks the documents received."
+        },
+        "justifie": {
+          "acteur": "DF",
+          "titre": "Justified",
+          "ou_non": "or not",
+          "texte": "The financial director certifies what the documents prove. A disputed finding is rectified, by two people."
+        },
+        "cloture": {
+          "acteur": "DF",
+          "titre": "Closed",
+          "texte": "The dossier is closed. Nothing is ever purged: dossier, documents and logs remain readable."
+        }
+      }
+    },
+    "perimetre": {
+      "sur_titre": "Scope",
+      "titre": "Seventeen INNOV PHARMA subsidiaries",
+      "texte": "Each country carries its own currency, time zone and reference data. A country account sees only its own.",
+      "legende": "Each subsidiary joins the scheme in turn; headquarters opens it from the Configuration."
+    }
   }
 }
