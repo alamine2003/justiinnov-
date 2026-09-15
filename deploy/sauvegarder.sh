@@ -8,7 +8,7 @@
 #                           défaut) ; le premier dump de chaque mois est
 #                           copié dans base/mensuel/, où rien n'est jamais
 #                           supprimé — la conservation est illimitée.
-#   sauvegarder.sh pieces   dans `sauvegarde-pieces` (image minio/mc) :
+#   sauvegarder.sh pieces   dans `sauvegarde-pieces` (image quay.io/minio/mc) :
 #                           miroir du bucket des justificatifs. Sans
 #                           `--remove` : un objet effacé du bucket reste
 #                           dans la copie, c'est le but d'une sauvegarde.
