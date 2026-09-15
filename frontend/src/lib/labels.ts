@@ -1,5 +1,15 @@
 import type { TFunction } from "i18next"
-import { RotateCcw, Undo2, type LucideIcon } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  FileText,
+  FileWarning,
+  FileX2,
+  RotateCcw,
+  TrendingUp,
+  Undo2,
+  type LucideIcon,
+} from "lucide-react"
 import type {
   AlertLevel,
   OverrunPolicy,
@@ -36,6 +46,26 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
 
 export function workflowLabel(t: TFunction, status: WorkflowStatus): string {
   return t(`libelles.workflow.${status}`, { defaultValue: status })
+}
+
+/**
+ * Le circuit dans l'ordre où il se parcourt, pour la frise du détail d'un
+ * dossier. `unjustified` n'y figure pas : ce n'est pas une étape de plus,
+ * c'est la branche qui remplace « justifié » quand le siège constate
+ * l'absence de preuve. L'ordre suit `backend/core/statuts.py` ; ce qui est
+ * *possible* à un instant donné reste dit par `allowed_actions`.
+ */
+export const CIRCUIT: WorkflowStatus[] = [
+  "draft",
+  "submitted",
+  "in_review",
+  "justified",
+  "closed",
+]
+
+/** Rang d'un statut dans le circuit ; un constat de non-justification occupe le rang de « justifié ». */
+export function circuitStep(status: WorkflowStatus): number {
+  return CIRCUIT.indexOf(status === "unjustified" ? "justified" : status)
 }
 
 export function proofStatusLabel(t: TFunction, status: ProofStatus): string {
@@ -100,10 +130,19 @@ export function auditActionLabel(t: TFunction, action: string): string {
 }
 
 /**
- * Icône d'une notification quand elle en mérite une. Le libellé, lui, vient
- * du serveur (`kind_display`).
+ * Icône d'une notification — et de l'alerte de même nature sur le Pilotage.
+ * Le libellé, lui, vient du serveur (`kind_display`, `title`). Une nature
+ * inconnue n'a pas d'icône : c'est le niveau qui la teinte.
  */
 const NOTIFICATION_KIND_ICONS: Record<string, LucideIcon> = {
+  budget_threshold: TrendingUp,
+  budget_overrun: AlertTriangle,
+  expense_submitted: FileText,
+  expense_rejected: FileX2,
+  proof_missing: FileX2,
+  proof_incomplete: FileWarning,
+  reallocation_requested: ArrowRightLeft,
+  storage_error: AlertTriangle,
   dossier_reopened: RotateCcw,
   rectification_requested: Undo2,
   rectification_decided: Undo2,

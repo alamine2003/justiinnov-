@@ -64,6 +64,26 @@ export function formatRate(value: string | null | undefined): string {
 }
 
 /**
+ * Montant abrégé, pour une graduation d'axe où le montant complet ne tient
+ * pas : « 90 M », « 1,2 Md ». Réservé aux repères d'un graphique — un
+ * montant lu par l'utilisateur passe par `formatAmount`.
+ */
+export function formatCompactAmount(value: number): string {
+  if (Number.isNaN(value)) return "—"
+  return numberFormat({ notation: "compact", maximumFractionDigits: 1 }).format(value)
+}
+
+/**
+ * Part d'un tout, bornée à [0, 1] et rendue en pourcentage pour une largeur
+ * CSS ou une longueur d'arc. C'est de la géométrie, pas un chiffre de
+ * gestion : les taux affichés viennent du serveur (`formatRate`).
+ */
+export function ratio(part: number, whole: number): number {
+  if (!Number.isFinite(part) || !Number.isFinite(whole) || whole <= 0) return 0
+  return Math.min(Math.max(part / whole, 0), 1)
+}
+
+/**
  * Lit une date « AAAA-MM-JJ » comme un jour local.
  *
  * `new Date("2026-03-15")` est interprété en UTC : à l'ouest de Greenwich, le

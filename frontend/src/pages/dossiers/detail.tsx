@@ -1,38 +1,22 @@
 import { useState } from "react"
 import { useParams } from "react-router-dom"
-import {
-  AlertTriangle,
-  FileText,
-  Loader2,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Trash2,
-} from "lucide-react"
+import { AlertTriangle, FileText, Loader2, Plus, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageHeader } from "@/components/ui/page-header"
 import { StatCard } from "@/components/ui/stat-card"
-import { EmptyRow } from "@/components/ui/table-states"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { BarreEcart } from "@/components/ui/charts"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
+import { CarteDeLigne } from "@/components/expenses/expense-line-card"
 import { ExpenseForm } from "@/components/expenses/expense-form"
 import { ProofPanel } from "@/components/expenses/proof-panel"
-import { OriginalAmount } from "@/components/expenses/original-amount"
 import { RectificationPanel } from "@/components/expenses/rectification-panel"
 import { ReopenDossier } from "@/components/expenses/reopen-dossier"
-import { RequestRectification } from "@/components/expenses/request-rectification"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
+import { FriseDuCircuit } from "@/components/expenses/workflow-frieze"
 import { useAuth } from "@/context/use-auth"
 import {
   createExpense,
@@ -55,7 +39,7 @@ import {
   type TransitionName,
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
-import { cn, formatAmount, formatDateIn, formatDay } from "@/lib/utils"
+import { formatAmount, formatDay } from "@/lib/utils"
 
 export function DossierDetailPage() {
   const { t } = useTranslation()
@@ -321,6 +305,13 @@ export function DossierDetailPage() {
         <ReopenDossier dossier={dossier} onReopen={reopen} />
       </PageHeader>
 
+      {/* Le circuit en frise : où en est le dossier, avant tout chiffre. */}
+      <Card className="border-border/60 shadow-sm">
+        <CardContent className="overflow-x-auto pt-6">
+          <FriseDuCircuit status={dossier.status} />
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           label={t("dossiers.detail.stat_depenses")}
@@ -329,193 +320,114 @@ export function DossierDetailPage() {
         <StatCard
           label={t("champs.justified_amount")}
           value={formatAmount(dossier.totals.justified, currencySymbol)}
-        />
+        >
+          <BarreEcart
+            className="mt-3 h-1.5"
+            amount={Number(dossier.totals.amount)}
+            justified={Number(dossier.totals.justified)}
+            title={t("dossiers.detail.barre_dossier_aria", {
+              justifie: formatAmount(dossier.totals.justified),
+              depense: formatAmount(dossier.totals.amount),
+            })}
+          />
+        </StatCard>
         <StatCard
           label={t("dossiers.detail.stat_ecart")}
           value={formatAmount(dossier.totals.gap, currencySymbol)}
+          tone={Number(dossier.totals.gap) > 0 ? "danger" : undefined}
           hint={Number(dossier.totals.gap) > 0 ? t("dossiers.detail.ecart_aide") : undefined}
         />
       </div>
 
-      <Card className="border-border/60 shadow-sm">
-        <CardContent className="space-y-3 pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold">{t("dossiers.detail.lignes_titre")}</h3>
-              <p className="text-xs text-muted-foreground">
-                {t("dossiers.detail.lignes_description")}
-              </p>
-            </div>
-            {canAddLine && (
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditing(null)
-                  setFormOpen(true)
-                }}
-              >
-                <Plus className="mr-1 h-4 w-4" aria-hidden />
-                {t("commun.ajouter")}
-              </Button>
-            )}
-          </div>
-
-          <div className="overflow-x-auto rounded-lg border border-border/60">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col">{t("champs.label")}</TableHead>
-                  <TableHead scope="col">{t("commun.date")}</TableHead>
-                  <TableHead scope="col" className="text-right">{t("dossiers.detail.colonnes.depense")}</TableHead>
-                  <TableHead scope="col" className="text-right">{t("dossiers.detail.colonnes.justifie")}</TableHead>
-                  <TableHead scope="col" className="text-right">{t("dossiers.detail.colonnes.ecart")}</TableHead>
-                  <TableHead scope="col">{t("commun.statut")}</TableHead>
-                  <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dossier.expenses.length === 0 ? (
-                  <EmptyRow
-                    colSpan={7}
-                    icon={FileText}
-                    title={t("dossiers.detail.vide.titre")}
-                    hint={
-                      canAddLine
-                        ? t("dossiers.detail.vide.aide_ajouter")
-                        : t("dossiers.detail.vide.aide_verrouille")
-                    }
-                  />
-                ) : (
-                  dossier.expenses.map((expense) => (
-                    <TableRow key={expense.id}>
-                      <TableCell>
-                        <p className="font-medium">{expense.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {expense.place || t("commun.aucun")}
-                          {expense.budget_label &&
-                            ` · ${t("dossiers.detail.impute_sur", { budget: expense.budget_label })}`}
-                          {expense.created_by &&
-                            ` · ${t("dossiers.detail.saisie_par", { nom: expense.created_by })}`}
-                        </p>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDateIn(expense.date, expense.country_timezone)}
-                        <br />
-                        <span className="opacity-70">
-                          {t("dossiers.detail.heure_fuseau", { fuseau: expense.country_timezone })}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatAmount(expense.amount)}
-                        <OriginalAmount
-                          currency={expense.original_currency}
-                          amount={expense.original_amount}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatAmount(expense.justified_amount)}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right font-medium",
-                          Number(expense.gap) > 0 && "text-destructive",
-                        )}
-                      >
-                        {formatAmount(expense.gap)}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={expense.status} label={expense.status_display} />
-                        {expense.control_note && (
-                          <p className="mt-1 max-w-[14rem] text-xs italic text-muted-foreground">
-                            {t("dossiers.detail.note_controle", { note: expense.control_note })}
-                          </p>
-                        )}
-                        {expense.note && (
-                          <p className="mt-1 max-w-[14rem] text-xs italic text-muted-foreground">
-                            {expense.note}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          {expense.allowed_actions.includes("edit") && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t("dossiers.detail.modifier_aria", { titre: expense.title })}
-                              onClick={() => {
-                                setEditing(expense)
-                                setFormOpen(true)
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {expense.allowed_actions.includes("delete") && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t("dossiers.detail.supprimer_aria", { titre: expense.title })}
-                              className="text-destructive hover:text-destructive"
-                              disabled={deletingId === expense.id}
-                              onClick={() => void removeDraft(expense)}
-                            >
-                              {deletingId === expense.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                            </Button>
-                          )}
-                          <WorkflowActions
-                            amount={expense.amount}
-                            currency={currencySymbol}
-                            allowedActions={expense.allowed_actions}
-                            onTransition={(action, payload) =>
-                              runExpenseTransition(expense, action, payload)
-                            }
-                            onError={setActionError}
-                          />
-                          <RequestRectification
-                            expense={expense}
-                            onRequest={(motif) => requestLineRectification(expense, motif)}
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {(rectifications.data?.results.length ?? 0) > 0 && (
+      {/* Les lignes à gauche, les preuves et les rectifications dans un rail
+          à droite : on justifie une ligne en regardant la pièce. */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
         <Card className="border-border/60 shadow-sm">
-          <CardContent className="pt-6">
-            <RectificationPanel
-              rows={rectifications.data?.results ?? []}
-              currency={currencySymbol}
-              onDecided={afterRectificationDecided}
-            />
+          <CardContent className="space-y-3 pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  {t("dossiers.detail.lignes_compte", { count: dossier.expenses.length })}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {t("dossiers.detail.lignes_description")}
+                </p>
+              </div>
+              {canAddLine && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditing(null)
+                    setFormOpen(true)
+                  }}
+                >
+                  <Plus className="mr-1 h-4 w-4" aria-hidden />
+                  {t("commun.ajouter")}
+                </Button>
+              )}
+            </div>
+
+            {dossier.expenses.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
+                <FileText className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
+                <p className="mt-2 text-sm font-medium">{t("dossiers.detail.vide.titre")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {canAddLine
+                    ? t("dossiers.detail.vide.aide_ajouter")
+                    : t("dossiers.detail.vide.aide_verrouille")}
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-2.5">
+                {dossier.expenses.map((expense) => (
+                  <CarteDeLigne
+                    key={expense.id}
+                    expense={expense}
+                    currency={currencySymbol}
+                    deleting={deletingId === expense.id}
+                    onEdit={(ligne) => {
+                      setEditing(ligne)
+                      setFormOpen(true)
+                    }}
+                    onDelete={(ligne) => void removeDraft(ligne)}
+                    onTransition={runExpenseTransition}
+                    onRequestRectification={requestLineRectification}
+                    onError={setActionError}
+                  />
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
-      )}
 
-      <Card className="border-border/60 shadow-sm">
-        <CardContent className="pt-6">
-          <ProofPanel
-            dossierId={dossier.id}
-            proofs={dossier.proofs}
-            canUpload={canUpload}
-            closed={closed}
-            onChanged={async () => {
-              query.reload()
-            }}
-          />
-        </CardContent>
-      </Card>
+        <div className="space-y-4">
+          <Card className="border-border/60 shadow-sm">
+            <CardContent className="pt-6">
+              <ProofPanel
+                dossierId={dossier.id}
+                proofs={dossier.proofs}
+                canUpload={canUpload}
+                closed={closed}
+                onChanged={async () => {
+                  query.reload()
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          {(rectifications.data?.results.length ?? 0) > 0 && (
+            <Card className="border-border/60 shadow-sm">
+              <CardContent className="pt-6">
+                <RectificationPanel
+                  rows={rectifications.data?.results ?? []}
+                  currency={currencySymbol}
+                  onDecided={afterRectificationDecided}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
 
       <ExpenseForm
         open={formOpen}

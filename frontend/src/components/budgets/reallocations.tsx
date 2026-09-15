@@ -15,16 +15,7 @@ import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
-import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import {
   approveReallocation,
@@ -35,7 +26,7 @@ import {
 import { REALLOCATION_STYLE } from "@/lib/status-styles"
 import type { Budget, Reallocation } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
-import { formatAmount, formatDate, normalizeDecimal } from "@/lib/utils"
+import { cn, formatAmount, formatDate, normalizeDecimal } from "@/lib/utils"
 
 interface ReallocationsProps {
   budgets: Budget[]
@@ -56,6 +47,12 @@ export function Reallocations({ budgets, canRequest, onChanged }: ReallocationsP
   const [formOpen, setFormOpen] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [rejecting, setRejecting] = useState<Reallocation | null>(null)
+
+  // La demande ne porte que le libellé de ses deux enveloppes ; leur solde se
+  // retrouve dans la liste des enveloppes de l'écran. Une enveloppe hors de
+  // cette liste — un autre exercice — n'en affiche aucun.
+  const disponibleDe = (id: number) =>
+    budgets.find((budget) => budget.id === id)?.figures.remaining ?? null
 
   const handleApprove = async (row: Reallocation) => {
     setBusyId(row.id)
@@ -91,100 +88,123 @@ export function Reallocations({ budgets, canRequest, onChanged }: ReallocationsP
       <FormError>{error ?? query.error}</FormError>
       <TruncatedNotice page={query.data} noun={t("budgets.realloc.nom_pluriel")} />
 
-      <div className="overflow-x-auto rounded-lg border border-border/60 shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead scope="col">{t("budgets.realloc.colonnes.transfert")}</TableHead>
-              <TableHead scope="col" className="text-right">{t("commun.montant")}</TableHead>
-              <TableHead scope="col">{t("budgets.realloc.colonnes.justification")}</TableHead>
-              <TableHead scope="col">{t("commun.statut")}</TableHead>
-              <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {query.loading ? (
-              <SkeletonRows columns={5} />
-            ) : rows.length === 0 ? (
-              <EmptyRow
-                colSpan={5}
-                icon={ArrowRightLeft}
-                title={t("budgets.realloc.vide_titre")}
-                hint={
-                  canRequest
-                    ? t("budgets.realloc.vide_indication_siege")
-                    : t("budgets.realloc.vide_indication_pays")
-                }
-              />
-            ) : (
-              rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2 text-sm">
-                      <span>{row.source_label}</span>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground" aria-label={t("budgets.realloc.vers")} />
-                      <span>{row.target_label}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
+      {/* Un transfert se lit d'un bout à l'autre : l'enveloppe qui donne, le
+          montant, l'enveloppe qui reçoit — puis qui a demandé et qui tranche.
+          Le tableau coupait ce mouvement en cinq colonnes. */}
+      {query.loading ? (
+        <div className="space-y-2" aria-busy="true">
+          {[0, 1].map((rang) => (
+            <div key={rang} className="h-24 animate-pulse rounded-lg border border-border/60 bg-muted/40" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
+          <ArrowRightLeft className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
+          <p className="mt-2 text-sm font-medium">{t("budgets.realloc.vide_titre")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {canRequest
+              ? t("budgets.realloc.vide_indication_siege")
+              : t("budgets.realloc.vide_indication_pays")}
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className={cn(
+                "rounded-lg border p-3",
+                row.status === "pending"
+                  ? "border-statut-attente/40 bg-statut-attente/5"
+                  : "border-border/60",
+              )}
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <div className="flex flex-1 items-stretch gap-3">
+                  <Enveloppe
+                    role={t("champs.source")}
+                    label={row.source_label}
+                    disponible={disponibleDe(row.source)}
+                    pending={row.status === "pending"}
+                  />
+                  <div className="flex shrink-0 flex-col items-center justify-center gap-1">
+                    <span
+                      className={cn(
+                        "text-sm font-semibold",
+                        row.status === "pending" ? "text-marque" : "text-muted-foreground",
+                      )}
+                    >
+                      {formatAmount(row.amount)}
+                    </span>
+                    <ArrowRight
+                      className={cn(
+                        "h-4 w-8",
+                        row.status === "pending" ? "text-marque" : "text-muted-foreground",
+                      )}
+                      aria-label={t("budgets.realloc.vers")}
+                    />
+                  </div>
+                  <Enveloppe
+                    role={t("champs.target")}
+                    label={row.target_label}
+                    disponible={disponibleDe(row.target)}
+                    pending={row.status === "pending"}
+                  />
+                </div>
+
+                <span aria-hidden className="hidden w-px self-stretch bg-border lg:block" />
+
+                <div className="lg:w-64">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={REALLOCATION_STYLE[row.status]}>{row.status_display}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {row.requested_by
+                        ? t("budgets.realloc.par", { auteur: row.requested_by })
+                        : null}
+                      {row.requested_by && " · "}
                       {formatDate(row.created_at)}
-                      {row.requested_by &&
-                        ` · ${t("budgets.realloc.par", { auteur: row.requested_by })}`}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs italic text-muted-foreground">{row.reason}</p>
+                  {row.decision_note && (
+                    <p className="mt-1 text-xs italic text-muted-foreground">
+                      {t("budgets.realloc.decision", { note: row.decision_note })}
                     </p>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatAmount(row.amount)}
-                  </TableCell>
-                  <TableCell className="max-w-xs">
-                    <p className="line-clamp-2 text-xs text-muted-foreground">
-                      {row.reason}
-                    </p>
-                    {row.decision_note && (
-                      <p className="line-clamp-2 text-xs italic text-muted-foreground">
-                        {t("budgets.realloc.decision", { note: row.decision_note })}
-                      </p>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={REALLOCATION_STYLE[row.status]}>
-                      {row.status_display}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {/* Le serveur dit qui tranche (`can_decide`) : demande
-                        encore en attente, rôle décideur, pas son auteur. */}
-                    {row.can_decide && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t("budgets.realloc.approuver")}
-                          disabled={busyId === row.id}
-                          onClick={() => void handleApprove(row)}
-                        >
-                          {busyId === row.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Check className="h-4 w-4 text-statut-succes" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t("budgets.realloc.refuser")}
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setRejecting(row)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                  )}
+                </div>
+
+                {/* Le serveur dit qui tranche (`can_decide`) : demande encore
+                    en attente, rôle décideur, pas son auteur. */}
+                {row.can_decide && (
+                  <div className="flex shrink-0 gap-2 lg:flex-col">
+                    <Button
+                      size="sm"
+                      disabled={busyId === row.id}
+                      onClick={() => void handleApprove(row)}
+                    >
+                      {busyId === row.id ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Check className="mr-1 h-4 w-4" aria-hidden />
+                      )}
+                      {t("budgets.realloc.approuver")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setRejecting(row)}
+                    >
+                      <X className="mr-1 h-4 w-4" aria-hidden />
+                      {t("budgets.realloc.refuser")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {formOpen && (
         <ReallocationForm
@@ -207,6 +227,37 @@ export function Reallocations({ budgets, canRequest, onChanged }: ReallocationsP
             onChanged()
           }}
         />
+      )}
+    </div>
+  )
+}
+
+/** Un bout de flux : l'enveloppe qui donne ou celle qui reçoit, et son solde. */
+function Enveloppe({
+  role,
+  label,
+  disponible,
+  pending,
+}: {
+  role: string
+  label: string
+  disponible: string | null
+  pending: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <div
+      className={cn(
+        "min-w-0 flex-1 rounded-lg border p-2.5",
+        pending ? "border-border/60 bg-card" : "border-border/40 bg-muted/30",
+      )}
+    >
+      <p className="text-xs text-muted-foreground">{role}</p>
+      <p className="mt-1 truncate text-sm font-semibold">{label}</p>
+      {disponible !== null && (
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {t("budgets.realloc.disponibles", { montant: formatAmount(disponible) })}
+        </p>
       )}
     </div>
   )
