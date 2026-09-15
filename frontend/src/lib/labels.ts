@@ -120,6 +120,8 @@ export const AUDIT_ACTIONS = [
   "rectification_requested",
   "rectification_decided",
   "rectified",
+  "reopen_requested",
+  "reopen_decided",
   "imported",
 ] as const
 
@@ -144,6 +146,8 @@ const NOTIFICATION_KIND_ICONS: Record<string, LucideIcon> = {
   reallocation_requested: ArrowRightLeft,
   storage_error: AlertTriangle,
   dossier_reopened: RotateCcw,
+  reopen_requested: RotateCcw,
+  reopen_decided: RotateCcw,
   rectification_requested: Undo2,
   rectification_decided: Undo2,
 }

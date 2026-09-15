@@ -86,7 +86,8 @@ l'application.
   (décision 58 : l'administrateur attribue chaque droit à qui il veut, et
   personne ne peut lui retirer les siens) ; et le `manager` ne reçoit
   jamais le contrôle (mise en contrôle, justification, clôture, contrôle
-  d'une pièce, réouverture, décision sur une rectification),
+  d'une pièce, réouverture, décision sur une rectification ou sur une
+  demande de réouverture),
   l'administration (comptes, configuration, journal d'audit, ouverture ou
   modification d'un pays) ni l'arbitrage des enveloppes ; les comptes et la
   configuration ne s'ouvrent qu'aux administrateurs, jamais au DM ni au
@@ -132,8 +133,16 @@ l'application.
   aux `dm` et `manager` du pays — elle sert à demander des comptes, jamais
   à corriger en silence. Les lignes reviennent en brouillon sans
   imputation. Un dossier dont une ligne est justifiée ou clôturée ne se
-  rouvre pas : le siège a constaté. **La seconde exception, la
-  rectification, commence là** : une ligne justifiée ou clôturée à tort se
+  rouvre pas : le siège a constaté. La réouverture se *demande* aussi
+  (`reopenings.request`, tous les rôles par défaut — le pays voit son
+  erreur le premier ; `reopenings.decide` : `admin`, `super_admin`,
+  jamais le pays, jamais l'auteur de la demande), motif obligatoire, une
+  demande en attente par dossier, sur un dossier soumis ou en contrôle
+  dont aucune ligne n'est constatée ; son approbation passe par la
+  réouverture ordinaire (`transitions.approuver_reouverture` →
+  `rouvrir`), mêmes verrous, mêmes traces (`reopen_requested`,
+  `reopened`, `reopen_decided`), même notification au pays. **La seconde
+  exception, la rectification, commence là** : une ligne justifiée ou clôturée à tort se
   *demande* à rectifier (`rectifications.request`, tous les rôles par
   défaut, motif obligatoire, une demande en attente par ligne) et un
   administrateur *qui n'est pas le demandeur* approuve ou refuse
@@ -239,7 +248,7 @@ l'application.
 | Modèle de données et décisions prises (référence, tenue à jour) | `docs/model-de-donnees.md` |
 | États du circuit (`Status` et ses ensembles) | `backend/core/statuts.py` |
 | Circuit de justification, réouverture, rectification | `backend/expenses/workflow.py` (états, prédicats), `backend/expenses/transitions.py` (services) |
-| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce, demander et décider une rectification) | `backend/expenses/transitions.py` |
+| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce, demander et décider une rectification ou une réouverture) | `backend/expenses/transitions.py` |
 | Services de réallocation (demander, approuver, refuser) | `backend/budget/transitions.py` |
 | Refus métier (`RegleViolee`, `PermissionRefusee`, `HorsPerimetre`) et leur traduction HTTP | `backend/core/regles.py` |
 | Capacités et leurs défauts, périmètres, équipes, double authentification, authentification | `backend/accounts/` (`permissions.py`, `perimetre.py`, `scoping.py`, `views.py`) ; matrice réglée dans `WorkflowConfiguration.capability_roles` |

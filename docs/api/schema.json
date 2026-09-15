@@ -32,6 +32,8 @@
                                 "rectification_requested",
                                 "rectified",
                                 "rejected",
+                                "reopen_decided",
+                                "reopen_requested",
                                 "reopened",
                                 "reviewed",
                                 "submitted",
@@ -39,7 +41,7 @@
                                 "updated"
                             ]
                         },
-                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
+                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `reopen_requested` - Demande de réouverture\n* `reopen_decided` - Décision sur une réouverture\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
                     },
                     {
                         "in": "query",
@@ -5159,10 +5161,12 @@
                                 "reallocation_requested",
                                 "rectification_decided",
                                 "rectification_requested",
+                                "reopen_decided",
+                                "reopen_requested",
                                 "storage_error"
                             ]
                         },
-                        "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification"
+                        "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `reopen_requested` - Demande de réouverture\n* `reopen_decided` - Décision sur une réouverture"
                     },
                     {
                         "in": "query",
@@ -6765,6 +6769,306 @@
                 }
             }
         },
+        "/api/reopen-requests/": {
+            "get": {
+                "operationId": "reopen_requests_list",
+                "description": "Demandes de réouverture d'un dossier déclaré (``transitions``).\n\nMême forme que les rectifications : une demande se dépose, puis\ns'approuve ou se refuse, jamais ne se réécrit (``PUT``, ``PATCH``,\n``DELETE`` → 405). Le périmètre est celui du dossier visé — pays, et\néquipes pour un manager qui y est restreint — : une demande hors\npérimètre n'existe pas (404).",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "dossier",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "dossier__country",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "ordering",
+                        "required": false,
+                        "in": "query",
+                        "description": "Quel champ utiliser pour classer les résultats.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un numéro de page de l'ensemble des résultats.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page_size",
+                        "required": false,
+                        "in": "query",
+                        "description": "Nombre de résultats à retourner par page.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un terme de recherche.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "status",
+                        "schema": {
+                            "type": "string",
+                            "title": "Statut",
+                            "enum": [
+                                "approved",
+                                "pending",
+                                "refused"
+                            ]
+                        },
+                        "description": "* `pending` - En attente\n* `approved` - Approuvée\n* `refused` - Refusée"
+                    }
+                ],
+                "tags": [
+                    "reopen-requests"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedReopenRequestList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "reopen_requests_create",
+                "description": "Demandes de réouverture d'un dossier déclaré (``transitions``).\n\nMême forme que les rectifications : une demande se dépose, puis\ns'approuve ou se refuse, jamais ne se réécrit (``PUT``, ``PATCH``,\n``DELETE`` → 405). Le périmètre est celui du dossier visé — pays, et\néquipes pour un manager qui y est restreint — : une demande hors\npérimètre n'existe pas (404).",
+                "tags": [
+                    "reopen-requests"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReopenRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReopenRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReopenRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReopenRequest"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/reopen-requests/{id}/": {
+            "get": {
+                "operationId": "reopen_requests_retrieve",
+                "description": "Demandes de réouverture d'un dossier déclaré (``transitions``).\n\nMême forme que les rectifications : une demande se dépose, puis\ns'approuve ou se refuse, jamais ne se réécrit (``PUT``, ``PATCH``,\n``DELETE`` → 405). Le périmètre est celui du dossier visé — pays, et\néquipes pour un manager qui y est restreint — : une demande hors\npérimètre n'existe pas (404).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Demande de réouverture.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reopen-requests"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReopenRequest"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/reopen-requests/{id}/approve/": {
+            "post": {
+                "operationId": "reopen_requests_approve_create",
+                "description": "Approuve : le dossier est rouvert (``transitions.rouvrir``).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Demande de réouverture.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reopen-requests"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReopenRequest"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/reopen-requests/{id}/refuse/": {
+            "post": {
+                "operationId": "reopen_requests_refuse_create",
+                "description": "Refuse : le dossier reste déclaré. Le motif est obligatoire.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Demande de réouverture.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reopen-requests"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RectificationDecisionRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReopenRequest"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/teams/": {
             "get": {
                 "operationId": "teams_list",
@@ -7585,13 +7889,15 @@
                     "rectification_requested",
                     "rectification_decided",
                     "rectified",
+                    "reopen_requested",
+                    "reopen_decided",
                     "proof_uploaded",
                     "proof_replaced",
                     "downloaded",
                     "imported"
                 ],
                 "type": "string",
-                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
+                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `reopen_requested` - Demande de réouverture\n* `reopen_decided` - Décision sur une réouverture\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
             },
             "AuditLog": {
                 "type": "object",
@@ -11692,10 +11998,12 @@
                     "storage_error",
                     "dossier_reopened",
                     "rectification_requested",
-                    "rectification_decided"
+                    "rectification_decided",
+                    "reopen_requested",
+                    "reopen_decided"
                 ],
                 "type": "string",
-                "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification"
+                "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `reopen_requested` - Demande de réouverture\n* `reopen_decided` - Décision sur une réouverture"
             },
             "NotificationLevelEnum": {
                 "enum": [
@@ -12310,6 +12618,39 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/Rectification"
+                        }
+                    }
+                }
+            },
+            "PaginatedReopenRequestList": {
+                "type": "object",
+                "required": [
+                    "count",
+                    "next",
+                    "previous",
+                    "results"
+                ],
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "example": 123
+                    },
+                    "next": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=4"
+                    },
+                    "previous": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=2"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReopenRequest"
                         }
                     }
                 }
@@ -13248,6 +13589,16 @@
                         "readOnly": true,
                         "description": "Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui."
                     },
+                    "reopenings.request": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Signaler, motif à l'appui, qu'un dossier soumis ou en contrôle doit revenir au pays."
+                    },
+                    "reopenings.decide": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Approuver — le dossier revient au brouillon — ou refuser une demande. Jamais la sienne."
+                    },
                     "rectifications.request": {
                         "type": "boolean",
                         "readOnly": true,
@@ -13297,6 +13648,8 @@
                     "expenses.close",
                     "proofs.review",
                     "dossiers.reopen",
+                    "reopenings.request",
+                    "reopenings.decide",
                     "rectifications.request",
                     "rectifications.decide",
                     "data.export",
@@ -13781,7 +14134,7 @@
             },
             "RectificationDecisionRequest": {
                 "type": "object",
-                "description": "Motif accompagnant une décision ; obligatoire en cas de refus.",
+                "description": "Motif accompagnant une décision — sur une rectification ou sur une\nréouverture ; obligatoire en cas de refus.",
                 "properties": {
                     "note": {
                         "type": "string"
@@ -13815,6 +14168,141 @@
                 ],
                 "type": "string",
                 "description": "* `pending` - En attente\n* `approved` - Approuvée\n* `refused` - Refusée"
+            },
+            "ReopenRequest": {
+                "type": "object",
+                "description": "Demande de réouverture d'un dossier déclaré (``workflow``).\n\nÀ la création, ``dossier`` et ``motif`` suffisent : le service relève\nl'état du dossier qu'elle vise, et le garde. Le reste — statut,\nsignatures, décision — s'écrit par les actions ``approve`` et\n``refuse``, jamais par ``PATCH``.",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "dossier": {
+                        "type": "integer"
+                    },
+                    "dossier_number": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "dossier_label": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "dossier_status": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "country": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "status": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RectificationStatusEnum"
+                            }
+                        ],
+                        "readOnly": true,
+                        "title": "Statut"
+                    },
+                    "status_display": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "motif": {
+                        "type": "string",
+                        "title": "Motif de la demande"
+                    },
+                    "previous_status": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WorkflowStatusEnum"
+                            }
+                        ],
+                        "readOnly": true,
+                        "title": "État avant réouverture"
+                    },
+                    "previous_status_display": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "requested_by": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Demandée par"
+                    },
+                    "decided_by": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Décidée par"
+                    },
+                    "decided_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Décidée le"
+                    },
+                    "decision_note": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Motif de la décision"
+                    },
+                    "can_decide": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Créé le"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Modifié le"
+                    }
+                },
+                "required": [
+                    "can_decide",
+                    "country",
+                    "created_at",
+                    "decided_at",
+                    "decided_by",
+                    "decision_note",
+                    "dossier",
+                    "dossier_label",
+                    "dossier_number",
+                    "dossier_status",
+                    "id",
+                    "motif",
+                    "previous_status",
+                    "previous_status_display",
+                    "requested_by",
+                    "status",
+                    "status_display",
+                    "updated_at"
+                ]
+            },
+            "ReopenRequestRequest": {
+                "type": "object",
+                "description": "Demande de réouverture d'un dossier déclaré (``workflow``).\n\nÀ la création, ``dossier`` et ``motif`` suffisent : le service relève\nl'état du dossier qu'elle vise, et le garde. Le reste — statut,\nsignatures, décision — s'écrit par les actions ``approve`` et\n``refuse``, jamais par ``PATCH``.",
+                "properties": {
+                    "dossier": {
+                        "type": "integer"
+                    },
+                    "motif": {
+                        "type": "string",
+                        "minLength": 1,
+                        "title": "Motif de la demande"
+                    }
+                },
+                "required": [
+                    "dossier",
+                    "motif"
+                ]
             },
             "RoleEnum": {
                 "enum": [
@@ -14159,10 +14647,11 @@
                     "reject",
                     "close",
                     "reopen",
-                    "request_rectification"
+                    "request_rectification",
+                    "request_reopening"
                 ],
                 "type": "string",
-                "description": "* `edit` - edit\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen\n* `request_rectification` - request_rectification"
+                "description": "* `edit` - edit\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen\n* `request_rectification` - request_rectification\n* `request_reopening` - request_reopening"
             },
             "TransitionRequest": {
                 "type": "object",

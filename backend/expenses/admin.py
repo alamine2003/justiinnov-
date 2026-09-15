@@ -9,7 +9,15 @@ from django.contrib import admin
 
 from core.statuts import LOCKED_STATUSES, Status
 
-from .models import AuditLog, Beneficiary, Dossier, Expense, Proof, Rectification
+from .models import (
+    AuditLog,
+    Beneficiary,
+    Dossier,
+    Expense,
+    Proof,
+    Rectification,
+    ReopenRequest,
+)
 
 
 class SansSuppressionMixin:
@@ -129,6 +137,23 @@ class RectificationAdmin(SansSuppressionMixin, admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("requested_by", "decided_by", "motif")
     readonly_fields = tuple(f.name for f in Rectification._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ReopenRequest)
+class ReopenRequestAdmin(SansSuppressionMixin, admin.ModelAdmin):
+    """Une demande se consulte ; elle se dépose et se tranche par l'API,
+    qui seule verrouille, journalise et rouvre le dossier."""
+
+    list_display = ("created_at", "dossier", "status", "requested_by", "decided_by")
+    list_filter = ("status",)
+    search_fields = ("requested_by", "decided_by", "motif", "dossier__number")
+    readonly_fields = tuple(f.name for f in ReopenRequest._meta.fields)
 
     def has_add_permission(self, request):
         return False

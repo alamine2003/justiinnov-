@@ -14,6 +14,8 @@ import { ExpenseForm } from "@/components/expenses/expense-form"
 import { ProofPanel } from "@/components/expenses/proof-panel"
 import { RectificationPanel } from "@/components/expenses/rectification-panel"
 import { ReopenDossier } from "@/components/expenses/reopen-dossier"
+import { ReopenRequestPanel } from "@/components/expenses/reopen-request-panel"
+import { RequestReopening } from "@/components/expenses/request-reopening"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
 import { FriseDuCircuit } from "@/components/expenses/workflow-frieze"
@@ -24,8 +26,10 @@ import {
   fetchBeneficiaries,
   fetchDossier,
   fetchRectifications,
+  fetchReopenRequests,
   reopenDossier,
   requestRectification,
+  requestReopening,
   transitionDossier,
   transitionExpense,
   updateExpense,
@@ -61,6 +65,14 @@ export function DossierDetailPage() {
   const rectifications = useQuery(
     `rectifications:${dossierId}`,
     (signal) => fetchRectifications({ expense__dossier: dossierId, page_size: 100 }, signal),
+  )
+
+  // Les demandes de réouverture du dossier : une au plus en attente, les
+  // tranchées restent lisibles. Relues avec le dossier après une demande
+  // ou une décision, puisque l'approbation le renvoie au brouillon.
+  const reopenRequests = useQuery(
+    `reopen-requests:${dossierId}`,
+    (signal) => fetchReopenRequests({ dossier: dossierId, page_size: 100 }, signal),
   )
 
   // Le référentiel du pays vient de sa fiche, mise en cache : une transition
@@ -147,6 +159,26 @@ export function DossierDetailPage() {
     setNotice(null)
     query.reload()
     rectifications.reload()
+  }
+
+  // La demande de réouverture n'est pas une transition : le dossier ne
+  // bouge qu'à la décision d'un administrateur. Le dialogue affiche
+  // lui-même les refus par champ, d'où l'erreur relancée ; la fiche est
+  // relue au succès (`allowed_actions` change : plus de nouvelle demande).
+  const requestDossierReopening = async (motif: string) => {
+    if (!dossier) return
+    setActionError(null)
+    setNotice(null)
+    await requestReopening(dossier.id, motif)
+    query.reload()
+    reopenRequests.reload()
+  }
+
+  const afterReopeningDecided = async () => {
+    setActionError(null)
+    setNotice(null)
+    query.reload()
+    reopenRequests.reload()
   }
 
   const removeDraft = async (expense: Expense) => {
@@ -249,6 +281,13 @@ export function DossierDetailPage() {
           <AlertDescription>{rectifications.error}</AlertDescription>
         </Alert>
       )}
+      {reopenRequests.error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>{t("dossiers.demande_reouverture.chargement_impossible")}</AlertTitle>
+          <AlertDescription>{reopenRequests.error}</AlertDescription>
+        </Alert>
+      )}
       {notice && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
@@ -303,6 +342,7 @@ export function DossierDetailPage() {
           onError={setActionError}
         />
         <ReopenDossier dossier={dossier} onReopen={reopen} />
+        <RequestReopening dossier={dossier} onRequest={requestDossierReopening} />
       </PageHeader>
 
       {/* Le circuit en frise : où en est le dossier, avant tout chiffre. */}
@@ -414,6 +454,17 @@ export function DossierDetailPage() {
               />
             </CardContent>
           </Card>
+
+          {(reopenRequests.data?.results.length ?? 0) > 0 && (
+            <Card className="border-border/60 shadow-sm">
+              <CardContent className="pt-6">
+                <ReopenRequestPanel
+                  rows={reopenRequests.data?.results ?? []}
+                  onDecided={afterReopeningDecided}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {(rectifications.data?.results.length ?? 0) > 0 && (
             <Card className="border-border/60 shadow-sm">

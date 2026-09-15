@@ -64,6 +64,27 @@ temps, à deux personnes :
   ses lignes ;
 - l'état et le montant justifié d'avant sont gardés sur la demande et dans
   le journal ; le demandeur, le contrôle et le pays sont prévenus.
+
+**La réouverture se demande aussi.** Le pays ne peut pas revenir sur ce
+qu'il a soumis, et c'est pourtant lui qui voit son erreur le premier — une
+ligne mal imputée, un montant faux, un dossier parti trop tôt. Plutôt que
+de lui ouvrir la réouverture, ce qui lui rendrait le droit de se corriger
+en silence, on lui ouvre la *demande*, sur le même modèle que la
+rectification :
+
+- **n'importe qui demande** (``reopenings.request``, tous les rôles par
+  défaut) : un dossier soumis ou en contrôle — jamais un brouillon, qui n'a
+  rien à rouvrir, jamais un dossier constaté ni un dossier dont une ligne
+  l'est, parce que la réouverture s'y refuse —, un motif obligatoire, une
+  seule demande en attente par dossier ;
+- **un administrateur décide** (``reopenings.decide`` : RH et direction,
+  jamais le pays) — et jamais l'auteur de la demande ;
+- approuvée, la demande **passe par la réouverture ordinaire**
+  (``transitions.rouvrir``, capacité ``dossiers.reopen``) : mêmes verrous,
+  même motif — celui de la demande, gardé sur le dossier —, mêmes traces
+  sur le dossier et sur chaque ligne, même notification au pays. Rien de
+  ce que la réouverture garantit n'est contourné ; refusée, le refus est
+  motivé et le demandeur en est prévenu.
 """
 
 from django.utils.translation import gettext_lazy as _
@@ -147,6 +168,18 @@ RECTIFIABLE_STATUSES = frozenset({Status.JUSTIFIED, Status.CLOSED})
 #: reçoit dans ``allowed_actions``. Ce n'est pas une transition : la ligne
 #: ne change pas d'état à la demande, seulement à la décision.
 REQUEST_RECTIFICATION = "request_rectification"
+
+#: Ce dont le pays ou le siège peut demander la réouverture : un dossier
+#: déclaré que le siège n'a pas encore constaté. Un brouillon n'a rien à
+#: rouvrir ; un dossier non justifié, lui, se rouvre encore de la main d'un
+#: administrateur (``TRANSITIONS["reopen"]``) mais ne se *demande* pas : le
+#: siège a relevé l'absence de preuve, c'est à lui d'en tirer la suite.
+REOPENABLE_ON_REQUEST_STATUSES = frozenset({Status.SUBMITTED, Status.IN_REVIEW})
+
+#: L'action de saisie qui ouvre une demande de réouverture, dans
+#: ``allowed_actions`` d'un dossier. Pas une transition non plus : le
+#: dossier ne bouge qu'à l'approbation, par ``reopen``.
+REQUEST_REOPENING = "request_reopening"
 
 #: Actions de saisie et leur capacité. Elles ne sont pas des transitions —
 #: l'état ne change pas — mais l'interface les propose au même endroit que
@@ -387,6 +420,30 @@ def peut_demander_une_rectification(expense, *, role, configuration=None):
     return not en_attente
 
 
+def peut_demander_une_reouverture(dossier, *, role, configuration=None):
+    """Une réouverture peut-elle être demandée sur ce dossier ?
+
+    Capacité, dossier soumis ou en contrôle, aucune ligne déjà constatée —
+    la réouverture s'y refuserait (``REOPEN_BLOCKING_STATUSES``), et une
+    demande vouée à l'échec n'a pas à être proposée — et aucune demande
+    déjà en attente. Ce dernier point se lit sur
+    ``dossier.reouverture_en_attente`` quand la liste l'a annoté
+    (``DossierQuerySet.with_reopen_request``), et par une requête sinon ;
+    les lignes constatées viennent de :meth:`Dossier.line_counts`, annoté
+    de même par ``with_totals``.
+    """
+    if role not in roles_pour("reopenings.request", configuration):
+        return False
+    if dossier.status not in REOPENABLE_ON_REQUEST_STATUSES:
+        return False
+    if dossier.line_counts()["settled"]:
+        return False
+    en_attente = getattr(dossier, "reouverture_en_attente", None)
+    if en_attente is None:
+        en_attente = dossier.reopen_requests.filter(status="pending").exists()
+    return not en_attente
+
+
 def dossier_allowed_actions(dossier, *, role, username, configuration=None):
     """Actions qu'un demandeur peut tenter sur un dossier (``allowed_actions``).
 
@@ -431,4 +488,6 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
         if action == "reopen" and lines["settled"]:
             continue
         actions.append(action)
+    if peut_demander_une_reouverture(dossier, role=role, configuration=configuration):
+        actions.append(REQUEST_REOPENING)
     return actions

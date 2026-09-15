@@ -291,6 +291,9 @@ SPECTACULAR_SETTINGS = {
         "NotificationKindEnum": "notifications.models.Notification.Kind",
         "NotificationLevelEnum": "notifications.models.Notification.Level",
         "ReallocationStatusEnum": "budget.models.BudgetReallocation.Status",
+        # Vaut aussi pour ``ReopenRequest.Status``, qui est la même
+        # énumération : un second nom pour le même jeu de choix ferait
+        # avertir drf-spectacular.
         "RectificationStatusEnum": "expenses.models.Rectification.Status",
         "OverrunPolicyEnum": "budget.models.OverrunPolicy",
         "ProjectStatusEnum": "core.models.Project.STATUS_CHOICES",

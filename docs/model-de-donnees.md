@@ -411,6 +411,31 @@ brouillon   soumis     en contrôle └▶ unjustified ┘
   par une réouverture : elle a une histoire et la demande la référence
   (`transitions.exiger_une_ligne_jamais_rectifiee`, `allowed_actions`
   sans `delete`) ; elle se corrige et se resoumet.
+- `request_reopening` : **demande de réouverture**, la réouverture
+  demandée par le pays — qui ne peut pas revenir sur ce qu'il a soumis et
+  voit pourtant son erreur le premier. N'importe qui la **demande** (`POST
+  /api/reopen-requests/ {dossier, motif}`, `reopenings.request`, tous les
+  rôles par défaut) sur un dossier **soumis ou en contrôle**
+  (`REOPENABLE_ON_REQUEST_STATUSES`) dont aucune ligne n'est constatée —
+  jamais un brouillon, qui n'a rien à rouvrir, jamais un dossier constaté,
+  que la rectification seule défait —, une seule demande en attente par
+  dossier (contrainte `reopen_request_une_en_attente_par_dossier`) ; un
+  administrateur **décide** (`POST /api/reopen-requests/{id}/approve/` ou
+  `/refuse/ {note}`, `reopenings.decide` : `admin`, `super_admin`, jamais
+  le pays) — **jamais l'auteur de la demande** (403). Approuvée, la
+  demande **passe par la réouverture ordinaire**
+  (`transitions.approuver_reouverture` → `rouvrir`, capacité
+  `dossiers.reopen`) : mêmes verrous (la demande, puis le dossier, puis
+  ses lignes), même refus dès qu'une ligne a été constatée entre-temps,
+  motif de la demande gardé dans `Dossier.reopen_note`, traces `reopened`
+  sur le dossier et chaque ligne, managers du pays prévenus
+  (`dossier_reopened`). Refusée, le dossier reste déclaré et le refus est
+  motivé. La demande garde `previous_status` ; `AuditLog` reçoit
+  `reopen_requested` et `reopen_decided` ; les administrateurs sont
+  prévenus de la demande, le demandeur de la décision — et les managers
+  du pays du seul refus, la réouverture les prévenant déjà de
+  l'approbation. `allowed_actions` du dossier porte `request_reopening`
+  quand la demande est possible.
 
 **Une dépense soumise est irréversible** : elle ne revient pas au brouillon,
 ne se modifie plus, ne se supprime pas. Seul un brouillon peut être retiré,
@@ -437,6 +462,23 @@ Ni modification ni suppression (`PUT`, `PATCH`, `DELETE` → 405) : un motif
 changé après coup ferait mentir le journal. Périmètre : celui de la ligne
 (`expense__country`, `expense__team`).
 
+### 5.5 ter `ReopenRequest` — demande de réouverture d'un dossier
+
+| Champ | Type | Notes |
+|---|---|---|
+| `dossier` | FK → Dossier (PROTECT) | le dossier à rouvrir |
+| `status` | Char(20) | `pending`, `approved`, `refused` — la même énumération que `Rectification.Status` (un seul composant `RectificationStatusEnum` dans le schéma) |
+| `motif` | Text | obligatoire |
+| `requested_by`, `decided_by` | Char(180) | identités en texte (décision 10) |
+| `decided_at` | DateTime (null) | contrainte `reopen_request_decision_datee` : une décision est datée |
+| `decision_note` | Text | obligatoire au refus |
+| `previous_status` | Char(20) | état du dossier à la demande (`submitted` ou `in_review`) |
+
+Même forme que la rectification : ni modification ni suppression (405),
+périmètre du dossier (`dossier__country`, `dossier__team`). La demande ne
+porte pas le motif de la réouverture une fois approuvée : c'est
+`Dossier.reopen_note` qui le garde, comme pour toute réouverture.
+
 ### 5.6 `AuditLog` — journal des actions sensibles
 
 Consultable par `audit.read` (`admin`, `super_admin` par défaut) : la RH, qui
@@ -446,7 +488,7 @@ leurs décisions.
 | Champ | Type | Notes |
 |---|---|---|
 | `user` | Char(180) | identité en texte |
-| `action` | Char(32) | `created`, `updated`, `submitted`, `reviewed`, `justified`, `unjustified`, `approved` / `rejected` (contrôle d'une pièce), `deleted` (brouillon), `closed`, `reopened` (réouverture, avec le motif ; sur le dossier et sur chaque ligne), `rectification_requested`, `rectification_decided`, `rectified` (rectification d'un constat : la demande, la décision, la ligne et le dossier remis en contrôle, avec le motif et le montant justifié défait), `proof_uploaded`, `proof_replaced`, `proof_to_review`, `downloaded` (pièce, ou export avec `detail = {year, month, country, format}`), `imported` (Excel) |
+| `action` | Char(32) | `created`, `updated`, `submitted`, `reviewed`, `justified`, `unjustified`, `approved` / `rejected` (contrôle d'une pièce), `deleted` (brouillon), `closed`, `reopened` (réouverture, avec le motif ; sur le dossier et sur chaque ligne), `rectification_requested`, `rectification_decided`, `rectified` (rectification d'un constat : la demande, la décision, la ligne et le dossier remis en contrôle, avec le motif et le montant justifié défait), `reopen_requested`, `reopen_decided` (demande de réouverture et sa décision ; la réouverture elle-même reste `reopened`), `proof_uploaded`, `proof_replaced`, `proof_to_review`, `downloaded` (pièce, ou export avec `detail = {year, month, country, format}`), `imported` (Excel) |
 | `object_type` / `object_id` | Char(64) / Integer | cible |
 | `label` | Char(250) | |
 | `country` | FK → Country (null) | pour le cloisonnement du journal |
@@ -465,7 +507,7 @@ Index : `(object_type, object_id)`, `(created_at)`, `(country, created_at)`,
 | Champ | Type | Notes |
 |---|---|---|
 | `recipient` | FK → User | |
-| `kind` | Char(32) | `budget_threshold`, `budget_overrun`, `expense_submitted`, `expense_rejected`, `dossier_reopened` (aux comptes qui suivent le pays), `proof_missing`, `proof_incomplete`, `reallocation_requested`, `rectification_requested` (aux administrateurs), `rectification_decided` (au demandeur et au contrôle ; au pays aussi quand la ligne revient en contrôle), `storage_error` |
+| `kind` | Char(32) | `budget_threshold`, `budget_overrun`, `expense_submitted`, `expense_rejected`, `dossier_reopened` (aux comptes qui suivent le pays), `proof_missing`, `proof_incomplete`, `reallocation_requested`, `rectification_requested` (aux administrateurs), `rectification_decided` (au demandeur et au contrôle ; au pays aussi quand la ligne revient en contrôle), `reopen_requested` (aux administrateurs), `reopen_decided` (au demandeur ; aux managers du pays aussi quand elle est refusée — approuvée, `dossier_reopened` les prévient déjà), `storage_error` |
 | `level` | Char | `info`, `warning`, `critical` |
 | `title`, `body`, `link` | | |
 | `country` | FK → Country (null) | |
@@ -552,6 +594,7 @@ AuditLog, ChangeLog, Notification ─▶ Country (null)
 | 56 | Chiffrement : ce qui est protégé de quoi | **Le volume `sauvegardes` du serveur reste en clair** par défaut : `rclone crypt` chiffre ce qu'il **envoie**, pas ce qui reste sur la machine. La copie distante, elle, est chiffrée (le tiers ne lit rien), noms de fichiers en clair pour `--lister`/`--rapatrier`. Le secret est **symétrique et présent sur le serveur** — « clé hors serveur » désigne une **copie de récupération** gardée ailleurs, pas un serveur qui en serait dépourvu : le serveur peut relire sa propre copie distante. À conserver pour restaurer : la clé, **le sel** (second mot de passe du coffre) et les réglages du coffre. **Pour que le serveur ne puisse pas déchiffrer**, `SAUVEGARDE_CLE_PUBLIQUE` chiffre chaque dump à la sortie de `pg_dump` avec une clé publique (`openssl smime`, AES-256, suffixe `.enc`) : le dump n'existe en clair nulle part et la clé privée reste hors machine ; `restaurer.sh` refuse un `.enc` en rappelant la commande de déchiffrement. Les copies **déjà envoyées en clair** ne se chiffrent pas rétroactivement : à supprimer depuis la console du fournisseur, puis copie complète. Tests exécutés : `deploy/tests/test_sauvegarder.sh` (39 contrôles, doublures de `pg_dump`/`mc`/`rclone`, vrai `openssl`), joué par la CI (travail « Exploitation ») |
 | 57 | Rectification d'un constat | **Seconde exception à l'irréversibilité**, là où la réouverture s'arrête (§5.5, `Rectification`) : une ligne justifiée ou clôturée à tort se **demande** à rectifier — n'importe quel rôle, motif obligatoire, une demande en attente par ligne — et un **administrateur qui n'est pas le demandeur** approuve ou refuse (`rectifications.request` = tous, `rectifications.decide` = `admin`, `super_admin`, verrouillée hors du pays). Approuvée, la ligne **revient en contrôle** — jamais au brouillon : la dépense reste déclarée, imputée, en engagé — montant justifié à zéro, motif en `control_note`, et le dossier constaté la suit ; l'état et le montant défaits restent sur la demande et dans `AuditLog` (`rectification_requested`, `rectified`, `rectification_decided`). Aucune route `rectify` : le constat ne se défait qu'en approuvant une demande. Une ligne contestée un jour ne se retire plus, même rouverte au brouillon — elle se corrige et se resoumet. Tests : `expenses/tests/test_rectification.py` |
 | 58 | L'administrateur a tous les droits, et les attribue | **`admin` = `super_admin` dans la matrice** (demande du produit, 11/09/2026) : les deux rôles sont `fixes` sur chaque capacité — personne ne peut leur retirer un droit, pas même l'autre — et `reglable_par` sur chaque ligne, l'argent compris : `budgets.create`, `budgets.update`, `reallocations.request`, `reallocations.decide`, `rates.manage` passent par défaut à `admin`, `super_admin` (ils étaient à `super_admin` seul, décisions 18 et 47). L'administrateur attribue ainsi chaque droit à n'importe quel rôle, dans les seules limites des verrous du pays (`_JAMAIS_LE_PAYS`) et des comptes (`_JAMAIS_HORS_ADMINISTRATEURS`), qui restent. Les deux rôles subsistent pour dire qui est RH et qui est direction, pas pour séparer des droits. Les notifications suivent la matrice (`arbitres()` prévient désormais les administrateurs d'une réallocation). Tests : `accounts/tests/test_matrice_des_droits.py` (`test_l_administrateur_a_l_argent_et_le_regle`, `test_les_administrateurs_gardent_tout`), `budget/tests/test_budgets.py` |
+| 59 | Demande de réouverture | **La réouverture se demande** (§5.5, `ReopenRequest`) : le pays ne peut pas revenir sur ce qu'il a soumis, et c'est lui qui voit son erreur le premier — lui ouvrir `dossiers.reopen` lui rendrait le droit de se corriger en silence, ce que la décision 20 refuse. Il **demande** donc — n'importe quel rôle, motif obligatoire, une demande en attente par dossier — sur un dossier soumis ou en contrôle dont aucune ligne n'est constatée ; un **administrateur qui n'est pas le demandeur** approuve ou refuse (`reopenings.request` = tous, `reopenings.decide` = `admin`, `super_admin`, verrouillée hors du pays). **Approuvée, la demande passe par la réouverture ordinaire** (`transitions.approuver_reouverture` → `rouvrir`, qui exige `dossiers.reopen`) : rien de ce que la décision 20 garantit n'est contourné — verrous, refus après constat, motif dans `Dossier.reopen_note`, traces `reopened` sur le dossier et chaque ligne, pays prévenu ; un rôle qui déciderait sans pouvoir rouvrir peut refuser, pas approuver. `AuditLog` reçoit `reopen_requested` et `reopen_decided` ; les administrateurs sont prévenus de la demande, le demandeur de la décision, les managers du pays du seul refus (la réouverture les prévient déjà de l'approbation). `ReopenRequest.Status` **est** `Rectification.Status` : deux énumérations aux valeurs identiques feraient avertir drf-spectacular. Tests : `expenses/tests/test_reouverture_demandee.py` |
 
 ### Décisions contraires au cadrage initial, assumées
 

@@ -32,15 +32,21 @@ from .models import (
     Expense,
     Proof,
     Rectification,
+    ReopenRequest,
     compute_sha256,
 )
 from .stockage import effacer_sans_bruit, noter_depot
-from .transitions import peut_decider_rectification
+from .transitions import (
+    MOTIF_DE_REOUVERTURE_MANQUANT,
+    peut_decider_rectification,
+    peut_decider_reouverture,
+)
 from .workflow import (
     LOCKED_STATUSES,
     PROOF_LOCKED_STATUSES,
     PROOF_TRANSITIONS,
     REQUEST_RECTIFICATION,
+    REQUEST_REOPENING,
     dossier_allowed_actions,
     expense_allowed_actions,
 )
@@ -97,15 +103,16 @@ PROOF_FINAL_STATUSES = frozenset(
 
 #: Actions qu'une dépense ou un dossier peut se voir proposer, pour le
 #: schéma (``allowed_actions``) : la saisie (modifier, ajouter une ligne,
-#: déposer une pièce, supprimer), les transitions du circuit, puis la
-#: demande de rectification d'un constat — qui n'est pas une transition :
-#: la ligne ne bouge qu'à la décision (``workflow.REQUEST_RECTIFICATION``).
+#: déposer une pièce, supprimer), les transitions du circuit, puis les
+#: demandes — rectification d'un constat sur une ligne, réouverture d'un
+#: dossier — qui ne sont pas des transitions : l'objet ne bouge qu'à la
+#: décision (``workflow.REQUEST_RECTIFICATION``, ``REQUEST_REOPENING``).
 TRANSITION_CHOICES = [
     (name, name)
     for name in (
         "edit", "add_line", "upload", "delete",
         "submit", "review", "justify", "reject", "close", "reopen",
-        REQUEST_RECTIFICATION,
+        REQUEST_RECTIFICATION, REQUEST_REOPENING,
     )
 ]
 
@@ -963,9 +970,66 @@ class RectificationSerializer(serializers.ModelSerializer):
 
 
 class RectificationDecisionSerializer(serializers.Serializer):
-    """Motif accompagnant une décision ; obligatoire en cas de refus."""
+    """Motif accompagnant une décision — sur une rectification ou sur une
+    réouverture ; obligatoire en cas de refus."""
 
     note = serializers.CharField(required=False, allow_blank=True)
+
+
+class ReopenRequestSerializer(serializers.ModelSerializer):
+    """Demande de réouverture d'un dossier déclaré (``workflow``).
+
+    À la création, ``dossier`` et ``motif`` suffisent : le service relève
+    l'état du dossier qu'elle vise, et le garde. Le reste — statut,
+    signatures, décision — s'écrit par les actions ``approve`` et
+    ``refuse``, jamais par ``PATCH``.
+    """
+
+    dossier = ChampCloisonne(
+        queryset=Dossier.objects.select_related("country"),
+        chemin_pays="country", chemin_equipe="team",
+        label=gettext_lazy("Dossier"),
+    )
+    dossier_number = serializers.CharField(source="dossier.number", read_only=True)
+    dossier_label = serializers.CharField(source="dossier.label", read_only=True)
+    dossier_status = serializers.CharField(source="dossier.status", read_only=True)
+    country = serializers.IntegerField(source="dossier.country_id", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    previous_status_display = serializers.CharField(
+        source="get_previous_status_display", read_only=True
+    )
+    can_decide = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReopenRequest
+        fields = [
+            "id", "dossier", "dossier_number", "dossier_label", "dossier_status",
+            "country", "status", "status_display", "motif",
+            "previous_status", "previous_status_display",
+            "requested_by", "decided_by", "decided_at", "decision_note",
+            "can_decide", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "status", "previous_status",
+            "requested_by", "decided_by", "decided_at", "decision_note",
+        ]
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_decide(self, demande):
+        """Le demandeur peut-il approuver ou refuser cette demande ?
+
+        Les mêmes conditions que ``approuver_reouverture`` et
+        ``refuser_reouverture`` (``transitions.verifier_la_decision_de_reouverture``),
+        pour que l'interface n'ait pas à les recopier : demande encore en
+        attente, rôle décideur, pas celui qui l'a demandée. Faux hors
+        requête.
+        """
+        return peut_decider_reouverture(demande, _acces(self), _configuration(self))
+
+    def validate_motif(self, value):
+        if not value.strip():
+            raise serializers.ValidationError(str(MOTIF_DE_REOUVERTURE_MANQUANT))
+        return value.strip()
 
 
 class ProofReviewSerializer(serializers.Serializer):

@@ -39,6 +39,7 @@ from .models import (
     Expense,
     Proof,
     Rectification,
+    ReopenRequest,
 )
 from .serializers import (
     AuditLogSerializer,
@@ -52,6 +53,7 @@ from .serializers import (
     ProofSerializer,
     RectificationDecisionSerializer,
     RectificationSerializer,
+    ReopenRequestSerializer,
     TransitionSerializer,
     TransitionWarningMixin,
 )
@@ -183,8 +185,12 @@ class BeneficiaryViewSet(CountryScopedMixin, NoDestroyModelViewSet):
 class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     """Dossiers de justification (N°ORDRE)."""
 
+    # ``with_reopen_request`` : ``allowed_actions`` dit si une réouverture
+    # peut être demandée sans une requête par dossier.
     queryset = (
-        Dossier.objects.select_related("country", "team", "owner").with_totals()
+        Dossier.objects.select_related("country", "team", "owner")
+        .with_totals()
+        .with_reopen_request()
     )
     permission_classes = [RolePermission]
     filterset_fields = [
@@ -649,6 +655,72 @@ class RectificationViewSet(
     def refuse(self, request, pk=None):
         """Refuse : le constat tient. Le motif est obligatoire."""
         return self._decider(request, transitions.refuser_rectification)
+
+
+class ReopenRequestViewSet(
+    CountryScopedMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Demandes de réouverture d'un dossier déclaré (``transitions``).
+
+    Même forme que les rectifications : une demande se dépose, puis
+    s'approuve ou se refuse, jamais ne se réécrit (``PUT``, ``PATCH``,
+    ``DELETE`` → 405). Le périmètre est celui du dossier visé — pays, et
+    équipes pour un manager qui y est restreint — : une demande hors
+    périmètre n'existe pas (404).
+    """
+
+    queryset = ReopenRequest.objects.select_related(
+        "dossier__country", "dossier__team"
+    ).all()
+    serializer_class = ReopenRequestSerializer
+    permission_classes = [RolePermission]
+    write_capability = "reopenings.decide"
+    action_write_capabilities = {"create": "reopenings.request"}
+    filterset_fields = ["status", "dossier", "dossier__country"]
+    ordering_fields = ["created_at", "decided_at"]
+    country_lookup = "dossier__country"
+    team_lookup = "dossier__team"
+    country_field = None
+
+    def perform_create(self, serializer):
+        donnees = serializer.validated_data
+        with traduire_les_regles():
+            resultat = transitions.demander_reouverture(
+                donnees["dossier"], get_access(self.request.user),
+                donnees["motif"], Trace.depuis_requete(self.request),
+            )
+        serializer.instance = resultat.instance
+
+    def _decider(self, request, service):
+        """Approbation ou refus : périmètre, motif, service, réponse."""
+        visible = self.get_object()
+        serializer = RectificationDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with traduire_les_regles():
+            resultat = service(
+                visible, get_access(request.user),
+                serializer.validated_data.get("note", ""),
+                Trace.depuis_requete(request),
+            )
+        # Relue par le queryset : l'approbation a rouvert le dossier, et
+        # la réponse doit le montrer tel qu'il est.
+        return Response(self.get_serializer(self.get_queryset().get(pk=resultat.instance.pk)).data)
+
+    @extend_schema(request=RectificationDecisionSerializer, responses=ReopenRequestSerializer)
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        """Approuve : le dossier est rouvert (``transitions.rouvrir``)."""
+        return self._decider(request, transitions.approuver_reouverture)
+
+    @extend_schema(request=RectificationDecisionSerializer, responses=ReopenRequestSerializer)
+    @action(detail=True, methods=["post"])
+    def refuse(self, request, pk=None):
+        """Refuse : le dossier reste déclaré. Le motif est obligatoire."""
+        return self._decider(request, transitions.refuser_reouverture)
 
 
 class AuditLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):

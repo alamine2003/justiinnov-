@@ -193,7 +193,9 @@
       "rectified": "Rectification of a finding",
       "proof_incomplete": "Incomplete document",
       "proof_to_review": "Document to review",
-      "imported": "Import"
+      "imported": "Import",
+      "reopen_requested": "Reopening request",
+      "reopen_decided": "Decision on a reopening"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",
@@ -388,6 +390,31 @@
     },
     "circuit": {
       "titre": "Justification workflow"
+    },
+    "demande_reouverture": {
+      "bouton": "Request reopening",
+      "titre": "Request the reopening of dossier {{numero}}",
+      "description": "The dossier stays submitted until an administrator decides. If they accept, the dossier and its lines go back to draft and you will be able to correct and resubmit. The reason is kept in the audit log.",
+      "motif": "Reason",
+      "motif_placeholder": "Document to replace, amount to correct…",
+      "motif_requis": "A reopening request must state a reason.",
+      "verrou": "A line already justified or closed prevents reopening; use “Rectify” on that line instead.",
+      "envoyer": "Request",
+      "impossible": "Request failed",
+      "chargement_impossible": "Reopening requests unavailable",
+      "panneau_titre": "Reopening requests",
+      "panneau_description": "An administrator approves or refuses, never the requester.",
+      "etat_avant": "Dossier {{statut}} when requested",
+      "par": "by {{auteur}}",
+      "decision": "Decision: {{note}}",
+      "approuver": "Approve the reopening",
+      "refuser": "Refuse",
+      "approbation_impossible": "Approval failed",
+      "refus_titre": "Refuse the reopening of dossier {{numero}}",
+      "refus_description": "The dossier stays as it is; the requester will be told your reason.",
+      "motif_refus": "Reason for refusal",
+      "motif_refus_requis": "A refusal must state a reason.",
+      "refus_impossible": "Refusal failed"
     }
   },
   "depenses": {

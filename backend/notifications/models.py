@@ -49,6 +49,12 @@ class Notification(models.Model):
         #: au contrôle et au pays.
         RECTIFICATION_REQUESTED = "rectification_requested", _("Demande de rectification")
         RECTIFICATION_DECIDED = "rectification_decided", _("Décision sur une rectification")
+        #: La réouverture se demande aussi : la demande attend un
+        #: administrateur ; sa décision revient au demandeur — et au pays
+        #: quand elle est refusée, ``dossier_reopened`` le prévenant déjà
+        #: quand elle est approuvée.
+        REOPEN_REQUESTED = "reopen_requested", _("Demande de réouverture")
+        REOPEN_DECIDED = "reopen_decided", _("Décision sur une réouverture")
 
     class Level(models.TextChoices):
         INFO = "info", _("Information")

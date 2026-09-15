@@ -15,7 +15,10 @@ l'import et les commandes appellent :
 - :func:`demander_rectification`, :func:`approuver_rectification`,
   :func:`refuser_rectification` — la seconde exception à l'irréversibilité :
   un constat remis en cause sur demande motivée, tranché par un
-  administrateur qui n'est pas le demandeur.
+  administrateur qui n'est pas le demandeur ;
+- :func:`demander_reouverture`, :func:`approuver_reouverture`,
+  :func:`refuser_reouverture` — la réouverture demandée par le pays, qui
+  voit son erreur le premier : approuvée, elle passe par :func:`rouvrir`.
 
 Chaque service prend les verrous (``select_for_update``), vérifie l'état
 (``next_status``), la capacité (``ACTION_CAPACITES``), les quatre yeux, les lignes
@@ -53,6 +56,7 @@ from .models import (
     Expense,
     Proof,
     Rectification,
+    ReopenRequest,
 )
 from .services import (
     attach_budget,
@@ -71,6 +75,7 @@ from .workflow import (
     PROOF_LOCKED_STATUSES,
     RECTIFIABLE_STATUSES,
     REOPEN_BLOCKING_STATUSES,
+    REOPENABLE_ON_REQUEST_STATUSES,
     Status,
     a_ete_rectifiee,
     breaks_four_eyes,
@@ -90,6 +95,13 @@ MOTIF_MANQUANT = {
         "qu'il a constaté à tort."
     ),
 }
+
+#: Ce que dit une demande de réouverture sans motif — la même phrase pour
+#: le sérialiseur et pour le service, qui refusent la même chose.
+MOTIF_DE_REOUVERTURE_MANQUANT = gettext_lazy(
+    "Une demande de réouverture doit être motivée : le siège doit savoir "
+    "pourquoi le dossier doit revenir au pays."
+)
 
 #: Signalé au pays quand il soumet sans pièce. La soumission passe quand même :
 #: bloquer reviendrait à ce qu'une dépense sans reçu ne soit jamais déclarée,
@@ -439,6 +451,21 @@ def _soumettre_les_lignes(dossier, acteur, trace, resultat):
     return " ".join(avertissements) or None
 
 
+def _exiger_aucune_ligne_constatee(lignes):
+    """Un dossier ne se rouvre pas — ni ne se demande à rouvrir — après
+    constat : le siège a tranché, et un constat ne se défait pas ligne à
+    ligne (``REOPEN_BLOCKING_STATUSES``). La rectification est là pour ça."""
+    constatees = [e for e in lignes if e.status in REOPEN_BLOCKING_STATUSES]
+    if constatees:
+        raise RegleViolee(
+            "expenses",
+            _(
+                "{count} ligne(s) ont déjà été constatées par le siège : "
+                "{detail}. Un dossier ne se rouvre pas après constat."
+            ).format(count=len(constatees), detail=_detail(constatees)),
+        )
+
+
 def _rouvrir_les_lignes(dossier, motif, trace, resultat):
     """Le dossier rouvert emporte ses lignes au brouillon.
 
@@ -452,15 +479,7 @@ def _rouvrir_les_lignes(dossier, motif, trace, resultat):
     lignes = list(
         dossier.expenses.select_for_update(of=("self",)).select_related("country")
     )
-    constatees = [e for e in lignes if e.status in REOPEN_BLOCKING_STATUSES]
-    if constatees:
-        raise RegleViolee(
-            "expenses",
-            _(
-                "{count} ligne(s) ont déjà été constatées par le siège : "
-                "{detail}. Un dossier ne se rouvre pas après constat."
-            ).format(count=len(constatees), detail=_detail(constatees)),
-        )
+    _exiger_aucune_ligne_constatee(lignes)
 
     maintenant = timezone.now()
     traces = []
@@ -931,14 +950,16 @@ def controler_piece(proof, statut, acteur, *, motif="", trace):
 # --- La rectification (seconde exception) ---------------------------------------
 
 
-def _exiger_le_perimetre(acteur, expense):
-    """La ligne est dans le périmètre de l'acteur, sinon elle n'existe pas
-    pour lui — pays, et équipes pour un manager qui y est restreint."""
+def _exiger_le_perimetre(acteur, objet):
+    """La ligne — ou le dossier — est dans le périmètre de l'acteur, sinon
+    elle n'existe pas pour lui : pays, et équipes pour un manager qui y est
+    restreint. Une ligne et un dossier portent l'un et l'autre leur pays et
+    leur équipe (décision 1) : la même règle les juge."""
     if acteur is None:
         raise HorsPerimetre()
-    if not acteur.has_global_scope and expense.country_id not in acteur.country_ids:
+    if not acteur.has_global_scope and objet.country_id not in acteur.country_ids:
         raise HorsPerimetre()
-    if acteur.team_ids is not None and expense.team_id not in acteur.team_ids:
+    if acteur.team_ids is not None and objet.team_id not in acteur.team_ids:
         raise HorsPerimetre()
 
 
@@ -1110,3 +1131,181 @@ def refuser_rectification(rectification, acteur, note, trace):
     )
     triggers.rectification_decided(demande, trace.compte)
     return Resultat(demande, audit=[entree])
+
+
+# --- La demande de réouverture ---------------------------------------------------
+
+
+def verifier_la_decision_de_reouverture(demande, acteur):
+    """La demande se décide-t-elle, et par cet acteur ?
+
+    Deux refus, deux codes, comme pour une rectification : déjà traitée
+    (400), demandée par l'acteur lui-même (403 — celui qui demande à
+    rouvrir ne se l'accorde pas).
+    """
+    if demande.status != ReopenRequest.Status.PENDING:
+        raise RegleViolee(
+            "status", _("Cette demande de réouverture a déjà été traitée.")
+        )
+    if demande.requested_by and demande.requested_by == acteur.username:
+        raise PermissionRefusee(
+            _("Vous ne pouvez pas décider d'une réouverture que vous avez demandée.")
+        )
+
+
+def peut_decider_reouverture(demande, acteur, configuration=None):
+    """``can_decide`` : les mêmes conditions que la décision, en booléen.
+
+    Porte sur ``reopenings.decide`` seule : l'approbation exige en outre
+    ``dossiers.reopen``, puisqu'elle rouvre (:func:`approuver_reouverture`) ;
+    par défaut, les deux capacités vont aux mêmes rôles.
+    """
+    if acteur is None or acteur.role not in roles_pour(
+        "reopenings.decide", configuration
+    ):
+        return False
+    try:
+        verifier_la_decision_de_reouverture(demande, acteur)
+    except (RegleViolee, PermissionRefusee):
+        return False
+    return True
+
+
+def _verrouiller_la_demande_de_reouverture(demande, acteur):
+    """Relit la demande sous verrou et vérifie qu'elle se décide.
+
+    Le statut est contrôlé **après** la prise du verrou : lu avant, deux
+    approbations simultanées le verraient toutes deux « en attente » ; la
+    seconde tenterait de rouvrir un dossier déjà rouvert, et le refus
+    parlerait d'un brouillon au lieu de dire que la demande est déjà
+    tranchée — et deux refus simultanés passeraient tous deux.
+    """
+    verrouillee = (
+        ReopenRequest.objects.select_related("dossier__country", "dossier__team")
+        .select_for_update(of=("self",))
+        .get(pk=demande.pk)
+    )
+    verifier_la_decision_de_reouverture(verrouillee, acteur)
+    return verrouillee
+
+
+def _journaliser_la_demande_de_reouverture(trace, action, demande, **detail):
+    return record(
+        trace, action, demande,
+        country=demande.dossier.country,
+        dossier=demande.dossier.number,
+        **detail,
+    )
+
+
+def _decider_la_reouverture(demande, acteur, note, trace, statut):
+    """Tronc commun d'une décision : statut, motif, signature, journal."""
+    demande.status = statut
+    demande.decision_note = note
+    demande.decided_by = acteur.username
+    demande.decided_at = timezone.now()
+    demande.save()
+    return _journaliser_la_demande_de_reouverture(
+        trace, AuditLog.Action.REOPEN_DECIDED, demande,
+        from_status=ReopenRequest.Status.PENDING, to_status=statut, note=note,
+    )
+
+
+@transaction.atomic
+def demander_reouverture(dossier, acteur, motif, trace):
+    """Demande la réouverture d'un dossier déclaré : il doit revenir au
+    pays, et voici pourquoi.
+
+    Ouverte à tous par défaut (``reopenings.request``) : le pays voit son
+    erreur le premier, et n'a pas d'autre voie — une dépense soumise est
+    irréversible. Le dossier ne bouge pas ; seule l'approbation le rouvrira.
+    La demande relève l'état qu'elle vise, pour que le journal et la fiche
+    le disent encore quand le dossier aura été resoumis. Le dossier est
+    relu sous verrou : une réouverture ou un constat pris au même instant
+    ne doivent pas laisser une demande sur un dossier qui a déjà bougé.
+    Une seule demande en attente par dossier : la contrainte en base y
+    veille aussi.
+    """
+    exiger_la_capacite("reopenings.request", acteur)
+    _exiger_le_perimetre(acteur, dossier)
+    motif = (motif or "").strip()
+    if not motif:
+        raise RegleViolee("motif", str(MOTIF_DE_REOUVERTURE_MANQUANT))
+    verrouille = _verrouiller_le_dossier(dossier)
+    if verrouille.status not in REOPENABLE_ON_REQUEST_STATUSES:
+        raise RegleViolee(
+            "status",
+            _(
+                "Seul un dossier soumis ou en contrôle peut être demandé en "
+                "réouverture : celui-ci est « {status} »."
+            ).format(status=verrouille.get_status_display().lower()),
+        )
+    # Une ligne déjà constatée interdirait la réouverture : la demande
+    # n'a pas lieu d'être — c'est une rectification qu'il faut demander.
+    _exiger_aucune_ligne_constatee(
+        verrouille.expenses.filter(status__in=REOPEN_BLOCKING_STATUSES)
+    )
+    if verrouille.reopen_requests.filter(status=ReopenRequest.Status.PENDING).exists():
+        raise RegleViolee(
+            "dossier",
+            _("Une demande de réouverture est déjà en attente sur ce dossier."),
+        )
+    demande = ReopenRequest.objects.create(
+        dossier=verrouille,
+        motif=motif,
+        requested_by=acteur.username,
+        previous_status=verrouille.status,
+    )
+    entree = _journaliser_la_demande_de_reouverture(
+        trace, AuditLog.Action.REOPEN_REQUESTED, demande,
+        from_status=verrouille.status, note=motif,
+    )
+    triggers.reopen_requested(demande, trace.compte)
+    return Resultat(demande, audit=[entree])
+
+
+@transaction.atomic
+def approuver_reouverture(demande, acteur, note, trace):
+    """Approuve la demande : le dossier est rouvert, par la réouverture
+    ordinaire.
+
+    Décider exige ``reopenings.decide`` ; rouvrir exige ``dossiers.reopen``,
+    que :func:`rouvrir` vérifie lui-même — l'approbation ne contourne rien
+    de ce que la réouverture garantit : verrou sur le dossier puis sur ses
+    lignes, refus dès qu'une ligne est constatée, motif gardé sur le
+    dossier (celui de la demande), trace ``reopened`` sur le dossier et
+    chaque ligne, pays prévenu. Un rôle qui déciderait sans pouvoir rouvrir
+    — la matrice le permet — peut refuser, pas approuver (403). Verrous
+    dans l'ordre du circuit : la demande, puis le dossier.
+    """
+    exiger_la_capacite("reopenings.decide", acteur)
+    note = (note or "").strip()
+    verrouillee = _verrouiller_la_demande_de_reouverture(demande, acteur)
+    _exiger_le_perimetre(acteur, verrouillee.dossier)
+
+    rouvert = rouvrir(verrouillee.dossier, acteur, verrouillee.motif, trace)
+    traces = list(rouvert.audit)
+    traces.append(
+        _decider_la_reouverture(
+            verrouillee, acteur, note, trace, ReopenRequest.Status.APPROVED
+        )
+    )
+    triggers.reopen_decided(verrouillee, trace.compte)
+    return Resultat(verrouillee, audit=traces)
+
+
+@transaction.atomic
+def refuser_reouverture(demande, acteur, note, trace):
+    """Refuse la demande : le dossier reste déclaré. Le refus est motivé —
+    le demandeur doit savoir pourquoi on ne le suit pas."""
+    exiger_la_capacite("reopenings.decide", acteur)
+    note = (note or "").strip()
+    if not note:
+        raise RegleViolee("note", _("Un refus doit être motivé."))
+    verrouillee = _verrouiller_la_demande_de_reouverture(demande, acteur)
+    _exiger_le_perimetre(acteur, verrouillee.dossier)
+    entree = _decider_la_reouverture(
+        verrouillee, acteur, note, trace, ReopenRequest.Status.REFUSED
+    )
+    triggers.reopen_decided(verrouillee, trace.compte)
+    return Resultat(verrouillee, audit=[entree])

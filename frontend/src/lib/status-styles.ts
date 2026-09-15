@@ -85,6 +85,8 @@ export const ACTION_STYLE: Record<string, string> = {
   rejected: DANGER,
   downloaded: ARCHIVE,
   reopened: ATTENTE,
+  reopen_requested: ATTENTE,
+  reopen_decided: INFO,
   rectification_requested: ATTENTE,
   rectification_decided: INFO,
   rectified: ATTENTE,

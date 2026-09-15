@@ -17,7 +17,7 @@ from core.regles import PermissionRefusee
 from core.tests.aides import trace
 from expenses import transitions
 from expenses.models import Dossier, Proof
-from expenses.workflow import Status
+from expenses.workflow import REQUEST_REOPENING, Status
 
 from .base import ExpenseTestCase
 from .test_workflow import configurer
@@ -130,15 +130,18 @@ class ActionsDeDossierTests(ExpenseTestCase):
     def test_un_dossier_soumis_attend_ses_lignes(self):
         """Le DF peut le mettre en contrôle, pas le trancher tant qu'une
         ligne reste en suspens ; le DM ne fait que le mettre en contrôle ;
-        l'administrateur peut aussi le rouvrir."""
+        l'administrateur peut aussi le rouvrir — et chacun, le pays le
+        premier, peut demander la réouverture tant que rien n'est constaté."""
         self.make_expense()
         self._piece()
         self.submit_dossier()
 
-        self.assertEqual(self._actions(self.dm), ["review"])
-        self.assertEqual(self._actions(self.controller), ["review"])
-        self.assertEqual(self._actions(self.admin), ["upload", "review", "reopen"])
-        self.assertEqual(self._actions(self.owner), ["upload"])
+        self.assertEqual(self._actions(self.dm), ["review", REQUEST_REOPENING])
+        self.assertEqual(self._actions(self.controller), ["review", REQUEST_REOPENING])
+        self.assertEqual(
+            self._actions(self.admin), ["upload", "review", "reopen", REQUEST_REOPENING]
+        )
+        self.assertEqual(self._actions(self.owner), ["upload", REQUEST_REOPENING])
 
     def test_les_lignes_tranchees_ouvrent_le_constat(self):
         ligne = self.make_expense()
@@ -153,11 +156,12 @@ class ActionsDeDossierTests(ExpenseTestCase):
         toutes_tranchees = self._actions(self.controller)
         rouvrable = self._actions(self.admin)
 
+        # Une ligne justifiée est un constat : plus de réouverture, ni à
+        # faire ni à demander.
         self.assertEqual(avec_une_en_suspens, ["review"])
         # Une ligne non justifiée : le dossier ne se justifie pas, il se
         # constate non justifié.
         self.assertEqual(toutes_tranchees, ["review", "reject"])
-        # Une ligne justifiée est un constat : plus de réouverture.
         self.assertEqual(rouvrable, ["upload", "review", "reject"])
 
     def test_un_dossier_sans_piece_exploitable_ne_se_justifie_pas(self):
@@ -186,8 +190,12 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self._piece()
         self.submit_dossier()
 
-        self.assertEqual(self._actions(self.controller), [])
-        self.assertEqual(self._actions(self.doo), ["upload", "review", "reopen"])
+        # Demander la réouverture n'est pas un acte de contrôle : celui qui
+        # a ouvert le dossier peut le demander — c'est même le cas ordinaire.
+        self.assertEqual(self._actions(self.controller), [REQUEST_REOPENING])
+        self.assertEqual(
+            self._actions(self.doo), ["upload", "review", "reopen", REQUEST_REOPENING]
+        )
 
     def test_un_dossier_justifie_se_clot(self):
         ligne = self.make_expense()
@@ -221,8 +229,9 @@ class TransitionRenvoieLeDetailTests(ExpenseTestCase):
         self.assertEqual(response.data["expenses"][0]["status"], Status.SUBMITTED)
         self.assertEqual(len(response.data["proofs"]), 1)
         self.assertEqual(response.data["expense_count"], 1)
-        # Déclaré, le dossier ne se modifie plus ; une pièce peut encore arriver.
-        self.assertEqual(response.data["allowed_actions"], ["upload"])
+        # Déclaré, le dossier ne se modifie plus ; une pièce peut encore
+        # arriver, et le pays peut demander qu'il lui revienne.
+        self.assertEqual(response.data["allowed_actions"], ["upload", REQUEST_REOPENING])
 
     def test_la_justification_renvoie_le_detail_avec_les_actions(self):
         ligne = self.make_expense()
@@ -304,7 +313,9 @@ class ActionsDeSaisieTests(ExpenseTestCase):
             original_name="facture.pdf", sha256="a" * 64,
         )
         self.submit_dossier()
-        self.assertEqual(self._dossier(self.owner), ["upload"])
+        # Déclaré, le pays dépose encore ses pièces — et peut désormais
+        # demander la réouverture, sans la prononcer lui-même.
+        self.assertEqual(self._dossier(self.owner), ["upload", "request_reopening"])
 
         self.login(self.controller)
         self.client.post(f"/api/expenses/{ligne.pk}/justify/")

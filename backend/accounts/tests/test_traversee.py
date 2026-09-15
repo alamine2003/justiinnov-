@@ -34,7 +34,15 @@ from core.models import (
     Team,
 )
 from core.statuts import Status
-from expenses.models import AuditLog, Beneficiary, Dossier, Expense, Proof, Rectification
+from expenses.models import (
+    AuditLog,
+    Beneficiary,
+    Dossier,
+    Expense,
+    Proof,
+    Rectification,
+    ReopenRequest,
+)
 from expenses.tests.base import in_memory_storage
 from notifications.models import Notification
 
@@ -148,6 +156,14 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
             )
             for cle, e in depenses.items()
         }
+        # Une demande de réouverture suit son dossier : même pays, même équipe.
+        reouvertures = {
+            cle: ReopenRequest.objects.create(
+                dossier=d, motif="Dossier parti trop tôt", requested_by="seed",
+                previous_status=Status.SUBMITTED,
+            )
+            for cle, d in dossiers.items()
+        }
         pieces = {
             cle: Proof.objects.create(
                 dossier=d, file=ContentFile(b"%PDF-1.4", name=f"{cle}.pdf"),
@@ -198,6 +214,7 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
             Dossier: dossiers,
             Expense: depenses,
             Rectification: rectifications,
+            ReopenRequest: reouvertures,
             Proof: pieces,
             AuditLog: journaux,
             # Une notification appartient à une personne : le « mien » du DF

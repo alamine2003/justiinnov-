@@ -85,7 +85,8 @@ class MatriceDesDroitsTests(ScopingTestCase):
 
     def test_le_pays_ne_recoit_jamais_le_controle(self):
         for cle in ("expenses.review", "expenses.validate", "expenses.close",
-                    "proofs.review", "dossiers.reopen", "audit.read", "users.update",
+                    "proofs.review", "dossiers.reopen", "reopenings.decide",
+                    "rectifications.decide", "audit.read", "users.update",
                     "budgets.update", "reallocations.decide", "rates.manage",
                     "countries.create", "countries.update"):
             with self.subTest(cle=cle):

@@ -92,10 +92,17 @@ type EditAction = "edit" | "add_line" | "upload" | "delete"
  */
 export const REQUEST_RECTIFICATION = "request_rectification"
 
+/**
+ * Demande de réouverture d'un dossier soumis ou en contrôle : proposée dans
+ * `allowed_actions` du dossier, mais ce n'est pas une transition — le
+ * dossier ne bouge qu'à la décision d'un administrateur.
+ */
+export const REQUEST_REOPENING = "request_reopening"
+
 /** Transitions d'un dossier ; ses lignes partent avec lui à la soumission. */
 export type TransitionName = Exclude<
   Schema<"TransitionEnum">,
-  "reopen" | EditAction | typeof REQUEST_RECTIFICATION
+  "reopen" | EditAction | typeof REQUEST_RECTIFICATION | typeof REQUEST_REOPENING
 >
 
 /** Une ligne ne se soumet jamais seule : c'est le dossier qu'on soumet. */
@@ -111,6 +118,7 @@ export type RegisterEntry = Schema<"ExpenseRegister">
 export type Beneficiary = Schema<"Beneficiary">
 export type RectificationStatus = Schema<"RectificationStatusEnum">
 export type Rectification = Schema<"Rectification">
+export type ReopenRequest = Schema<"ReopenRequest">
 
 
 // ---------------------------------------------------------------------------

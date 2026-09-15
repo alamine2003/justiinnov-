@@ -11,6 +11,7 @@ import type {
   Proof,
   ProofStatus,
   Rectification,
+  ReopenRequest,
   RegisterEntry,
   TransitionName,
 } from "@/lib/types"
@@ -203,4 +204,29 @@ export function updateBeneficiary(id: number, data: unknown) {
 
 export function fetchAudit(params?: Record<string, unknown>, signal?: AbortSignal) {
   return apiGet<Paginated<AuditEntry>>("/audit/", params, signal)
+}
+
+// ---------------------------------------------------------------------------
+// Demandes de réouverture d'un dossier
+// ---------------------------------------------------------------------------
+export function fetchReopenRequests(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<ReopenRequest>>("/reopen-requests/", params, signal)
+}
+
+/**
+ * Demande la réouverture d'un dossier soumis ou en contrôle, motif à
+ * l'appui. Le dossier ne bouge pas : un administrateur décidera.
+ */
+export function requestReopening(dossierId: number, motif: string) {
+  return apiPost<ReopenRequest>("/reopen-requests/", { dossier: dossierId, motif })
+}
+
+/** Approuve : le dossier est rouvert, motif de la demande à l'appui. */
+export function approveReopening(id: number, note = "") {
+  return apiPost<ReopenRequest>(`/reopen-requests/${id}/approve/`, { note })
+}
+
+/** Refuse : le dossier reste tel quel ; le refus est motivé. */
+export function refuseReopening(id: number, note: string) {
+  return apiPost<ReopenRequest>(`/reopen-requests/${id}/refuse/`, { note })
 }

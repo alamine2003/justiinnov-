@@ -351,6 +351,23 @@ CAPACITES = (
         _("Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui."),
         _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
+    # La réouverture se demande aussi (``expenses.workflow``) : le pays, qui
+    # ne peut pas revenir sur ce qu'il a soumis, voit son erreur le premier
+    # — demander est donc ouvert à tous. Décider ne l'est jamais au pays, et
+    # le service refuse en outre l'auteur de la demande ; approuver rouvre
+    # par la réouverture ordinaire, qui exige ``dossiers.reopen``.
+    Capacite(
+        "reopenings.request", GROUPE_CONTROLE,
+        _("Demander la réouverture d'un dossier"),
+        _("Signaler, motif à l'appui, qu'un dossier soumis ou en contrôle doit revenir au pays."),
+        _TOUS,
+    ),
+    Capacite(
+        "reopenings.decide", GROUPE_CONTROLE,
+        _("Décider d'une réouverture"),
+        _("Approuver — le dossier revient au brouillon — ou refuser une demande. Jamais la sienne."),
+        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
+    ),
     # La seconde exception à l'irréversibilité (``expenses.workflow``) : un
     # constat se rectifie sur demande motivée et décision d'un
     # administrateur. Demander est ouvert à tous — le pays voit l'erreur le

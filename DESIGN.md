@@ -408,6 +408,38 @@ Quand une ligne est justifiée ou clôturée, le bouton n'apparaît pas : le
 serveur refuserait, et un bouton qui mène à un refus n'a rien à faire à
 l'écran.
 
+### Demande de réouverture
+
+Le pays ne rouvre pas — seul le siège le fait — mais il peut le
+**demander**. Sur le détail d'un dossier, un bouton **« Demander la
+réouverture »** (`outline`, icône `RotateCcw`,
+`components/expenses/request-reopening.tsx`), dans les actions de
+`PageHeader` à côté de « Rouvrir », rendu **seulement** si
+`allowed_actions` du dossier contient `request_reopening` — le serveur le
+dit : droit (`reopenings.request`, tous les rôles par défaut), dossier
+soumis ou en contrôle, aucune ligne constatée, aucune demande déjà en
+attente. Il ouvre un dialogue au titre affirmatif (« Demander la
+réouverture du dossier N°… »), dont la description dit la conséquence :
+le dossier reste soumis tant qu'un administrateur n'a pas décidé ; s'il
+accepte, le dossier et ses lignes reviennent au brouillon ; le motif est
+conservé. Un encart rappelle qu'une ligne justifiée ou clôturée empêche
+la réouverture et renvoie à « Rectifier ». Champ « Motif » obligatoire ;
+un refus du serveur sur le dossier (`400` sur `dossier`, `status` ou
+`expenses`) s'affiche en `<FormError>`, un refus sur le motif sous le
+champ. Bouton principal « Demander ».
+
+Les demandes du dossier s'affichent dans une carte **« Demandes de
+réouverture »** (`components/expenses/reopen-request-panel.tsx`), dans la
+colonne de droite, sous les pièces, **seulement s'il y en a** : l'état du
+dossier à la demande, la date et l'auteur, le motif entre guillemets, le
+statut (`RECTIFICATION_STYLE` : les mêmes trois états), la décision et son
+auteur. « Approuver la réouverture » (bouton plein) et « Refuser »
+(`destructive`) rendus seulement si `can_decide` ; refuser ouvre un
+dialogue au motif obligatoire. Après une décision, la page relit le
+dossier et ses demandes. Dans le journal d'audit : `reopen_requested`,
+`reopened` (l'approbation est une réouverture ordinaire),
+`reopen_decided` ; dans les notifications, l'icône `RotateCcw`.
+
 ### Rectification d'un constat
 
 Là où la réouverture s'arrête — une ligne justifiée ou clôturée — commence

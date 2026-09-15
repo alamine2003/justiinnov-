@@ -148,6 +148,18 @@ class DossierQuerySet(models.QuerySet):
             ),
         )
 
+    def with_reopen_request(self):
+        """Annote le dossier de ``reouverture_en_attente`` — une demande de
+        réouverture attend-elle ? — pour ``allowed_actions`` sans une
+        requête par dossier (``workflow.peut_demander_une_reouverture``)."""
+        return self.annotate(
+            reouverture_en_attente=models.Exists(
+                ReopenRequest.objects.filter(
+                    dossier=OuterRef("pk"), status=ReopenRequest.Status.PENDING
+                )
+            )
+        )
+
 
 class Dossier(TimeStampedModel):
     """Le **N°ORDRE** : ensemble documentaire d'une opération."""
@@ -552,6 +564,74 @@ class Rectification(TimeStampedModel):
         return self.expense.country
 
 
+class ReopenRequest(TimeStampedModel):
+    """Demande de réouverture d'un dossier déclaré (``workflow``).
+
+    Seul un administrateur rouvre un dossier ; mais c'est le pays qui, le
+    premier, voit qu'il s'est trompé — une ligne mal imputée, un montant
+    faux — et qui n'a aucun moyen de revenir sur ce qu'il a soumis. Il le
+    *demande* donc, motif à l'appui, sur un dossier soumis ou en contrôle ;
+    un administrateur — jamais l'auteur de la demande — approuve, et le
+    dossier est rouvert par la réouverture ordinaire
+    (``transitions.approuver_reouverture`` → ``rouvrir``), ou refuse. La
+    demande garde l'état du dossier qu'elle visait : ce que le journal
+    dit, la fiche le dit aussi.
+    """
+
+    #: Les mêmes états qu'une rectification, et la même énumération : deux
+    #: énumérations aux valeurs identiques feraient fabriquer à
+    #: drf-spectacular deux composants pour un seul jeu de choix, avec un
+    #: avertissement que la CI refuse (``ENUM_NAME_OVERRIDES``).
+    Status = Rectification.Status
+
+    dossier = models.ForeignKey(
+        Dossier, on_delete=models.PROTECT, related_name="reopen_requests",
+        verbose_name=_("Dossier"),
+    )
+    status = models.CharField(
+        _("Statut"), max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    motif = models.TextField(_("Motif de la demande"))
+    requested_by = models.CharField(_("Demandée par"), max_length=180, blank=True)
+    decided_by = models.CharField(_("Décidée par"), max_length=180, blank=True)
+    decided_at = models.DateTimeField(_("Décidée le"), null=True, blank=True)
+    decision_note = models.TextField(_("Motif de la décision"), blank=True)
+    # L'état du dossier à la demande (soumis ou en contrôle), relevé pour
+    # rester lisible après coup, quand le dossier aura été rouvert puis
+    # resoumis. Les états du circuit (``core.statuts.Status``), pas ceux de
+    # la demande : ``Status`` désigne ici l'énumération ci-dessus.
+    previous_status = models.CharField(
+        _("État avant réouverture"), max_length=20,
+        choices=Dossier._meta.get_field("status").choices,
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = _("Demande de réouverture")
+        verbose_name_plural = _("Demandes de réouverture")
+        constraints = [
+            # Une seule demande en attente par dossier : deux demandes
+            # ouvertes se trancheraient l'une l'autre.
+            models.UniqueConstraint(
+                fields=["dossier"],
+                condition=Q(status="pending"),
+                name="reopen_request_une_en_attente_par_dossier",
+            ),
+            # Une décision sans date n'est pas une décision.
+            models.CheckConstraint(
+                condition=Q(status="pending") | Q(decided_at__isnull=False),
+                name="reopen_request_decision_datee",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_status_display()} : {self.dossier}"
+
+    @property
+    def country(self):
+        return self.dossier.country
+
+
 class Proof(TimeStampedModel):
     """Pièce justificative, rattachée au **dossier** (§5.4)."""
 
@@ -711,6 +791,12 @@ class AuditLog(models.Model):
         RECTIFICATION_REQUESTED = "rectification_requested", _("Demande de rectification")
         RECTIFICATION_DECIDED = "rectification_decided", _("Décision sur une rectification")
         RECTIFIED = "rectified", _("Rectification d'un constat")
+        # La réouverture se demande aussi (``ReopenRequest``) : le pays
+        # signale son erreur, un administrateur tranche. ``reopened`` reste
+        # l'entrée de la réouverture elle-même, qu'elle vienne d'une
+        # demande approuvée ou d'un administrateur qui rouvre de lui-même.
+        REOPEN_REQUESTED = "reopen_requested", _("Demande de réouverture")
+        REOPEN_DECIDED = "reopen_decided", _("Décision sur une réouverture")
         PROOF_UPLOADED = "proof_uploaded", _("Dépôt de justificatif")
         PROOF_REPLACED = "proof_replaced", _("Remplacement de justificatif")
         DOWNLOADED = "downloaded", _("Téléchargement")

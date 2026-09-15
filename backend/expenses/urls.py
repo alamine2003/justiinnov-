@@ -11,6 +11,7 @@ router.register("dossiers", views.DossierViewSet, basename="dossier")
 router.register("expenses", views.ExpenseViewSet, basename="expense")
 router.register("proofs", views.ProofViewSet, basename="proof")
 router.register("rectifications", views.RectificationViewSet, basename="rectification")
+router.register("reopen-requests", views.ReopenRequestViewSet, basename="reopen-request")
 router.register("audit", views.AuditLogViewSet, basename="audit")
 
 urlpatterns = [path("", include(router.urls))]

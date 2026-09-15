@@ -51,6 +51,12 @@ def decideurs_de_rectification():
     return roles_pour("rectifications.decide")
 
 
+def decideurs_de_reouverture():
+    """Qui tranche une demande de réouverture : les administrateurs par
+    défaut, jamais le pays (``reopenings.decide``)."""
+    return roles_pour("reopenings.decide")
+
+
 def _safe(action):
     """Exécute un déclencheur sans jamais propager son échec.
 
@@ -355,5 +361,97 @@ def rectification_decided(rectification, actor):
             link=f"/dossiers/{expense.dossier_id}",
             country=expense.country,
             dedup_key=f"rectification_decided:{rectification.pk}",
+        )
+    )
+
+
+def reopen_requested(demande, actor):
+    """Prévient ceux qui peuvent trancher qu'un dossier est demandé en
+    réouverture.
+
+    Le pays ne peut pas revenir sur ce qu'il a soumis (``expenses.workflow``)
+    : il le demande, et la demande attend un administrateur. Le motif
+    figure dans le message, avec l'état du dossier, pour qu'il puisse juger
+    sans ouvrir la fiche.
+    """
+    dossier = demande.dossier
+    return _safe(
+        lambda: notify(
+            _sauf(
+                recipients_for(decideurs_de_reouverture(), dossier.country, dossier.team),
+                actor,
+            ),
+            kind=Notification.Kind.REOPEN_REQUESTED,
+            level=Notification.Level.INFO,
+            title=format_lazy(
+                _("Demande de réouverture — {number}"), number=dossier.number
+            ),
+            body=format_lazy(
+                _("{label} · dossier « {status} ». Motif : {motive}"),
+                label=dossier.label,
+                status=demande.get_previous_status_display(),
+                motive=demande.motif,
+            ),
+            link=f"/dossiers/{dossier.pk}",
+            country=dossier.country,
+            dedup_key=f"reopen_requested:{demande.pk}",
+        )
+    )
+
+
+def reopen_decided(demande, actor):
+    """Prévient le demandeur de la décision — et le pays, quand elle est
+    refusée.
+
+    Approuvée, le dossier a été rouvert par la réouverture ordinaire, qui
+    prévient déjà les managers du pays (``dossier_reopened``, avec le
+    motif) : seul le demandeur apprend ici que sa demande a été suivie —
+    les prévenir deux fois du même retour noierait l'information. Refusée,
+    rien n'a bougé et ``dossier_reopened`` n'a rien dit : le demandeur et
+    les managers du pays, qui attendaient peut-être le dossier, apprennent
+    le refus et son motif. Le demandeur est prévenu même s'il ne porte
+    plus le rôle concerné — c'est sa demande.
+    """
+    from django.contrib.auth.models import User
+    from django.db.models import Q
+
+    dossier = demande.dossier
+    # La valeur, pas l'énumération : ``notifications`` précède ``expenses``
+    # dans l'ordre des applications et n'importe pas ses modèles.
+    approuvee = demande.status == "approved"
+    # Sans demandeur connu (compte disparu) ni refus, personne : un
+    # ``pk__in`` vide ne rend rien, sans interroger la base.
+    qui = Q(pk__in=[])
+    if demande.requested_by:
+        qui |= Q(username=demande.requested_by, is_active=True)
+    if not approuvee:
+        concernes = recipients_for(PROVIDERS, dossier.country, dossier.team)
+        qui |= Q(pk__in=concernes.values("pk"))
+    destinataires = User.objects.filter(qui).distinct()
+    if approuvee:
+        titre = _("Réouverture approuvée — {number}")
+        corps = _(
+            "{label} : le dossier est revenu au brouillon, à corriger puis "
+            "à resoumettre. Motif : {motive}"
+        )
+    else:
+        titre = _("Réouverture refusée — {number}")
+        corps = _("{label} : le dossier reste déclaré. Motif du refus : {motive}")
+    return _safe(
+        lambda: notify(
+            _sauf(destinataires, actor),
+            kind=Notification.Kind.REOPEN_DECIDED,
+            # Approuvée, la nouvelle est la même que `dossier_reopened` :
+            # il y a quelque chose à refaire. Refusée, elle informe.
+            level=Notification.Level.WARNING if approuvee else Notification.Level.INFO,
+            title=format_lazy(titre, number=dossier.number),
+            body=format_lazy(
+                corps,
+                label=dossier.label,
+                motive=demande.motif if approuvee else demande.decision_note,
+            ),
+            link=f"/dossiers/{dossier.pk}",
+            country=dossier.country,
+            dedup_key=f"reopen_decided:{demande.pk}",
         )
     )

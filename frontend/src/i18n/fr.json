@@ -193,7 +193,9 @@
       "rectified": "Rectification d'un constat",
       "proof_incomplete": "Justificatif incomplet",
       "proof_to_review": "Justificatif à contrôler",
-      "imported": "Import"
+      "imported": "Import",
+      "reopen_requested": "Demande de réouverture",
+      "reopen_decided": "Décision sur une réouverture"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",
@@ -388,6 +390,31 @@
     },
     "circuit": {
       "titre": "Circuit de justification"
+    },
+    "demande_reouverture": {
+      "bouton": "Demander la réouverture",
+      "titre": "Demander la réouverture du dossier {{numero}}",
+      "description": "Le dossier reste soumis tant qu'un administrateur n'a pas décidé. S'il accepte, le dossier et ses lignes reviennent au brouillon et vous pourrez corriger puis soumettre à nouveau. Le motif est conservé dans le journal d'audit.",
+      "motif": "Motif",
+      "motif_placeholder": "Pièce à remplacer, montant à corriger…",
+      "motif_requis": "Une demande de réouverture doit être motivée.",
+      "verrou": "Une ligne déjà justifiée ou clôturée empêche la réouverture ; passez alors par « Rectifier » sur cette ligne.",
+      "envoyer": "Demander",
+      "impossible": "Demande impossible",
+      "chargement_impossible": "Demandes de réouverture indisponibles",
+      "panneau_titre": "Demandes de réouverture",
+      "panneau_description": "Un administrateur approuve ou refuse, jamais l'auteur de la demande.",
+      "etat_avant": "Dossier {{statut}} à la demande",
+      "par": "par {{auteur}}",
+      "decision": "Décision : {{note}}",
+      "approuver": "Approuver la réouverture",
+      "refuser": "Refuser",
+      "approbation_impossible": "Approbation impossible",
+      "refus_titre": "Refuser la réouverture du dossier {{numero}}",
+      "refus_description": "Le dossier reste tel quel ; le demandeur sera prévenu de votre motif.",
+      "motif_refus": "Motif du refus",
+      "motif_refus_requis": "Un refus doit être motivé.",
+      "refus_impossible": "Refus impossible"
     }
   },
   "depenses": {

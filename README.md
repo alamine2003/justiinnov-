@@ -115,7 +115,8 @@ relèvent des administrateurs — RH et direction à égalité (décision 58).
 **La matrice des droits se règle dans l'application.** Chaque action de
 l'API est une capacité nommée — `users.create`, `referentiel.update`,
 `budgets.create`, `expenses.delete`, `proofs.upload`, `dossiers.submit`,
-`expenses.review`, `dossiers.reopen`, `rectifications.decide`,
+`expenses.review`, `dossiers.reopen`, `reopenings.request`,
+`reopenings.decide`, `rectifications.decide`,
 `data.export`… — dont les rôles par
 défaut sont dans `accounts/permissions.py` (`CAPACITES`). Les
 administrateurs les modifient case par case dans « Configuration ›

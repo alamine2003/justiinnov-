@@ -2318,3 +2318,75 @@ msgstr "This line has been the subject of a rectification request: it can no lon
 #: expenses/transitions.py
 msgid "Ce dossier contient une ligne qui a fait l'objet d'une demande de rectification : il ne se supprime plus."
 msgstr "This dossier contains a line that has been the subject of a rectification request: it can no longer be deleted."
+
+#: accounts/permissions.py
+msgid "Demander la réouverture d'un dossier"
+msgstr "Request the reopening of a dossier"
+
+#: accounts/permissions.py
+msgid "Signaler, motif à l'appui, qu'un dossier soumis ou en contrôle doit revenir au pays."
+msgstr "Report, with a reason, that a submitted or in-review dossier must go back to the country."
+
+#: accounts/permissions.py
+msgid "Décider d'une réouverture"
+msgstr "Decide on a reopening"
+
+#: accounts/permissions.py
+msgid "Approuver — le dossier revient au brouillon — ou refuser une demande. Jamais la sienne."
+msgstr "Approve — the dossier goes back to draft — or refuse a request. Never one's own."
+
+#: expenses/models.py
+msgid "État avant réouverture"
+msgstr "Status before reopening"
+
+#: expenses/models.py notifications/models.py
+msgid "Demande de réouverture"
+msgstr "Reopening request"
+
+#: expenses/models.py
+msgid "Demandes de réouverture"
+msgstr "Reopening requests"
+
+#: expenses/models.py notifications/models.py
+msgid "Décision sur une réouverture"
+msgstr "Decision on a reopening"
+
+#: expenses/transitions.py
+msgid "Une demande de réouverture doit être motivée : le siège doit savoir pourquoi le dossier doit revenir au pays."
+msgstr "A reopening request must be motivated: head office must know why the dossier must go back to the country."
+
+#: expenses/transitions.py
+msgid "Cette demande de réouverture a déjà été traitée."
+msgstr "This reopening request has already been processed."
+
+#: expenses/transitions.py
+msgid "Vous ne pouvez pas décider d'une réouverture que vous avez demandée."
+msgstr "You cannot decide on a reopening you requested yourself."
+
+#: expenses/transitions.py
+msgid "Seul un dossier soumis ou en contrôle peut être demandé en réouverture : celui-ci est « {status} »."
+msgstr "Only a submitted or in-review dossier can be requested for reopening: this one is “{status}”."
+
+#: expenses/transitions.py
+msgid "Une demande de réouverture est déjà en attente sur ce dossier."
+msgstr "A reopening request is already pending on this dossier."
+
+#: notifications/triggers.py
+msgid "Demande de réouverture — {number}"
+msgstr "Reopening request — {number}"
+
+#: notifications/triggers.py
+msgid "{label} · dossier « {status} ». Motif : {motive}"
+msgstr "{label} · dossier “{status}”. Reason: {motive}"
+
+#: notifications/triggers.py
+msgid "Réouverture approuvée — {number}"
+msgstr "Reopening approved — {number}"
+
+#: notifications/triggers.py
+msgid "Réouverture refusée — {number}"
+msgstr "Reopening refused — {number}"
+
+#: notifications/triggers.py
+msgid "{label} : le dossier reste déclaré. Motif du refus : {motive}"
+msgstr "{label}: the dossier remains declared. Reason for refusal: {motive}"

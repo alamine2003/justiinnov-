@@ -1625,6 +1625,99 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/reopen-requests/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description Demandes de réouverture d'un dossier déclaré (``transitions``).
+         *
+         *     Même forme que les rectifications : une demande se dépose, puis
+         *     s'approuve ou se refuse, jamais ne se réécrit (``PUT``, ``PATCH``,
+         *     ``DELETE`` → 405). Le périmètre est celui du dossier visé — pays, et
+         *     équipes pour un manager qui y est restreint — : une demande hors
+         *     périmètre n'existe pas (404).
+         */
+        get: operations["reopen_requests_list"]
+        put?: never
+        /**
+         * @description Demandes de réouverture d'un dossier déclaré (``transitions``).
+         *
+         *     Même forme que les rectifications : une demande se dépose, puis
+         *     s'approuve ou se refuse, jamais ne se réécrit (``PUT``, ``PATCH``,
+         *     ``DELETE`` → 405). Le périmètre est celui du dossier visé — pays, et
+         *     équipes pour un manager qui y est restreint — : une demande hors
+         *     périmètre n'existe pas (404).
+         */
+        post: operations["reopen_requests_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/reopen-requests/{id}/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description Demandes de réouverture d'un dossier déclaré (``transitions``).
+         *
+         *     Même forme que les rectifications : une demande se dépose, puis
+         *     s'approuve ou se refuse, jamais ne se réécrit (``PUT``, ``PATCH``,
+         *     ``DELETE`` → 405). Le périmètre est celui du dossier visé — pays, et
+         *     équipes pour un manager qui y est restreint — : une demande hors
+         *     périmètre n'existe pas (404).
+         */
+        get: operations["reopen_requests_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/reopen-requests/{id}/approve/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        /** @description Approuve : le dossier est rouvert (``transitions.rouvrir``). */
+        post: operations["reopen_requests_approve_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/reopen-requests/{id}/refuse/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        /** @description Refuse : le dossier reste déclaré. Le motif est obligatoire. */
+        post: operations["reopen_requests_refuse_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/teams/": {
         parameters: {
             query?: never
@@ -1823,13 +1916,15 @@ export interface components {
          *     * `rectification_requested` - Demande de rectification
          *     * `rectification_decided` - Décision sur une rectification
          *     * `rectified` - Rectification d'un constat
+         *     * `reopen_requested` - Demande de réouverture
+         *     * `reopen_decided` - Décision sur une réouverture
          *     * `proof_uploaded` - Dépôt de justificatif
          *     * `proof_replaced` - Remplacement de justificatif
          *     * `downloaded` - Téléchargement
          *     * `imported` - Import Excel
          * @enum {string}
          */
-        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported"
+        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "reopen_requested" | "reopen_decided" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported"
         AuditLog: {
             readonly id: number
             /** Utilisateur */
@@ -3276,9 +3371,11 @@ export interface components {
          *     * `dossier_reopened` - Dossier rouvert
          *     * `rectification_requested` - Demande de rectification
          *     * `rectification_decided` - Décision sur une rectification
+         *     * `reopen_requested` - Demande de réouverture
+         *     * `reopen_decided` - Décision sur une réouverture
          * @enum {string}
          */
-        NotificationKindEnum: "budget_threshold" | "budget_overrun" | "expense_submitted" | "expense_rejected" | "proof_missing" | "proof_incomplete" | "reallocation_requested" | "storage_error" | "dossier_reopened" | "rectification_requested" | "rectification_decided"
+        NotificationKindEnum: "budget_threshold" | "budget_overrun" | "expense_submitted" | "expense_rejected" | "proof_missing" | "proof_incomplete" | "reallocation_requested" | "storage_error" | "dossier_reopened" | "rectification_requested" | "rectification_decided" | "reopen_requested" | "reopen_decided"
         /**
          * @description * `info` - Information
          *     * `warning` - Avertissement
@@ -3564,6 +3661,21 @@ export interface components {
              */
             previous: string | null
             results: components["schemas"]["Rectification"][]
+        }
+        PaginatedReopenRequestList: {
+            /** @example 123 */
+            count: number
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next: string | null
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous: string | null
+            results: components["schemas"]["ReopenRequest"][]
         }
         PaginatedTeamList: {
             /** @example 123 */
@@ -3984,6 +4096,10 @@ export interface components {
             readonly "proofs.review": boolean
             /** @description Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui. */
             readonly "dossiers.reopen": boolean
+            /** @description Signaler, motif à l'appui, qu'un dossier soumis ou en contrôle doit revenir au pays. */
+            readonly "reopenings.request": boolean
+            /** @description Approuver — le dossier revient au brouillon — ou refuser une demande. Jamais la sienne. */
+            readonly "reopenings.decide": boolean
             /** @description Signaler, motif à l'appui, qu'une ligne justifiée ou clôturée l'a été à tort. */
             readonly "rectifications.request": boolean
             /** @description Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne. */
@@ -4186,7 +4302,10 @@ export interface components {
              */
             readonly updated_at: string
         }
-        /** @description Motif accompagnant une décision ; obligatoire en cas de refus. */
+        /**
+         * @description Motif accompagnant une décision — sur une rectification ou sur une
+         *     réouverture ; obligatoire en cas de refus.
+         */
         RectificationDecisionRequest: {
             note?: string
         }
@@ -4212,6 +4331,65 @@ export interface components {
          * @enum {string}
          */
         RectificationStatusEnum: "pending" | "approved" | "refused"
+        /**
+         * @description Demande de réouverture d'un dossier déclaré (``workflow``).
+         *
+         *     À la création, ``dossier`` et ``motif`` suffisent : le service relève
+         *     l'état du dossier qu'elle vise, et le garde. Le reste — statut,
+         *     signatures, décision — s'écrit par les actions ``approve`` et
+         *     ``refuse``, jamais par ``PATCH``.
+         */
+        ReopenRequest: {
+            readonly id: number
+            dossier: number
+            readonly dossier_number: string
+            readonly dossier_label: string
+            readonly dossier_status: string
+            readonly country: number
+            /** Statut */
+            readonly status: components["schemas"]["RectificationStatusEnum"]
+            readonly status_display: string
+            /** Motif de la demande */
+            motif: string
+            /** État avant réouverture */
+            readonly previous_status: components["schemas"]["WorkflowStatusEnum"]
+            readonly previous_status_display: string
+            /** Demandée par */
+            readonly requested_by: string
+            /** Décidée par */
+            readonly decided_by: string
+            /**
+             * Décidée le
+             * Format: date-time
+             */
+            readonly decided_at: string | null
+            /** Motif de la décision */
+            readonly decision_note: string
+            readonly can_decide: boolean
+            /**
+             * Créé le
+             * Format: date-time
+             */
+            readonly created_at: string
+            /**
+             * Modifié le
+             * Format: date-time
+             */
+            readonly updated_at: string
+        }
+        /**
+         * @description Demande de réouverture d'un dossier déclaré (``workflow``).
+         *
+         *     À la création, ``dossier`` et ``motif`` suffisent : le service relève
+         *     l'état du dossier qu'elle vise, et le garde. Le reste — statut,
+         *     signatures, décision — s'écrit par les actions ``approve`` et
+         *     ``refuse``, jamais par ``PATCH``.
+         */
+        ReopenRequestRequest: {
+            dossier: number
+            /** Motif de la demande */
+            motif: string
+        }
         /**
          * @description * `super_admin` - Super administrateur (DG, DO, CEO, DEV)
          *     * `admin` - Administrateur (RH)
@@ -4370,9 +4548,10 @@ export interface components {
          *     * `close` - close
          *     * `reopen` - reopen
          *     * `request_rectification` - request_rectification
+         *     * `request_reopening` - request_reopening
          * @enum {string}
          */
-        TransitionEnum: "edit" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen" | "request_rectification"
+        TransitionEnum: "edit" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen" | "request_rectification" | "request_reopening"
         /**
          * @description Motif accompagnant une transition ; obligatoire pour un rejet (§5.5)
          *     et pour une réouverture.
@@ -4551,12 +4730,14 @@ export interface operations {
                  *     * `rectification_requested` - Demande de rectification
                  *     * `rectification_decided` - Décision sur une rectification
                  *     * `rectified` - Rectification d'un constat
+                 *     * `reopen_requested` - Demande de réouverture
+                 *     * `reopen_decided` - Décision sur une réouverture
                  *     * `proof_uploaded` - Dépôt de justificatif
                  *     * `proof_replaced` - Remplacement de justificatif
                  *     * `downloaded` - Téléchargement
                  *     * `imported` - Import Excel
                  */
-                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
+                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "reopen_decided" | "reopen_requested" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
                 country?: number
                 object_type?: string
                 /** @description Quel champ utiliser pour classer les résultats. */
@@ -6952,8 +7133,10 @@ export interface operations {
                  *     * `dossier_reopened` - Dossier rouvert
                  *     * `rectification_requested` - Demande de rectification
                  *     * `rectification_decided` - Décision sur une rectification
+                 *     * `reopen_requested` - Demande de réouverture
+                 *     * `reopen_decided` - Décision sur une réouverture
                  */
-                kind?: "budget_overrun" | "budget_threshold" | "dossier_reopened" | "expense_rejected" | "expense_submitted" | "proof_incomplete" | "proof_missing" | "reallocation_requested" | "rectification_decided" | "rectification_requested" | "storage_error"
+                kind?: "budget_overrun" | "budget_threshold" | "dossier_reopened" | "expense_rejected" | "expense_submitted" | "proof_incomplete" | "proof_missing" | "reallocation_requested" | "rectification_decided" | "rectification_requested" | "reopen_decided" | "reopen_requested" | "storage_error"
                 /**
                  * @description * `info` - Information
                  *     * `warning` - Avertissement
@@ -7724,6 +7907,145 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["Rectification"]
+                }
+            }
+        }
+    }
+    reopen_requests_list: {
+        parameters: {
+            query?: {
+                dossier?: number
+                dossier__country?: number
+                /** @description Quel champ utiliser pour classer les résultats. */
+                ordering?: string
+                /** @description Un numéro de page de l'ensemble des résultats. */
+                page?: number
+                /** @description Nombre de résultats à retourner par page. */
+                page_size?: number
+                /** @description Un terme de recherche. */
+                search?: string
+                /**
+                 * @description * `pending` - En attente
+                 *     * `approved` - Approuvée
+                 *     * `refused` - Refusée
+                 */
+                status?: "approved" | "pending" | "refused"
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["PaginatedReopenRequestList"]
+                }
+            }
+        }
+    }
+    reopen_requests_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenRequestRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["ReopenRequestRequest"]
+                "multipart/form-data": components["schemas"]["ReopenRequestRequest"]
+            }
+        }
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ReopenRequest"]
+                }
+            }
+        }
+    }
+    reopen_requests_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Demande de réouverture. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ReopenRequest"]
+                }
+            }
+        }
+    }
+    reopen_requests_approve_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Demande de réouverture. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RectificationDecisionRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["RectificationDecisionRequest"]
+                "multipart/form-data": components["schemas"]["RectificationDecisionRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ReopenRequest"]
+                }
+            }
+        }
+    }
+    reopen_requests_refuse_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Demande de réouverture. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RectificationDecisionRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["RectificationDecisionRequest"]
+                "multipart/form-data": components["schemas"]["RectificationDecisionRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ReopenRequest"]
                 }
             }
         }
