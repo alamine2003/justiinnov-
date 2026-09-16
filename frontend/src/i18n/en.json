@@ -786,7 +786,9 @@
       "sans_preuve": "no proof {{montant}}",
       "detail": "consumed {{consomme}} · committed {{engage}} · justified {{justifie}} · available {{disponible}}",
       "aria": "{{pays}}: {{taux}} of the allocated envelope",
-      "echelle": "The vertical line marks the allocated envelope. Bars share the scale of the largest envelope."
+      "echelle": "The vertical line marks the allocated envelope. Bars share the scale of the largest envelope, compared in FCFA.",
+      "hors_echelle": "off scale",
+      "hors_echelle_aide": "A currency with no known rate keeps its own scale: its bar cannot be compared with the others."
     }
   },
   "pays": {

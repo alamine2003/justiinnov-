@@ -39,6 +39,7 @@ import type {
   DashboardCountryRow,
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
+import { echelleCommune, echelleDe, mesuresEnXof } from "@/lib/echelle"
 import { cn, formatAmount, formatRate } from "@/lib/utils"
 
 /** Alertes montrées d'emblée ; le reste est signalé par un compte. */
@@ -460,12 +461,9 @@ function ParPays({
   warningRate: number
 }) {
   const { t } = useTranslation()
-  // Échelle commune : la plus grande enveloppe attribuée. Sans enveloppe, la
-  // plus grosse consommation, pour que la barre ne soit pas vide.
-  const echelle = Math.max(
-    ...rows.map((row) => Math.max(Number(row.allocated), Number(row.consumed))),
-    1,
-  )
+  // Les pays se comparent en FCFA : le détail est dans `lib/echelle.ts`.
+  const mesures = mesuresEnXof(rows)
+  const echelle = echelleCommune(mesures)
 
   return (
     <Card className="border-border/60 shadow-sm">
@@ -496,7 +494,9 @@ function ParPays({
           </div>
         ) : (
           <ul className="space-y-4">
-            {rows.map((row) => {
+            {mesures.map(({ row, ...mesure }) => {
+              // Les chiffres lus restent dans la devise du pays ; seuls ceux
+              // du dessin passent en FCFA.
               const attribue = Number(row.allocated)
               const depassement = Number(row.consumed) - attribue
               const taux = Number(row.execution_rate ?? 0)
@@ -530,6 +530,14 @@ function ParPays({
                       >
                         {formatRate(row.execution_rate)}
                       </span>
+                      {!mesure.converti && (
+                        <span
+                          className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground"
+                          title={t("pilotage.barres.hors_echelle_aide")}
+                        >
+                          {t("pilotage.barres.hors_echelle")}
+                        </span>
+                      )}
                       <span className="text-muted-foreground">
                         {t("pilotage.barres.attribues", { montant: formatAmount(row.allocated) })}
                       </span>
@@ -537,10 +545,10 @@ function ParPays({
                   </div>
                   <div className="mt-1.5">
                     <BarreEnveloppe
-                      consumed={Number(row.consumed)}
-                      engaged={Number(row.engaged)}
-                      allocated={attribue}
-                      scale={echelle}
+                      consumed={mesure.consumed}
+                      engaged={mesure.engaged}
+                      allocated={mesure.allocated}
+                      scale={echelleDe(mesure, echelle)}
                       title={t("pilotage.barres.aria", {
                         pays: row.country_name,
                         taux: formatRate(row.execution_rate),

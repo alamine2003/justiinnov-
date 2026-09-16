@@ -45,6 +45,18 @@ class DashboardCountryRowSerializer(serializers.Serializer):
     execution_rate = champ_taux()
     justification_rate = champ_taux()
     remaining_xof = champ_montant(allow_null=True)
+    allocated_xof = champ_montant(
+        allow_null=True,
+        help_text=_("L'enveloppe en FCFA, pour comparer les pays entre eux ; absent faute de taux."),
+    )
+    consumed_xof = champ_montant(
+        allow_null=True,
+        help_text=_("Le consommé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux."),
+    )
+    engaged_xof = champ_montant(
+        allow_null=True,
+        help_text=_("L'engagé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux."),
+    )
 
 
 class ConsolidatedXofSerializer(serializers.Serializer):

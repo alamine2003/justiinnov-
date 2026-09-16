@@ -25,6 +25,7 @@ import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import { executionWarningRate } from "@/lib/reporting"
 import type { Budget, CountryBudgetRow } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
+import { echelleCommune, echelleDe, mesuresEnXof } from "@/lib/echelle"
 import { cn, formatAmount } from "@/lib/utils"
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -291,10 +292,9 @@ function TousLesPays({
   onChoose: (id: number) => void
 }) {
   const { t } = useTranslation()
-  const echelle = Math.max(
-    ...rows.map((row) => Math.max(Number(row.allocated), Number(row.consumed))),
-    1,
-  )
+  // Les pays se comparent en FCFA : le détail est dans `lib/echelle.ts`.
+  const mesures = mesuresEnXof(rows)
+  const echelle = echelleCommune(mesures)
 
   return (
     <Card className="border-border/60 shadow-sm">
@@ -317,7 +317,9 @@ function TousLesPays({
       </CardHeader>
       <CardContent>
         <ul className="space-y-4">
-          {rows.map((row) => (
+          {/* Les chiffres lus restent dans la devise du pays ; seuls ceux du
+              dessin passent en FCFA. */}
+          {mesures.map(({ row, ...mesure }) => (
             <li key={row.country}>
               <button
                 type="button"
@@ -343,6 +345,14 @@ function TousLesPays({
                         montant: formatAmount(row.remaining),
                       })}
                     </span>
+                    {!mesure.converti && (
+                      <span
+                        className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground"
+                        title={t("pilotage.barres.hors_echelle_aide")}
+                      >
+                        {t("pilotage.barres.hors_echelle")}
+                      </span>
+                    )}
                     <span className="text-muted-foreground">
                       {t("pilotage.barres.attribues", { montant: formatAmount(row.allocated) })}
                     </span>
@@ -350,10 +360,10 @@ function TousLesPays({
                 </span>
                 <span className="mt-1.5 block">
                   <BarreEnveloppe
-                    consumed={Number(row.consumed)}
-                    engaged={Number(row.engaged)}
-                    allocated={Number(row.allocated)}
-                    scale={echelle}
+                    consumed={mesure.consumed}
+                    engaged={mesure.engaged}
+                    allocated={mesure.allocated}
+                    scale={echelleDe(mesure, echelle)}
                     title={t("budgets.enveloppe.barre_aria", { pays: row.country_name })}
                   />
                 </span>

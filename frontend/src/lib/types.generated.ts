@@ -2255,6 +2255,21 @@ export interface components {
             readonly remaining: string
             /** Format: decimal */
             readonly remaining_xof: string | null
+            /**
+             * Format: decimal
+             * @description L'enveloppe en FCFA, pour comparer les pays entre eux ; absent faute de taux.
+             */
+            readonly allocated_xof: string | null
+            /**
+             * Format: decimal
+             * @description Le consommé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux.
+             */
+            readonly consumed_xof: string | null
+            /**
+             * Format: decimal
+             * @description L'engagé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux.
+             */
+            readonly engaged_xof: string | null
         }
         /** @description Représentation compacte pour la liste des pays. */
         CountryDetail: {
@@ -2445,6 +2460,21 @@ export interface components {
             readonly justification_rate: string | null
             /** Format: decimal */
             readonly remaining_xof: string | null
+            /**
+             * Format: decimal
+             * @description L'enveloppe en FCFA, pour comparer les pays entre eux ; absent faute de taux.
+             */
+            readonly allocated_xof: string | null
+            /**
+             * Format: decimal
+             * @description Le consommé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux.
+             */
+            readonly consumed_xof: string | null
+            /**
+             * Format: decimal
+             * @description L'engagé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux.
+             */
+            readonly engaged_xof: string | null
         }
         /** @description Totaux consolidés en FCFA (``totals``). */
         DashboardTotals: {

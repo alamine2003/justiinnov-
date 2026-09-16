@@ -8849,6 +8849,30 @@
                         "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
                         "readOnly": true,
                         "nullable": true
+                    },
+                    "allocated_xof": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true,
+                        "description": "L'enveloppe en FCFA, pour comparer les pays entre eux ; absent faute de taux."
+                    },
+                    "consumed_xof": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true,
+                        "description": "Le consommé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux."
+                    },
+                    "engaged_xof": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true,
+                        "description": "L'engagé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux."
                     }
                 },
                 "required": [
@@ -8862,7 +8886,10 @@
                     "consumed",
                     "justified",
                     "remaining",
-                    "remaining_xof"
+                    "remaining_xof",
+                    "allocated_xof",
+                    "consumed_xof",
+                    "engaged_xof"
                 ]
             },
             "CountryDetail": {
@@ -9363,6 +9390,30 @@
                         "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
                         "readOnly": true,
                         "nullable": true
+                    },
+                    "allocated_xof": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true,
+                        "description": "L'enveloppe en FCFA, pour comparer les pays entre eux ; absent faute de taux."
+                    },
+                    "consumed_xof": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true,
+                        "description": "Le consommé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux."
+                    },
+                    "engaged_xof": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true,
+                        "description": "L'engagé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux."
                     }
                 },
                 "required": [
@@ -9379,7 +9430,10 @@
                     "remaining",
                     "execution_rate",
                     "justification_rate",
-                    "remaining_xof"
+                    "remaining_xof",
+                    "allocated_xof",
+                    "consumed_xof",
+                    "engaged_xof"
                 ]
             },
             "DashboardTotals": {

@@ -408,6 +408,53 @@ class ExchangeRateTests(BudgetTestCase):
         self.assertEqual(response.data["unconverted_currencies"], ["GNF"])
         self.assertEqual(response.data["total_remaining_xof"], "10000000.00")
 
+    def test_la_ligne_porte_ses_montants_en_fcfa(self):
+        """Les barres se comparent entre pays : il leur faut une seule unité.
+
+        Avec un taux différent de 1, le montant converti n'est pas le montant
+        local — c'est tout l'objet du champ, et c'est ce qui manquait quand
+        l'échelle se calculait sur `allocated`.
+        """
+        self.ivoire.currency = "MAD"
+        self.ivoire.save()
+        ExchangeRate.objects.create(
+            currency="MAD", rate_to_xof=Decimal("60.000000"), valid_from=date(2026, 1, 1)
+        )
+        self.imputer(self.budget_ivoire, "5000000.00", Status.JUSTIFIED)
+        self.login(self.doo)
+
+        response = self.client.get("/api/budgets/summary/", {"year": 2026})
+
+        rows = {row["country_ref"]: row for row in response.data["countries"]}
+        ivoire = rows["CT-01"]
+        self.assertEqual(
+            Decimal(ivoire["allocated_xof"]), Decimal(ivoire["allocated"]) * 60
+        )
+        self.assertEqual(
+            Decimal(ivoire["consumed_xof"]), Decimal(ivoire["consumed"]) * 60
+        )
+        self.assertEqual(
+            Decimal(ivoire["engaged_xof"]), Decimal(ivoire["engaged"]) * 60
+        )
+        # Le Togo est en FCFA : converti, il ne bouge pas.
+        togo = rows["TG-02"]
+        self.assertEqual(togo["allocated_xof"], togo["allocated"])
+
+    def test_une_devise_sans_taux_ne_recoit_pas_de_montant_en_fcfa(self):
+        """Mieux vaut un champ nul qu'un chiffre inventé : l'interface saura
+        qu'elle ne peut pas comparer cette ligne aux autres."""
+        self.ivoire.currency = "GNF"
+        self.ivoire.save()
+        self.login(self.doo)
+
+        response = self.client.get("/api/budgets/summary/")
+
+        ivoire = next(row for row in response.data["countries"] if row["currency"] == "GNF")
+        self.assertIsNone(ivoire["allocated_xof"])
+        self.assertIsNone(ivoire["consumed_xof"])
+        self.assertIsNone(ivoire["engaged_xof"])
+        self.assertEqual(response.data["unconverted_currencies"], ["GNF"])
+
     def test_un_taux_date_du_futur_ne_s_applique_pas_encore(self):
         """Le taux « courant » est le dernier en vigueur *aujourd'hui*, pas le
         plus récent saisi : un taux daté de demain attend son jour."""

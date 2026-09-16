@@ -98,6 +98,9 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
                     "justified": str(row["justified"]),
                     "remaining": str(row["remaining"]),
                     "remaining_xof": _as_str(row["remaining_xof"]),
+                    "allocated_xof": _as_str(row["allocated_xof"]),
+                    "consumed_xof": _as_str(row["consumed_xof"]),
+                    "engaged_xof": _as_str(row["engaged_xof"]),
                 }
                 for row in rows
             ],

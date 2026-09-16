@@ -50,6 +50,18 @@ class CountryBudgetRowSerializer(serializers.Serializer):
     justified = champ_montant()
     remaining = champ_montant()
     remaining_xof = champ_montant(allow_null=True)
+    allocated_xof = champ_montant(
+        allow_null=True,
+        help_text=gettext_lazy("L'enveloppe en FCFA, pour comparer les pays entre eux ; absent faute de taux."),
+    )
+    consumed_xof = champ_montant(
+        allow_null=True,
+        help_text=gettext_lazy("Le consommé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux."),
+    )
+    engaged_xof = champ_montant(
+        allow_null=True,
+        help_text=gettext_lazy("L'engagé en FCFA, à la même échelle que l'enveloppe ; absent faute de taux."),
+    )
 
 
 class BudgetSummarySerializer(serializers.Serializer):

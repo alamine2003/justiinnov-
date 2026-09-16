@@ -786,7 +786,9 @@
       "sans_preuve": "sans preuve {{montant}}",
       "detail": "consommé {{consomme}} · engagé {{engage}} · justifié {{justifie}} · disponible {{disponible}}",
       "aria": "{{pays}} : {{taux}} de l'enveloppe attribuée",
-      "echelle": "Le trait vertical marque l'enveloppe attribuée. Les barres sont à l'échelle de la plus grande enveloppe."
+      "echelle": "Le trait vertical marque l'enveloppe attribuée. Les barres sont à l'échelle de la plus grande enveloppe, comparée en FCFA.",
+      "hors_echelle": "hors échelle",
+      "hors_echelle_aide": "Une devise sans taux connu reste à sa propre échelle : sa barre ne se compare pas aux autres."
     }
   },
   "pays": {
