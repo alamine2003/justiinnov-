@@ -164,12 +164,12 @@ export function SousEnveloppes({
   onEdit: (budget: Budget) => void
 }) {
   const { t } = useTranslation()
-  // Seul chiffre d'argent encore calculé ici : le serveur publie `allocated`
-  // et `sub_allocated`, pas leur écart. À déplacer côté serveur (`unallocated`
-  // dans `CountryBudgetRow`) — voir DESIGN.md, « rien ne se calcule dans
-  // l'interface ». L'arrondi à deux décimales de `formatAmount` couvre le
-  // flottant, mais la définition, elle, peut diverger en silence.
-  const nonReparti = Number(row.allocated) - Number(row.sub_allocated)
+  // Le serveur publie la part non découpée (`unallocated`) : l'écran ne la
+  // déduit plus d'`allocated - sub_allocated`, calcul de gestion qui pouvait
+  // diverger de la définition du serveur sans que rien ne le signale.
+  // La conversion en `number` ne sert qu'à la comparaison ; le montant
+  // affiché part en chaîne, comme le veut la précision décimale.
+  const nonReparti = Number(row.unallocated)
 
   return (
     <section className="space-y-3">
@@ -259,7 +259,7 @@ export function SousEnveloppes({
             <span className="text-sm font-semibold">{t("budgets.sous.decouper")}</span>
             <span className="text-xs text-muted-foreground">
               {nonReparti > 0
-                ? t("budgets.sous.non_reparti", { montant: formatAmount(String(nonReparti)) })
+                ? t("budgets.sous.non_reparti", { montant: formatAmount(row.unallocated) })
                 : t("budgets.sous.tout_reparti")}
             </span>
           </button>

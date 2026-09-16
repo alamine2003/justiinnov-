@@ -45,6 +45,9 @@ class CountryBudgetRowSerializer(serializers.Serializer):
     currency = serializers.CharField(read_only=True)
     allocated = champ_montant()
     sub_allocated = champ_montant()
+    unallocated = champ_montant(
+        help_text=gettext_lazy("Part de l'enveloppe du pays qui n'est pas encore découpée.")
+    )
     engaged = champ_montant()
     consumed = champ_montant()
     justified = champ_montant()
