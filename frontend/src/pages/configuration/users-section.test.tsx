@@ -291,4 +291,43 @@ describe("UsersSection — modification", () => {
     expect(updateUser.mock.calls[0][1]).toMatchObject({ teams: [4] })
     expect(fetchCountry).toHaveBeenCalledWith(1)
   })
+
+  it("ne demande qu'une fois la fiche de chaque pays coché", async () => {
+    // Régression : `teamsByCountry` figurait dans les dépendances de l'effet,
+    // chaque réponse le relançait et son nettoyage jetait les requêtes encore
+    // en vol — trois pays cochés produisaient 3 + 2 + 1 requêtes pour trois
+    // fiches.
+    fetchUsers.mockResolvedValue(
+      page([
+        compte({
+          countries: [1, 2, 3],
+          countries_detail: [
+            { id: 1, name: "Togo", code: "TG", country_ref: null, timezone: "Africa/Lome", currency: "XOF" },
+            { id: 2, name: "Benin", code: "BJ", country_ref: null, timezone: "Africa/Porto-Novo", currency: "XOF" },
+            { id: 3, name: "Mali", code: "ML", country_ref: null, timezone: "Africa/Bamako", currency: "XOF" },
+          ],
+        }),
+      ]),
+    )
+    // Les réponses arrivent échelonnées : résolues dans le même tick, React
+    // groupe les trois mises à jour et la boucle ne se voit pas.
+    const differees = new Map<number, (fiche: unknown) => void>()
+    fetchCountry.mockImplementation(
+      (id: number) => new Promise((resolve) => differees.set(id, resolve)),
+    )
+    render(<UsersSection />)
+
+    fireEvent.click(await screen.findByRole("button", { name: "Modifier togo.innov" }))
+
+    await waitFor(() => expect(differees.size).toBe(3))
+    for (const id of [1, 2, 3]) {
+      differees.get(id)?.({ id, teams: [] })
+      // Chaque réponse laisse React se réconcilier avant la suivante : c'est
+      // là que l'effet se relançait et rejetait les requêtes en vol.
+      await waitFor(() => expect(fetchCountry).toHaveBeenCalled())
+    }
+
+    await waitFor(() => expect(fetchCountry).toHaveBeenCalledTimes(3))
+    expect(fetchCountry.mock.calls.map((appel) => appel[0]).sort()).toEqual([1, 2, 3])
+  })
 })
