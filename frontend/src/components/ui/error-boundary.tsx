@@ -33,7 +33,12 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
             <AlertDescription>
               <p>{this.state.error.message || i18next.t("erreurs.inattendue")}</p>
               <p>
-                <a href={window.location.pathname}>{i18next.t("erreurs.recharger")}</a>
+                {/* La query string fait partie de l'écran : sans elle,
+                    « recharger » depuis `?onglet=permissions` ramenait à
+                    l'onglet général. */}
+                <a href={window.location.pathname + window.location.search}>
+                  {i18next.t("erreurs.recharger")}
+                </a>
               </p>
             </AlertDescription>
           </Alert>

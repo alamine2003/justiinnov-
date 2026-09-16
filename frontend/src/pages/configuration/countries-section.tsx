@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { CountryForm, type CountryFormValues } from "@/components/countries/country-form"
 import { CountryTable } from "@/components/countries/country-table"
+import { useAuth } from "@/context/use-auth"
 import { createCountry, fetchCountries, updateCountry } from "@/lib/countries"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import type { CountrySummary } from "@/lib/types"
@@ -20,6 +21,7 @@ type StatusFilter = "all" | "active" | "inactive"
  * d'un pays à deux endroits garantirait qu'ils divergent.
  */
 export function CountriesSection() {
+  const { can } = useAuth()
   const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
@@ -114,7 +116,7 @@ export function CountriesSection() {
         }}
         onToggle={(country) => void handleToggle(country)}
         togglingId={togglingId}
-        canManage
+        canManage={can("countries.create") && can("countries.update")}
       />
 
       <Pagination
