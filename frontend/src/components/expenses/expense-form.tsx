@@ -239,7 +239,10 @@ function ExpenseFormBody({
               disabled={devisePresente}
               placeholder={
                 devisePresente
-                  ? t("depenses.formulaire.converti_serveur")
+                  ? // Le repli « autre devise » peut être refermé : sans
+                    // nommer la devise, le champ restait grisé sans que sa
+                    // raison soit visible nulle part.
+                    t("depenses.formulaire.converti_serveur_devise", { devise })
                   : t("depenses.formulaire.montant_placeholder")
               }
               required={!devisePresente}

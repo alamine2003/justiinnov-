@@ -418,6 +418,7 @@
       "montant": "Expense ({{devise}})",
       "montant_placeholder": "12,500.00",
       "converti_serveur": "converted by the server",
+      "converti_serveur_devise": "converted from {{devise}} by the server",
       "autre_devise": "Paid in another currency",
       "autre_devise_aide": "Enter the amount as it appears on the supporting document. The server converts it to {{devise}} at the rate of the expense date and freezes that rate: the figure will not change.",
       "devise_iso": "Currency (ISO 4217)",

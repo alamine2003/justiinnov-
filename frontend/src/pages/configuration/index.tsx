@@ -15,16 +15,22 @@ import { PermissionsSection } from "@/pages/configuration/permissions-section"
  */
 const ONGLETS = ["general", "utilisateurs", "pays", "permissions", "import"] as const
 
+type Onglet = (typeof ONGLETS)[number]
+
 export function ConfigurationPage() {
   const { t } = useTranslation()
   const { can } = useAuth()
   // L'onglet vit dans l'URL : un lien vers « Configuration › Permissions »
   // doit rouvrir cet onglet, pas le premier.
   const [params, setParams] = useSearchParams()
-  const onglet = params.get("onglet") ?? "general"
   // L'import manipule des fichiers : réservé aux administrateurs par défaut
   // (`data.import`).
   const onglets = ONGLETS.filter((value) => value !== "import" || can("data.import"))
+  // Une valeur inconnue — `?onglet=xyz`, ou `?onglet=import` sur un compte
+  // qui n'y a pas droit — laissait une barre d'onglets sans onglet actif et
+  // aucun contenu : une page blanche sans explication.
+  const demande = params.get("onglet")
+  const onglet = demande && onglets.includes(demande as Onglet) ? demande : "general"
 
   return (
     <div className="space-y-6">

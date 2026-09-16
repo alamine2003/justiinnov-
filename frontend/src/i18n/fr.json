@@ -418,6 +418,7 @@
       "montant": "Dépense ({{devise}})",
       "montant_placeholder": "12 500,00",
       "converti_serveur": "converti par le serveur",
+      "converti_serveur_devise": "converti depuis {{devise}} par le serveur",
       "autre_devise": "Payé dans une autre devise",
       "autre_devise_aide": "Saisissez le montant tel qu'il figure sur la pièce. Le serveur le convertit en {{devise}} au taux du jour de la dépense et fige ce taux : le chiffre ne bougera plus.",
       "devise_iso": "Devise (ISO 4217)",

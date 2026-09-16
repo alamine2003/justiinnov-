@@ -14,8 +14,8 @@ export function fetchBudgets(params?: Record<string, unknown>, signal?: AbortSig
   return apiGet<Paginated<Budget>>("/budgets/", params, signal)
 }
 
-export function fetchBudgetSummary(params?: Record<string, unknown>) {
-  return apiGet<BudgetSummary>("/budgets/summary/", params)
+export function fetchBudgetSummary(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<BudgetSummary>("/budgets/summary/", params, signal)
 }
 
 export function createBudget(data: unknown) {

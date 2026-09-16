@@ -194,6 +194,10 @@ export function Reallocations({ budgets, canRequest, onChanged }: ReallocationsP
                       size="sm"
                       variant="outline"
                       className="text-destructive hover:text-destructive"
+                      // Même garde que « Approuver » : ouvrir le refus
+                      // pendant que l'approbation part rapportait un refus
+                      // incompréhensible du serveur.
+                      disabled={busyId === row.id}
                       onClick={() => setRejecting(row)}
                     >
                       <X className="mr-1 h-4 w-4" aria-hidden />
