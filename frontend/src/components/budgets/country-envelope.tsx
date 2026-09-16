@@ -164,6 +164,11 @@ export function SousEnveloppes({
   onEdit: (budget: Budget) => void
 }) {
   const { t } = useTranslation()
+  // Seul chiffre d'argent encore calculé ici : le serveur publie `allocated`
+  // et `sub_allocated`, pas leur écart. À déplacer côté serveur (`unallocated`
+  // dans `CountryBudgetRow`) — voir DESIGN.md, « rien ne se calcule dans
+  // l'interface ». L'arrondi à deux décimales de `formatAmount` couvre le
+  // flottant, mais la définition, elle, peut diverger en silence.
   const nonReparti = Number(row.allocated) - Number(row.sub_allocated)
 
   return (

@@ -295,10 +295,14 @@ export function BarreEnveloppe({
   title,
 }: BarreEnveloppeProps) {
   const dansEnveloppe = Math.min(consumed, allocated)
-  const depassement = Math.max(consumed - allocated, 0)
   // L'engagé se pose après le consommé, sans franchir le montant attribué :
   // au-delà, c'est le dépassement qui occupe la barre.
   const engage = Math.max(Math.min(engaged, allocated - dansEnveloppe), 0)
+  // Le dépassement se mesure sur consommé **et** engagé — la définition du
+  // serveur (`remaining = allocated - (consumed + engaged)`). Mesuré sur le
+  // seul consommé, la barre s'arrêtait au plafond sans segment corail alors
+  // que le taux d'exécution affichait 120 % : le dessin démentait le chiffre.
+  const depassement = Math.max(consumed + engaged - allocated, 0)
   return (
     <div className="relative h-[22px]">
       <span className="sr-only">{title}</span>
@@ -317,7 +321,12 @@ export function BarreEnveloppe({
       {depassement > 0 && (
         <div
           className="absolute inset-y-0 rounded-r bg-destructive"
-          style={{ left: pct(allocated, scale), width: pct(depassement, scale) }}
+          style={{
+            left: pct(allocated, scale),
+            // Borné à ce qui reste de l'échelle : la barre ne déborde jamais
+            // de son cadre, quelle que soit l'échelle qu'on lui donne.
+            width: pct(Math.min(depassement, scale - allocated), scale),
+          }}
         />
       )}
       <div
@@ -356,8 +365,9 @@ export function RailEnveloppe({
   title,
 }: RailEnveloppeProps) {
   const dansEnveloppe = Math.min(consumed, allocated)
-  const depassement = Math.max(consumed - allocated, 0)
   const engage = Math.max(Math.min(engaged, allocated - dansEnveloppe), 0)
+  // Comme `BarreEnveloppe` : consommé et engagé, la définition du serveur.
+  const depassement = Math.max(consumed + engaged - allocated, 0)
   return (
     <div>
       <div className="relative">

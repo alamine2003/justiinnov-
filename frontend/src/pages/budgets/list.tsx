@@ -292,7 +292,11 @@ function TousLesPays({
 }) {
   const { t } = useTranslation()
   const echelle = Math.max(
-    ...rows.map((row) => Math.max(Number(row.allocated), Number(row.consumed))),
+    // L'engagé compte dans l'échelle : la barre le dessine après le consommé,
+    // et un dépassement mesuré sur les deux sortait sinon du cadre.
+    ...rows.map((row) =>
+      Math.max(Number(row.allocated), Number(row.consumed) + Number(row.engaged)),
+    ),
     1,
   )
 
