@@ -45,8 +45,9 @@ export function CarteDeLigne({
   const montant = Number(expense.amount)
   const justifie = Number(expense.justified_amount)
   const ecart = Number(expense.gap)
-  // Un brouillon n'a rien à montrer : il n'est pas encore déclaré, et une
-  // barre vide qui se lirait « tout en écart » serait un contresens.
+  // Un brouillon n'a pas encore de constat à montrer : une barre vide se
+  // lirait « tout en écart », ce qui serait un contresens. Le montant, lui,
+  // s'affiche — voir plus bas.
   const declaree = expense.status !== "draft"
 
   const contexte = [
@@ -86,8 +87,12 @@ export function CarteDeLigne({
           </p>
         </div>
         <div className="shrink-0 text-right">
+          {/* Le montant s'affiche même en brouillon : c'est celui que le
+              manager vient de saisir, et c'est sur cet écran qu'il le relit
+              avant de soumettre. Le masquer était d'autant plus trompeur que
+              les totaux du dossier, eux, comptent les brouillons. */}
           <p className="text-base font-semibold tracking-tight">
-            {declaree ? formatAmount(expense.amount, currency) : "—"}
+            {formatAmount(expense.amount, currency)}
           </p>
           <OriginalAmount
             currency={expense.original_currency}

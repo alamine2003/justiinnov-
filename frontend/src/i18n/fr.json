@@ -38,7 +38,8 @@
     "page_sur": "page {{page}} sur {{total}}",
     "elements_one": "{{count}} élément",
     "elements_other": "{{count}} éléments",
-    "separateur_libelle": " : "
+    "separateur_libelle": " : ",
+    "sera_enregistre": "Sera enregistré : {{montant}}"
   },
   "nav": {
     "retour": "Retour",
@@ -242,6 +243,7 @@
     "connexion": "Connexion",
     "sous_titre": "Identifiez-vous pour accéder à votre périmètre.",
     "identifiant": "Identifiant",
+    "identifiant_exemple": "prenom.innov",
     "mot_de_passe": "Mot de passe",
     "afficher_mdp": "Afficher le mot de passe",
     "masquer_mdp": "Masquer le mot de passe",

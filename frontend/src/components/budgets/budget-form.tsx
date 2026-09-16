@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FormError } from "@/components/ui/form-error"
+import { MontantNormalise } from "@/components/ui/montant-normalise"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -205,6 +206,7 @@ function BudgetFormBody({
               placeholder={t("budgets.form.montant_exemple")}
               required
             />
+            <MontantNormalise value={amount} />
           </div>
         </div>
 

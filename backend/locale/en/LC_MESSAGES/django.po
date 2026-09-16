@@ -684,6 +684,10 @@ msgstr "Submitted or under review: taken out of the budget, not yet recorded by 
 msgid "Consommé sans preuve à l'appui."
 msgstr "Consumed without supporting proof."
 
+#: budget/serializers.py:49
+msgid "Part de l'enveloppe du pays qui n'est pas encore découpée."
+msgstr "Share of the country envelope not yet carved up."
+
 #: budget/serializers.py:59
 msgid "Devises sans taux connu, laissées hors du total."
 msgstr "Currencies without a known rate, left out of the total."

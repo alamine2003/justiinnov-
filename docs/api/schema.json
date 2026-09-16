@@ -8819,6 +8819,13 @@
                         "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
                         "readOnly": true
                     },
+                    "unallocated": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "description": "Part de l'enveloppe du pays qui n'est pas encore découpée."
+                    },
                     "engaged": {
                         "type": "string",
                         "format": "decimal",
@@ -8858,6 +8865,7 @@
                     "currency",
                     "allocated",
                     "sub_allocated",
+                    "unallocated",
                     "engaged",
                     "consumed",
                     "justified",

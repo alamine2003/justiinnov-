@@ -38,7 +38,8 @@
     "page_sur": "page {{page}} of {{total}}",
     "elements_one": "{{count}} item",
     "elements_other": "{{count}} items",
-    "separateur_libelle": ": "
+    "separateur_libelle": ": ",
+    "sera_enregistre": "Will be recorded as: {{montant}}"
   },
   "nav": {
     "retour": "Back",
@@ -242,6 +243,7 @@
     "connexion": "Sign in",
     "sous_titre": "Sign in to access your scope.",
     "identifiant": "Username",
+    "identifiant_exemple": "firstname.innov",
     "mot_de_passe": "Password",
     "afficher_mdp": "Show password",
     "masquer_mdp": "Hide password",

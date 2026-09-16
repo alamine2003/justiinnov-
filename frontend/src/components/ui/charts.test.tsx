@@ -51,6 +51,30 @@ describe("BarreEnveloppe", () => {
     expect(largeurs(container)).toContain("10%")
   })
 
+  it("compte l'engagé dans le dépassement, comme le serveur", () => {
+    // Régression : le dépassement se mesurait sur le seul consommé. Avec
+    // attribué 100, consommé 80 et engagé 40, le serveur rend
+    // `remaining = -20` et `execution_rate = 1,20` — mais la barre s'arrêtait
+    // pile au plafond, sans segment corail : le dessin démentait le chiffre.
+    const { container } = render(
+      <BarreEnveloppe consumed={80} engaged={40} allocated={100} scale={120} title="TG" />,
+    )
+
+    expect(container.querySelector(".bg-destructive")).not.toBeNull()
+  })
+
+  it("ne laisse pas le dépassement sortir du cadre", () => {
+    const { container } = render(
+      <BarreEnveloppe consumed={90} engaged={90} allocated={100} scale={100} title="SN" />,
+    )
+
+    const debordent = [...container.querySelectorAll<HTMLElement>("div[style*='width']")].filter(
+      (noeud) =>
+        parseFloat(noeud.style.left || "0") + parseFloat(noeud.style.width || "0") > 100.01,
+    )
+    expect(debordent).toEqual([])
+  })
+
   it("ne divise pas par une échelle nulle", () => {
     const { container } = render(
       <BarreEnveloppe consumed={0} engaged={0} allocated={0} scale={0} title="Sans enveloppe" />,

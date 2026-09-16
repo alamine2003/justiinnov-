@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FormError } from "@/components/ui/form-error"
+import { MontantNormalise } from "@/components/ui/montant-normalise"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -356,6 +357,7 @@ function ReallocationForm({
               onChange={(e) => setAmount(e.target.value)}
               required
             />
+            <MontantNormalise value={amount} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="realloc-reason">{t("budgets.realloc.colonnes.justification")}</Label>

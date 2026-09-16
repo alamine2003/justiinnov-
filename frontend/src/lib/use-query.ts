@@ -4,6 +4,8 @@ import { isCancelled } from "@/lib/api"
 
 interface QueryState<T> {
   stamp: string | null
+  /** Clé sans le numéro de rechargement : ce que les données décrivent. */
+  cle: string | null
   data: T | null
   error: string | null
 }
@@ -43,12 +45,18 @@ export function useQuery<T>(
   const { t, i18n } = useTranslation()
   const { enabled = true, fallback = t("erreurs.chargement_impossible") } = options
   const [version, setVersion] = useState(0)
-  const [state, setState] = useState<QueryState<T>>({ stamp: null, data: null, error: null })
+  const [state, setState] = useState<QueryState<T>>({
+    stamp: null,
+    cle: null,
+    data: null,
+    error: null,
+  })
   // Le fetcher est presque toujours une fermeture recréée à chaque rendu :
   // `useEffectEvent` en lit la dernière version sans relancer l'effet.
   const run = useEffectEvent((signal: AbortSignal) => fetcher(signal))
 
-  const stamp = enabled ? `${key}#${version}#${i18n.resolvedLanguage ?? i18n.language}` : null
+  const cle = enabled ? `${key}#${i18n.resolvedLanguage ?? i18n.language}` : null
+  const stamp = cle === null ? null : `${cle}#${version}`
 
   useEffect(() => {
     if (stamp === null) return
@@ -56,18 +64,24 @@ export function useQuery<T>(
     run(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return
-        setState({ stamp, data, error: null })
+        setState({ stamp, cle, data, error: null })
       })
       .catch((e: unknown) => {
         if (controller.signal.aborted || isCancelled(e)) return
         setState((current) => ({
           stamp,
-          data: current.data,
+          cle,
+          // Les données de la clé précédente ne décrivent plus ce qui est
+          // demandé : les garder afficherait les brouillons sous le filtre
+          // « justifié », sous un bandeau d'erreur — un résultat faux, présenté
+          // comme un résultat. Un simple rechargement de la même clé, lui,
+          // garde ce qui est à l'écran.
+          data: current.cle === cle ? current.data : null,
           error: e instanceof Error ? e.message : fallback,
         }))
       })
     return () => controller.abort()
-  }, [stamp, fallback])
+  }, [stamp, cle, fallback])
 
   const reload = useCallback(() => setVersion((v) => v + 1), [])
   const setData = useCallback(

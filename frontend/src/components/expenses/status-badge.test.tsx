@@ -18,8 +18,15 @@ import {
 } from "@/lib/status-styles"
 import type { ProofStatus, WorkflowStatus } from "@/lib/types"
 
-/** Teintes Tailwind brutes et blanc en dur : interdits par DESIGN.md. */
-const TEINTE_BRUTE = /\b(?:bg|text|border)-(?:emerald|red|green|amber|blue|slate|zinc|gray|yellow|orange)-\d{3}\b|\btext-white\b/
+/**
+ * Teintes Tailwind brutes et blanc en dur : interdits par DESIGN.md.
+ *
+ * La liste couvre désormais toutes les familles de Tailwind : elle n'en
+ * nommait que dix, si bien qu'un `text-sky-600` ou un `bg-rose-500` serait
+ * passé. Les préfixes `fill-` et `stroke-` sont ajoutés pour les graphiques.
+ */
+const TEINTE_BRUTE =
+  /\b(?:bg|text|border|fill|stroke|ring|from|via|to)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-\d{2,3}\b|\b(?:text|bg|border|fill|stroke)-white\b/
 
 function fichiersSource(dossier: string): string[] {
   return readdirSync(dossier).flatMap((nom) => {
@@ -82,5 +89,83 @@ describe("StatusBadge", () => {
     render(<StatusBadge status="justified" label="Justifiée" />)
 
     expect(screen.getByText("Justifiée")).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Contraste des paires de statut
+// ---------------------------------------------------------------------------
+
+/** Convertit une couleur `oklch(L C H)` d'`index.css` en sRGB linéaire borné au gamut. */
+function oklchEnLineaire(couleur: string): [number, number, number] {
+  const [clarte, chroma, teinte] = couleur
+    .replace(/oklch\(|\)/g, "")
+    .trim()
+    .split(/\s+/)
+    .map(Number)
+  const radians = (teinte * Math.PI) / 180
+  const a = chroma * Math.cos(radians)
+  const b = chroma * Math.sin(radians)
+  const l = (clarte + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m = (clarte - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s = (clarte - 0.0894841775 * a - 1.291485548 * b) ** 3
+  return [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ].map((canal) => Math.min(Math.max(canal, 0), 1)) as [number, number, number]
+}
+
+/** Rapport de contraste WCAG entre deux couleurs `oklch`. */
+function contraste(fond: string, texte: string): number {
+  const luminance = (couleur: string) => {
+    const [r, v, b] = oklchEnLineaire(couleur)
+    return 0.2126 * r + 0.7152 * v + 0.0722 * b
+  }
+  const [clair, sombre] = [luminance(fond), luminance(texte)].sort((x, y) => y - x)
+  return (clair + 0.05) / (sombre + 0.05)
+}
+
+/** Valeurs des variables CSS d'un bloc (`:root` ou `.dark`) d'`index.css`. */
+function jetons(bloc: ":root" | ".dark"): Record<string, string> {
+  const css = readFileSync(join(import.meta.dirname, "../../index.css"), "utf8")
+  const corps = new RegExp(`^${bloc.replace(".", "\\.")} \\{([\\s\\S]*?)^\\}`, "m").exec(css)
+  if (!corps) throw new Error(`bloc ${bloc} introuvable dans index.css`)
+  return Object.fromEntries(
+    [...corps[1].matchAll(/^\s*(--[\w-]+):\s*(oklch\([^)]*\));/gm)].map((m) => [m[1], m[2]]),
+  )
+}
+
+/**
+ * Chaque teinte de statut doit se lire sur son encre. Les badges sont en
+ * `text-xs` : le seuil applicable est celui du texte normal, 4,5:1.
+ *
+ * Régression : l'émeraude du succès donnait 2,47:1, le bleu de l'information
+ * 3,76:1 et l'azur de la marque 3,10:1 — du blanc en dur par le jeton, que le
+ * grep sur `text-white` ne pouvait pas voir. DESIGN.md affirmait pourtant que
+ * le contraste était garanti dans les deux thèmes.
+ */
+describe("contraste des jetons", () => {
+  const PAIRES: [string, string, string][] = [
+    ["--statut-succes", "--statut-succes-foreground", "badge justifie"],
+    ["--statut-attente", "--statut-attente-foreground", "badge en controle"],
+    ["--statut-info", "--statut-info-foreground", "badge soumis"],
+    ["--statut-neutre", "--statut-neutre-foreground", "badge brouillon"],
+    ["--statut-archive", "--statut-archive-foreground", "badge cloture"],
+    ["--destructive", "--destructive-foreground", "badge non justifie"],
+    ["--marque", "--marque-foreground", "azur de la marque"],
+    ["--marque-fort", "--marque-fort-foreground", "azur fort"],
+    ["--banniere", "--banniere-foreground", "bandeau marine"],
+    ["--banniere", "--banniere-muted", "bandeau, etiquette"],
+  ]
+
+  it.each([":root", ".dark"] as const)("atteint 4,5:1 sur chaque paire en %s", (bloc) => {
+    const table = jetons(bloc)
+    const faibles = PAIRES.filter(([fond, texte]) => contraste(table[fond], table[texte]) < 4.5).map(
+      ([fond, texte, nom]) =>
+        `${nom} (${fond}/${texte}) : ${contraste(table[fond], table[texte]).toFixed(2)}:1`,
+    )
+
+    expect(faibles).toEqual([])
   })
 })
