@@ -703,6 +703,59 @@ class DossierWorkflowTests(ExpenseTestCase):
         self.assertEqual(response.data["totals"]["gap"], "30000.00")
 
 
+class DossierCountsTests(ExpenseTestCase):
+    """Les pastilles de la liste comptent les dossiers par statut."""
+
+    def setUp(self):
+        super().setUp()
+        togolais = Dossier.objects.create(
+            number="N-0002", label="Salon Kara", country=self.togo, team=self.team,
+            owner=self.manager, date=date(self.year, 4, 1), status=Status.SUBMITTED,
+            created_by=self.owner.username,
+        )
+        Dossier.objects.create(
+            number="N-0003", label="Mission Abidjan", country=self.ivoire,
+            date=date(self.year, 4, 2), status=Status.SUBMITTED,
+            created_by=self.rep_ivoire.username,
+        )
+        # Deux pièces sur le même dossier : le queryset de la liste annote
+        # les pièces, et un compte qui suivrait la jointure le compterait
+        # deux fois.
+        for nom in ("a.pdf", "b.pdf"):
+            Proof.objects.create(
+                dossier=togolais, file=f"justificatifs/{nom}",
+                original_name=nom, sha256=nom[0] * 64,
+            )
+
+    def test_compte_par_statut_dans_le_perimetre(self):
+        self.login(self.owner)
+
+        response = self.client.get("/api/dossiers/counts/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # N-0002 porte deux pièces et ne compte quand même que pour un.
+        self.assertEqual(response.data["total"], 2)
+        self.assertEqual(response.data["by_status"]["draft"], 1)
+        self.assertEqual(response.data["by_status"]["submitted"], 1)
+        # Chaque statut est présent, à zéro s'il le faut : l'interface ne
+        # devine pas la liste des états.
+        self.assertEqual(set(response.data["by_status"]), set(Status.values))
+
+    def test_ignore_le_filtre_de_statut_mais_garde_les_autres(self):
+        self.login(self.doo)
+
+        response = self.client.get(
+            "/api/dossiers/counts/", {"status": "draft", "search": "Mission"}
+        )
+
+        # « Mission » : N-0001 « Mission Lomé » (brouillon, Togo) et N-0003
+        # « Mission Abidjan » (soumis, Côte d'Ivoire) ; le statut demandé ne
+        # retranche rien.
+        self.assertEqual(response.data["total"], 2)
+        self.assertEqual(response.data["by_status"]["draft"], 1)
+        self.assertEqual(response.data["by_status"]["submitted"], 1)
+
+
 class ScopingTests(ExpenseTestCase):
     def _payload(self, **extra):
         data = {

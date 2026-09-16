@@ -110,6 +110,19 @@ TRANSITION_CHOICES = [
 ]
 
 
+class DossierCountsSerializer(serializers.Serializer):
+    """Nombre de dossiers par statut (``/api/dossiers/counts/``).
+
+    Forme documentaire : la vue rend le dictionnaire tel quel.
+    """
+
+    total = serializers.IntegerField(read_only=True)
+    by_status = serializers.DictField(
+        child=serializers.IntegerField(), read_only=True,
+        help_text=gettext_lazy("Un compte par statut du circuit, zéro compris."),
+    )
+
+
 class DossierTotalsSerializer(serializers.Serializer):
     """Totaux d'un dossier, calculés en base (``Dossier.totals``)."""
 

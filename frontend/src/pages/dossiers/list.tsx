@@ -33,7 +33,7 @@ import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
-import { createDossier, fetchDossiers } from "@/lib/expenses"
+import { createDossier, fetchDossierCounts, fetchDossiers } from "@/lib/expenses"
 import { fetchCountries, fetchCountry } from "@/lib/countries"
 import { WORKFLOW_STATUSES, workflowLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
@@ -70,6 +70,15 @@ export function DossiersPage() {
       if (statusFilter) requestParams.status = statusFilter
       return fetchDossiers(requestParams, signal)
     },
+    { fallback: t("dossiers.liste.chargement_impossible") },
+  )
+  // Les comptes suivent la recherche, mais pas le statut : une pastille
+  // doit dire combien de dossiers l'attendent pendant qu'on en regarde un
+  // autre. Le serveur applique le même cloisonnement qu'à la liste.
+  const counts = useQuery(
+    JSON.stringify({ search: debouncedSearch }),
+    (signal) =>
+      fetchDossierCounts(debouncedSearch ? { search: debouncedSearch } : undefined, signal),
     { fallback: t("dossiers.liste.chargement_impossible") },
   )
   const countries = useReferentiel("countries", () =>
@@ -119,7 +128,8 @@ export function DossiersPage() {
       <TruncatedNotice page={countries.data} noun={t("dossiers.noms_pays")} />
 
       {/* Six statuts tiennent en pastilles : les voir tous vaut mieux que les
-          dérouler, et le compte du serveur se pose sur celui qui est actif. */}
+          dérouler, et chacune porte son compte — on sait ce qui attend
+          ailleurs sans avoir à y aller. */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="relative w-full lg:max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -142,12 +152,12 @@ export function DossiersPage() {
             {
               value: "",
               label: t("commun.tous"),
-              count: statusFilter === "" && !query.loading ? count : undefined,
+              count: counts.data?.total,
             },
             ...WORKFLOW_STATUSES.map((value) => ({
               value,
               label: workflowLabel(t, value),
-              count: statusFilter === value && !query.loading ? count : undefined,
+              count: counts.data?.by_status[value],
             })),
           ]}
         />
@@ -241,6 +251,8 @@ export function DossiersPage() {
           countries={countries.data?.results ?? []}
           onSaved={async () => {
             query.reload()
+            // Un dossier de plus, c'est une pastille qui change.
+            counts.reload()
           }}
         />
       )}

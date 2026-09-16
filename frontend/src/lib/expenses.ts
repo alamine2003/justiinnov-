@@ -1,6 +1,7 @@
 import { api, apiGet, apiPatch, apiPost } from "@/lib/api"
 import type { AxiosProgressEvent } from "axios"
 import type {
+  DossierCounts,
   AuditEntry,
   Beneficiary,
   Dossier,
@@ -20,6 +21,11 @@ import type {
 // ---------------------------------------------------------------------------
 export function fetchDossiers(params?: Record<string, unknown>, signal?: AbortSignal) {
   return apiGet<Paginated<Dossier>>("/dossiers/", params, signal)
+}
+
+/** Nombre de dossiers par statut, aux mêmes filtres que la liste (statut mis à part). */
+export function fetchDossierCounts(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<DossierCounts>("/dossiers/counts/", params, signal)
 }
 
 export function fetchDossier(id: number, signal?: AbortSignal) {

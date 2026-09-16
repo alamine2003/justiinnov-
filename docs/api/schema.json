@@ -2288,6 +2288,35 @@
                 }
             }
         },
+        "/api/dossiers/counts/": {
+            "get": {
+                "operationId": "dossiers_counts_retrieve",
+                "description": "Nombre de dossiers par statut, aux filtres de la liste — statut mis à part.\n\nLa liste filtre sur un statut ; ses pastilles doivent dire combien\nde dossiers portent chaque autre statut, avec la même recherche et\nle même pays. Le paramètre ``status`` est donc retiré avant que\nles filtres ne s'appliquent ; le cloisonnement, lui, reste celui\ndu queryset.",
+                "tags": [
+                    "dossiers"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DossierCounts"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/exchange-rates/": {
             "get": {
                 "operationId": "exchange_rates_list",
@@ -9618,6 +9647,28 @@
                     "created_by",
                     "created_at",
                     "updated_at"
+                ]
+            },
+            "DossierCounts": {
+                "type": "object",
+                "description": "Nombre de dossiers par statut (``/api/dossiers/counts/``).\n\nForme documentaire : la vue rend le dictionnaire tel quel.",
+                "properties": {
+                    "total": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "by_status": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "integer"
+                        },
+                        "readOnly": true,
+                        "description": "Un compte par statut du circuit, zéro compris."
+                    }
+                },
+                "required": [
+                    "total",
+                    "by_status"
                 ]
             },
             "DossierDetail": {

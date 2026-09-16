@@ -12,7 +12,7 @@ import logging
 from django.db import IntegrityError, transaction
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -43,6 +43,7 @@ from .models import (
 from .serializers import (
     AuditLogSerializer,
     BeneficiarySerializer,
+    DossierCountsSerializer,
     DossierDetailSerializer,
     DossierSerializer,
     ExpenseRegisterSerializer,
@@ -55,7 +56,7 @@ from .serializers import (
     TransitionSerializer,
     TransitionWarningMixin,
 )
-from .workflow import ACTION_CAPACITES
+from .workflow import ACTION_CAPACITES, Status
 
 
 logger = logging.getLogger(__name__)
@@ -253,6 +254,37 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         """
         complet = self._avec_le_contenu(self.get_queryset()).get(pk=dossier.pk)
         return self.get_serializer(complet).data
+
+    @extend_schema(responses=DossierCountsSerializer)
+    @action(detail=False, methods=["get"])
+    def counts(self, request):
+        """Nombre de dossiers par statut, aux filtres de la liste — statut mis à part.
+
+        La liste filtre sur un statut ; ses pastilles doivent dire combien
+        de dossiers portent chaque autre statut, avec la même recherche et
+        le même pays. Le paramètre ``status`` est donc retiré avant que
+        les filtres ne s'appliquent ; le cloisonnement, lui, reste celui
+        du queryset.
+        """
+        sans_statut = request.query_params.copy()
+        sans_statut.pop("status", None)
+        # ``filter_queryset`` lit ``request.query_params`` : les mêmes
+        # filtres que la liste, à un paramètre près.
+        request._request.GET = sans_statut
+        # ``get_queryset`` annote ``total_proofs`` et ``usable_proofs`` : la
+        # jointure sur les pièces reste au SQL même si ``values`` la sort du
+        # SELECT, et un dossier à trois pièces serait compté trois fois.
+        # ``distinct=True`` compte les dossiers, pas les lignes jointes.
+        rows = (
+            self.filter_queryset(self.get_queryset())
+            .order_by()
+            .values("status")
+            .annotate(total=Count("id", distinct=True))
+        )
+        by_status = {statut: 0 for statut in Status.values}
+        for row in rows:
+            by_status[row["status"]] = row["total"]
+        return Response({"total": sum(by_status.values()), "by_status": by_status})
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):

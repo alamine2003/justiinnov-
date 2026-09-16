@@ -475,6 +475,31 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/dossiers/counts/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description Nombre de dossiers par statut, aux filtres de la liste — statut mis à part.
+         *
+         *     La liste filtre sur un statut ; ses pastilles doivent dire combien
+         *     de dossiers portent chaque autre statut, avec la même recherche et
+         *     le même pays. Le paramètre ``status`` est donc retiré avant que
+         *     les filtres ne s'appliquent ; le cloisonnement, lui, reste celui
+         *     du queryset.
+         */
+        get: operations["dossiers_counts_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/exchange-rates/": {
         parameters: {
             query?: never
@@ -2517,6 +2542,18 @@ export interface components {
              * Format: date-time
              */
             readonly updated_at: string
+        }
+        /**
+         * @description Nombre de dossiers par statut (``/api/dossiers/counts/``).
+         *
+         *     Forme documentaire : la vue rend le dictionnaire tel quel.
+         */
+        DossierCounts: {
+            readonly total: number
+            /** @description Un compte par statut du circuit, zéro compris. */
+            readonly by_status: {
+                [key: string]: number
+            }
         }
         DossierDetail: {
             readonly id: number
@@ -5598,6 +5635,25 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["DossierTransitionResponse"]
+                }
+            }
+        }
+    }
+    dossiers_counts_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["DossierCounts"]
                 }
             }
         }

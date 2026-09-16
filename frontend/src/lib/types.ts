@@ -103,6 +103,7 @@ export type ExpenseTransitionName = Exclude<TransitionName, "submit">
 
 export type Dossier = Schema<"Dossier">
 export type DossierDetail = Schema<"DossierDetail">
+export type DossierCounts = Schema<"DossierCounts">
 export type Expense = Schema<"Expense">
 export type PaymentMethod = Schema<"PaymentMethodEnum">
 export type ProofStatus = Schema<"ProofStatusEnum">

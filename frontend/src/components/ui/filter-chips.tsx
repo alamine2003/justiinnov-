@@ -40,6 +40,11 @@ export function FilterChips({
             key={chip.value || "tous"}
             type="button"
             aria-pressed={actif}
+            // Le compte est collé au libellé dans le flux du texte : sans
+            // nom explicite, un lecteur d'écran annonce « Tous42 ».
+            aria-label={
+              chip.count === undefined ? undefined : `${chip.label} · ${chip.count}`
+            }
             onClick={() => onChange(chip.value)}
             className={cn(
               "rounded-full border px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
