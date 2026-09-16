@@ -9250,6 +9250,14 @@
                         },
                         "readOnly": true
                     },
+                    "monthly": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BreakdownRow"
+                        },
+                        "readOnly": true,
+                        "description": "Dépensé et justifié par mois de l'exercice, en FCFA consolidé ; douze lignes, ``label`` au format AAAA-MM."
+                    },
                     "workload": {
                         "allOf": [
                             {
@@ -9276,6 +9284,7 @@
                     "totals",
                     "consolidated_xof",
                     "countries",
+                    "monthly",
                     "workload",
                     "alerts",
                     "alerts_total"

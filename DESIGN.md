@@ -171,7 +171,7 @@ une page.
 |---|---|---|
 | `JaugeDouble` | Exécution et justification en deux anneaux, sur le bandeau marine | Pilotage |
 | `Jauge` | Le taux d'une sous-enveloppe, teinté par le seuil franchi | Budgets |
-| `CourbeMensuelle` | Dépensé en aire, justifié en pointillé, sur douze mois | Pilotage |
+| `CourbeMensuelle` | Dépensé en aire, justifié en pointillé, sur douze mois (`monthly` de `/api/dashboard/`, FCFA consolidé : elle ne dépend pas du pays choisi, et son « dépensé » réunit l'engagé et le consommé) | Pilotage |
 | `BarreEnveloppe` | Un pays contre son enveloppe, à échelle commune, dépassement en corail | Pilotage, Budgets |
 | `RailEnveloppe` | Une enveloppe et ses seuils d'alerte gradués | Budgets |
 | `BarreEcart` | La part justifiée d'une dépense, et son écart | Dossier — détail |

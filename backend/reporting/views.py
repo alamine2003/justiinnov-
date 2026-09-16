@@ -31,7 +31,7 @@ from .exports import (
     lignes_depenses,
     tableaux_rapprochement,
 )
-from .scope import Periode, fuseau_de, scoped_querysets
+from .scope import Periode, fuseau_de, fuseau_du_perimetre, scoped_querysets
 from accounts.permissions import RolePermission, get_access
 from .imports import audit_import, importer_depenses
 from .serializers import (
@@ -113,6 +113,7 @@ class DashboardView(APIView):
         rates = current_rates(on_date=date_de_reference(year))
         rows, _, consolidated = self._per_country(budgets, rates)
         current_alerts = alert_rules.collect(budgets, dossiers, expenses)
+        fuseau = fuseau_du_perimetre(get_access(request.user), country_id)
 
         return Response(
             {
@@ -122,6 +123,7 @@ class DashboardView(APIView):
                 "totals": self._totaux_consolides(rows, rates),
                 "consolidated_xof": consolidated,
                 "countries": rows,
+                "monthly": self._par_mois(expenses, year, rates, fuseau),
                 "workload": self._workload(dossiers, expenses),
                 # Les alertes sont calculées à la lecture, mais **pas
                 # notifiées** ici : une requête GET ne doit rien écrire, et
@@ -224,6 +226,70 @@ class DashboardView(APIView):
                 "unconverted_currencies": consolidated["unconverted_currencies"],
             },
         )
+
+    def _par_mois(self, expenses, year, rates, fuseau):
+        """Dépensé et justifié par mois de l'exercice, consolidés en FCFA.
+
+        Douze lignes, janvier à décembre, même sans dépense : la courbe du
+        pilotage se lit sur l'exercice entier, et l'interface n'a pas à
+        deviner les mois manquants. Les mois sont ceux de l'horloge du
+        périmètre (:func:`fuseau_du_perimetre`), comme les bornes de la
+        période.
+
+        Ce que la courbe additionne, et qui la distingue du bandeau :
+
+        - elle part des **dépenses**, quand le bandeau part des
+          **enveloppes** — une enveloppe désactivée sort du bandeau, ses
+          dépenses restent ici ;
+        - ``amount`` réunit l'engagé et le consommé (mêmes statuts que la
+          répartition), là où le bandeau les sépare : la courbe dit ce qui
+          est sorti, pas ce qui est constaté ;
+        - une devise sans taux connu est écartée du mois. Elle est nommée
+          par ``unconverted_currencies`` **si le pays a une enveloppe
+          active** sur l'exercice, puisque ce signalement vient de la
+          consolidation des enveloppes ; sinon ses montants manquent sans
+          être annoncés.
+        """
+        counted = expenses.filter(
+            status__in=list(ENGAGING_STATUSES) + list(CONSUMING_STATUSES)
+        )
+        rows = (
+            counted.annotate(month=TruncMonth("date", tzinfo=fuseau))
+            .values("month", "country__currency")
+            .annotate(
+                amount=Sum("amount"),
+                justified=Sum("justified_amount"),
+                lines=Count("id"),
+            )
+        )
+        mois = {
+            numero: {"amount": ZERO, "justified": ZERO, "lines": 0}
+            for numero in range(1, 13)
+        }
+        for row in rows:
+            # Les bornes de la période et `TruncMonth` partagent le même
+            # fuseau, donc ce mois est dans l'exercice ; on s'en assure
+            # plutôt que de laisser un mois hors cadre écraser `mois[13]`.
+            if row["month"] is None or row["month"].year != year:
+                continue
+            amount = to_xof(row["amount"] or ZERO, row["country__currency"], rates=rates)
+            justified = to_xof(row["justified"] or ZERO, row["country__currency"], rates=rates)
+            if amount is None or justified is None:
+                continue
+            cumul = mois[row["month"].month]
+            cumul["amount"] += amount
+            cumul["justified"] += justified
+            cumul["lines"] += row["lines"]
+        return [
+            {
+                "label": f"{year}-{numero:02d}",
+                "amount": _money(cumul["amount"]),
+                "justified": _money(cumul["justified"]),
+                "gap": _money(cumul["amount"] - cumul["justified"]),
+                "lines": cumul["lines"],
+            }
+            for numero, cumul in mois.items()
+        ]
 
     def _workload(self, dossiers, expenses):
         """Ce qui attend une action, pour orienter le contrôle."""

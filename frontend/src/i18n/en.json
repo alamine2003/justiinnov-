@@ -774,7 +774,7 @@
     },
     "courbe": {
       "titre": "Monthly consumption",
-      "description": "Declared spending and justified amount, month by month.",
+      "description": "Declared spending and justified amount, month by month, in consolidated FCFA.",
       "aria": "Declared spending and justified amount by month, {{annee}} financial year",
       "depense": "Spent",
       "justifie": "Justified"

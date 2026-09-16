@@ -1,12 +1,12 @@
 """Tableaux de bord, alertes, notifications et exports."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 
 from django.core import mail
 from django.core.management import call_command
-from django.utils import translation
+from django.utils import timezone, translation
 from openpyxl import load_workbook
 from rest_framework import status
 
@@ -59,6 +59,43 @@ class DashboardTests(DashboardTestCase):
         )
         self.assertEqual(togo["remaining"], "500000.00")
         self.assertEqual(togo["justification_rate"], "0.8333")
+
+    def test_serie_mensuelle_consolidee(self):
+        """Douze mois en FCFA ; brouillons exclus, chaque ligne pèse sur son mois.
+
+        Les lignes du décor sont datées de `timezone.now()` : on les redate
+        explicitement, sinon le test dépendrait du jour où il tourne — et
+        franchirait un changement de mois entre le décor et l'assertion.
+        """
+        self.make_expense(amount="999999.00", status=Status.DRAFT)
+        mars = timezone.make_aware(datetime(self.year, 3, 10, 12, 0))
+        juillet = timezone.make_aware(datetime(self.year, 7, 4, 12, 0))
+        lignes = list(self.dossier.expenses.exclude(status=Status.DRAFT).order_by("pk"))
+        lignes[0].date = mars
+        lignes[0].save(update_fields=["date"])
+        for ligne in lignes[1:]:
+            ligne.date = juillet
+            ligne.save(update_fields=["date"])
+        self.login(self.doo)
+
+        response = self.client.get("/api/dashboard/", {"year": self.year})
+
+        monthly = {row["label"]: row for row in response.data["monthly"]}
+        # Douze mois, dans l'ordre, même vides : la courbe se lit sur
+        # l'exercice entier et l'interface n'a pas de trou à deviner.
+        self.assertEqual(
+            [row["label"] for row in response.data["monthly"]],
+            [f"{self.year}-{mois:02d}" for mois in range(1, 13)],
+        )
+        total = sum(Decimal(row["amount"]) for row in response.data["monthly"])
+        self.assertEqual(total, Decimal("500000.00"))
+        self.assertEqual(monthly[f"{self.year}-03"]["lines"], 1)
+        self.assertEqual(monthly[f"{self.year}-07"]["lines"], len(lignes) - 1)
+        # Le brouillon ne pèse sur aucun mois : 999 999 n'apparaît nulle part.
+        self.assertTrue(all(Decimal(row["amount"]) < 999999 for row in response.data["monthly"]))
+        # Un mois sans ligne vaut zéro, pas « absent ».
+        self.assertEqual(monthly[f"{self.year}-01"]["amount"], "0.00")
+        self.assertEqual(monthly[f"{self.year}-01"]["lines"], 0)
 
     def test_charge_de_travail(self):
         self.login(self.controller)

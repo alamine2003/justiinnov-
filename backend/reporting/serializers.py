@@ -75,25 +75,32 @@ class AlertSerializer(serializers.Serializer):
     key = serializers.CharField(read_only=True)
 
 
-class DashboardSerializer(serializers.Serializer):
-    year = serializers.IntegerField(read_only=True)
-    totals = DashboardTotalsSerializer(read_only=True)
-    consolidated_xof = ConsolidatedXofSerializer(read_only=True)
-    countries = DashboardCountryRowSerializer(many=True, read_only=True)
-    workload = WorkloadSerializer(read_only=True)
-    alerts = AlertSerializer(
-        many=True, read_only=True,
-        help_text=_("Les plus graves seulement ; ``alerts_total`` donne le compte réel."),
-    )
-    alerts_total = serializers.IntegerField(read_only=True)
-
-
 class BreakdownRowSerializer(serializers.Serializer):
     label = serializers.CharField(read_only=True)
     amount = champ_montant()
     justified = champ_montant()
     gap = champ_montant()
     lines = serializers.IntegerField(read_only=True)
+
+
+class DashboardSerializer(serializers.Serializer):
+    year = serializers.IntegerField(read_only=True)
+    totals = DashboardTotalsSerializer(read_only=True)
+    consolidated_xof = ConsolidatedXofSerializer(read_only=True)
+    countries = DashboardCountryRowSerializer(many=True, read_only=True)
+    monthly = BreakdownRowSerializer(
+        many=True, read_only=True,
+        help_text=_(
+            "Dépensé et justifié par mois de l'exercice, en FCFA consolidé ; "
+            "douze lignes, ``label`` au format AAAA-MM."
+        ),
+    )
+    workload = WorkloadSerializer(read_only=True)
+    alerts = AlertSerializer(
+        many=True, read_only=True,
+        help_text=_("Les plus graves seulement ; ``alerts_total`` donne le compte réel."),
+    )
+    alerts_total = serializers.IntegerField(read_only=True)
 
 
 class BreakdownSerializer(serializers.Serializer):

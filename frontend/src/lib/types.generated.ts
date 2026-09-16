@@ -2415,6 +2415,8 @@ export interface components {
             readonly totals: components["schemas"]["DashboardTotals"]
             readonly consolidated_xof: components["schemas"]["ConsolidatedXof"]
             readonly countries: components["schemas"]["DashboardCountryRow"][]
+            /** @description Dépensé et justifié par mois de l'exercice, en FCFA consolidé ; douze lignes, ``label`` au format AAAA-MM. */
+            readonly monthly: components["schemas"]["BreakdownRow"][]
             readonly workload: components["schemas"]["Workload"]
             /** @description Les plus graves seulement ; ``alerts_total`` donne le compte réel. */
             readonly alerts: components["schemas"]["Alert"][]

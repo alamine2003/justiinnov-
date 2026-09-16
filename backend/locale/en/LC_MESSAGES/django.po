@@ -2318,3 +2318,11 @@ msgstr "This line has been the subject of a rectification request: it can no lon
 #: expenses/transitions.py
 msgid "Ce dossier contient une ligne qui a fait l'objet d'une demande de rectification : il ne se supprime plus."
 msgstr "This dossier contains a line that has been the subject of a rectification request: it can no longer be deleted."
+
+#: reporting/serializers.py:93
+msgid ""
+"Dépensé et justifié par mois de l'exercice, en FCFA consolidé ; douze "
+"lignes, ``label`` au format AAAA-MM."
+msgstr ""
+"Spent and justified per month of the fiscal year, in consolidated FCFA; "
+"twelve rows, ``label`` formatted YYYY-MM."

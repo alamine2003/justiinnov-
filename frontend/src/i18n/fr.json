@@ -774,7 +774,7 @@
     },
     "courbe": {
       "titre": "Consommation par mois",
-      "description": "Dépenses déclarées et montant justifié, mois par mois.",
+      "description": "Dépenses déclarées et montant justifié, mois par mois, en FCFA consolidé.",
       "aria": "Dépenses déclarées et montant justifié par mois, exercice {{annee}}",
       "depense": "Dépensé",
       "justifie": "Justifié"

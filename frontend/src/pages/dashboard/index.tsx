@@ -48,9 +48,10 @@ const CURRENT_YEAR = new Date().getFullYear()
 const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2]
 
 /**
- * Les douze mois de l'exercice, dans l'ordre, à partir des seuls mois que le
- * serveur a renvoyés (« 2026-03 »). Un mois sans dépense vaut zéro : une
- * courbe qui saute des mois se lit de travers.
+ * Les douze mois de l'exercice, dans l'ordre. Le serveur les renvoie déjà
+ * tous — `monthly`, en FCFA consolidé —, mais on les range par numéro de
+ * mois plutôt que par position : une courbe qui saute un mois, ou qui le
+ * range de travers, se lit de travers.
  */
 function serieMensuelle(rows: BreakdownRow[]): PointMensuel[] {
   const parMois = new Map(rows.map((row) => [Number(row.label.slice(-2)), row]))
@@ -214,7 +215,11 @@ export function DashboardPage() {
         />
       </div>
 
-      {breakdown && (
+      {/* La courbe ne dépend plus d'un pays choisi : `monthly` consolide les
+          douze mois en FCFA, comme le bandeau du haut. Elle disparaît quand
+          le tableau de bord n'a pas répondu — une courbe plate à zéro se
+          lirait comme un exercice sans dépense. */}
+      {data && (
         <Card className="border-border/60 shadow-sm">
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -236,7 +241,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <CourbeMensuelle
-              points={serieMensuelle(breakdown.by_month)}
+              points={serieMensuelle(data.monthly)}
               title={t("pilotage.courbe.aria", { annee: year })}
             />
           </CardContent>
