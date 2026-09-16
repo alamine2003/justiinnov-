@@ -2,6 +2,7 @@ import { useState } from "react"
 import { AlertTriangle, ScrollText, Search } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
+import type { WorkflowStatus } from "@/lib/types"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -25,14 +26,20 @@ import { ACTION_STYLE } from "@/lib/status-styles"
 import { type AuditEntry } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
-import { formatDate } from "@/lib/utils"
+import { formatAmount, formatDate } from "@/lib/utils"
+import { workflowLabel } from "@/lib/labels"
 
 /** Résume le détail JSON d'une entrée en une phrase lisible. */
 function summarize(t: TFunction, entry: AuditEntry): string {
   const detail = entry.detail ?? {}
   const parts: string[] = []
   if (typeof detail.from_status === "string" && typeof detail.to_status === "string") {
-    parts.push(`${detail.from_status} → ${detail.to_status}`)
+    // Les codes du circuit sortaient bruts — « draft → submitted », en
+    // français comme en anglais. Ils passent par la table des libellés,
+    // comme partout ailleurs.
+    parts.push(
+      `${workflowLabel(t, detail.from_status as WorkflowStatus)} → ${workflowLabel(t, detail.to_status as WorkflowStatus)}`,
+    )
   }
   if (typeof detail.note === "string" && detail.note) {
     parts.push(t("audit.detail_citation", { texte: detail.note }))
@@ -43,7 +50,13 @@ function summarize(t: TFunction, entry: AuditEntry): string {
   const before = detail.before as Record<string, string> | undefined
   const after = detail.after as Record<string, string> | undefined
   if (before && after && before.amount !== after.amount) {
-    parts.push(t("audit.detail_montant", { avant: before.amount, apres: after.amount }))
+    // « 1500.00 → 1200.00 » : un montant s'affiche formaté, ici comme ailleurs.
+    parts.push(
+      t("audit.detail_montant", {
+        avant: formatAmount(before.amount),
+        apres: formatAmount(after.amount),
+      }),
+    )
   }
   if (typeof detail.sha256 === "string") {
     parts.push(t("audit.detail_empreinte", { empreinte: detail.sha256.slice(0, 12) }))
