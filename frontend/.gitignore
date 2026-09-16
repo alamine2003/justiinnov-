@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Rapport de `vitest run --coverage`.
+coverage
 *.local
 
 # Editor directories and files
