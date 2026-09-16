@@ -27,6 +27,7 @@ import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
 import { fetchConfiguration } from "@/lib/accounts"
+import { isCancelled } from "@/lib/api"
 import { fetchCountries } from "@/lib/countries"
 import { MONTHS } from "@/lib/months"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
@@ -82,19 +83,37 @@ export function DashboardPage() {
     enabled: can("configuration.manage"),
   })
   const warningRate = executionWarningRate(configuration.data?.alertes.seuils)
+  // Les pays que ce compte peut nommer : le référentiel au siège, son
+  // périmètre sinon. Un compte restreint à plusieurs pays a besoin du
+  // sélecteur, sans quoi il ne peut pas obtenir sa répartition.
+  const perimetre = me?.countries ?? []
+  const paysChoisissables = me?.has_global_scope ? (countries.data?.results ?? []) : perimetre
+  const choixPaysVisible = Boolean(me?.has_global_scope) || perimetre.length > 1
   const query = useQuery(
-    JSON.stringify({ year, countryId }),
+    // Le périmètre entre dans la clé : il décide si la répartition peut être
+    // demandée sans nommer de pays, et il n'est connu qu'une fois le profil
+    // chargé — sans lui, un compte à pays unique resterait sans répartition.
+    JSON.stringify({ year, countryId, perimetre: perimetre.length, global: me?.has_global_scope }),
     async (signal) => {
       const params: Record<string, unknown> = { year }
       if (countryId !== "") params.country = countryId
       // La répartition n'a de sens que pour un pays : sans pays choisi, le
-      // serveur la refuse à un compte siège (deux équipes homonymes de pays
-      // différents fusionneraient). Un compte restreint à un pays l'obtient
-      // sans le nommer.
-      const repartitionPossible = countryId !== "" || !me?.has_global_scope
+      // serveur la refuse (deux équipes homonymes de pays différents
+      // fusionneraient). Il ne devine le pays que lorsque le périmètre n'en
+      // compte qu'un — `_pays_unique`, reporting/views.py. Un DM ou un DF
+      // restreint à deux pays doit donc en nommer un : la demander sans pays
+      // rapportait un 400 qui, dans un `Promise.all`, emportait tout le
+      // tableau de bord — et le sélecteur de pays lui était masqué.
+      const repartitionPossible = countryId !== "" || perimetre.length === 1
       const [dashboard, breakdown] = await Promise.all([
         fetchDashboard(params, signal),
-        repartitionPossible ? fetchBreakdown(params, signal) : Promise.resolve(null),
+        repartitionPossible
+          ? fetchBreakdown(params, signal).catch((e: unknown) => {
+              // Un refus sur la répartition laisse le reste de la page debout.
+              if (isCancelled(e)) throw e
+              return null
+            })
+          : Promise.resolve(null),
       ])
       return { dashboard, breakdown }
     },
@@ -141,7 +160,7 @@ export function DashboardPage() {
               </option>
             ))}
           </NativeSelect>
-          {me?.has_global_scope && (
+          {choixPaysVisible && (
             <NativeSelect
               value={countryId}
               onChange={(e) =>
@@ -151,7 +170,7 @@ export function DashboardPage() {
               className="w-48"
             >
               <option value="">{t("pilotage.tous_pays")}</option>
-              {(countries.data?.results ?? []).map((country) => (
+              {paysChoisissables.map((country) => (
                 <option key={country.id} value={country.id}>
                   {country.country_ref ? `${country.country_ref} — ` : ""}
                   {country.name}
@@ -463,7 +482,11 @@ function ParPays({
   // Échelle commune : la plus grande enveloppe attribuée. Sans enveloppe, la
   // plus grosse consommation, pour que la barre ne soit pas vide.
   const echelle = Math.max(
-    ...rows.map((row) => Math.max(Number(row.allocated), Number(row.consumed))),
+    // L'engagé compte dans l'échelle : la barre le dessine après le consommé,
+    // et un dépassement mesuré sur les deux sortait sinon du cadre.
+    ...rows.map((row) =>
+      Math.max(Number(row.allocated), Number(row.consumed) + Number(row.engaged)),
+    ),
     1,
   )
 
@@ -498,7 +521,11 @@ function ParPays({
           <ul className="space-y-4">
             {rows.map((row) => {
               const attribue = Number(row.allocated)
-              const depassement = Number(row.consumed) - attribue
+              // Le dépassement est le disponible du serveur passé sous zéro.
+              // Le déduire d'une soustraction maison (`consomme - attribue`)
+              // le faisait diverger d'`execution_rate`, qui compte l'engagé :
+              // 120 % s'affichait en corail sans aucun montant en regard.
+              const depassement = -Number(row.remaining)
               const taux = Number(row.execution_rate ?? 0)
               return (
                 <li key={row.country}>
