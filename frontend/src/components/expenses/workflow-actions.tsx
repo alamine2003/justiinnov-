@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FormError } from "@/components/ui/form-error"
+import { MontantNormalise } from "@/components/ui/montant-normalise"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -329,6 +330,7 @@ function JustifyDialog({
                 onChange={(e) => setJustified(e.target.value)}
                 required
               />
+              <MontantNormalise value={justified} currency={currency} />
               {amount && (
                 <p className="text-xs text-muted-foreground">
                   {t("depenses.justification.declaree", {

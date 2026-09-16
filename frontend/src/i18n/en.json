@@ -38,7 +38,8 @@
     "page_sur": "page {{page}} of {{total}}",
     "elements_one": "{{count}} item",
     "elements_other": "{{count}} items",
-    "separateur_libelle": ": "
+    "separateur_libelle": ": ",
+    "sera_enregistre": "Will be recorded as: {{montant}}"
   },
   "nav": {
     "retour": "Back",
