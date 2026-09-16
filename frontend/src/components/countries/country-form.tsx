@@ -40,7 +40,11 @@ const DEFAULTS: CountryFormValues = {
   code: "",
   currency: "",
   currency_symbol: "",
-  timezone: "UTC",
+  // Pas de fuseau par défaut : « UTC » passait la validation du serveur et
+  // toutes les dépenses du pays se lisaient ensuite à l'heure de Greenwich,
+  // sans le moindre signal. Vide, le champ montre son exemple et le serveur
+  // exige une valeur.
+  timezone: "",
   is_active: true,
 }
 
