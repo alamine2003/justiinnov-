@@ -73,6 +73,11 @@ export function ProofPreview({
     return () => {
       revoked = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
+      // L'état portait encore l'URL qu'on vient de révoquer : rouvrir la
+      // *même* pièce la réaffichait le temps du rechargement — cadre vide,
+      // image cassée, et une erreur réseau en console, qui fait échouer les
+      // scripts de capture.
+      setSource(null)
     }
   }, [proof])
 
