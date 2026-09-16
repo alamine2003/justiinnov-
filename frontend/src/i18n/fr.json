@@ -242,6 +242,7 @@
     "connexion": "Connexion",
     "sous_titre": "Identifiez-vous pour accéder à votre périmètre.",
     "identifiant": "Identifiant",
+    "identifiant_exemple": "prenom.innov",
     "mot_de_passe": "Mot de passe",
     "afficher_mdp": "Afficher le mot de passe",
     "masquer_mdp": "Masquer le mot de passe",
