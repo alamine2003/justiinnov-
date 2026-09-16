@@ -67,7 +67,7 @@ interface ExpenseFormProps {
 export function ExpenseForm({ open, onOpenChange, editing, ...rest }: ExpenseFormProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         {/* Monté à l'ouverture seulement : l'état repart de la dépense
             éditée sans effet de réinitialisation. */}
         {open && (
