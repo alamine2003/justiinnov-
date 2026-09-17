@@ -200,7 +200,12 @@ Trois règles s'y appliquent :
   serveur et passe par `formatRate` — jamais d'un `a / b` écrit dans la
   page. C'est la règle « rien ne se calcule dans l'interface », appliquée à
   la lettre : `ratio()` (`lib/utils.ts`) borne une part à son tout pour le
-  dessin, et rien d'autre.
+  dessin, et rien d'autre. L'échelle commune d'une liste de barres se prend
+  à `echelleCommune()` (`lib/echelle.ts`) : le pilotage et les budgets la
+  recopiaient mot pour mot, et le correctif qui y fait entrer l'engagé a dû
+  l'être aussi. Un garde-fou tient la règle,
+  `lib/rien-ne-se-calcule.test.ts` : il refuse qu'une page compose deux
+  montants du serveur, et n'excepte que les deux fichiers qui dessinent.
 - **Le dessin ne remplace pas les chiffres.** Chaque graphique est
   accompagné des montants en texte : la barre donne la forme, la ligne
   d'à côté donne les nombres. Le SVG lui-même est `aria-hidden` et porte

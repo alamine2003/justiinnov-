@@ -11,6 +11,7 @@ import {
   Legende,
   type PointMensuel,
 } from "@/components/ui/charts"
+import { echelleCommune } from "@/lib/echelle"
 import { NativeSelect } from "@/components/ui/native-select"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow } from "@/components/ui/table-states"
@@ -479,16 +480,7 @@ function ParPays({
   warningRate: number
 }) {
   const { t } = useTranslation()
-  // Échelle commune : la plus grande enveloppe attribuée. Sans enveloppe, la
-  // plus grosse consommation, pour que la barre ne soit pas vide.
-  const echelle = Math.max(
-    // L'engagé compte dans l'échelle : la barre le dessine après le consommé,
-    // et un dépassement mesuré sur les deux sortait sinon du cadre.
-    ...rows.map((row) =>
-      Math.max(Number(row.allocated), Number(row.consumed) + Number(row.engaged)),
-    ),
-    1,
-  )
+  const echelle = echelleCommune(rows)
 
   return (
     <Card className="border-border/60 shadow-sm">
