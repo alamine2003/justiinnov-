@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarreEnveloppe, Legende } from "@/components/ui/charts"
+import { echelleCommune } from "@/lib/echelle"
 import { NativeSelect } from "@/components/ui/native-select"
 import { StatCard } from "@/components/ui/stat-card"
 import { PageHeader } from "@/components/ui/page-header"
@@ -291,14 +292,7 @@ function TousLesPays({
   onChoose: (id: number) => void
 }) {
   const { t } = useTranslation()
-  const echelle = Math.max(
-    // L'engagé compte dans l'échelle : la barre le dessine après le consommé,
-    // et un dépassement mesuré sur les deux sortait sinon du cadre.
-    ...rows.map((row) =>
-      Math.max(Number(row.allocated), Number(row.consumed) + Number(row.engaged)),
-    ),
-    1,
-  )
+  const echelle = echelleCommune(rows)
 
   return (
     <Card className="border-border/60 shadow-sm">
