@@ -163,6 +163,24 @@ même étiquette recharge la configuration du répertoire d'exploitation
 (Caddyfile, Prometheus, tableaux de bord Grafana), puisque ces fichiers
 sont montés depuis ce dossier et non copiés dans les images.
 
+### Quand une livraison échoue
+
+Personne ne surveille l'onglet Actions : une livraison cassée après la
+fusion d'une pull request est passée inaperçue une nuit entière, la
+préproduction restant sur une version périmée. Le travail `alerte` de
+`cd.yml` **ouvre donc un ticket** sur le dépôt dès qu'un travail de la
+livraison échoue, le commente aux échecs suivants plutôt que d'en ouvrir
+un second — un ticket par environnement, reconnu à un marqueur invisible
+dans son corps — et le **referme de lui-même** quand une livraison
+repasse. Le ticket donne l'environnement, le commit, les travaux en échec
+et le lien de l'exécution.
+
+Une livraison annulée ne déclenche rien, et un déploiement simplement
+hors circuit (`DEPLOIEMENT_SSH` différent de `1`) non plus : un travail
+sauté n'est pas un échec. Le serveur, lui, a déjà rétabli l'étiquette
+précédente (« Revenir en arrière ») ; le ticket dit qu'il faut regarder,
+pas que la plateforme est tombée.
+
 ## Réduire les pouvoirs de la livraison
 
 La clé SSH de livraison, détenue par GitHub, ne peut faire **qu'une chose**
