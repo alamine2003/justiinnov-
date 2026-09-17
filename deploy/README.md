@@ -250,6 +250,33 @@ vérification et son retour arrière :
    `cd.yml` a besoin d'un `deploy` qui écrit dans le répertoire, le nouveau
    d'une commande forcée.
 
+### Lire les journaux après un incident
+
+```bash
+docker compose -f docker-compose.prod.yml logs --since 30m backend
+```
+
+Tout part sur la sortie standard, en `clé=valeur` :
+
+```
+2026-09-17T22:44:54+0000 ERROR django.request requete=c01b52ab7689 compte=anonyme \
+    ip=10.0.0.9 Internal Server Error: /api/dossiers/
+Traceback (most recent call last): …
+```
+
+Chaque réponse porte son identifiant dans l'en-tête **`X-Requete-Id`**. Un
+utilisateur qui signale une erreur peut donc le citer, et une seule commande
+retrouve tout ce que cette requête a écrit :
+
+```bash
+docker compose -f docker-compose.prod.yml logs backend | grep requete=c01b52ab7689
+```
+
+Seules les erreurs 500 passent par là ; les 4xx sont dans le journal d'accès
+de gunicorn et de nginx, sur la même sortie. `DJANGO_LOG_REQUESTS=WARNING`
+les ramène le temps d'une enquête, `DJANGO_LOG_LEVEL=DEBUG` ouvre tout —
+jamais le SQL, qui reste muet par construction.
+
 ## Commandes d'exploitation
 
 Toutes celles qui suivent passent par `docker compose`, qui a besoin de

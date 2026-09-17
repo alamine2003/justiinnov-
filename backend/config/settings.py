@@ -603,6 +603,73 @@ if PROMETHEUS_MULTIPROC_DIR:
 # - les mots de passe sont hachés en MD5 : PBKDF2, avec ses centaines de
 #   milliers d'itérations, rendait la création de chaque compte de test plus
 #   longue que le test lui-même. Aucun test ne porte sur l'algorithme.
+# ---------------------------------------------------------------------------
+# Journalisation
+# ---------------------------------------------------------------------------
+# Django n'a pas de configuration par défaut utilisable en production : son
+# gestionnaire console porte le filtre ``RequireDebugTrue``, et celui par
+# courriel n'écrit nulle part sans ``ADMINS``. Résultat mesuré par l'audit de
+# résilience : pendant une coupure de la base, six mille erreurs 500 n'ont
+# produit **aucune ligne** de journal. Restait le code d'état dans le journal
+# d'accès de gunicorn, et rien pour dire pourquoi.
+#
+# Une seule sortie, la sortie standard : c'est là que Docker, `docker compose
+# logs` et n'importe quel collecteur vont chercher. Pas de fichier, pas de
+# rotation à tenir.
+#
+# Le format est en ``clé=valeur`` : lisible à l'œil dans un terminal, et
+# filtrable au `grep` sur `requete=`, `compte=` ou `ip=`. Du JSON serait plus
+# commode pour un agrégateur — il n'y en a pas ici, et `docker compose logs`
+# en JSON ne se lit pas.
+DJANGO_LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO").upper()
+
+#: Les 4xx sont déjà dans le journal d'accès de nginx et de gunicorn ; les
+#: reprendre ici noierait les 5xx, qui sont la raison d'être de ce réglage.
+#: ``WARNING`` les fait réapparaître, le temps d'une enquête.
+DJANGO_LOG_REQUESTS = os.environ.get("DJANGO_LOG_REQUESTS", "ERROR").upper()
+
+LOGGING = {
+    "version": 1,
+    # Les journaux des bibliothèques restent en place : on ajoute une sortie,
+    # on ne coupe la parole à personne.
+    "disable_existing_loggers": False,
+    "filters": {
+        "contexte": {"()": "core.journalisation.FiltreContexte"},
+    },
+    "formatters": {
+        "standard": {
+            "format": (
+                "%(asctime)s %(levelname)s %(name)s "
+                "requete=%(requete)s compte=%(compte)s ip=%(ip)s %(message)s"
+            ),
+            "datefmt": "%Y-%m-%dT%H:%M:%S%z",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            # Chaîne plutôt qu'un objet : ``sys`` n'est importé que plus bas,
+            # et dictConfig sait résoudre ``ext://``.
+            "stream": "ext://sys.stdout",
+            "formatter": "standard",
+            "filters": ["contexte"],
+        },
+    },
+    "root": {"handlers": ["console"], "level": DJANGO_LOG_LEVEL},
+    "loggers": {
+        # ``django.request`` porte la trace complète des 500 : c'est la ligne
+        # qui manquait.
+        "django.request": {"level": DJANGO_LOG_REQUESTS, "propagate": True},
+        # Tentatives d'intrusion, hôtes non autorisés, requêtes suspectes.
+        "django.security": {"level": "WARNING", "propagate": True},
+        # Jamais le SQL : en DEBUG, ce logger écrit chaque requête.
+        "django.db.backends": {"level": "WARNING", "propagate": True},
+        # Les serveurs de développement seulement ; gunicorn a son propre
+        # journal d'accès.
+        "django.utils.autoreload": {"level": "WARNING", "propagate": True},
+    },
+}
+
 import sys  # noqa: E402 — réservé à ce bloc
 
 EN_TEST = os.environ.get("DJANGO_TEST") == "1" or sys.argv[1:2] == ["test"]
@@ -612,4 +679,7 @@ if EN_TEST:
         "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
     }
     PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+    # Les journaux se taisent pendant les tests : ``assertLogs`` pose son
+    # propre niveau, les tests qui les vérifient fonctionnent donc quand même.
+    LOGGING["root"]["level"] = "CRITICAL"
     TEST_RUNNER = "core.tests.runner.LanceurDeTests"
