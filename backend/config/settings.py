@@ -384,10 +384,33 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL", "")
 
+# Délais du client S3, bornés et réglables. Sans eux, botocore attend
+# soixante secondes par tentative et recommence jusqu'à cinq fois : un
+# stockage qui accepte la connexion sans jamais répondre — la panne la plus
+# vicieuse, et la plus banale derrière un pare-feu — immobilise le thread qui
+# le sert. Le `--timeout` de gunicorn ne rattrape rien : en mode `gthread`,
+# il surveille la boucle du worker, pas ses threads de requête, qui restent
+# donc bloqués sans limite. Huit threads ainsi pris, et toute l'API est
+# muette, y compris ce qui ne touche aucun fichier (audit de résilience,
+# scénario 10 : coupure totale et définitive, sans une ligne de journal).
+# Ici, le pire cas est borné à connexion + lecture × tentatives.
+AWS_S3_CONNECT_TIMEOUT = int(os.environ.get("AWS_S3_CONNECT_TIMEOUT", "3"))
+AWS_S3_READ_TIMEOUT = int(os.environ.get("AWS_S3_READ_TIMEOUT", "10"))
+#: Tentatives au total, première comprise : 2 laisse une seconde chance à un
+#: incident passager sans transformer une panne durable en attente longue.
+AWS_S3_MAX_ATTEMPTS = int(os.environ.get("AWS_S3_MAX_ATTEMPTS", "2"))
+
 if AWS_S3_ENDPOINT_URL:
+    from botocore.config import Config as _ConfigurationS3
+
     _default_storage = {
         "BACKEND": "storages.backends.s3.S3Storage",
         "OPTIONS": {
+            "client_config": _ConfigurationS3(
+                connect_timeout=AWS_S3_CONNECT_TIMEOUT,
+                read_timeout=AWS_S3_READ_TIMEOUT,
+                retries={"max_attempts": AWS_S3_MAX_ATTEMPTS, "mode": "standard"},
+            ),
             "endpoint_url": AWS_S3_ENDPOINT_URL,
             "access_key": os.environ.get("AWS_ACCESS_KEY_ID", ""),
             "secret_key": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
