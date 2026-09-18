@@ -32,7 +32,13 @@ from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
 from notifications import services
 from notifications.models import TITRE_MAX, Notification
-from notifications.services import AGE_MAX_DE_REPRISE, DELAI_DE_REPRISE, ESSAIS_MAX
+from notifications.services import (
+    AGE_MAX_DE_REPRISE,
+    DELAI_DE_REPRISE,
+    ESSAIS_MAX,
+    abandonnees,
+    envoyer_les_emails,
+)
 
 #: Un libellé à la longueur maximale de ``Expense.title``.
 LIBELLE_DE_250 = ("Frais de mission pharmaceutique Abidjan " * 7)[:250]
@@ -287,3 +293,84 @@ class OrdonnanceurTests(ExpenseTestCase):
     def test_sans_rien_a_faire_la_commande_se_tait(self):
         call_command("envoyer_emails", verbosity=0)
         self.assertEqual(mail.outbox, [])
+
+
+class AbandonsSignalesTests(RefusTestCase):
+    """Ce qui ne partira plus doit se dire — la dernière ligne disait l'inverse.
+
+    Trouvé par l'audit de résilience (scénario 12). Le journal écrivait
+    « N e-mail(s) à reprendre » à chaque échec, puis se taisait : une fois
+    ``ESSAIS_MAX`` atteint, les lignes cessaient d'être réclamées, sans un
+    mot. La dernière chose écrite était donc fausse, et l'exploitant croyait
+    la reprise en cours.
+
+    Mesuré sur le banc : serveur de courrier arrêté, soixante notifications
+    abandonnées après cinq passages, aucune trace de l'abandon.
+    """
+
+    def _refuser_serveur_en_panne(self):
+        with mock.patch.object(
+            services.EmailMessage, "send", side_effect=OSError("SMTP injoignable")
+        ), self.assertLogs("notifications.services", level="ERROR"):
+            return self.refuser()
+
+    def _epuiser(self):
+        self._refuser_serveur_en_panne()
+        Notification.objects.update(
+            email_attempts=ESSAIS_MAX,
+            email_attempted_at=timezone.now() - DELAI_DE_REPRISE - timedelta(seconds=1),
+        )
+
+    def test_les_lignes_epuisees_sont_reconnues(self):
+        self._epuiser()
+
+        self.assertEqual(abandonnees().count(), Notification.objects.count())
+
+    def test_une_ligne_hors_fenetre_ne_se_signale_plus(self):
+        """L'avertissement s'éteint de lui-même : passé AGE_MAX_DE_REPRISE,
+        la ligne sort du dispositif et n'a plus à être rappelée chaque fois
+        que l'ordonnanceur passe."""
+        self._epuiser()
+        Notification.objects.update(
+            created_at=timezone.now() - AGE_MAX_DE_REPRISE - timedelta(hours=1)
+        )
+
+        self.assertEqual(abandonnees().count(), 0)
+
+    def test_une_ligne_sans_adresse_n_est_pas_un_abandon(self):
+        """Un destinataire sans adresse n'a jamais rien attendu."""
+        self._epuiser()
+        type(self.owner).objects.filter(pk=self.owner.pk).update(email="")
+
+        self.assertEqual(abandonnees().count(), 0)
+
+    def test_l_ordonnanceur_dit_ce_qui_ne_partira_plus(self):
+        self._epuiser()
+
+        with self.assertLogs("notifications.services", level="WARNING") as journal:
+            call_command("envoyer_emails", verbosity=0)
+
+        message = "\n".join(journal.output)
+        self.assertIn("ne partiront plus", message)
+        self.assertIn(
+            "lisibles dans l'application", message,
+            "l'exploitant doit savoir que rien n'est perdu, seule la relance l'est",
+        )
+
+    def test_sans_abandon_l_ordonnanceur_ne_crie_pas(self):
+        self.refuser()
+        Notification.objects.update(
+            email_attempted_at=timezone.now() - DELAI_DE_REPRISE - timedelta(seconds=1)
+        )
+
+        with self.assertNoLogs("notifications.services", level="WARNING"):
+            call_command("envoyer_emails", verbosity=0)
+
+    def test_l_envoi_qui_suit_une_action_ne_signale_rien(self):
+        """Le chemin appelé après le commit sert une requête, pas la
+        supervision : il ne doit pas parcourir toute la table."""
+        self._epuiser()
+        pks = list(Notification.objects.values_list("pk", flat=True))
+
+        with self.assertNoLogs("notifications.services", level="WARNING"):
+            envoyer_les_emails(pks=pks)

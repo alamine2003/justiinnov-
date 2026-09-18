@@ -210,6 +210,28 @@ def reclamer(pks=None, *, maintenant):
     return list(reclamees)
 
 
+def abandonnees(maintenant=None):
+    """Lignes dont l'e-mail ne partira plus : essais épuisés, dans la fenêtre.
+
+    Le journal disait « N e-mail(s) à reprendre » à chaque échec, puis se
+    taisait — les lignes cessaient simplement d'être réclamées une fois
+    ``ESSAIS_MAX`` atteint. La dernière chose écrite était donc fausse :
+    elles n'étaient plus reprises du tout, et personne ne l'apprenait
+    (audit de résilience, scénario 12).
+
+    La fenêtre de ``AGE_MAX_DE_REPRISE`` borne le signalement : passé ce
+    délai la ligne sort du dispositif de toute façon, et l'avertissement
+    s'éteint de lui-même au lieu de se répéter indéfiniment.
+    """
+    maintenant = maintenant or timezone.now()
+    return Notification.objects.filter(
+        emailed_at__isnull=True,
+        recipient__email__gt="",
+        email_attempts__gte=ESSAIS_MAX,
+        created_at__gte=maintenant - AGE_MAX_DE_REPRISE,
+    )
+
+
 def envoyer_les_emails(pks=None):
     """Envoie les e-mails des notifications réclamées ; rend ``(envoyés, échecs)``.
 
@@ -227,7 +249,10 @@ def envoyer_les_emails(pks=None):
     préfixe du sujet reste à traduire. Aucune exception ne sort d'ici : un
     échec est journalisé, la ligne reste à reprendre.
     """
-    reclamees = reclamer(pks, maintenant=timezone.now())
+    maintenant = timezone.now()
+    reclamees = reclamer(pks, maintenant=maintenant)
+    if pks is None:
+        _signaler_les_abandons(maintenant)
     if not reclamees:
         return 0, 0
 
@@ -252,6 +277,23 @@ def envoyer_les_emails(pks=None):
         except Exception:
             logger.exception("Fermeture de la connexion de courrier impossible")
     return envoyes, echecs
+
+
+def _signaler_les_abandons(maintenant):
+    """Dit une fois par passage ce qui ne partira plus, et ce que ça coûte.
+
+    Le message précise que la notification reste lisible dans
+    l'application : l'exploitant doit savoir que rien n'est perdu, seule la
+    relance par courriel l'est. Sans cette précision, l'avertissement
+    paraîtrait plus grave qu'il n'est.
+    """
+    perdues = abandonnees(maintenant).count()
+    if perdues:
+        logger.warning(
+            "%d notification(s) ne partiront plus par e-mail : %d essais épuisés. "
+            "Elles restent lisibles dans l'application ; vérifiez le serveur de courrier.",
+            perdues, ESSAIS_MAX,
+        )
 
 
 def _envoyer_un(notification, connection):
