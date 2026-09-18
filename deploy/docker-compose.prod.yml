@@ -148,7 +148,19 @@ services:
     # les trois quarts en estimation du cache disponible ; `shm_size` évite
     # l'échec des tris parallèles, que les 64 Mo de /dev/shm par défaut de
     # Docker font échouer.
-    command: postgres -c shared_buffers=256MB -c effective_cache_size=768MB
+    #
+    # `max_connections` était laissé à son défaut, 100 : un plafond que
+    # personne n'avait choisi, et que le `mem_limit: 1g` ci-dessous ne peut
+    # pas honorer. Mesuré pendant l'audit de résilience : une connexion
+    # coûte 1,9 à 2,4 Mo, sans compter `work_mem` (4 Mo par tri). Cent
+    # connexions en train de trier dépasseraient le gigaoctet et feraient
+    # tuer la base par le noyau — une panne bien pire qu'un refus de
+    # connexion. Cinquante tient dans la limite et laisse le double de ce
+    # que la pile consomme (voir POSTGRES_MAX_CONNECTIONS dans
+    # `.env.example` pour le détail du budget).
+    command: >
+      postgres -c shared_buffers=256MB -c effective_cache_size=768MB
+      -c max_connections=${POSTGRES_MAX_CONNECTIONS:-50}
     shm_size: 256m
     mem_limit: 1g
     # Le superutilisateur du conteneur est le rôle propriétaire : celui qui
