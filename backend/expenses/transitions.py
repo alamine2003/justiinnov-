@@ -46,7 +46,6 @@ from notifications import triggers
 from . import stockage
 from .audit import enregistrer, preparer, record
 from .models import (
-    EXPENSE_RELATIONS,
     ZERO,
     AuditLog,
     Dossier,
@@ -564,7 +563,7 @@ def _apres_sur_le_dossier(dossier, action, note, trace):
 
 def _verrouiller_la_ligne(expense):
     return (
-        Expense.objects.select_related(*EXPENSE_RELATIONS)
+        Expense.objects.avec_les_relations()
         .select_for_update(of=("self",))
         .get(pk=expense.pk)
     )

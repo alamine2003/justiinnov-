@@ -32,7 +32,6 @@ from . import stockage, transitions
 from .audit import record
 from .mixins import DraftDeletableViewSet
 from .models import (
-    EXPENSE_RELATIONS,
     AuditLog,
     Beneficiary,
     Dossier,
@@ -226,7 +225,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         prefetch : la règle n'est pas récrite ici.
         """
         return filtrer(
-            Expense.objects.select_related(*EXPENSE_RELATIONS).with_rectification(),
+            Expense.objects.avec_les_relations().with_rectification(),
             get_access(self.request.user),
             pays=ExpenseViewSet.country_lookup,
             equipe=ExpenseViewSet.team_lookup,
@@ -300,7 +299,7 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
 
     # ``with_rectification`` : ``allowed_actions`` dit si une rectification
     # peut être demandée sans une requête par ligne.
-    queryset = Expense.objects.select_related(*EXPENSE_RELATIONS).with_rectification()
+    queryset = Expense.objects.avec_les_relations().with_rectification()
     serializer_class = ExpenseSerializer
     transition_serializer_class = ExpenseTransitionSerializer
     permission_classes = [RolePermission]
