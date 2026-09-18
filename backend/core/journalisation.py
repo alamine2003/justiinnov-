@@ -121,3 +121,24 @@ class FiltreContexte(logging.Filter):
         except Exception:  # noqa: BLE001 — un journal ne tombe jamais
             pass
         return True
+
+
+class SansDegradationRepetee(logging.Filter):
+    """Écarte la ligne que Django ajoute pour chaque réponse 503.
+
+    ``BaseHandler.get_response`` journalise toute réponse 5xx sur
+    ``django.request``. Pour une 503 — une indisponibilité que
+    ``core.exceptions`` vient d'annoncer, avec sa cause et son débit borné —
+    cette ligne n'apprend rien et se répète à chaque requête : 5 523 lignes
+    pour sept secondes de base coupée, mesurées sur le banc.
+
+    Elle est en outre sans contexte : Django l'écrit **après** que le
+    middleware a rendu la main, donc hors de la variable de contexte, et elle
+    sort avec ``requete=-``. Elle ne sert donc même pas à corréler.
+
+    Les 500 ne sont pas touchées : leur trace est écrite plus tôt, pendant le
+    traitement, et garde son identifiant de requête.
+    """
+
+    def filter(self, record):
+        return getattr(record, "status_code", None) != 503

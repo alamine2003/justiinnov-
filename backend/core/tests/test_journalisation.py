@@ -25,6 +25,7 @@ from core.journalisation import (
     ENTETE,
     MOTIF_ACCEPTABLE,
     FiltreContexte,
+    SansDegradationRepetee,
     lire_identifiant,
     poser_identifiant,
     retirer_identifiant,
@@ -181,3 +182,30 @@ class EnTeteDeReponseTests(TestCase):
         self.assertEqual(ligne.compte, "agent.journal")
         self.assertEqual(ligne.ip, "10.0.0.9")
         self.assertEqual(ligne.requete, identifiant)
+
+
+class SansDegradationRepeteeTests(SimpleTestCase):
+    """Django ajoute une ligne par réponse 5xx ; celles des 503 sont du bruit.
+
+    Mesuré : 5 523 lignes pour sept secondes de base coupée, sans contexte
+    (``requete=-``) puisque Django les écrit après que le middleware a rendu
+    la main, et répétant ce que ``core.exceptions`` venait de dire.
+    """
+
+    def _ligne(self, code=None):
+        ligne = logging.LogRecord("django.request", logging.ERROR, __file__, 1,
+                                  "Service Unavailable: /api/dossiers/", (), None)
+        if code is not None:
+            ligne.status_code = code
+        return ligne
+
+    def test_la_ligne_d_une_503_est_ecartee(self):
+        self.assertFalse(SansDegradationRepetee().filter(self._ligne(503)))
+
+    def test_celle_d_une_500_passe(self):
+        """Un défaut réel garde sa ligne : c'est lui qu'on cherche."""
+        self.assertTrue(SansDegradationRepetee().filter(self._ligne(500)))
+
+    def test_une_ligne_sans_code_passe(self):
+        """Tout ce qui n'est pas une réponse HTTP n'est pas concerné."""
+        self.assertTrue(SansDegradationRepetee().filter(self._ligne()))

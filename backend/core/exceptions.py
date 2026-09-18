@@ -28,6 +28,9 @@ seulement, garde ses pages HTML.
 """
 
 import logging
+import os
+import threading
+import time
 
 from django.db import InterfaceError, OperationalError
 from django.http import JsonResponse
@@ -59,13 +62,68 @@ MESSAGES = {
 }
 
 
+#: Une base coupée fait échouer *toutes* les requêtes, et les échecs sont
+#: rapides : le débit monte au lieu de descendre. Mesuré sur le banc — 441
+#: erreurs par seconde, 7,8 ko de trace chacune, soit 3,5 Mo par seconde.
+#: Docker retient 100 Mo par service (``max-size`` × ``max-file``) : **une
+#: demi-minute de panne effaçait tout l'historique**, y compris les lignes
+#: qui diraient ce qui s'est passé avant elle. La trace complète ne se répète
+#: donc qu'à cet intervalle ; entre deux, une ligne compacte au plus par
+#: seconde dit combien d'appels ont échoué. Le volume passe de 3,5 Mo/s à
+#: moins d'un kilo-octet.
+INTERVALLE_DE_TRACE = int(os.environ.get("DJANGO_LOG_PANNE_TRACE", "60"))
+INTERVALLE_DE_RESUME = float(os.environ.get("DJANGO_LOG_PANNE_RESUME", "1"))
+
+_verrou = threading.Lock()
+_derniere_trace = 0.0
+_dernier_resume = 0.0
+_depuis_la_trace = 0
+
+
 def _journaliser(exc, ou):
     """Une seule formulation pour cette panne, où qu'elle soit attrapée.
 
     Journalisée ici parce que la réponse n'est plus une erreur 500 : elle ne
     passera donc pas par ``django.request``, et la trace manquerait.
+
+    Le débit est borné (voir ci-dessus). Rien n'est perdu de ce qui compte :
+    la trace est identique à chaque fois — c'est toujours « connexion
+    impossible » —, et le nombre d'appels échoués est dit.
     """
-    logger.error("Base de données injoignable (%s) : %s", ou, exc, exc_info=exc)
+    global _derniere_trace, _dernier_resume, _depuis_la_trace
+
+    maintenant = time.monotonic()
+    with _verrou:
+        _depuis_la_trace += 1
+        if maintenant - _derniere_trace >= INTERVALLE_DE_TRACE:
+            _derniere_trace = _dernier_resume = maintenant
+            etouffees, _depuis_la_trace = _depuis_la_trace - 1, 0
+            quoi = "trace"
+        elif maintenant - _dernier_resume >= INTERVALLE_DE_RESUME:
+            _dernier_resume = maintenant
+            etouffees, quoi = _depuis_la_trace, "resume"
+        else:
+            return
+
+    if quoi == "trace":
+        suite = f" — et {etouffees} autres depuis la trace précédente" if etouffees else ""
+        logger.error(
+            "Base de données injoignable (%s) : %s%s", ou, exc, suite, exc_info=exc
+        )
+    else:
+        logger.error(
+            "Base de données injoignable (%s) : %s — %d appels échoués, "
+            "trace au plus une fois toutes les %ss",
+            ou, exc, etouffees, INTERVALLE_DE_TRACE,
+        )
+
+
+def reinitialiser_le_debit_de_journal():
+    """Remet les compteurs à zéro. Réservé aux tests."""
+    global _derniere_trace, _dernier_resume, _depuis_la_trace
+    with _verrou:
+        _derniere_trace = _dernier_resume = 0.0
+        _depuis_la_trace = 0
 
 
 def reponse_indisponible(exc=None, ou="hors vue"):

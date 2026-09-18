@@ -25,8 +25,8 @@ from rest_framework.exceptions import ValidationError
 from core.exceptions import (
     DELAI_DE_REESSAI,
     INDISPONIBLE,
-    erreur_404,
     gestionnaire_d_exception,
+    reinitialiser_le_debit_de_journal,
     reponse_indisponible,
 )
 
@@ -53,6 +53,14 @@ class GestionnaireDrfTests(SimpleTestCase):
 
 
 class ReponseIndisponibleTests(SimpleTestCase):
+    # Le débit de journal est un compteur de module : sans remise à zéro, un
+    # test consomme la trace du suivant.
+    def setUp(self):
+        reinitialiser_le_debit_de_journal()
+
+    def tearDown(self):
+        reinitialiser_le_debit_de_journal()
+
     def test_elle_porte_le_code_le_delai_et_le_motif(self):
         reponse = reponse_indisponible()
 
@@ -126,3 +134,66 @@ class DegradationCoherenteTests(TestCase):
         self.assertEqual(reponse.status_code, 500)
         self.assertEqual(reponse["Content-Type"], "application/json")
         self.assertIn("detail", json.loads(reponse.content))
+
+
+class DebitDuJournalTests(SimpleTestCase):
+    """Une panne ne doit pas effacer l'historique des journaux.
+
+    Une base coupée fait échouer toutes les requêtes, et vite : le débit
+    monte au lieu de descendre. Mesuré sur le banc — 441 erreurs par
+    seconde, 7,8 ko de trace chacune, soit **24 Mo en sept secondes**.
+    Docker retient 100 Mo par service : une demi-minute de panne effaçait
+    tout, y compris les lignes qui diraient ce qui s'est passé avant elle.
+
+    Après bornage, le même test produit 17,8 ko.
+    """
+
+    def setUp(self):
+        reinitialiser_le_debit_de_journal()
+
+    def tearDown(self):
+        reinitialiser_le_debit_de_journal()
+
+    def test_la_premiere_panne_porte_sa_trace(self):
+        with self.assertLogs("core.exceptions", level="ERROR") as journal:
+            reponse_indisponible(OperationalError("coupée"), ou="essai")
+
+        self.assertEqual(len(journal.records), 1)
+        self.assertIsNotNone(journal.records[0].exc_info, "la trace manque")
+
+    def test_les_suivantes_ne_repetent_pas_la_trace(self):
+        with self.assertLogs("core.exceptions", level="ERROR") as journal:
+            for _ in range(500):
+                reponse_indisponible(OperationalError("coupée"), ou="essai")
+
+        avec_trace = [r for r in journal.records if r.exc_info]
+        self.assertEqual(len(avec_trace), 1, "la trace se répète")
+        self.assertLess(
+            len(journal.records), 10,
+            f"{len(journal.records)} lignes pour 500 pannes : le débit n'est pas borné",
+        )
+
+    def test_le_nombre_d_appels_echoues_est_dit(self):
+        """Rien de ce qui compte n'est perdu : la trace est la même à chaque
+        fois, seul le volume change — et il est annoncé."""
+        with self.assertLogs("core.exceptions", level="ERROR"):
+            reponse_indisponible(OperationalError("coupée"), ou="essai")
+
+        import core.exceptions as ce
+
+        ce._dernier_resume = 0.0  # la seconde de résumé est écoulée
+        with self.assertLogs("core.exceptions", level="ERROR") as journal:
+            for _ in range(41):
+                reponse_indisponible(OperationalError("coupée"), ou="essai")
+
+        self.assertIn("appels échoués", journal.records[0].getMessage())
+
+    def test_chaque_reponse_reste_un_503_meme_sans_ligne_de_journal(self):
+        """Borner le journal ne borne pas les réponses : chacune est servie."""
+        reponses = [
+            reponse_indisponible(OperationalError("coupée"), ou="essai")
+            for _ in range(50)
+        ]
+
+        self.assertTrue(all(r.status_code == 503 for r in reponses))
+        self.assertTrue(all(r["Retry-After"] == str(DELAI_DE_REESSAI) for r in reponses))

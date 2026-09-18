@@ -638,6 +638,11 @@ LOGGING = {
     "disable_existing_loggers": False,
     "filters": {
         "contexte": {"()": "core.journalisation.FiltreContexte"},
+        # Django ajoute une ligne par réponse 5xx ; pour les 503, elle répète
+        # ce que ``core.exceptions`` a déjà dit, sans contexte et sans borne.
+        "sans_degradation_repetee": {
+            "()": "core.journalisation.SansDegradationRepetee"
+        },
     },
     "formatters": {
         "standard": {
@@ -655,7 +660,7 @@ LOGGING = {
             # et dictConfig sait résoudre ``ext://``.
             "stream": "ext://sys.stdout",
             "formatter": "standard",
-            "filters": ["contexte"],
+            "filters": ["sans_degradation_repetee", "contexte"],
         },
     },
     "root": {"handlers": ["console"], "level": DJANGO_LOG_LEVEL},
