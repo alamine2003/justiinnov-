@@ -2322,3 +2322,23 @@ msgstr "This line has been the subject of a rectification request: it can no lon
 #: expenses/transitions.py
 msgid "Ce dossier contient une ligne qui a fait l'objet d'une demande de rectification : il ne se supprime plus."
 msgstr "This dossier contains a line that has been the subject of a rectification request: it can no longer be deleted."
+
+#: core/exceptions.py
+msgid "Service momentanément indisponible. Réessayez dans quelques instants."
+msgstr "Service temporarily unavailable. Please try again in a moment."
+
+#: core/exceptions.py
+msgid "Requête incorrecte."
+msgstr "Bad request."
+
+#: core/exceptions.py
+msgid "Accès refusé."
+msgstr "Access denied."
+
+#: core/exceptions.py
+msgid "Ressource introuvable."
+msgstr "Resource not found."
+
+#: core/exceptions.py
+msgid "Erreur interne du serveur."
+msgstr "Internal server error."

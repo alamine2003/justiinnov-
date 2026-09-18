@@ -219,6 +219,9 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
+    # Une panne d'infrastructure devient 503 avec ``Retry-After`` ; le reste
+    # garde le comportement de DRF. Voir ``core.exceptions``.
+    "EXCEPTION_HANDLER": "core.exceptions.gestionnaire_d_exception",
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
     "PAGE_SIZE": 25,
     "SEARCH_PARAM": "search",
@@ -679,7 +682,11 @@ if EN_TEST:
         "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
     }
     PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
-    # Les journaux se taisent pendant les tests : ``assertLogs`` pose son
-    # propre niveau, les tests qui les vérifient fonctionnent donc quand même.
-    LOGGING["root"]["level"] = "CRITICAL"
+    # Les journaux se taisent pendant les tests : c'est le *gestionnaire*
+    # qu'on baisse, pas les niveaux — un enregistrement propagé depuis
+    # ``django.request`` atteint les gestionnaires de la racine quel que soit
+    # le niveau de celle-ci, et la trace d'un test qui lève exprès polluait
+    # la sortie. ``assertLogs`` pose ses propres gestionnaires : les tests
+    # qui vérifient les journaux fonctionnent quand même.
+    LOGGING["handlers"]["console"]["level"] = "CRITICAL"
     TEST_RUNNER = "core.tests.runner.LanceurDeTests"
