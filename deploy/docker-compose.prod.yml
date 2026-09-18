@@ -136,6 +136,13 @@ x-backend: &backend
 services:
   db:
     image: postgres:16.4-alpine
+    # L'image officielle arrête Postgres en mode « fast » : les connexions
+    # sont rompues, puis un point de reprise est écrit. C'est rapide sur une
+    # base de cette taille, mais un SIGKILL au milieu obligerait au
+    # rétablissement par le journal au redémarrage suivant — sans perte, la
+    # durée en plus. Le double du délai par défaut coûte zéro quand tout va
+    # bien, et évite cela quand la base est occupée.
+    stop_grace_period: 30s
     # Postgres ne se règle pas seul : par défaut il suppose 128 Mo de cache
     # et n'en utilise pas plus. Un quart de sa limite en tampons partagés,
     # les trois quarts en estimation du cache disponible ; `shm_size` évite
@@ -183,6 +190,18 @@ services:
   backend:
     <<: *backend
     mem_limit: 768m
+    # Docker accorde dix secondes entre son SIGTERM et son SIGKILL, et
+    # gunicorn en prend trente pour laisser finir les requêtes en vol
+    # (`--graceful-timeout 30`, backend/entrypoint.sh) — trente parce que
+    # `GUNICORN_TIMEOUT` vaut 120 : un export d'année complète ou une pièce
+    # de 20 Mo sur une liaison lente dépassent les trente secondes par
+    # défaut. Sans ce réglage, la chaîne se contredisait : 120 s autorisées,
+    # 30 s pour se vider, 10 s réellement accordées. Mesuré pendant l'audit
+    # de résilience — une pièce en cours de dépôt mettait 11,07 s à finir
+    # après le SIGTERM, soit une seconde de trop : à chaque livraison, le
+    # déposant perdait son envoi. Cinq secondes de marge pour que gunicorn
+    # sorte de lui-même plutôt que d'être abattu.
+    stop_grace_period: 35s
     environment:
       <<: *django
       # Compteurs Prometheus partagés entre les workers gunicorn, en mémoire
