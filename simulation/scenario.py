@@ -6,6 +6,7 @@ Usage : SIM_COMPTES=comptes.json python3 simulation/scenario.py http://127.0.0.1
 
 import io
 import json
+import secrets
 import subprocess
 import sys
 import time
@@ -19,6 +20,17 @@ from commun import COMPOSE, RACINE, code_totp, comptes, multipart, pdf
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:8000"
 rapport = []
+
+
+def mot_de_passe_jetable():
+    """Mot de passe provisoire d'un compte créé par le scénario, tiré au hasard.
+
+    Jamais dérivé de l'identifiant : un mot de passe qu'on déduit du nom du
+    compte se devine dès que ce nom se lit, et le scénario peut tourner sur un
+    serveur partagé. Les validateurs du serveur (dix caractères, ni commun, ni
+    numérique, ni proche de l'identifiant) l'acceptent.
+    """
+    return secrets.token_urlsafe(18)
 
 
 def api(method, chemin, token=None, data=None, corps=None, content_type=None, lang="fr", brut=False):
@@ -71,10 +83,10 @@ def main():
         nom = f"{role}.{suffixe}"
         s, rep, _ = api("POST", "/api/users/", siege, {"username": nom, "email": f"{nom}@innovpharma.net", "role": role,
                                                        "first_name": role.upper(), "last_name": "Scénario",
-                                                       "password": "Provisoire-2026-" + suffixe})
+                                                       "password": mot_de_passe_jetable()})
         etape(f"1. créer le compte {role}", 201, s, rep)
     s, rep, _ = api("POST", "/api/users/", siege, {"username": f"x.{suffixe}", "email": f"x.{suffixe}@gmail.com",
-                                                   "role": "manager", "password": "Provisoire-2026-" + suffixe})
+                                                   "role": "manager", "password": mot_de_passe_jetable()})
     etape("1. un compte hors @innovpharma.net est refusé", 400, s, rep)
     # Les comptes créés ont un mot de passe provisoire et pas de 2FA : les rôles
     # du siège se jouent avec les comptes jetables déjà enrôlés.
@@ -106,7 +118,7 @@ def main():
     etape("2. un manager ne crée pas d'équipe", 403, s, rep)
     s, mgr, _ = api("POST", "/api/users/", admin, {"username": f"mgr.{suffixe}", "email": f"mgr.{suffixe}@innovpharma.net",
                                                   "role": "manager", "countries": [togo["id"]], "teams": [ids["teams"]],
-                                                  "password": "Provisoire-2026-" + suffixe})
+                                                  "password": mot_de_passe_jetable()})
     etape("2. compte manager rattaché à une équipe", 201, s, mgr)
 
     # 3. Le super administrateur attribue enveloppe, sous-enveloppe, taux
