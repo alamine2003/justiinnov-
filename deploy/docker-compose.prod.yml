@@ -192,6 +192,23 @@ services:
       - archive_command=/archiver_wal.sh %p %f
       - -c
       - archive_timeout=${POSTGRES_ARCHIVE_TIMEOUT:-300}
+      # Réplique en attente chaude (docker-compose.replique.yml, sur une
+      # seconde machine). Sans réplique déclarée, ces réglages ne coûtent
+      # rien : aucun flux n'est ouvert.
+      #
+      # `max_slot_wal_keep_size` est **la** borne à ne pas retirer. Un
+      # emplacement de réplication demande à la primaire de garder tout ce
+      # que la réplique n'a pas encore lu ; si la seconde machine s'absente,
+      # cela ne s'arrête jamais. Mesuré : sans borne, `pg_wal` grandit
+      # jusqu'à remplir le disque — et la base s'arrête. Avec elle,
+      # l'emplacement est déclaré perdu au-delà de la marge, la primaire
+      # continue de servir, et c'est la réplique qu'on reconstruit (0,5 s
+      # pour 15 Mo, mesuré). Perdre la réplique vaut mieux que perdre la
+      # base.
+      - -c
+      - max_slot_wal_keep_size=${POSTGRES_SLOT_WAL_MAX:-2GB}
+      - -c
+      - max_wal_senders=${POSTGRES_WAL_SENDERS:-10}
     shm_size: 256m
     mem_limit: 1g
     # Le superutilisateur du conteneur est le rôle propriétaire : celui qui

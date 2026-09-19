@@ -1137,6 +1137,138 @@ banc**, sans rapatriement depuis la copie distante — qui domine le temps
 réel quand le serveur est perdu. Mesurez les vôtres à la prochaine
 répétition.
 
+## Réplique en attente chaude
+
+Une seconde machine qui rejoue le flux de la première en continu, et prend
+le relais quand elle est perdue. Elle se laisse interroger en lecture —
+c'est ce que veut dire « attente chaude », et c'est ce qui permet de
+**vérifier** qu'elle suit au lieu de l'espérer.
+
+> **Une réplique n'est pas une sauvegarde.** Un `DELETE` malheureux se
+> réplique en moins d'une milliseconde. La réplique protège de la perte
+> d'une **machine** ; l'archivage des journaux protège de l'**erreur
+> humaine**. Gardez les deux, ils ne se remplacent pas.
+
+La réplication est **asynchrone** : une transaction validée sur la primaire
+qui meurt avant d'avoir envoyé son journal est perdue. C'est un choix
+assumé. En synchrone, chaque écriture attendrait la seconde machine, et une
+réplique absente **bloquerait toute la plateforme** — un remède pire que le
+mal quand il n'y a qu'une réplique.
+
+### Mettre en place
+
+Sur la **primaire**, une fois :
+
+```bash
+# 1. le rôle de réplication
+docker compose -f docker-compose.prod.yml exec -T db \
+  psql -v ON_ERROR_STOP=1 -v role_replication=replicateur \
+       -v mot_de_passe="'<un mot de passe long>'" \
+       -U "$POSTGRES_MIGRATION_USER" -d "$POSTGRES_DB" -f - \
+  < creer_role_replication.sql
+
+# 2. son adresse, et elle seule, dans pg_hba.conf
+docker compose -f docker-compose.prod.yml exec -T db sh -c \
+  'echo "host replication replicateur <ip-seconde-machine>/32 scram-sha-256" \
+   >> "$PGDATA/pg_hba.conf"'
+docker compose -f docker-compose.prod.yml exec -T db \
+  psql -U "$POSTGRES_MIGRATION_USER" -d "$POSTGRES_DB" -c 'select pg_reload_conf()'
+```
+
+> **Le flux de réplication, c'est la base entière** — lignes, jetons de
+> session, secrets TOTP. Il ne traverse pas l'Internet en clair : réseau
+> privé entre les deux machines, ou tunnel. C'est la première fois que les
+> données de cette plateforme sortent d'une machine ; traitez-le comme tel.
+
+Sur la **seconde machine** : le dépôt, le `.env` de la primaire (mêmes
+secrets), puis
+
+```bash
+PGPASSWORD='<le mot de passe du rôle>' ./preparer_replique.sh --primaire <ip-primaire>
+docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml up -d
+```
+
+Seules la base et le cache démarrent : l'application, l'ordonnanceur et
+**les sauvegardes** attendent dans le profil `bascule`. Deux machines qui
+sauvegardent vers le même coffre distant s'écraseraient l'une l'autre.
+
+### Vérifier qu'elle suit — depuis la primaire
+
+```bash
+docker compose -f docker-compose.prod.yml exec db \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "select application_name, state, sync_state, replay_lag from pg_stat_replication"
+```
+
+`state = streaming` veut dire qu'elle suit. **Tant que cette ligne
+n'apparaît pas, il n'y a pas de réplique** — seulement une copie qui
+vieillit.
+
+`manage.py verifier_sauvegardes` surveille désormais aussi les emplacements
+de réplication et prévient les administrateurs quand l'un est **inactif**
+(la seconde machine ne se connecte plus) ou **perdu** (elle a trop de retard
+pour rattraper : il faut la refaire). Sans cette alerte, on croit avoir une
+réplique jusqu'au jour de la bascule.
+
+### Ce que la primaire risque, et ce qui l'en protège
+
+Un emplacement de réplication demande à la primaire de **garder** tout ce
+que la réplique n'a pas encore lu. Si la seconde machine s'absente, cela ne
+s'arrête jamais de soi-même.
+
+> Mesuré : sans borne, `pg_wal` grandit jusqu'à remplir le disque — et la
+> base s'arrête. Avec `POSTGRES_SLOT_WAL_MAX`, l'emplacement passe à
+> `lost` au-delà de la marge, **la primaire continue de servir**, et c'est
+> la réplique qu'on refait. Perdre la réplique vaut mieux que perdre la
+> base.
+
+### Basculer
+
+```bash
+# sur la seconde machine
+./promouvoir_replique.sh --primaire-perdue <ip-primaire>
+```
+
+Le script **refuse de promouvoir si la primaire répond encore** : deux bases
+qui acceptent des écritures produisent deux histoires que rien ne
+réconcilie. Il promeut, démarre l'application et les sauvegardes ici, puis
+rappelle les deux gestes qu'aucun script ne fait :
+
+1. **le domaine pointe encore sur l'ancienne machine.** Tant qu'il n'est pas
+   changé, personne n'arrive. C'est là que passe l'essentiel du temps
+   d'indisponibilité réel — le TTL du DNS, pas la base ;
+2. **l'ancienne machine ne redémarre jamais en primaire.** Quand elle
+   revient, elle devient réplique de la nouvelle.
+
+### Répéter — tous les trimestres
+
+```bash
+./promouvoir_replique.sh --primaire-perdue <ip-primaire> --repetition
+```
+
+Tout sauf la promotion. On vérifie que la commande est la bonne, que les
+profils démarrent, que le garde-fou fonctionne — pendant que les mains ne
+tremblent pas.
+
+### Ce qui a été mesuré, et ce qui ne l'a pas été
+
+Sur un banc, deux grappes locales sans latence réseau :
+
+| | mesure |
+|---|---|
+| retard de réplication | **0 octet, 0,69 ms** |
+| copie initiale (base de 15 Mo) | 0,5 s |
+| promotion, base en écriture | **0,11 s** |
+| perte après SIGKILL de la primaire | **aucune** — l'écriture d'avant la mort était là |
+| réplique absente, primaire | **continue de servir**, emplacement passé à `lost` |
+| reconstruction après invalidation | 0,5 s |
+
+**Ce qui n'a pas été éprouvé** : deux machines réelles, un vrai réseau
+(latence, pertes, tunnel), et la bascule du domaine. Le retard suivra
+l'aller-retour du réseau, et le temps réel d'indisponibilité sera dominé par
+le DNS. C'est la première répétition sur les vraies machines qui le dira —
+faites-la avant d'en avoir besoin.
+
 ## Après une fuite
 
 Une sauvegarde lue par un tiers, un `.env` copié, un poste d'exploitation

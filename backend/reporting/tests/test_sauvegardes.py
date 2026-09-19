@@ -26,6 +26,7 @@ from notifications.models import Notification
 from reporting.management.commands.verifier_sauvegardes import (
     anomalies,
     archivage_en_panne,
+    replication_en_panne,
 )
 
 
@@ -245,3 +246,60 @@ class ArchivageDesSegmentsTests(ExpenseTestCase):
         depuis le début, et aucun segment n'est jamais parti."""
         with self._postgres_repond("on", timezone.now(), None):
             self.assertIsNotNone(archivage_en_panne())
+
+
+class RepliqueTests(ExpenseTestCase):
+    """Une réplique qu'on croit avoir et qu'on n'a plus.
+
+    C'est le défaut le plus désagréable d'une attente chaude : la plateforme
+    tourne parfaitement, personne ne voit rien, et l'on découvre le jour de
+    la bascule qu'il n'y avait pas de réplique. Deux états le disent, et
+    aucun ne se remarque autrement.
+
+    ``pg_replication_slots`` est une vue **de la grappe**, pas de la base :
+    ce contrôle voit les emplacements de tout le serveur, ce qui est voulu —
+    il n'y a qu'une grappe en production.
+    """
+
+    @staticmethod
+    def _emplacements(lignes):
+        curseur = mock.MagicMock()
+        curseur.__enter__.return_value = curseur
+        curseur.fetchall.return_value = lignes
+        return mock.patch(
+            "reporting.management.commands.verifier_sauvegardes.connection.cursor",
+            return_value=curseur,
+        )
+
+    def test_sans_replique_il_n_y_a_rien_a_dire(self):
+        """Tant qu'il n'y a qu'une machine, ce contrôle doit se taire."""
+        with self._emplacements([]):
+            self.assertEqual(replication_en_panne(), [])
+
+    def test_une_replique_qui_suit_ne_declenche_rien(self):
+        with self._emplacements([("replique", True, "reserved")]):
+            self.assertEqual(replication_en_panne(), [])
+
+    def test_un_emplacement_perdu_se_dit(self):
+        """La borne ``max_slot_wal_keep_size`` a joué — elle a protégé le
+        disque de la primaire, et c'est bien. Mais la réplique est
+        inutilisable : elle doit être refaite, pas attendue."""
+        with self._emplacements([("replique", False, "lost")]):
+            self.assertEqual(replication_en_panne(), [("replique", "perdu")])
+
+    def test_une_replique_debranchee_se_dit_avant_d_etre_perdue(self):
+        """Prévenir pendant que la réplique peut encore rattraper vaut mieux
+        que prévenir quand il faut tout refaire."""
+        with self._emplacements([("replique", False, "reserved")]):
+            self.assertEqual(replication_en_panne(), [("replique", "inactif")])
+
+    def test_plusieurs_repliques_sont_toutes_signalees(self):
+        with self._emplacements([
+            ("replique_a", True, "reserved"),
+            ("replique_b", False, "lost"),
+            ("replique_c", False, "reserved"),
+        ]):
+            self.assertEqual(
+                replication_en_panne(),
+                [("replique_b", "perdu"), ("replique_c", "inactif")],
+            )

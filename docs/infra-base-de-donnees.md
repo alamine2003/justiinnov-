@@ -111,7 +111,7 @@ distant que les dumps, et une sauvegarde de base hebdomadaire
   cette pile, c'est l'hôte.
 - **Coûte** : de la mémoire prise à une base qui n'en manque pas.
 
-### C. Réplique en attente chaude sur une seconde machine — **plus tard**
+### C. Réplique en attente chaude sur une seconde machine — **mise en place**
 
 - **Achète** : RTO de quelques minutes, survie à la perte d'une machine.
 - **Coûte** : une seconde machine, une bascule à écrire **et à répéter**,
@@ -176,8 +176,12 @@ déjà Prometheus ; ajouter une alerte sur l'âge de la dernière sauvegarde
 réussie et sur le retard d'archivage. `verifier_sauvegardes` notifie déjà
 les administrateurs : vérifier que quelqu'un lit ces notifications.
 
-**5. Réévaluer la haute disponibilité** (option C) quand le RPO/RTO écrit
-à l'étape 1 ne sera plus tenu par les étapes 2 à 4. Pas avant.
+**5. La haute disponibilité** (option C) — **faite** (décision 75), à la
+demande de la direction plutôt qu'au terme des étapes précédentes. Ce que
+cela change, mesuré sur banc : promotion en 0,11 s, aucune perte après un
+SIGKILL de la primaire. Ce que cela ne change pas : le temps réel
+d'indisponibilité, dominé par la bascule du domaine — et la nécessité des
+sauvegardes, qu'une réplique ne remplace pas.
 
 ---
 

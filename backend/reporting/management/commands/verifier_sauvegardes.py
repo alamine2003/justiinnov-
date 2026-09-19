@@ -126,6 +126,39 @@ def archivage_en_panne():
     return segment, echoue_a
 
 
+def replication_en_panne():
+    """La réplique suit-elle encore ?
+
+    Deux défauts, tous deux muets. Un emplacement **perdu**
+    (``wal_status = 'lost'``) : la primaire a cessé de garder ce que la
+    réplique n'a pas lu — c'est la borne ``max_slot_wal_keep_size`` qui a
+    joué, et elle a bien fait, puisque sans elle le disque de la primaire se
+    serait rempli. Mais la réplique est alors inutilisable : elle doit être
+    **refaite**, pas attendue. Un emplacement **inactif** : la seconde
+    machine ne se connecte plus.
+
+    Dans les deux cas, la plateforme tourne parfaitement, et l'on croit
+    avoir une réplique qu'on n'a plus. Cela ne se découvre que le jour de la
+    bascule, c'est-à-dire le pire.
+
+    Rend ``[(nom, état)]``, vide quand tout va bien — ou qu'aucune réplique
+    n'est déclarée, ce qui est le cas tant qu'il n'y a qu'une machine.
+    """
+    with connection.cursor() as curseur:
+        curseur.execute(
+            "SELECT slot_name, active, wal_status FROM pg_replication_slots "
+            "WHERE slot_type = 'physical'"
+        )
+        emplacements = curseur.fetchall()
+    ennuis = []
+    for nom, actif, etat in emplacements:
+        if etat == "lost":
+            ennuis.append((nom, "perdu"))
+        elif not actif:
+            ennuis.append((nom, "inactif"))
+    return ennuis
+
+
 class Command(BaseCommand):
     help = "Vérifie que chaque sauvegarde a réussi récemment ; prévient sinon."
 
@@ -162,8 +195,16 @@ class Command(BaseCommand):
             if not options["dry_run"]:
                 self._prevenir_de_l_archivage(segment, echoue_a, maintenant)
 
+        replication = replication_en_panne()
+        for nom, etat in replication:
+            self.stdout.write(self.style.ERROR(
+                f"✘ réplique « {nom} » : {etat}"
+            ))
+            if not options["dry_run"]:
+                self._prevenir_de_la_replique(nom, etat, maintenant)
+
         if not trouvees:
-            if panne is None:
+            if panne is None and not replication:
                 self.stdout.write(self.style.SUCCESS("✔ Sauvegardes à jour."))
             return
 
@@ -221,4 +262,34 @@ class Command(BaseCommand):
             ),
             link="/configuration",
             dedup_key=f"archivage:{maintenant.date().isoformat()}",
+        )
+
+    def _prevenir_de_la_replique(self, nom, etat, maintenant):
+        """Une réplique qu'on croit avoir et qu'on n'a plus ne se découvre
+        que le jour de la bascule — c'est-à-dire trop tard."""
+        if etat == "perdu":
+            detail = _(
+                "La primaire a cessé de lui garder ses journaux : la réplique "
+                "ne peut plus rattraper son retard et doit être **refaite** "
+                "(preparer_replique.sh), pas attendue. La plateforme, elle, "
+                "n'a rien risqué — c'est précisément ce que cette borne protège."
+            )
+        else:
+            detail = _(
+                "La seconde machine ne se connecte plus. Tant qu'elle est "
+                "absente, la primaire garde ses journaux pour elle ; au-delà "
+                "de la marge, l'emplacement sera déclaré perdu et la réplique "
+                "devra être refaite."
+            )
+        notify(
+            recipients_for(DESTINATAIRES),
+            kind=Notification.Kind.STORAGE_ERROR,
+            level=Notification.Level.CRITICAL,
+            title=format_lazy(_("Réplique en défaut — {nom}"), nom=nom),
+            body=format_lazy(
+                _("{detail} Voir deploy/README.md, « Réplique en attente chaude »."),
+                detail=detail,
+            ),
+            link="/configuration",
+            dedup_key=f"replique:{maintenant.date().isoformat()}:{nom}",
         )
