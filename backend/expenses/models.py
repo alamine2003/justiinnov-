@@ -304,6 +304,28 @@ class ExpenseQuerySet(models.QuerySet):
         Ce n'est pas un N+1 : le nombre de requêtes est constant. C'est
         l'inverse — on échange une jointure coûteuse à planifier contre des
         requêtes que Postgres traite sans réfléchir.
+
+        **Cet échange a un point de bascule**, mesuré depuis : la
+        planification ne dépend pas du réseau, les allers-retours si. La
+        jointure paie 91 ms fixes, le préchargement neuf allers-retours de
+        plus — les deux se valent donc autour de **10 ms d'aller-retour**,
+        et au-delà la jointure reprend l'avantage :
+
+        ==================  =============  =============
+        aller-retour        préchargé      joint
+        ==================  =============  =============
+        0,6 ms                     58 ms         207 ms
+        8,0 ms                    192 ms         289 ms
+        11,8 ms                   266 ms         287 ms
+        21,4 ms                   445 ms         380 ms
+        51,6 ms                  1016 ms         680 ms
+        ==================  =============  =============
+
+        La pile livrée est très loin de ce point : la base est un conteneur
+        voisin, l'aller-retour vaut 0,09 ms. Mais une base hébergée
+        ailleurs (``DATABASE_URL``, voir ``deploy/.env.example``) peut
+        dépasser les 10 ms — auquel cas ce choix se rediscute, mesure à
+        l'appui.
         """
         return self.prefetch_related(*EXPENSE_RELATIONS)
 

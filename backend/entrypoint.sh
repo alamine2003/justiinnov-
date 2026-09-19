@@ -21,17 +21,28 @@ mot_de_passe_proprietaire() {
   fi
 }
 
+# Les commandes de maintenance passent par ici : migrations, table de cache.
+# `statement_timeout` (config/settings.py) borne les requêtes du service —
+# quinze secondes, cent fois la plus lourde mesurée — et couperait un
+# `CREATE INDEX` sur une grande table au milieu de la livraison. On le lève
+# donc pour elles, et pour elles seulement.
+#
+# `lock_timeout` reste en place : une migration qui n'obtient pas son verrou
+# doit échouer bruyamment, la livraison s'arrêter et quelqu'un regarder —
+# plutôt qu'attendre sans fin en bloquant tout derrière elle. Django joue
+# chaque migration dans une transaction : un échec se défait proprement.
 en_tant_que_proprietaire() {
+  sans_delai_d_instruction="env POSTGRES_STATEMENT_TIMEOUT=0"
   if [ -n "${DATABASE_MIGRATION_URL:-}" ]; then
-    env DATABASE_URL="$DATABASE_MIGRATION_URL" "$@"
+    $sans_delai_d_instruction DATABASE_URL="$DATABASE_MIGRATION_URL" "$@"
   elif [ -n "${POSTGRES_MIGRATION_USER:-}" ]; then
     if [ -n "${DATABASE_URL:-}" ]; then
       echo "⚠ POSTGRES_MIGRATION_USER est ignoré : DATABASE_URL prime. Définissez DATABASE_MIGRATION_URL."
     fi
-    env POSTGRES_USER="$POSTGRES_MIGRATION_USER" \
+    $sans_delai_d_instruction POSTGRES_USER="$POSTGRES_MIGRATION_USER" \
       POSTGRES_PASSWORD="$(mot_de_passe_proprietaire)" "$@"
   else
-    "$@"
+    $sans_delai_d_instruction "$@"
   fi
 }
 

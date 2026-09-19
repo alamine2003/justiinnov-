@@ -173,6 +173,70 @@ def parse_database_url(url):
     return config
 
 
+# ---------------------------------------------------------------------------
+# Délais de la base
+# ---------------------------------------------------------------------------
+# Rien ne bornait le temps passé à attendre la base : `statement_timeout`,
+# `lock_timeout` et `idle_in_transaction_session_timeout` valaient tous zéro,
+# c'est-à-dire l'infini, et aucun délai n'était posé côté client. L'audit de
+# résilience l'a mesuré — une base qui accepte la connexion sans jamais
+# répondre (un pare-feu qui avale les paquets, pas un service arrêté) faisait
+# **pendre toute l'API au-delà de quatre-vingt-dix secondes**, `/api/health/`
+# compris. C'est la panne du stockage (décision 60) à l'identique, sur la
+# base cette fois.
+#
+# Deux familles, deux rôles, et on a besoin des deux :
+#
+# - **côté serveur** (`options`) : la base est vivante mais quelque chose s'y
+#   éternise — une requête qui n'en finit pas, un verrou tenu par une
+#   transaction voisine, une transaction laissée ouverte par un client parti.
+#   Postgres tranche lui-même ;
+# - **côté client** (`connect_timeout`, `keepalives`) : la base **ne répond
+#   pas**. Aucun réglage du serveur ne peut alors s'appliquer, puisque c'est
+#   le serveur qui manque. Seul le client peut renoncer.
+#
+# Chaque dépassement devient une 503 avec `Retry-After` (décision 62), pas
+# une attente sans fin : le fil est rendu, les autres écrans répondent.
+#
+# Les valeurs laissent une marge large sur le mesuré : la requête la plus
+# lourde de l'application tient en 127 ms de SQL et le verrou d'une
+# transition est tenu 8,5 ms.
+DELAIS_POSTGRES = {
+    # Ouverture de connexion (secondes, libpq).
+    "connect_timeout": int(os.environ.get("POSTGRES_CONNECT_TIMEOUT", "3")),
+    # Détection d'une base devenue muette sur une connexion déjà ouverte :
+    # sonde après 5 s de silence, toutes les 2 s, trois échecs — la panne se
+    # découvre en une dizaine de secondes au lieu de jamais.
+    "keepalives": 1,
+    "keepalives_idle": int(os.environ.get("POSTGRES_KEEPALIVE_IDLE", "5")),
+    "keepalives_interval": 2,
+    "keepalives_count": 3,
+    "options": " ".join(
+        f"-c {nom}={os.environ.get(variable, defaut)}"
+        for nom, variable, defaut in (
+            # Une requête qui dépasse : quinze secondes, cent fois la plus
+            # lourde mesurée. Le délai vaut par instruction, pas par requête
+            # HTTP : un export enchaîne des requêtes courtes, il n'est pas
+            # menacé.
+            ("statement_timeout", "POSTGRES_STATEMENT_TIMEOUT", "15000"),
+            # Attendre un verrou : dix secondes. Deux personnes qui
+            # soumettent le même dossier s'attendent quelques
+            # millisecondes ; au-delà, quelque chose est bloqué et la
+            # seconde doit l'apprendre plutôt que d'attendre.
+            ("lock_timeout", "POSTGRES_LOCK_TIMEOUT", "10000"),
+            # Une transaction ouverte puis abandonnée tient ses verrous.
+            # Cinq minutes : au-delà de toute transition, et assez large
+            # pour une migration de données qui réfléchit entre deux
+            # instructions — elle n'est « inactive » que là.
+            (
+                "idle_in_transaction_session_timeout",
+                "POSTGRES_IDLE_TX_TIMEOUT",
+                "300000",
+            ),
+        )
+    ),
+}
+
 # Connexions réutilisées entre requêtes, et vérifiées avant usage : sans
 # contrôle, une connexion coupée par Postgres ou le réseau ne se découvre
 # qu'à la première requête qui échoue.
@@ -183,7 +247,12 @@ _DATABASE_COMMON = {"CONN_MAX_AGE": 60, "CONN_HEALTH_CHECKS": True}
 # Docker. Voir deploy/.env.example.
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 if DATABASE_URL:
-    DATABASES = {"default": {**parse_database_url(DATABASE_URL), **_DATABASE_COMMON}}
+    _hebergee = parse_database_url(DATABASE_URL)
+    # Les délais d'abord, ce que l'URL dit ensuite : un réglage écrit à la
+    # main dans l'URL l'emporte sur nos défauts. La fonction, elle, reste
+    # pure — elle traduit l'URL, elle n'y ajoute rien.
+    _hebergee["OPTIONS"] = {**DELAIS_POSTGRES, **_hebergee.get("OPTIONS", {})}
+    DATABASES = {"default": {**_hebergee, **_DATABASE_COMMON}}
 else:
     POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "")
     if not POSTGRES_PASSWORD:
@@ -203,6 +272,7 @@ else:
             "PASSWORD": POSTGRES_PASSWORD,
             "HOST": os.environ.get("POSTGRES_HOST", "db"),
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "OPTIONS": DELAIS_POSTGRES,
             **_DATABASE_COMMON,
         }
     }
