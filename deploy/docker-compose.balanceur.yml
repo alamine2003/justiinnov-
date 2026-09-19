@@ -1,0 +1,71 @@
+# L'aiguillage, sur une TROISIÈME machine.
+#
+#   docker compose -f docker-compose.balanceur.yml up -d
+#
+# Il ne sert que Caddy : c'est le nom de domaine, le certificat, et le choix
+# de la machine à qui parler. Aucune base, aucun applicatif, aucune donnée —
+# on peut le perdre et le refaire en une minute, pourvu que le DNS pointe
+# sur sa nouvelle adresse.
+#
+# POURQUOI PAS SUR L'UNE DES DEUX MACHINES
+#
+# Un aiguillage posé sur la primaire meurt avec elle : le jour de la panne,
+# il n'aiguille plus rien. Posé sur la réplique, il survit — mais alors
+# c'est la réplique qui porte le nom de domaine et le certificat, et l'on a
+# déplacé le problème sans le résoudre. Il lui faut donc sa propre machine,
+# et elle peut être minuscule : Caddy tient dans 64 Mo et ne fait que
+# relayer.
+#
+# ENCORE MIEUX, SI L'HÉBERGEUR LE PROPOSE
+#
+# Un répartiteur managé, ou une **IP flottante** qu'on réattache à la
+# seconde machine d'une commande : ni troisième machine à tenir, ni
+# aiguillage à surveiller. Ce fichier existe pour le cas où l'on n'a ni
+# l'un ni l'autre. Voir README.md, « Répartiteur ».
+#
+# CE QU'IL FAUT DANS SON .env
+#   APP_DOMAIN         le nom public, celui que le DNS fait pointer ICI
+#   ACME_EMAIL         pour Let's Encrypt
+#   MACHINE_PRIMAIRE   adresse privée de la première machine
+#   MACHINE_SECONDE    adresse privée de la seconde
+
+services:
+  balanceur:
+    image: caddy:2.8-alpine
+    container_name: justi_balanceur
+    mem_limit: 128m
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN manquant}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant}
+      # Les deux machines, par leur adresse **privée** : le trafic entre
+      # l'aiguillage et elles ne passe pas par l'Internet, et elles n'ont
+      # donc rien à y publier.
+      MACHINE_PRIMAIRE: ${MACHINE_PRIMAIRE:?MACHINE_PRIMAIRE manquante}
+      MACHINE_SECONDE: ${MACHINE_SECONDE:?MACHINE_SECONDE manquante}
+    volumes:
+      - ./balanceur/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Les certificats survivent à un redémarrage : sans ce volume, Caddy
+      # en redemanderait à chaque fois et Let's Encrypt finirait par refuser.
+      - balanceur_data:/data
+      - balanceur_config:/config
+    healthcheck:
+      # Caddy sert son propre point d'administration sur 2019 ; on se
+      # contente de vérifier qu'il écoute.
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+volumes:
+  balanceur_data:
+  balanceur_config:

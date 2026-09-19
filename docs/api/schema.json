@@ -4111,7 +4111,7 @@
         "/api/health/": {
             "get": {
                 "operationId": "health_retrieve",
-                "description": "État de la plateforme, pour Docker et la livraison continue.\n\nNi compte, ni jeton : le contrôle de santé du conteneur l'interroge\ntoutes les trente secondes, et un déploiement n'est déclaré réussi que\nlorsqu'il répond. Il ne dit que deux choses — le serveur répond, la base\nest joignable — et rien sur ce qu'elle contient.",
+                "description": "État de la plateforme, pour Docker, la livraison et le répartiteur.\n\nNi compte, ni jeton : le contrôle de santé du conteneur l'interroge\ntoutes les trente secondes, un déploiement n'est déclaré réussi que\nlorsqu'il répond, et le répartiteur de charge s'en sert pour choisir\n**vers quelle machine envoyer les gens**. Il ne dit rien du contenu de\nla base.\n\nIl dit trois choses, et la troisième a été ajoutée pour le répartiteur :\n\n1. le serveur répond ;\n2. la base est joignable ;\n3. **elle accepte les écritures**.\n\nLe troisième point n'est pas un détail. Une réplique en attente chaude\n(décision 75) répond parfaitement au ``SELECT 1`` : sa base est vivante,\nsimplement en lecture seule. Sans ce contrôle, un répartiteur y\nenverrait des gens qui ne pourraient plus rien enregistrer — et, le jour\noù l'ancienne primaire redémarre après une bascule, il lui rendrait le\ntrafic alors qu'elle sert une base **périmée**, arrêtée à l'instant de sa\nperte. C'est ce contrôle qui rend le basculement sûr : une machine qui\nn'est pas la primaire se déclare indisponible, et le répartiteur cesse\nde la choisir.\n\n``pg_is_in_recovery()`` est vrai sur une réplique, et pendant une\nreprise à un instant donné (décision 74) tant que la base n'est pas\nouverte : dans les deux cas, envoyer du monde ici serait une erreur.",
                 "tags": [
                     "health"
                 ],
@@ -11151,20 +11151,26 @@
                             }
                         ],
                         "readOnly": true
+                    },
+                    "writable": {
+                        "type": "boolean",
+                        "readOnly": true
                     }
                 },
                 "required": [
                     "status",
-                    "database"
+                    "database",
+                    "writable"
                 ]
             },
             "HealthStatusEnum": {
                 "enum": [
                     "ok",
-                    "indisponible"
+                    "indisponible",
+                    "replique"
                 ],
                 "type": "string",
-                "description": "* `ok` - ok\n* `indisponible` - indisponible"
+                "description": "* `ok` - ok\n* `indisponible` - indisponible\n* `replique` - replique"
             },
             "ImportError": {
                 "type": "object",

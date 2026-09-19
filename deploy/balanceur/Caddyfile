@@ -1,0 +1,98 @@
+# Point d'entrée unique devant les deux machines.
+#
+# CE QUE C'EST, ET CE QUE CE N'EST PAS
+#
+# Ce n'est pas une répartition de charge : les deux machines ne sont pas
+# interchangeables. La première porte la base en écriture, la seconde une
+# réplique **en lecture seule** dont l'application est à l'arrêt (décision
+# 75). Envoyer la moitié du trafic à la seconde reviendrait à refuser la
+# moitié des enregistrements.
+#
+# C'est un **aiguillage** : tout va à la machine qui se déclare primaire, et
+# à elle seule. `lb_policy first` prend toujours la première amont **en
+# bonne santé** ; la seconde n'est choisie que lorsque la première ne
+# répond plus.
+#
+# CE QUE CELA APPORTE, ET C'EST PRÉCIS
+#
+# Sans lui, une bascule oblige à changer l'enregistrement DNS, et c'est le
+# TTL du cache qui décide du retour du service — des minutes, parfois des
+# heures, pendant lesquelles la base a déjà basculé. Avec lui, le nom de
+# domaine ne bouge jamais : il pointe ici, et l'aiguillage suit la primaire
+# en quelques secondes.
+#
+# CE QUI REND CELA SÛR
+#
+# `/api/health/` ne répond 200 que si la base **accepte les écritures**
+# (core/views.py). Une réplique répond parfaitement au `SELECT 1` : sans ce
+# contrôle, l'aiguillage y enverrait du monde. Et surtout — le jour où
+# l'ancienne primaire redémarre après une bascule, elle sert une base
+# **périmée**, arrêtée à l'instant de sa perte. Avec `lb_policy first`, elle
+# redeviendrait la préférée. C'est le contrôle d'écriture qui l'en empêche :
+# tant qu'elle n'a pas été refaite en réplique, elle se déclare
+# indisponible, et personne n'y retourne.
+#
+# OÙ CE FICHIER TOURNE
+#
+# **Pas sur l'une des deux machines.** Un aiguillage posé sur la première
+# meurt avec elle, et l'on n'a rien gagné. Trois possibilités, par ordre de
+# simplicité : le répartiteur de l'hébergeur (ou une IP flottante, qui rend
+# ce fichier inutile — c'est bien) ; une troisième petite machine ; à
+# défaut, rien, et l'on garde le DNS. Voir README.md, « Répartiteur ».
+#
+# Vérification, sans rien déployer :
+#   docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
+#       -e MACHINE_PRIMAIRE=10.0.0.1 -e MACHINE_SECONDE=10.0.0.2 \
+#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+#       caddy validate --config /etc/caddy/Caddyfile
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Les justificatifs peuvent peser jusqu'à 20 Mo (MAX_PROOF_SIZE) ; un peu
+	# de marge pour l'enveloppe multipart. La même borne qu'en aval : la
+	# refuser ici évite de traverser le réseau privé pour rien.
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy {$MACHINE_PRIMAIRE}:80 {$MACHINE_SECONDE}:80 {
+		# Toujours la première en bonne santé. Jamais les deux à la fois :
+		# deux machines qui écriraient chacune dans leur base donneraient
+		# deux histoires qu'on ne réunirait pas.
+		lb_policy first
+
+		# Le contrôle actif, et c'est lui qui fait tout le travail. Il
+		# n'interroge pas « le serveur répond-il ? » mais « cette machine
+		# est-elle la primaire ? » : 200 seulement si la base accepte les
+		# écritures.
+		health_uri /api/health/
+		health_interval 5s
+		health_timeout 3s
+		health_status 200
+
+		# Une amont qui vient d'échouer n'est pas rappelée aussitôt : sans
+		# cela, une machine à demi vivante recevrait une requête sur deux.
+		fail_duration 30s
+		max_fails 2
+
+		# Le délai de lecture couvre le plus long des usages réels : un
+		# export d'année complète, ou le dépôt d'une pièce de 20 Mo sur une
+		# liaison lente (GUNICORN_TIMEOUT vaut 120 s en aval). Plus court,
+		# l'aiguillage couperait une requête que la machine allait servir.
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 120s
+			read_timeout 300s
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

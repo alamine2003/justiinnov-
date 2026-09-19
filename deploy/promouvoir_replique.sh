@@ -104,12 +104,21 @@ cat <<FIN
   LA BASE ET L'APPLICATION TOURNENT ICI. DEUX GESTES RESTENT, ET AUCUN
   SCRIPT NE PEUT LES FAIRE À VOTRE PLACE.
 
-  1. LE DOMAINE POINTE ENCORE SUR $PRIMAIRE.
+  1. LE TRAFIC DOIT ARRIVER ICI.
+
+     AVEC UN AIGUILLAGE (docker-compose.balanceur.yml) : rien à faire.
+     Il interroge /api/health/ toutes les cinq secondes, voit que cette
+     machine accepte désormais les écritures, et bascule seul. Vérifiez-le
+     plutôt que de le supposer :
+       curl -sS https://<le domaine>/api/health/
+
+     SANS AIGUILLAGE : LE DOMAINE POINTE ENCORE SUR $PRIMAIRE.
      Tant qu'il n'est pas changé, personne n'arrive ici : la bascule est
      faite pour les machines, pas pour les gens. Changez l'enregistrement
      A vers l'adresse de cette machine-ci, et rappelez-vous que le cache
      DNS met le temps de son TTL à s'effacer — c'est là que passe
-     l'essentiel du temps d'indisponibilité réel.
+     l'essentiel du temps d'indisponibilité réel, et c'est précisément ce
+     qu'un aiguillage supprime.
 
   2. NE REDÉMARREZ JAMAIS $PRIMAIRE EN PRIMAIRE.
      Ses données s'arrêtent à l'instant de sa perte ; les vôtres ont

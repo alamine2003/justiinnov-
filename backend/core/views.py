@@ -37,12 +37,33 @@ class HealthRateThrottle(SimpleRateThrottle):
 
 
 class HealthView(APIView):
-    """État de la plateforme, pour Docker et la livraison continue.
+    """État de la plateforme, pour Docker, la livraison et le répartiteur.
 
     Ni compte, ni jeton : le contrôle de santé du conteneur l'interroge
-    toutes les trente secondes, et un déploiement n'est déclaré réussi que
-    lorsqu'il répond. Il ne dit que deux choses — le serveur répond, la base
-    est joignable — et rien sur ce qu'elle contient.
+    toutes les trente secondes, un déploiement n'est déclaré réussi que
+    lorsqu'il répond, et le répartiteur de charge s'en sert pour choisir
+    **vers quelle machine envoyer les gens**. Il ne dit rien du contenu de
+    la base.
+
+    Il dit trois choses, et la troisième a été ajoutée pour le répartiteur :
+
+    1. le serveur répond ;
+    2. la base est joignable ;
+    3. **elle accepte les écritures**.
+
+    Le troisième point n'est pas un détail. Une réplique en attente chaude
+    (décision 75) répond parfaitement au ``SELECT 1`` : sa base est vivante,
+    simplement en lecture seule. Sans ce contrôle, un répartiteur y
+    enverrait des gens qui ne pourraient plus rien enregistrer — et, le jour
+    où l'ancienne primaire redémarre après une bascule, il lui rendrait le
+    trafic alors qu'elle sert une base **périmée**, arrêtée à l'instant de sa
+    perte. C'est ce contrôle qui rend le basculement sûr : une machine qui
+    n'est pas la primaire se déclare indisponible, et le répartiteur cesse
+    de la choisir.
+
+    ``pg_is_in_recovery()`` est vrai sur une réplique, et pendant une
+    reprise à un instant donné (décision 74) tant que la base n'est pas
+    ouverte : dans les deux cas, envoyer du monde ici serait une erreur.
     """
 
     authentication_classes = []
@@ -53,10 +74,16 @@ class HealthView(APIView):
     def get(self, request):
         try:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
+                cursor.execute("SELECT pg_is_in_recovery()")
+                en_reprise = cursor.fetchone()[0]
         except OperationalError:
             return Response(
-                {"status": "indisponible", "database": "ko"},
+                {"status": "indisponible", "database": "ko", "writable": False},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        return Response({"status": "ok", "database": "ok"})
+        if en_reprise:
+            return Response(
+                {"status": "replique", "database": "ok", "writable": False},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({"status": "ok", "database": "ok", "writable": True})

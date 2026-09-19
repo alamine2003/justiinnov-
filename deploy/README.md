@@ -1269,6 +1269,122 @@ l'aller-retour du réseau, et le temps réel d'indisponibilité sera dominé par
 le DNS. C'est la première répétition sur les vraies machines qui le dira —
 faites-la avant d'en avoir besoin.
 
+## Répartiteur : un seul nom pour deux machines
+
+**Ce n'est pas une répartition de charge, et le mot trompe.** Les deux
+machines ne sont pas interchangeables : la seconde porte une base en
+**lecture seule** et son application est à l'arrêt. Partager le trafic
+reviendrait à refuser la moitié des enregistrements.
+
+C'est un **aiguillage** : tout va à la machine qui se déclare primaire, et à
+elle seule.
+
+### Ce que cela apporte — et c'est précis
+
+Sans lui, une bascule oblige à changer l'enregistrement DNS, et c'est le TTL
+du cache qui décide du retour du service : des minutes, parfois des heures,
+pendant lesquelles la base a déjà basculé depuis longtemps. **C'est là que
+passe l'essentiel de l'indisponibilité réelle**, pas dans la promotion, qui
+prend 0,11 s.
+
+Avec lui, le nom de domaine ne bouge jamais. L'aiguillage interroge
+`/api/health/` toutes les cinq secondes et suit la primaire.
+
+### Ce qui le rend sûr
+
+`/api/health/` ne répond **200 que si la base accepte les écritures**. Ce
+n'est pas une précaution de confort :
+
+- une réplique répond parfaitement au `SELECT 1` — sans ce contrôle,
+  l'aiguillage y enverrait du monde ;
+- surtout, **le jour où l'ancienne primaire redémarre** après une bascule,
+  elle sert une base *périmée*, arrêtée à l'instant de sa perte. Comme
+  l'aiguillage préfère toujours la première machine, il lui rendrait le
+  trafic. C'est le contrôle d'écriture qui l'en empêche : tant qu'elle n'a
+  pas été refaite en réplique, elle se déclare indisponible.
+
+### Où il tourne — et où il ne doit pas
+
+> **Pas sur l'une des deux machines.** Posé sur la primaire, il meurt avec
+> elle : le jour de la panne, il n'aiguille plus rien.
+
+Par ordre de simplicité :
+
+1. **Une IP flottante chez l'hébergeur**, qu'on réattache à la seconde
+   machine d'une commande. Rien à tenir, rien à surveiller — et
+   `docker-compose.balanceur.yml` devient inutile. **Si c'est proposé,
+   prenez-le.**
+2. **Un répartiteur managé** de l'hébergeur, configuré avec le même contrôle
+   de santé.
+3. **Une troisième petite machine**, avec le fichier fourni. Caddy tient
+   dans 64 Mo et ne fait que relayer.
+
+### Mettre en place
+
+Sur la troisième machine :
+
+```bash
+# .env : APP_DOMAIN, ACME_EMAIL, MACHINE_PRIMAIRE, MACHINE_SECONDE
+docker compose -f docker-compose.balanceur.yml up -d
+```
+
+Sur **chacune** des deux machines, en ajoutant la surcharge :
+
+```bash
+# .env : ADRESSE_PRIVEE (celle de cette machine), BALANCEUR_RESEAU
+docker compose -f docker-compose.prod.yml \
+               -f docker-compose.derriere-balanceur.yml up -d
+```
+
+Puis faites pointer le DNS sur la troisième machine, et **une seule fois**.
+
+### Trois réglages qui doivent être vrais ensemble
+
+La surcharge s'en charge, mais il faut savoir pourquoi — deux d'entre eux
+cassent quelque chose **en silence** :
+
+| réglage | ce qui arrive sans lui |
+|---|---|
+| `DJANGO_NUM_PROXIES=3` | `client_ip` lit l'adresse de l'aiguillage **pour tout le monde**. La limite anti-bourrage devient un seul compteur commun — cinq essais par minute pour la plateforme entière — et le journal d'audit note la même adresse pour chaque action. **Une protection qui compte faux ne protège pas.** |
+| `MANDATAIRES_DE_CONFIANCE` | Caddy réécrit `X-Forwarded-Proto` en « http ». Django se croit en clair, redirige vers HTTPS, donc vers l'aiguillage, qui revient ici : **une boucle**, c'est-à-dire une panne franche |
+| `ADRESSE_PRIVEE` | la machine publie encore 80 et 443 sur l'Internet : deux portes d'entrée là où l'on en veut une, et la seconde sans TLS |
+
+### Vérifier, avant d'en avoir besoin
+
+```bash
+# depuis l'extérieur : le nom public répond
+curl -sS https://<le domaine>/api/health/
+
+# depuis l'aiguillage : chaque machine dit-elle la vérité ?
+curl -sS http://<primaire>:80/api/health/    # {"status":"ok","writable":true}
+curl -sS http://<seconde>:80/api/health/     # connexion refusée (appli arrêtée)
+```
+
+Après une promotion, la seconde doit répondre `writable: true` et
+l'aiguillage basculer en quelques secondes — sans que personne n'ait touché
+au DNS. **C'est la seule chose à vérifier lors de la répétition
+trimestrielle** ; tout le reste est déjà couvert par
+`promouvoir_replique.sh --repetition`.
+
+### Ce qui n'a pas été éprouvé
+
+Caddy n'était pas disponible sur le banc : **la configuration de
+l'aiguillage n'a pas été exécutée**, seulement écrite et relue. Le contrôle
+de santé sur lequel tout repose, lui, est testé
+(`core/tests/test_health.py`). Validez le fichier avant de le déployer :
+
+```bash
+docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
+    -e MACHINE_PRIMAIRE=10.0.0.1 -e MACHINE_SECONDE=10.0.0.2 \
+    -v "$PWD/balanceur/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+    caddy validate --config /etc/caddy/Caddyfile
+```
+
+**Et il reste un point de défaillance unique** : l'aiguillage lui-même. Le
+doubler demanderait un troisième niveau, ce qui ne se justifie pas ici ; une
+IP flottante chez l'hébergeur, elle, n'a pas ce défaut. C'est une raison de
+plus de la préférer.
+
 ## Après une fuite
 
 Une sauvegarde lue par un tiers, un `.env` copié, un poste d'exploitation

@@ -338,8 +338,16 @@ class WorkflowConfigurationSerializer(serializers.ModelSerializer):
 
 
 class HealthSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=[("ok", "ok"), ("indisponible", "indisponible")], read_only=True)
+    status = serializers.ChoiceField(
+        choices=[("ok", "ok"), ("indisponible", "indisponible"), ("replique", "replique")],
+        read_only=True,
+    )
     database = serializers.ChoiceField(choices=[("ok", "ok"), ("ko", "ko")], read_only=True)
+    #: La base accepte-t-elle les écritures ? Faux sur une réplique en
+    #: attente chaude, dont la base répond parfaitement mais en lecture
+    #: seule — c'est ce que le répartiteur de charge regarde pour ne pas y
+    #: envoyer de monde (core/views.py).
+    writable = serializers.BooleanField(read_only=True)
 
 
 class AvailableCountrySerializer(serializers.Serializer):

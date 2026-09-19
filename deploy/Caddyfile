@@ -14,6 +14,18 @@
 #       caddy validate --config /etc/caddy/Caddyfile
 {
 	email {$ACME_EMAIL}
+
+	# Mandataires de confiance devant Caddy. Sans cette liste, Caddy
+	# **réécrit** `X-Forwarded-Proto` avec le protocole qu'il a reçu : derrière
+	# un répartiteur qui termine TLS et parle HTTP ici, Django lirait « http »,
+	# se croirait en clair et redirigerait vers HTTPS — donc vers le
+	# répartiteur, qui reviendrait ici. Une boucle, c'est-à-dire une panne.
+	#
+	# Par défaut, seule la boucle locale : sans répartiteur, rien ne change.
+	# Avec, on y met son adresse (voir docker-compose.derriere-balanceur.yml).
+	servers {
+		trusted_proxies static {$MANDATAIRES_DE_CONFIANCE:127.0.0.1/32}
+	}
 }
 
 {$APP_DOMAIN} {
