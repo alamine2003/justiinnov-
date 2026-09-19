@@ -43,6 +43,11 @@
 # pouvoirs de la livraison »). Quiconque pousse sur `main` n'exécute donc
 # plus de code en root sur le serveur.
 #
+# Un échec de livraison ouvre un ticket sur le dépôt (travail `alerte`) :
+# une pull request fusionnée ne dit rien de ce qui se passe après elle, et
+# personne ne regarde l'onglet Actions. Le ticket se commente aux échecs
+# suivants et se referme quand une livraison repasse.
+#
 # La plateforme tourne sur le serveur Hetzner (deploy/README.md) ; Railway
 # reste une voie de repli documentée (`docs/deploiement-railway.md`). La
 # publication des images et le déploiement par SSH ne partent que si la
@@ -323,3 +328,107 @@ jobs:
             echo "| Étiquette | \`$IMAGE_TAG\` |"
             echo "| Commit | \`$COMMIT\` |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+
+  alerte:
+    name: Signaler l'état de la livraison
+    needs: [ci, images, deployer]
+    # Un échec de livraison ne se voyait nulle part : la pull request était
+    # déjà fusionnée, personne ne regardait l'onglet Actions, et la
+    # préproduction est restée une nuit entière sur une version périmée sans
+    # que quiconque l'apprenne. Ce travail ouvre un ticket quand la livraison
+    # casse, le commente à chaque nouvel échec plutôt que d'en ouvrir un
+    # second, et le referme dès qu'une livraison repasse. Il se tait sur une
+    # livraison annulée, et quand le déploiement est hors circuit
+    # (`DEPLOIEMENT_SSH`) : un travail sauté n'est pas un échec.
+    if: >-
+      always() && (contains(needs.*.result, 'failure')
+      || needs.deployer.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+
+    steps:
+      - name: Ouvrir, commenter ou refermer le ticket de livraison
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API: ${{ github.api_url }}/repos/${{ github.repository }}
+          ENVIRONNEMENT: ${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
+          EXECUTION: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT: ${{ github.sha }}
+          RESULTAT_CI: ${{ needs.ci.result }}
+          RESULTAT_IMAGES: ${{ needs.images.result }}
+          RESULTAT_DEPLOIEMENT: ${{ needs.deployer.result }}
+        run: |
+          set -euo pipefail
+
+          api() {
+            curl -sS --fail-with-body \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" "$@"
+          }
+
+          commenter() {
+            api -X POST "$API/issues/$1/comments" \
+              -d "$(jq -n --arg body "$2" '{body: $body}')" > /dev/null
+          }
+
+          # Le marqueur est invisible dans le ticket rendu : c'est lui, et non
+          # le titre, qui rattache un échec au ticket déjà ouvert pour le même
+          # environnement. Deux environnements ont donc deux tickets.
+          marqueur="<!-- livraison-echec:$ENVIRONNEMENT -->"
+
+          # Un ticket ouvert porte-t-il déjà ce marqueur ? La recherche globale
+          # est indexée avec du retard ; la liste des tickets du dépôt, non.
+          # Elle mêle tickets et pull requests : les secondes sont écartées.
+          numero=$(api "$API/issues?state=open&per_page=100" | jq -r \
+            --arg m "$marqueur" '
+              [ .[]
+                | select(.pull_request == null)
+                | select((.body // "") | contains($m))
+              ] | first | .number // empty')
+
+          if [ "$RESULTAT_DEPLOIEMENT" = success ]; then
+            if [ -z "$numero" ]; then
+              echo "✔ Livraison réussie, aucun ticket à refermer."
+              exit 0
+            fi
+            commenter "$numero" "$(printf '%s\n' \
+              "✔ Livraison rétablie en **$ENVIRONNEMENT** sur \`$COMMIT\`." \
+              "" \
+              "[Voir l'exécution]($EXECUTION)")"
+            api -X PATCH "$API/issues/$numero" \
+              -d '{"state": "closed", "state_reason": "completed"}' > /dev/null
+            echo "✔ Ticket #$numero refermé."
+            exit 0
+          fi
+
+          echecs=""
+          for travail in "Intégration continue:$RESULTAT_CI" \
+                         "Images:$RESULTAT_IMAGES" \
+                         "Déploiement:$RESULTAT_DEPLOIEMENT"; do
+            [ "${travail##*:}" = failure ] || continue
+            echecs="$echecs$(printf '\n- %s' "${travail%%:*}")"
+          done
+
+          detail=$(printf '%s\n' \
+            "**Environnement** : $ENVIRONNEMENT" \
+            "**Commit** : \`$COMMIT\`" \
+            "**Travaux en échec** :$echecs" \
+            "" \
+            "[Voir l'exécution]($EXECUTION)")
+
+          if [ -n "$numero" ]; then
+            commenter "$numero" "$(printf '%s\n' "✘ Nouvel échec." "" "$detail")"
+            echo "✘ Échec ajouté au ticket #$numero."
+            exit 0
+          fi
+
+          corps=$(printf '%s\n' "$marqueur" "$detail" "" \
+            "Ce ticket se referme de lui-même dès qu'une livraison repasse vers cet environnement.")
+          ouvert=$(api -X POST "$API/issues" -d "$(jq -n \
+            --arg title "Livraison en échec ($ENVIRONNEMENT)" \
+            --arg body "$corps" '{title: $title, body: $body}')")
+          echo "✘ Ticket #$(printf '%s' "$ouvert" | jq -r .number) ouvert."

@@ -303,6 +303,13 @@ def consolidation_par_pays(budgets, rates=None):
             "currency": country.currency,
             **entry,
             "gap": entry["consumed"] - entry["justified"],
+            # Ce que l'enveloppe du pays n'a pas encore découpé. L'interface
+            # le déduisait elle-même d'``allocated - sub_allocated``, contre
+            # la règle « rien ne se calcule dans l'interface » : la définition
+            # pouvait diverger sans que rien ne le signale. Négatif si les
+            # sous-enveloppes dépassent l'enveloppe du pays — un fait à voir,
+            # pas à masquer par un plancher à zéro.
+            "unallocated": entry["allocated"] - entry["sub_allocated"],
             "remaining": remaining,
             "execution_rate": _ratio(used, entry["allocated"]),
             "justification_rate": _ratio(entry["justified"], entry["consumed"]),

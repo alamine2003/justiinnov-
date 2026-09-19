@@ -66,6 +66,7 @@ export type TotpEnrolment = Schema<"TotpEnrolment">
 export type OverrunPolicy = Schema<"OverrunPolicyEnum">
 export type Budget = Schema<"Budget">
 export type BudgetSummary = Schema<"BudgetSummary">
+export type CountryBudgetRow = Schema<"CountryBudgetRow">
 export type ReallocationStatus = Schema<"ReallocationStatusEnum">
 export type Reallocation = Schema<"BudgetReallocation">
 export type ExchangeRate = Schema<"ExchangeRate">
@@ -117,7 +118,9 @@ export type Rectification = Schema<"Rectification">
 // ---------------------------------------------------------------------------
 
 export type AlertLevel = Schema<"NotificationLevelEnum">
+export type DashboardAlert = Schema<"Alert">
 export type Dashboard = Schema<"Dashboard">
+export type DashboardCountryRow = Schema<"DashboardCountryRow">
 export type BreakdownRow = Schema<"BreakdownRow">
 export type Breakdown = Schema<"Breakdown">
 export type AppNotification = Schema<"Notification">

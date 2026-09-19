@@ -1,25 +1,17 @@
 import { useState } from "react"
-import { AlertTriangle, Pencil, Plus, Wallet } from "lucide-react"
+import { AlertTriangle, Plus, Wallet } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { BarreEnveloppe, Legende } from "@/components/ui/charts"
+import { echelleCommune } from "@/lib/echelle"
 import { NativeSelect } from "@/components/ui/native-select"
 import { StatCard } from "@/components/ui/stat-card"
-import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageHeader } from "@/components/ui/page-header"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { BudgetForm, type BudgetFormValues } from "@/components/budgets/budget-form"
+import { EnveloppeDuPays, SousEnveloppes } from "@/components/budgets/country-envelope"
 import { Reallocations } from "@/components/budgets/reallocations"
 import { useAuth } from "@/context/use-auth"
 import { fetchConfiguration } from "@/lib/accounts"
@@ -31,12 +23,20 @@ import {
 } from "@/lib/budgets"
 import { fetchCountries, fetchProjects, fetchTeams } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import type { Budget } from "@/lib/types"
+import { executionWarningRate } from "@/lib/reporting"
+import type { Budget, CountryBudgetRow } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
-import { cn, formatAmount, formatRate } from "@/lib/utils"
+import { cn, formatAmount } from "@/lib/utils"
 
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2]
+
+/**
+ * Le plafond est toujours gradué : c'est l'enveloppe elle-même, pas un
+ * réglage. Les seuils d'alerte, eux, viennent de la configuration, que seuls
+ * les administrateurs lisent — sans elle, le rail ne montre que le plafond.
+ */
+const PLAFOND = 100
 
 export function BudgetsPage() {
   const { t } = useTranslation()
@@ -47,8 +47,11 @@ export function BudgetsPage() {
   const canRequest = can("reallocations.request")
   const canManage = canCreate || canEdit
   // Un seul exercice pour le résumé par pays et la liste des enveloppes :
-  // les deux onglets parlent des mêmes chiffres.
+  // les deux vues parlent des mêmes chiffres.
   const [year, setYear] = useState(CURRENT_YEAR)
+  // Le pays choisi ouvre son enveloppe et ses sous-enveloppes ; sans pays,
+  // tous se comparent en barres.
+  const [countryId, setCountryId] = useState<number | "">("")
 
   const query = useQuery(
     `budgets:${year}`,
@@ -80,16 +83,30 @@ export function BudgetsPage() {
     { enabled: canManage },
   )
   const configuration = useReferentiel("configuration", fetchConfiguration, {
-    enabled: canManage && can("configuration.manage"),
+    enabled: can("configuration.manage"),
   })
+  const seuils = configuration.data?.alertes.seuils ?? []
+  const thresholds = [...new Set([...seuils.filter((s) => s > 0), PLAFOND])].sort((a, b) => a - b)
+  const warningRate = executionWarningRate(configuration.data?.alertes.seuils)
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
 
-  const symbolOf = (countryId: number, fallback: string) =>
-    countries.data?.results.find((c) => c.id === countryId)?.currency_symbol || fallback
+  const symbolOf = (id: number, fallback: string) =>
+    countries.data?.results.find((c) => c.id === id)?.currency_symbol || fallback
   const consolidatedSymbol =
     countries.data?.results.find((c) => c.currency === "XOF")?.currency_symbol || "XOF"
+
+  const rows = summary?.countries ?? []
+  // Un compte restreint à un seul pays n'a rien à choisir : son pays s'ouvre
+  // de lui-même.
+  const selected = countryId === "" && rows.length === 1 ? rows[0] : rows.find((r) => r.country === countryId)
+  const sousEnveloppes = selected
+    ? budgets.filter((b) => b.country === selected.country && b.scope_kind !== "country")
+    : []
+  const enveloppePays = selected
+    ? budgets.find((b) => b.country === selected.country && b.scope_kind === "country")
+    : undefined
 
   const handleSave = async (values: BudgetFormValues) => {
     if (editing) {
@@ -101,6 +118,11 @@ export function BudgetsPage() {
     query.reload()
   }
 
+  const ouvrirFormulaire = (budget: Budget | null) => {
+    setEditing(budget)
+    setFormOpen(true)
+  }
+
   const referentielError = countries.error ?? projects.error ?? teams.error
 
   return (
@@ -110,6 +132,24 @@ export function BudgetsPage() {
         description={t("budgets.description")}
       >
         <div className="flex flex-wrap items-center gap-2">
+          {rows.length > 1 && (
+            <NativeSelect
+              value={countryId}
+              onChange={(e) =>
+                setCountryId(e.target.value === "" ? "" : Number(e.target.value))
+              }
+              aria-label={t("commun.pays")}
+              className="w-48"
+            >
+              <option value="">{t("budgets.tous_pays")}</option>
+              {rows.map((row) => (
+                <option key={row.country} value={row.country}>
+                  {row.country_ref ? `${row.country_ref} — ` : ""}
+                  {row.country_name}
+                </option>
+              ))}
+            </NativeSelect>
+          )}
           <NativeSelect
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
@@ -123,12 +163,7 @@ export function BudgetsPage() {
             ))}
           </NativeSelect>
           {canCreate && (
-            <Button
-              onClick={() => {
-                setEditing(null)
-                setFormOpen(true)
-              }}
-            >
+            <Button onClick={() => ouvrirFormulaire(null)}>
               <Plus className="mr-2 h-4 w-4" aria-hidden />
               {t("budgets.attribuer")}
             </Button>
@@ -168,7 +203,7 @@ export function BudgetsPage() {
         <StatCard
           icon={Wallet}
           label={t("budgets.indicateurs.pays_dotes")}
-          value={summary?.countries.length ?? 0}
+          value={rows.length}
         />
         <StatCard
           icon={Wallet}
@@ -177,199 +212,52 @@ export function BudgetsPage() {
         />
       </div>
 
-      <Tabs defaultValue="pays">
-        <TabsList className="bg-muted/60">
-          <TabsTrigger value="pays">{t("budgets.onglets.pays")}</TabsTrigger>
-          <TabsTrigger value="enveloppes">{t("budgets.onglets.enveloppes")}</TabsTrigger>
-          <TabsTrigger value="reallocations">{t("budgets.onglets.reallocations")}</TabsTrigger>
-        </TabsList>
+      {rows.length === 0 && !query.loading ? (
+        <Card className="border-border/60 shadow-sm">
+          <CardContent className="pt-6">
+            <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
+              <Wallet className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
+              <p className="mt-2 text-sm font-medium">{t("budgets.vide.pays_titre")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {canCreate
+                  ? t("budgets.vide.pays_indication_siege")
+                  : t("budgets.vide.pays_indication_pays")}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : selected ? (
+        <>
+          <EnveloppeDuPays
+            row={selected}
+            budget={enveloppePays}
+            thresholds={thresholds}
+            symbol={symbolOf(selected.country, selected.currency)}
+            onEdit={canEdit ? ouvrirFormulaire : undefined}
+          />
+          <SousEnveloppes
+            budgets={sousEnveloppes}
+            row={selected}
+            warningRate={warningRate}
+            canCreate={canCreate}
+            canEdit={canEdit}
+            onCreate={() => ouvrirFormulaire(null)}
+            onEdit={ouvrirFormulaire}
+          />
+        </>
+      ) : (
+        <TousLesPays rows={rows} symbolOf={symbolOf} onChoose={setCountryId} />
+      )}
 
-        <TabsContent value="pays" className="mt-4">
-          <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
-              <div className="overflow-x-auto rounded-lg border border-border/60">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead scope="col">{t("commun.pays")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.enveloppe")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.engage")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.consomme")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.disponible")}</TableHead>
-                      <TableHead scope="col" className="text-right">
-                        {t("budgets.colonnes.disponible_devise", { devise: consolidatedSymbol })}
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.loading ? (
-                      <SkeletonRows columns={6} />
-                    ) : !summary || summary.countries.length === 0 ? (
-                      <EmptyRow
-                        colSpan={6}
-                        icon={Wallet}
-                        title={t("budgets.vide.pays_titre")}
-                        hint={
-                          canCreate
-                            ? t("budgets.vide.pays_indication_siege")
-                            : t("budgets.vide.pays_indication_pays")
-                        }
-                      />
-                    ) : (
-                      summary.countries.map((row) => (
-                        <TableRow key={row.country}>
-                          <TableCell>
-                            <p className="font-medium">{row.country_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {row.country_ref ?? t("commun.aucun")} ·{" "}
-                              {symbolOf(row.country, row.currency)}
-                            </p>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatAmount(row.allocated)}
-                            {Number(row.sub_allocated) > 0 && (
-                              <p className="text-xs text-muted-foreground">
-                                {t("budgets.dont_reparti", {
-                                  montant: formatAmount(row.sub_allocated),
-                                })}
-                              </p>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatAmount(row.engaged)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatAmount(row.consumed)}
-                          </TableCell>
-                          <TableCell
-                            className={cn(
-                              "text-right font-medium",
-                              Number(row.remaining) < 0 && "text-destructive",
-                            )}
-                          >
-                            {formatAmount(row.remaining)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {row.remaining_xof
-                              ? formatAmount(row.remaining_xof)
-                              : t("budgets.taux_inconnu")}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="enveloppes" className="mt-4">
-          <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
-              <div className="overflow-x-auto rounded-lg border border-border/60">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead scope="col">{t("budgets.colonnes.enveloppe")}</TableHead>
-                      <TableHead scope="col">{t("commun.annee")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("commun.montant")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.engage")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("budgets.colonnes.disponible")}</TableHead>
-                      <TableHead scope="col">{t("budgets.colonnes.execution")}</TableHead>
-                      <TableHead scope="col">{t("budgets.colonnes.depassement")}</TableHead>
-                      {canEdit && (
-                        <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
-                      )}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.loading ? (
-                      <SkeletonRows columns={canEdit ? 8 : 7} />
-                    ) : budgets.length === 0 ? (
-                      <EmptyRow
-                        colSpan={canEdit ? 8 : 7}
-                        icon={Wallet}
-                        title={t("budgets.vide.enveloppes_titre")}
-                        hint={
-                          canManage
-                            ? t("budgets.vide.enveloppes_indication_siege")
-                            : t("budgets.vide.enveloppes_indication_pays")
-                        }
-                      />
-                    ) : (
-                      budgets.map((budget) => (
-                        <TableRow key={budget.id}>
-                          <TableCell>
-                            <p className="font-medium">{budget.country_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {budget.scope_label ?? t("budgets.portee.country")}
-                              {!budget.is_active && ` · ${t("budgets.inactive")}`}
-                            </p>
-                          </TableCell>
-                          <TableCell>{budget.year}</TableCell>
-                          <TableCell className="text-right">
-                            {formatAmount(budget.amount, symbolOf(budget.country, budget.currency))}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatAmount(budget.figures.engaged)}
-                          </TableCell>
-                          <TableCell
-                            className={cn(
-                              "text-right font-medium",
-                              Number(budget.figures.remaining) < 0 && "text-destructive",
-                            )}
-                          >
-                            {formatAmount(budget.figures.remaining)}
-                          </TableCell>
-                          <TableCell>
-                            {formatRate(budget.figures.execution_rate)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {budget.overrun_policy_display}
-                            </Badge>
-                          </TableCell>
-                          {canEdit && (
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label={t("budgets.modifier_aria", {
-                                  pays: budget.country_name,
-                                  annee: budget.year,
-                                })}
-                                onClick={() => {
-                                  setEditing(budget)
-                                  setFormOpen(true)
-                                }}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="reallocations" className="mt-4">
-          <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
-              <Reallocations
-                budgets={budgets}
-                canRequest={canRequest}
-                onChanged={query.reload}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      <Card className="border-border/60 shadow-sm">
+        <CardContent className="pt-6">
+          <Reallocations
+            budgets={budgets}
+            canRequest={canRequest}
+            onChanged={query.reload}
+          />
+        </CardContent>
+      </Card>
 
       <BudgetForm
         open={formOpen}
@@ -386,5 +274,100 @@ export function BudgetsPage() {
         defaultPolicy={configuration.data?.workflow.default_overrun_policy}
       />
     </div>
+  )
+}
+
+/**
+ * Sans pays choisi : toutes les enveloppes côte à côte, à échelle commune.
+ * Chaque barre ouvre le pays — c'est le chemin vers son rail et ses
+ * sous-enveloppes.
+ */
+function TousLesPays({
+  rows,
+  symbolOf,
+  onChoose,
+}: {
+  rows: CountryBudgetRow[]
+  symbolOf: (id: number, fallback: string) => string
+  onChoose: (id: number) => void
+}) {
+  const { t } = useTranslation()
+  const echelle = echelleCommune(rows)
+
+  return (
+    <Card className="border-border/60 shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-semibold">{t("budgets.onglets.pays")}</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("budgets.choisir_pays")}
+            </p>
+          </div>
+          <Legende
+            items={[
+              { tone: "bg-marque", label: t("budgets.colonnes.consomme") },
+              { tone: "bg-marque-clair", label: t("budgets.colonnes.engage") },
+              { tone: "bg-muted", label: t("budgets.colonnes.disponible") },
+            ]}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-4">
+          {rows.map((row) => (
+            <li key={row.country}>
+              <button
+                type="button"
+                onClick={() => onChoose(row.country)}
+                className="w-full rounded-lg p-2 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-sm font-semibold">{row.country_name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {row.country_ref ?? t("commun.aucun")} ·{" "}
+                      {symbolOf(row.country, row.currency)}
+                    </span>
+                  </span>
+                  <span className="flex items-baseline gap-2.5 text-xs">
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        Number(row.remaining) < 0 ? "text-destructive" : "text-marque-fort",
+                      )}
+                    >
+                      {t("budgets.enveloppe.legende_disponible", {
+                        montant: formatAmount(row.remaining),
+                      })}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t("pilotage.barres.attribues", { montant: formatAmount(row.allocated) })}
+                    </span>
+                  </span>
+                </span>
+                <span className="mt-1.5 block">
+                  <BarreEnveloppe
+                    consumed={Number(row.consumed)}
+                    engaged={Number(row.engaged)}
+                    allocated={Number(row.allocated)}
+                    scale={echelle}
+                    title={t("budgets.enveloppe.barre_aria", { pays: row.country_name })}
+                  />
+                </span>
+                {Number(row.sub_allocated) > 0 && (
+                  <span className="mt-1.5 block text-xs text-muted-foreground">
+                    {t("budgets.dont_reparti", { montant: formatAmount(row.sub_allocated) })}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+          {t("pilotage.barres.echelle")}
+        </p>
+      </CardContent>
+    </Card>
   )
 }

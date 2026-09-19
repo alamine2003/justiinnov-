@@ -2247,6 +2247,11 @@ export interface components {
             readonly allocated: string
             /** Format: decimal */
             readonly sub_allocated: string
+            /**
+             * Format: decimal
+             * @description Part de l'enveloppe du pays qui n'est pas encore découpée.
+             */
+            readonly unallocated: string
             /** Format: decimal */
             readonly engaged: string
             /** Format: decimal */

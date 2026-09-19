@@ -38,7 +38,8 @@
     "page_sur": "page {{page}} sur {{total}}",
     "elements_one": "{{count}} élément",
     "elements_other": "{{count}} éléments",
-    "separateur_libelle": " : "
+    "separateur_libelle": " : ",
+    "sera_enregistre": "Sera enregistré : {{montant}}"
   },
   "nav": {
     "retour": "Retour",
@@ -243,6 +244,7 @@
     "connexion": "Connexion",
     "sous_titre": "Identifiez-vous pour accéder à votre périmètre.",
     "identifiant": "Identifiant",
+    "identifiant_exemple": "prenom.innov",
     "mot_de_passe": "Mot de passe",
     "afficher_mdp": "Afficher le mot de passe",
     "masquer_mdp": "Masquer le mot de passe",
@@ -364,7 +366,16 @@
       "saisie_par": "saisie par {{nom}}",
       "heure_fuseau": "heure {{fuseau}}",
       "modifier_aria": "Modifier {{titre}}",
-      "supprimer_aria": "Supprimer le brouillon {{titre}}"
+      "supprimer_aria": "Supprimer le brouillon {{titre}}",
+      "lignes_compte_one": "Ligne de dépense — {{count}}",
+      "lignes_compte_other": "Lignes de dépenses — {{count}}",
+      "justifie_de": "justifié {{montant}}",
+      "non_soumise": "non soumise",
+      "attente_soumission": "en attente de soumission",
+      "ecart_de": "écart {{montant}}",
+      "ecart_nul": "écart nul",
+      "barre_aria": "{{titre}} : {{justifie}} justifiés sur {{depense}} dépensés",
+      "barre_dossier_aria": "{{justifie}} justifiés sur {{depense}} dépensés"
     },
     "reouverture": {
       "rouvrir": "Rouvrir",
@@ -377,6 +388,9 @@
       "impossible": "Réouverture impossible",
       "bandeau_titre": "Dossier rouvert par le siège",
       "bandeau_motif": "Motif : {{motif}}"
+    },
+    "circuit": {
+      "titre": "Circuit de justification"
     }
   },
   "depenses": {
@@ -405,6 +419,7 @@
       "montant": "Dépense ({{devise}})",
       "montant_placeholder": "12 500,00",
       "converti_serveur": "converti par le serveur",
+      "converti_serveur_devise": "converti depuis {{devise}} par le serveur",
       "autre_devise": "Payé dans une autre devise",
       "autre_devise_aide": "Saisissez le montant tel qu'il figure sur la pièce. Le serveur le convertit en {{devise}} au taux du jour de la dépense et fige ce taux : le chiffre ne bougera plus.",
       "devise_iso": "Devise (ISO 4217)",
@@ -653,7 +668,31 @@
       "refus_titre": "Refuser la réallocation",
       "refus_description": "Un refus doit être motivé : le motif est conservé dans l'historique.",
       "motif_refus": "Motif du refus",
-      "motif_requis": "Un refus doit être motivé."
+      "motif_requis": "Un refus doit être motivé.",
+      "disponibles": "{{montant}} disponibles"
+    },
+    "tous_pays": "Tous les pays",
+    "choisir_pays": "Choisissez un pays pour ouvrir son enveloppe, ses seuils et ses sous-enveloppes.",
+    "enveloppe": {
+      "titre": "{{pays}} — enveloppe du pays",
+      "exercice": "exercice {{annee}}",
+      "depassement": "dépassement : {{politique}}",
+      "attribue": "Attribué",
+      "seuil": "{{seuil}} %",
+      "rail_aria": "Enveloppe de {{pays}}, consommée à {{taux}}",
+      "barre_aria": "Enveloppe de {{pays}}",
+      "legende_consomme": "Consommé {{montant}}",
+      "legende_engage": "Engagé {{montant}}",
+      "legende_disponible": "Disponible {{montant}}",
+      "legende_justifie": "Justifié {{montant}}"
+    },
+    "sous": {
+      "titre": "Sous-enveloppes — {{montant}} répartis",
+      "modifier_aria": "Modifier la sous-enveloppe {{enveloppe}}",
+      "jauge_aria": "{{enveloppe}}, consommée à {{taux}}",
+      "decouper": "Découper encore",
+      "non_reparti": "{{montant}} de l'enveloppe du pays ne sont pas répartis. Une sous-enveloppe suit une seule dimension : projet, équipe ou manager.",
+      "tout_reparti": "L'enveloppe du pays est entièrement répartie."
     }
   },
   "pilotage": {
@@ -686,7 +725,13 @@
       "a_controler": "Lignes à contrôler",
       "brouillon": "Lignes en brouillon",
       "non_justifiees": "Lignes non justifiées",
-      "dossiers_ouverts": "Dossiers ouverts"
+      "dossiers_ouverts": "Dossiers ouverts",
+      "aide": {
+        "a_controler": "soumis ou en contrôle",
+        "brouillon": "pas encore soumises",
+        "non_justifiees": "au débit de l'enveloppe",
+        "dossiers_ouverts": "tous pays"
+      }
     },
     "alertes_one": "{{count}} alerte",
     "alertes_other": "{{count}} alertes",
@@ -724,6 +769,28 @@
       },
       "vide_titre": "Aucune dépense sur la période",
       "vide_indication": "Changez d'année ou de pays pour voir une répartition."
+    },
+    "alertes_soustitre": "les plus graves d'abord",
+    "bandeau": {
+      "titre": "Enveloppe consolidée · exercice {{annee}}",
+      "jauge_legende": "exécution",
+      "jauge_aria": "Taux d'exécution {{execution}}, justifié à {{justification}}"
+    },
+    "courbe": {
+      "titre": "Consommation par mois",
+      "description": "Dépenses déclarées et montant justifié, mois par mois.",
+      "aria": "Dépenses déclarées et montant justifié par mois, exercice {{annee}}",
+      "depense": "Dépensé",
+      "justifie": "Justifié"
+    },
+    "barres": {
+      "description": "Consommé et engagé contre l'enveloppe attribuée.",
+      "attribues": "{{montant}} attribués",
+      "depassement": "dépassement {{montant}}",
+      "sans_preuve": "sans preuve {{montant}}",
+      "detail": "consommé {{consomme}} · engagé {{engage}} · justifié {{justifie}} · disponible {{disponible}}",
+      "aria": "{{pays}} : {{taux}} de l'enveloppe attribuée",
+      "echelle": "Le trait vertical marque l'enveloppe attribuée. Les barres sont à l'échelle de la plus grande enveloppe."
     }
   },
   "pays": {
@@ -922,7 +989,9 @@
       "annuler": "Annuler les modifications",
       "enregistre": "Droits enregistrés : ils s'appliquent dès maintenant.",
       "erreur": "Enregistrement impossible",
-      "hors_de_votre_role": "Ne se règle pas depuis votre rôle"
+      "hors_de_votre_role": "Ne se règle pas depuis votre rôle",
+      "aucune_modification": "Aucune modification en attente",
+      "legende_accorde": "accordé"
     },
     "utilisateurs": {
       "titre": "Comptes",

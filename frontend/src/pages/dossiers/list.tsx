@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FilterChips } from "@/components/ui/filter-chips"
 import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -117,8 +118,10 @@ export function DossiersPage() {
       )}
       <TruncatedNotice page={countries.data} noun={t("dossiers.noms_pays")} />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative w-full sm:max-w-xs">
+      {/* Six statuts tiennent en pastilles : les voir tous vaut mieux que les
+          dérouler, et le compte du serveur se pose sur celui qui est actif. */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative w-full lg:max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
             value={search}
@@ -131,19 +134,23 @@ export function DossiersPage() {
             className="pl-9"
           />
         </div>
-        <NativeSelect
+        <FilterChips
+          label={t("dossiers.liste.filtrer_statut")}
           value={statusFilter}
-          onChange={(e) => changeStatus(e.target.value)}
-          className="sm:max-w-[12rem]"
-          aria-label={t("dossiers.liste.filtrer_statut")}
-        >
-          <option value="">{t("dossiers.liste.tous_statuts")}</option>
-          {WORKFLOW_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {workflowLabel(t, value)}
-            </option>
-          ))}
-        </NativeSelect>
+          onChange={changeStatus}
+          chips={[
+            {
+              value: "",
+              label: t("commun.tous"),
+              count: statusFilter === "" && !query.loading ? count : undefined,
+            },
+            ...WORKFLOW_STATUSES.map((value) => ({
+              value,
+              label: workflowLabel(t, value),
+              count: statusFilter === value && !query.loading ? count : undefined,
+            })),
+          ]}
+        />
       </div>
 
       <Card className="border-border/60 shadow-sm">

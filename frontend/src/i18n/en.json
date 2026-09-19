@@ -38,7 +38,8 @@
     "page_sur": "page {{page}} of {{total}}",
     "elements_one": "{{count}} item",
     "elements_other": "{{count}} items",
-    "separateur_libelle": ": "
+    "separateur_libelle": ": ",
+    "sera_enregistre": "Will be recorded as: {{montant}}"
   },
   "nav": {
     "retour": "Back",
@@ -243,6 +244,7 @@
     "connexion": "Sign in",
     "sous_titre": "Sign in to access your scope.",
     "identifiant": "Username",
+    "identifiant_exemple": "firstname.innov",
     "mot_de_passe": "Password",
     "afficher_mdp": "Show password",
     "masquer_mdp": "Hide password",
@@ -364,7 +366,16 @@
       "saisie_par": "entered by {{nom}}",
       "heure_fuseau": "{{fuseau}} time",
       "modifier_aria": "Edit {{titre}}",
-      "supprimer_aria": "Delete the draft {{titre}}"
+      "supprimer_aria": "Delete the draft {{titre}}",
+      "lignes_compte_one": "Expense line — {{count}}",
+      "lignes_compte_other": "Expense lines — {{count}}",
+      "justifie_de": "justified {{montant}}",
+      "non_soumise": "not submitted",
+      "attente_soumission": "awaiting submission",
+      "ecart_de": "gap {{montant}}",
+      "ecart_nul": "no gap",
+      "barre_aria": "{{titre}}: {{justifie}} justified out of {{depense}} spent",
+      "barre_dossier_aria": "{{justifie}} justified out of {{depense}} spent"
     },
     "reouverture": {
       "rouvrir": "Reopen",
@@ -377,6 +388,9 @@
       "impossible": "Unable to reopen",
       "bandeau_titre": "File reopened by headquarters",
       "bandeau_motif": "Reason: {{motif}}"
+    },
+    "circuit": {
+      "titre": "Justification workflow"
     }
   },
   "depenses": {
@@ -405,6 +419,7 @@
       "montant": "Expense ({{devise}})",
       "montant_placeholder": "12,500.00",
       "converti_serveur": "converted by the server",
+      "converti_serveur_devise": "converted from {{devise}} by the server",
       "autre_devise": "Paid in another currency",
       "autre_devise_aide": "Enter the amount as it appears on the supporting document. The server converts it to {{devise}} at the rate of the expense date and freezes that rate: the figure will not change.",
       "devise_iso": "Currency (ISO 4217)",
@@ -653,7 +668,31 @@
       "refus_titre": "Reject the reallocation",
       "refus_description": "A rejection must state a reason: the reason is kept in the history.",
       "motif_refus": "Reason for rejection",
-      "motif_requis": "A rejection must state a reason."
+      "motif_requis": "A rejection must state a reason.",
+      "disponibles": "{{montant}} available"
+    },
+    "tous_pays": "All countries",
+    "choisir_pays": "Pick a country to open its envelope, its thresholds and its sub-envelopes.",
+    "enveloppe": {
+      "titre": "{{pays}} — country envelope",
+      "exercice": "{{annee}} financial year",
+      "depassement": "overrun: {{politique}}",
+      "attribue": "Allocated",
+      "seuil": "{{seuil}}%",
+      "rail_aria": "{{pays}} envelope, {{taux}} consumed",
+      "barre_aria": "{{pays}} envelope",
+      "legende_consomme": "Consumed {{montant}}",
+      "legende_engage": "Committed {{montant}}",
+      "legende_disponible": "Available {{montant}}",
+      "legende_justifie": "Justified {{montant}}"
+    },
+    "sous": {
+      "titre": "Sub-envelopes — {{montant}} allocated",
+      "modifier_aria": "Edit sub-envelope {{enveloppe}}",
+      "jauge_aria": "{{enveloppe}}, {{taux}} consumed",
+      "decouper": "Split further",
+      "non_reparti": "{{montant}} of the country envelope is not allocated. A sub-envelope follows a single dimension: project, team or manager.",
+      "tout_reparti": "The country envelope is fully allocated."
     }
   },
   "pilotage": {
@@ -686,7 +725,13 @@
       "a_controler": "Lines to review",
       "brouillon": "Draft lines",
       "non_justifiees": "Unjustified lines",
-      "dossiers_ouverts": "Open files"
+      "dossiers_ouverts": "Open files",
+      "aide": {
+        "a_controler": "submitted or in review",
+        "brouillon": "not submitted yet",
+        "non_justifiees": "still charged to the envelope",
+        "dossiers_ouverts": "all countries"
+      }
     },
     "alertes_one": "{{count}} alert",
     "alertes_other": "{{count}} alerts",
@@ -724,6 +769,28 @@
       },
       "vide_titre": "No expense for this period",
       "vide_indication": "Change the year or the country to see a breakdown."
+    },
+    "alertes_soustitre": "most serious first",
+    "bandeau": {
+      "titre": "Consolidated envelope · {{annee}} financial year",
+      "jauge_legende": "execution",
+      "jauge_aria": "Execution rate {{execution}}, justified at {{justification}}"
+    },
+    "courbe": {
+      "titre": "Monthly consumption",
+      "description": "Declared spending and justified amount, month by month.",
+      "aria": "Declared spending and justified amount by month, {{annee}} financial year",
+      "depense": "Spent",
+      "justifie": "Justified"
+    },
+    "barres": {
+      "description": "Consumed and committed against the allocated envelope.",
+      "attribues": "{{montant}} allocated",
+      "depassement": "overrun {{montant}}",
+      "sans_preuve": "no proof {{montant}}",
+      "detail": "consumed {{consomme}} · committed {{engage}} · justified {{justifie}} · available {{disponible}}",
+      "aria": "{{pays}}: {{taux}} of the allocated envelope",
+      "echelle": "The vertical line marks the allocated envelope. Bars share the scale of the largest envelope."
     }
   },
   "pays": {
@@ -922,7 +989,9 @@
       "annuler": "Discard changes",
       "enregistre": "Rights saved: they apply from now on.",
       "erreur": "Could not save",
-      "hors_de_votre_role": "Cannot be set from your role"
+      "hors_de_votre_role": "Cannot be set from your role",
+      "aucune_modification": "No pending change",
+      "legende_accorde": "granted"
     },
     "utilisateurs": {
       "titre": "Accounts",

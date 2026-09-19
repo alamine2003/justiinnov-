@@ -227,6 +227,67 @@ class PaysSansEnveloppeDePaysTests(ExpenseTestCase):
         self.assertEqual(ligne["execution_rate"], Decimal("0.0000"))
 
 
+class NonRepartiTests(ExpenseTestCase):
+    """``unallocated`` : ce que l'enveloppe du pays n'a pas encore découpé.
+
+    L'interface le calculait elle-même (``allocated - sub_allocated``), contre
+    la règle « rien ne se calcule dans l'interface » : le serveur le publie.
+    """
+
+    def test_la_part_non_decoupee_est_publiee(self):
+        projet = Project.objects.create(country=self.ivoire, name="Salon Abidjan")
+        Budget.objects.create(
+            country=self.ivoire, year=self.year, amount=Decimal("300000.00"), project=projet
+        )
+        budgets = Budget.objects.select_related("country").filter(
+            country=self.ivoire, year=self.year
+        )
+
+        rows, _ = consolidation_par_pays(budgets, rates=current_rates())
+
+        (ligne,) = rows
+        self.assertEqual(
+            ligne["unallocated"], ligne["allocated"] - ligne["sub_allocated"]
+        )
+        self.assertEqual(ligne["sub_allocated"], Decimal("300000.00"))
+
+    def test_un_pays_sans_enveloppe_de_pays_n_a_rien_a_repartir(self):
+        # Les sous-enveloppes deviennent alors l'attribué du pays : il ne
+        # reste rien à découper, et non un négatif.
+        projet = Project.objects.create(country=self.ivoire, name="Salon Abidjan")
+        self.budget_ivoire.delete()
+        Budget.objects.create(
+            country=self.ivoire, year=self.year, amount=Decimal("300000.00"), project=projet
+        )
+        budgets = Budget.objects.select_related("country").filter(
+            country=self.ivoire, year=self.year
+        )
+
+        rows, _ = consolidation_par_pays(budgets, rates=current_rates())
+
+        (ligne,) = rows
+        self.assertEqual(ligne["unallocated"], Decimal("0.00"))
+
+    def test_un_decoupage_qui_depasse_l_enveloppe_se_voit(self):
+        # Un négatif dit que les sous-enveloppes dépassent l'enveloppe du
+        # pays. Le masquer par un plancher à zéro cacherait le fait.
+        projet = Project.objects.create(country=self.ivoire, name="Salon Abidjan")
+        Budget.objects.create(
+            country=self.ivoire,
+            year=self.year,
+            amount=self.budget_ivoire.amount + Decimal("1000.00"),
+            project=projet,
+        )
+        budgets = Budget.objects.select_related("country").filter(
+            country=self.ivoire, year=self.year
+        )
+
+        rows, _ = consolidation_par_pays(budgets, rates=current_rates())
+
+        (ligne,) = rows
+        self.assertEqual(ligne["unallocated"], Decimal("-1000.00"))
+
+
 class TauxCroiseTests(ExpenseTestCase):
     def test_le_montant_est_calcule_sur_le_rapport_exact(self):
         aujourd_hui = timezone.localdate()

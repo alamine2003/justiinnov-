@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { FormError } from "@/components/ui/form-error"
 import { BrandLogo } from "@/components/layout/brand-logo"
 import { LanguageToggle } from "@/components/layout/language-toggle"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
@@ -94,21 +95,24 @@ export function LoginPage() {
         <ThemeToggle />
       </div>
       {/* Panneau de présentation — masqué sur petit écran, où seul le
-          formulaire compte. */}
-      <aside className="relative hidden flex-col overflow-hidden bg-primary p-12 text-primary-foreground lg:flex">
+          formulaire compte. Il prend le marine de la marque (`banniere`) et
+          non `primary` : ce dernier s'inverse d'un thème à l'autre, et le
+          panneau devenait clair en thème sombre — l'inverse du « logo clair
+          sur panneau sombre » de DESIGN.md, avec un pied à 3,38:1. */}
+      <aside className="relative hidden flex-col overflow-hidden bg-banniere p-12 text-banniere-foreground lg:flex">
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-primary-foreground/5"
+          className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-banniere-foreground/5"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-primary-foreground/5"
+          className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-banniere-foreground/5"
         />
 
         <div className="relative space-y-2">
           {/* Le logo suit la couleur du texte du panneau : clair sur sombre. */}
           <BrandLogo className="h-9 w-auto" />
-          <p className="text-xs text-primary-foreground/60">{t("app.tagline")}</p>
+          <p className="text-xs text-banniere-muted">{t("app.tagline")}</p>
         </div>
 
         <div className="relative flex flex-1 flex-col justify-center py-12">
@@ -118,19 +122,19 @@ export function LoginPage() {
               <br />
               {t("auth.slogan_ligne2")}
             </h1>
-            <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
+            <p className="mt-4 text-sm leading-relaxed text-banniere-muted">
               {t("auth.intro")}
             </p>
 
             <ul className="mt-10 space-y-6">
               {PROMESSES.map(({ icon: Icon, titre, texte }) => (
                 <li key={titre} className="flex gap-4">
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/10">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-banniere-foreground/10">
                     <Icon className="h-4 w-4" aria-hidden />
                   </div>
                   <div>
                     <p className="text-sm font-medium">{t(`auth.promesses.${titre}`)}</p>
-                    <p className="mt-0.5 text-sm text-primary-foreground/60">
+                    <p className="mt-0.5 text-sm text-banniere-muted">
                       {t(`auth.promesses.${texte}`)}
                     </p>
                   </div>
@@ -140,7 +144,7 @@ export function LoginPage() {
           </div>
         </div>
 
-        <div className="relative space-y-1 text-xs text-primary-foreground/50">
+        <div className="relative space-y-1 text-xs text-banniere-muted">
           <p>{t("auth.acces_reserve")}</p>
           <p>
             {copyright()} {t("layout.version")} {BRAND.version} — {BRAND.developer}.
@@ -163,16 +167,14 @@ export function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="grid gap-5" noValidate>
-            {/* `role="alert"` : l'échec doit être annoncé aux lecteurs d'écran,
-                pas seulement apparaître à l'écran. */}
+            {/* Le composant partagé porte le `role="alert"` et l'encadré :
+                cet écran les réécrivait à la main, la duplication même que
+                `FormError` a été créé pour supprimer. */}
             {error && (
-              <p
-                role="alert"
-                className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-              >
+              <FormError className="flex items-start gap-2">
                 <Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                 {error}
-              </p>
+              </FormError>
             )}
 
             <div className="grid gap-2">
@@ -181,7 +183,7 @@ export function LoginPage() {
                 id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="prenom.innov"
+                placeholder={t("auth.identifiant_exemple")}
                 autoComplete="username"
                 required
                 className="h-10"

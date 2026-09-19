@@ -1,9 +1,8 @@
 import { useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { AlertTriangle, FileWarning, Paperclip, Search } from "lucide-react"
+import { AlertTriangle, FileWarning, FileX2, Paperclip, Search } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -68,13 +67,23 @@ export function RegisterPage() {
     () => fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
     { enabled: Boolean(me?.has_global_scope) },
   )
-  const selectedCountry = countries.data?.results.find((c) => c.id === countryId)
+  // Les pays que ce compte peut nommer : le référentiel au siège, son
+  // périmètre sinon. Comme sur le Pilotage, un compte restreint à plusieurs
+  // pays a besoin du sélecteur — sans lui il ne peut pas lever l'ambiguïté.
+  const perimetre = me?.countries ?? []
+  const paysChoisissables = me?.has_global_scope ? (countries.data?.results ?? []) : perimetre
+  const choixPaysVisible = Boolean(me?.has_global_scope) || perimetre.length > 1
+  const selectedCountry = paysChoisissables.find((c) => c.id === countryId)
   // Les bornes de période sont des jours du pays filtré : « du 1er au 3 »
-  // à Nairobi ne commence pas à la même seconde qu'à Paris. Un compte pays
-  // lit dans le fuseau de son pays ; le siège sans pays choisi, dans le sien.
-  const timezone =
-    selectedCountry?.timezone ??
-    (me?.has_global_scope ? null : (me?.countries[0]?.timezone ?? null))
+  // à Nairobi ne commence pas à la même seconde qu'à Paris.
+  //
+  // Le fuseau n'est connu que lorsqu'un pays l'est : celui du filtre, ou
+  // l'unique pays du périmètre. Prendre `countries[0]` d'un périmètre qui en
+  // compte deux décalait les bornes — un `df` sur Madagascar (UTC+3) et la
+  // Côte d'Ivoire (UTC+0) perdait les dépenses ivoiriennes du dernier soir —
+  // et le libellé du champ affirmait un fuseau valable pour la moitié de son
+  // périmètre. Sans pays déterminé, on lit dans le fuseau du lecteur.
+  const timezone = selectedCountry?.timezone ?? (perimetre.length === 1 ? perimetre[0].timezone : null)
 
   const query = useQuery(
     JSON.stringify({ page, debouncedSearch, statusFilter, countryId, from, to, timezone }),
@@ -182,7 +191,7 @@ export function RegisterPage() {
                 ))}
               </NativeSelect>
             </div>
-            {me?.has_global_scope && (
+            {choixPaysVisible && (
               <div className="grid gap-1.5">
                 <Label htmlFor="reg-country" className="text-xs">
                   {t("commun.pays")}
@@ -196,7 +205,7 @@ export function RegisterPage() {
                   }}
                 >
                   <option value="">{t("registre.tous_pays")}</option>
-                  {(countries.data?.results ?? []).map((country) => (
+                  {paysChoisissables.map((country) => (
                     <option key={country.id} value={country.id}>
                       {country.country_ref ? `${country.country_ref} — ` : ""}
                       {country.name}
@@ -328,21 +337,28 @@ export function RegisterPage() {
                       >
                         {formatAmount(entry.gap)}
                       </TableCell>
+                      {/* La preuve est ce qu'on vient chercher ici : elle se
+                          lit d'un mot, en bout de ligne, et son absence se
+                          voit à la teinte sans avoir à comparer deux
+                          colonnes de montants. */}
                       <TableCell>
                         {entry.has_proof ? (
-                          <div className="flex items-center gap-1 text-xs">
-                            <Paperclip className="h-3 w-3 text-muted-foreground" aria-hidden />
-                            {t("registre.pieces", { count: entry.proofs.length })}
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                            <span className="text-marque-fort">
+                              {t("registre.pieces", { count: entry.proofs.length })}
+                            </span>
                             {entry.proofs.some((p) => !p.is_complete) && (
-                              <Badge variant="outline" className="ml-1 text-[10px]">
-                                {t("registre.incomplet")}
-                              </Badge>
+                              <span className="text-statut-attente">
+                                {` · ${t("registre.incomplet")}`}
+                              </span>
                             )}
                           </div>
                         ) : (
-                          <Badge variant="outline" className="text-destructive">
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+                            <FileX2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                             {t("registre.aucune")}
-                          </Badge>
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>

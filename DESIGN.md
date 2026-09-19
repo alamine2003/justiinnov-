@@ -21,7 +21,7 @@ découlent :
 
 ## Couleurs
 
-Palette **monochrome**, définie en `oklch` dans `frontend/src/index.css`, avec
+Palette **neutre**, définie en `oklch` dans `frontend/src/index.css`, avec
 un thème clair et un thème sombre. **N'écrivez jamais une couleur en dur** pour
 un fond, un texte ou une bordure.
 
@@ -37,6 +37,32 @@ un fond, un texte ou une bordure.
 | Erreur, danger | `text-destructive`, `bg-destructive/10`, `border-destructive/20` |
 | Anneau de focus | `focus-visible:ring-ring` |
 
+### Couleurs de la marque — liste close
+
+L'identité d'INNOV PHARMA porte un azur, un corail, un ambre et un marine.
+Ils ne remplacent pas les neutres — le gris reste la matière de l'écran —
+mais ils donnent leur teinte aux **chiffres** : ce que montre une jauge, une
+courbe ou une barre, et rien d'autre. **N'ajoutez aucune autre teinte** et
+n'employez pas celles-ci pour du texte courant ou une grande surface.
+
+| Sens | Jeton |
+|---|---|
+| Azur de la marque : trait de courbe, anneau de jauge, part consommée | `bg-marque`, `text-marque`, `fill-marque`, `stroke-marque` |
+| Sur l'azur : encre marine, jamais blanche (`--marque-foreground`) | `text-marque-foreground` |
+| Azur foncé : texte et lien lisibles sur fond clair | `text-marque-fort`, `bg-marque-fort text-marque-fort-foreground` |
+| Azur clair : part engagée, seconde série | `bg-marque-clair` |
+| Marine : le bandeau consolidé du Pilotage et le panneau de l'écran de connexion | `bg-banniere text-banniere-foreground` |
+| Sur le marine : étiquette, chiffre mis en avant, filet | `text-banniere-muted`, `text-banniere-accent`, `bg-banniere-bordure` |
+
+Le corail et l'ambre n'ont pas de jeton à eux : ce sont désormais
+`--destructive` (écart, dépassement, non justifié) et `--statut-attente`
+(en contrôle, incomplet, en attente) dans `index.css`. Une teinte de plus
+aurait dit la même chose deux fois. L'ambre s'encre de marine
+(`--statut-attente-foreground`) : le blanc n'y tenait pas le contraste.
+
+Les cinq `--chart-*` descendent l'azur : une même famille se lit comme une
+même grandeur à des intensités différentes.
+
 ### Couleurs de statut — liste close
 
 Seule dérogation aux tokens, parce qu'un statut doit se reconnaître d'un coup
@@ -51,8 +77,17 @@ d'œil. **N'ajoutez aucune autre teinte.**
 | Archivé, clôturé | `bg-statut-archive text-statut-archive-foreground` |
 | Non justifié, rejeté, dépassement | `bg-destructive text-destructive-foreground` |
 
-`text-white` est proscrit sur un fond destructif : le jeton
-`--destructive-foreground` garantit le contraste dans les deux thèmes.
+`text-white` est proscrit sur un fond de statut : le jeton
+`*-foreground` porte l'encre, et chaque paire tient **4,5:1 dans les deux
+thèmes** — un badge est en `text-xs`, donc du texte normal au sens WCAG.
+
+Le blanc ne s'écrit pas non plus *par le jeton* : l'émeraude du succès
+(2,47:1), le bleu de l'information (3,76:1) et l'azur de la marque (3,10:1)
+l'ont eu, et le grep sur la classe `text-white` ne pouvait pas le voir. Les
+deux premiers ont été assombris ; l'azur et le corail, couleurs de la marque,
+n'ont pas bougé — c'est leur encre qui a changé. Le test
+`status-badge.test.tsx` calcule désormais le contraste de chaque paire depuis
+`index.css`, `:root` et `.dark`, et échoue sous 4,5:1.
 
 Les teintes sont centralisées dans `lib/status-styles.ts`, les badges dans
 `components/expenses/status-badge.tsx` (`StatusBadge`, `ProofStatusBadge`,
@@ -131,8 +166,63 @@ shadcn, dont l'API diffère de Radix : pour les listes déroulantes, préférez
 ### Dialogues
 
 Titre affirmatif, description qui dit la conséquence. Actions en bas à droite :
-`outline` pour annuler, puis l'action principale. Un formulaire long prend
-`max-h-[90vh] overflow-y-auto`.
+`outline` pour annuler, puis l'action principale.
+
+`DialogContent` **borne lui-même sa hauteur** (`max-h-[90vh] overflow-y-auto`) :
+la règle a d'abord été confiée à l'appelant, et trois formulaires sur cinq
+l'avaient oubliée. Un conteneur `fixed top-1/2 -translate-y-1/2` plus haut que
+la fenêtre déborde des deux côtés sans que la page puisse défiler : à neuf
+champs (797 px) sur un écran de 768 px, le bouton d'enregistrement devenait
+inatteignable. Une page n'a plus à y penser.
+
+### Graphiques
+
+Un chiffre se lit ; une proportion se voit. Là où le lecteur cherche un
+rapport — consommé contre enveloppe, justifié contre dépensé, un pays
+contre les autres —, le graphique passe avant le tableau. Les primitives
+vivent dans `components/ui/charts.tsx` ; n'en dessinez pas d'autres dans
+une page.
+
+| Primitive | Ce qu'elle montre | Où |
+|---|---|---|
+| `JaugeDouble` | Exécution et justification en deux anneaux, sur le bandeau marine | Pilotage |
+| `Jauge` | Le taux d'une sous-enveloppe, teinté par le seuil franchi | Budgets |
+| `CourbeMensuelle` | Dépensé en aire, justifié en pointillé, sur douze mois | Pilotage |
+| `BarreEnveloppe` | Un pays contre son enveloppe, à échelle commune, dépassement en corail | Pilotage, Budgets |
+| `RailEnveloppe` | Une enveloppe et ses seuils d'alerte gradués | Budgets |
+| `BarreEcart` | La part justifiée d'une dépense, et son écart | Dossier — détail |
+| `Legende` | Pastille et libellé d'une série ; `dashed` pour un repère en pointillé | toutes |
+
+Trois règles s'y appliquent :
+
+- **Elles ne calculent que des longueurs.** Largeur de barre, longueur
+  d'arc, coordonnée d'un point : de la géométrie. Un taux affiché vient du
+  serveur et passe par `formatRate` — jamais d'un `a / b` écrit dans la
+  page. C'est la règle « rien ne se calcule dans l'interface », appliquée à
+  la lettre : `ratio()` (`lib/utils.ts`) borne une part à son tout pour le
+  dessin, et rien d'autre. L'échelle commune d'une liste de barres se prend
+  à `echelleCommune()` (`lib/echelle.ts`) : le pilotage et les budgets la
+  recopiaient mot pour mot, et le correctif qui y fait entrer l'engagé a dû
+  l'être aussi. Un garde-fou tient la règle,
+  `lib/rien-ne-se-calcule.test.ts` : il refuse qu'une page compose deux
+  montants du serveur, et n'excepte que les deux fichiers qui dessinent.
+- **Le dessin ne remplace pas les chiffres.** Chaque graphique est
+  accompagné des montants en texte : la barre donne la forme, la ligne
+  d'à côté donne les nombres. Le SVG lui-même est `aria-hidden` et porte
+  son `title` en `sr-only` — un graphique n'est jamais la seule source
+  d'une information.
+- **Aucune couleur en dur.** Les séries prennent `marque`, `marque-clair`,
+  `banniere-accent` ; l'écart et le dépassement prennent `destructive` ;
+  le seuil d'alerte prend `statut-attente`.
+
+### Filtres à bascule
+
+`<FilterChips>` (`components/ui/filter-chips.tsx`) remplace une liste
+déroulante quand les valeurs sont peu nombreuses et qu'on gagne à les voir
+toutes — les six statuts du circuit, sur la liste des dossiers. Chaque
+pastille est un `<button>` qui expose `aria-pressed`, dans un `<fieldset>`
+dont la `<legend>` en `sr-only` dit ce qui est filtré. Au-delà de six ou
+sept valeurs, revenez au `NativeSelect`.
 
 ---
 
@@ -143,17 +233,17 @@ Titre affirmatif, description qui dit la conséquence. Actions en bas à droite 
 | Chargement d'un tableau | `<SkeletonRows columns={n} />` |
 | Tableau vide | `<EmptyRow colSpan={n} icon={…} title="…" hint="…" />` |
 | Erreur de page | `<Alert variant="destructive">` |
-| Erreur de formulaire | `<FormError message={…} />` (`role="alert"`) |
+| Erreur de formulaire | `<FormError>{message}</FormError>` (`role="alert"`, ne rend rien sans message) |
 | Erreur de rendu | `<ErrorBoundary>` autour du layout (`components/ui/error-boundary.tsx`) |
 | Avertissement métier | `<Alert>` neutre |
-| Indicateur chiffré | `<StatCard label value hint />` (`components/ui/stat-card.tsx`) |
-| Liste plafonnée par le serveur | `<TruncatedNotice count shown />` dès que `count > results.length` |
+| Indicateur chiffré | `<StatCard label value hint />` (`components/ui/stat-card.tsx`) ; `tone="danger"` pour un écart, `children` pour une barre sous le chiffre |
+| Liste plafonnée par le serveur | `<TruncatedNotice page={…} noun={…} />` ; le composant se tait tant que la page n'est pas tronquée |
 
 Le chargement des données passe par `useQuery(clé, fetcher)` (annulation de la
 requête précédente, `loading` distinct de `refreshing`) et, pour les
 référentiels, par `useReferentiel(clé, fetcher)` (cache mémoire cinq minutes,
 `invalidateReferentiel` après une écriture). Les recherches sont différées par
-`useDebounced`. La remise à la première page se fait dans le gestionnaire du
+`useDebouncedValue` (`lib/use-debounced.ts`). La remise à la première page se fait dans le gestionnaire du
 filtre, jamais dans un effet.
 
 Un état vide doit dire **quoi faire**, pas seulement constater le vide.
@@ -233,9 +323,10 @@ endroit partout.
 
 ### Sélecteur de langue
 
-Dans le menu du compte (en haut à droite, à côté du sélecteur de thème),
-un `DropdownMenuRadioGroup` « Langue » avec deux choix, **Français** et
-**English**, chacun écrit dans sa propre langue. Le choix est enregistré sur
+En haut à droite, à côté du sélecteur de thème et du menu du compte —
+un bouton à icône propre (`language-toggle.tsx`), pas une entrée du menu :
+un `DropdownMenuRadioGroup` avec deux choix, **Français** et **English**,
+chacun écrit dans sa propre langue et porteur de son attribut `lang`. Le choix est enregistré sur
 le profil (`PATCH /api/me/`, champ `language`) et appliqué sans
 rechargement ; l'en-tête `Accept-Language` des requêtes suivantes le suit,
 et les notifications comme les e-mails arrivent dans cette langue.
@@ -263,8 +354,10 @@ Configuration) ; les équipes d'un
 manager qui y est rattaché ; **« Activer la double authentification »**
 (icône `ShieldCheck`, lien vers `/2fa`) tant que `totp_confirmed` est
 faux — rien quand le serveur ne connaît pas la 2FA ; **« Supervision »**
-(icône `Activity`) pour les administrateurs seulement (`can("configuration.manage")`),
-qui ouvre `/grafana/` — chemin relatif à l'origine, servi par Caddy — dans
+(icône `Activity`) pour les administrateurs seulement
+(`can("configuration.manage")`) **et** sur une pile qui l'expose
+(`me.supervision`, d'après `DJANGO_SUPERVISION` : sans Grafana derrière
+Caddy le lien mènerait à un 404), qui ouvre `/grafana/` — chemin relatif à l'origine, servi par Caddy — dans
 un nouvel onglet avec `rel="noopener noreferrer"`, parce que Grafana a sa
 propre session ; « Installer l'application » quand le navigateur le
 permet ; « Déconnexion ». Les libellés de menu vivent dans un
@@ -303,14 +396,28 @@ l'état (`totp_confirmed`) ; `platformClosed` et `totpEnrolmentRequired`
   authentification » — `POST /api/token-auth/` prend `{username, password,
   code}` et répond `400 totp_required` sans code valide à un compte
   enrôlé ; le champ devient alors exigé, sans perdre l'identifiant ni le
-  mot de passe. Le bouton « Se connecter », et un lien « Je n'ai plus accès
-  à mon application » qui n'ouvre rien d'automatique : il explique que seul
-  un administrateur peut réinitialiser l'enrôlement, et à qui s'adresser.
+  mot de passe. Le bouton « Se connecter », et un repli
+  `<details>` « Je n'ai plus accès à mon application » qui n'ouvre rien
+  d'automatique : il explique que seul un administrateur peut réinitialiser
+  l'enrôlement, et à qui s'adresser.
 
 Un code refusé s'affiche en `<FormError>` sans vider le champ ; on ne
 désactive pas le bouton pour un champ vide (règle d'accessibilité
 ci-dessous). Aucune option « se souvenir de cet appareil » : le code est
 demandé à chaque connexion d'un compte enrôlé.
+
+### Le circuit en frise
+
+Le détail d'un dossier ouvre sur `<FriseDuCircuit>`
+(`components/expenses/workflow-frieze.tsx`), avant les chiffres : cinq
+étapes — brouillon, soumis, en contrôle, justifié, clôturé — franchies,
+courante ou à venir. L'ordre vient de `CIRCUIT` (`lib/labels.ts`), qui suit
+`backend/core/statuts.py` ; il ne se recopie pas dans une page. Le constat
+de non-justification **n'est pas une sixième étape** : il prend la place de
+« justifié », en corail. La frise dit l'état et rien d'autre — les actions
+restent celles d'`allowed_actions`, dans `PageHeader` et sur chaque ligne.
+Elle n'affiche ni date ni auteur par étape : cela vit dans le journal
+d'audit, réservé aux administrateurs, qu'un DF lisant cet écran n'a pas.
 
 ### Réouverture d'un dossier
 

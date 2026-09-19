@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { AlertTriangle, Loader2, Pencil, Plus, ShieldOff, Users } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -440,12 +440,19 @@ function UserForm({
   // pays cochés.
   const teamsApply = Boolean(roleInfo) && !isHeadquarters
 
+  // Les pays déjà demandés, hors de l'état : sans cela, `teamsByCountry`
+  // figurait dans les dépendances de l'effet, chaque réponse le relançait, et
+  // son nettoyage jetait les requêtes encore en vol — k pays cochés
+  // produisaient k + (k−1) + … requêtes pour k fiches.
+  const demandes = useRef(new Set<number>())
+
   useEffect(() => {
     if (!teamsApply) return
-    const missing = countryIds.filter((id) => !(id in teamsByCountry))
+    const missing = countryIds.filter((id) => !demandes.current.has(id))
     if (missing.length === 0) return
     let active = true
     for (const id of missing) {
+      demandes.current.add(id)
       fetchCountry(id)
         .then((country) => {
           if (!active) return
@@ -456,14 +463,16 @@ function UserForm({
         })
         .catch(() => {
           // Sans la fiche, aucune équipe à proposer pour ce pays : le
-          // serveur revalidera de toute façon.
+          // serveur revalidera de toute façon. Le pays sort des demandes
+          // pour qu'un nouveau cochage puisse retenter.
+          demandes.current.delete(id)
           if (active) setTeamsByCountry((current) => ({ ...current, [id]: [] }))
         })
     }
     return () => {
       active = false
     }
-  }, [teamsApply, countryIds, teamsByCountry])
+  }, [teamsApply, countryIds])
 
   const eligibleTeams = countryIds.flatMap((id) => teamsByCountry[id] ?? [])
 
@@ -555,7 +564,7 @@ function UserForm({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>
             {editing

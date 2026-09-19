@@ -35,7 +35,12 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 ## Préparer un serveur
 
 1. Une machine Linux avec Docker Engine et le plugin Compose (v2.24 ou plus),
-   les ports 80 et 443 ouverts, un enregistrement DNS vers elle.
+   les ports 80 et 443 ouverts, un enregistrement DNS vers elle. Le serveur
+   tire ses images de trois registres, tous en sortie HTTPS : `ghcr.io`
+   (backend et frontend, avec le jeton de livraison), Docker Hub (Postgres,
+   Caddy, les exporteurs) et `quay.io` (MinIO et son client `mc` — le
+   registre de l'éditeur, sans limite de téléchargement anonyme, là où
+   Docker Hub refuse cette image aux runners de la CI).
 2. Un compte de livraison `deploy` **sans le groupe `docker`** (ce groupe
    vaut root), dont la clé SSH ne peut exécuter qu'une commande forcée,
    `justi-livrer` (« Réduire les pouvoirs de la livraison », plus bas), et
@@ -157,6 +162,24 @@ Une livraison peut être rejouée sans nouvelle image : `deploy.sh` avec la
 même étiquette recharge la configuration du répertoire d'exploitation
 (Caddyfile, Prometheus, tableaux de bord Grafana), puisque ces fichiers
 sont montés depuis ce dossier et non copiés dans les images.
+
+### Quand une livraison échoue
+
+Personne ne surveille l'onglet Actions : une livraison cassée après la
+fusion d'une pull request est passée inaperçue une nuit entière, la
+préproduction restant sur une version périmée. Le travail `alerte` de
+`cd.yml` **ouvre donc un ticket** sur le dépôt dès qu'un travail de la
+livraison échoue, le commente aux échecs suivants plutôt que d'en ouvrir
+un second — un ticket par environnement, reconnu à un marqueur invisible
+dans son corps — et le **referme de lui-même** quand une livraison
+repasse. Le ticket donne l'environnement, le commit, les travaux en échec
+et le lien de l'exécution.
+
+Une livraison annulée ne déclenche rien, et un déploiement simplement
+hors circuit (`DEPLOIEMENT_SSH` différent de `1`) non plus : un travail
+sauté n'est pas un échec. Le serveur, lui, a déjà rétabli l'étiquette
+précédente (« Revenir en arrière ») ; le ticket dit qu'il faut regarder,
+pas que la plateforme est tombée.
 
 ## Réduire les pouvoirs de la livraison
 

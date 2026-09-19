@@ -50,6 +50,16 @@
     --color-statut-neutre-foreground: var(--statut-neutre-foreground);
     --color-statut-archive: var(--statut-archive);
     --color-statut-archive-foreground: var(--statut-archive-foreground);
+    --color-marque: var(--marque);
+    --color-marque-foreground: var(--marque-foreground);
+    --color-marque-fort: var(--marque-fort);
+    --color-marque-fort-foreground: var(--marque-fort-foreground);
+    --color-marque-clair: var(--marque-clair);
+    --color-banniere: var(--banniere);
+    --color-banniere-foreground: var(--banniere-foreground);
+    --color-banniere-muted: var(--banniere-muted);
+    --color-banniere-accent: var(--banniere-accent);
+    --color-banniere-bordure: var(--banniere-bordure);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -74,16 +84,22 @@
     --muted-foreground: oklch(0.48 0.01 260);
     --accent: oklch(0.955 0.005 260);
     --accent-foreground: oklch(0.18 0.015 260);
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.985 0.002 250);
+    /* Corail de la marque : la teinte du danger, de l'écart et du dépassement.
+       Le pas foncé sert aussi de couleur de texte, d'où sa clarté. */
+    --destructive: oklch(0.581 0.187 19.2);
+    /* Blanc pur plutôt que le blanc cassé du fond : le corail de la marque
+       reste intact, et la paire passe de 4,50 à 4,70:1. */
+    --destructive-foreground: oklch(1 0 0);
     --border: oklch(0.91 0.005 260);
     --input: oklch(0.91 0.005 260);
     --ring: oklch(0.55 0.02 260);
-    --chart-1: oklch(0.72 0.12 250);
-    --chart-2: oklch(0.55 0.10 260);
-    --chart-3: oklch(0.45 0.08 270);
-    --chart-4: oklch(0.38 0.06 260);
-    --chart-5: oklch(0.28 0.04 260);
+    /* Les séries de graphique descendent l'azur de la marque : une même
+       famille se lit comme une même grandeur à des intensités différentes. */
+    --chart-1: oklch(0.656 0.138 238.3);
+    --chart-2: oklch(0.548 0.121 240.9);
+    --chart-3: oklch(0.742 0.116 234.8);
+    --chart-4: oklch(0.857 0.063 232.6);
+    --chart-5: oklch(0.399 0.025 232.9);
     --radius: 0.7rem;
     --sidebar: oklch(0.985 0.002 250);
     --sidebar-foreground: oklch(0.16 0.008 260);
@@ -93,16 +109,35 @@
     --sidebar-accent-foreground: oklch(0.18 0.015 260);
     --sidebar-border: oklch(0.91 0.005 260);
     --sidebar-ring: oklch(0.55 0.02 260);
-    --statut-succes: oklch(0.696 0.17 162.48);
+    /* Émeraude assombrie : sur la teinte d'origine (L 0.696) le blanc ne
+       donnait que 2,47:1, sous le seuil AA d'un badge en `text-xs`. */
+    --statut-succes: oklch(0.52 0.125 162.48);
     --statut-succes-foreground: oklch(1 0 0);
-    --statut-attente: oklch(0.769 0.188 70.08);
-    --statut-attente-foreground: oklch(1 0 0);
-    --statut-info: oklch(0.623 0.214 259.815);
+    /* Ambre de la marque, encré de marine : le blanc ne tenait pas le
+       contraste sur cet ambre-là. */
+    --statut-attente: oklch(0.800 0.145 76.8);
+    --statut-attente-foreground: oklch(0.315 0.023 228.3);
+    /* Bleu assombri, pour la même raison que l'émeraude : 3,76:1 avant. */
+    --statut-info: oklch(0.55 0.21 259.815);
     --statut-info-foreground: oklch(1 0 0);
     --statut-neutre: oklch(0.554 0.046 257.417);
     --statut-neutre-foreground: oklch(1 0 0);
     --statut-archive: oklch(0.552 0.016 285.938);
     --statut-archive-foreground: oklch(1 0 0);
+
+    /* Palette de l'entreprise : azur de la marque, marine du bandeau. */
+    --marque: oklch(0.656 0.138 238.3);
+    /* L'azur s'encre de marine, comme l'ambre : le blanc n'y donnait que
+       3,10:1. L'azur lui-même, couleur de la marque, ne bouge pas. */
+    --marque-foreground: oklch(0.25 0.03 238.3);
+    --marque-fort: oklch(0.548 0.121 240.9);
+    --marque-fort-foreground: oklch(1 0 0);
+    --marque-clair: oklch(0.857 0.063 232.6);
+    --banniere: oklch(0.315 0.023 228.3);
+    --banniere-foreground: oklch(0.981 0.003 247.9);
+    --banniere-muted: oklch(0.704 0.028 231.8);
+    --banniere-accent: oklch(0.798 0.094 232.6);
+    --banniere-bordure: oklch(0.399 0.025 232.9);
 }
 
 .dark {
@@ -120,16 +155,16 @@
     --muted-foreground: oklch(0.62 0.015 260);
     --accent: oklch(0.24 0.01 260);
     --accent-foreground: oklch(0.92 0.005 250);
-    --destructive: oklch(0.65 0.20 22);
+    --destructive: oklch(0.70 0.170 19.2);
     --destructive-foreground: oklch(0.13 0.01 260);
     --border: oklch(1 0.005 260 / 8%);
     --input: oklch(1 0.005 260 / 12%);
     --ring: oklch(0.50 0.02 260);
-    --chart-1: oklch(0.72 0.12 250);
-    --chart-2: oklch(0.55 0.10 260);
-    --chart-3: oklch(0.45 0.08 270);
-    --chart-4: oklch(0.38 0.06 260);
-    --chart-5: oklch(0.28 0.04 260);
+    --chart-1: oklch(0.742 0.116 234.8);
+    --chart-2: oklch(0.656 0.138 238.3);
+    --chart-3: oklch(0.857 0.063 232.6);
+    --chart-4: oklch(0.548 0.121 240.9);
+    --chart-5: oklch(0.60 0.030 232.9);
     --sidebar: oklch(0.15 0.01 260);
     --sidebar-foreground: oklch(0.95 0.005 250);
     --sidebar-primary: oklch(0.50 0.15 260);
@@ -140,14 +175,27 @@
     --sidebar-ring: oklch(0.50 0.02 260);
     --statut-succes: oklch(0.80 0.14 162);
     --statut-succes-foreground: oklch(0.20 0.03 162);
-    --statut-attente: oklch(0.80 0.14 70);
-    --statut-attente-foreground: oklch(0.20 0.03 70);
+    --statut-attente: oklch(0.83 0.140 76.8);
+    --statut-attente-foreground: oklch(0.25 0.025 228.3);
     --statut-info: oklch(0.80 0.14 260);
     --statut-info-foreground: oklch(0.20 0.03 260);
     --statut-neutre: oklch(0.80 0.06 257);
     --statut-neutre-foreground: oklch(0.20 0.03 257);
     --statut-archive: oklch(0.80 0.04 286);
     --statut-archive-foreground: oklch(0.20 0.03 286);
+
+    /* Sur fond sombre l'azur monte en clarté pour rester lisible, et le
+       bandeau s'éclaircit pour se détacher du fond de page. */
+    --marque: oklch(0.742 0.116 234.8);
+    --marque-foreground: oklch(0.15 0.015 260);
+    --marque-fort: oklch(0.798 0.094 232.6);
+    --marque-fort-foreground: oklch(0.15 0.015 260);
+    --marque-clair: oklch(0.548 0.121 240.9);
+    --banniere: oklch(0.255 0.022 228.3);
+    --banniere-foreground: oklch(0.95 0.005 250);
+    --banniere-muted: oklch(0.680 0.028 231.8);
+    --banniere-accent: oklch(0.798 0.094 232.6);
+    --banniere-bordure: oklch(0.360 0.025 232.9);
 }
 
 @layer base {

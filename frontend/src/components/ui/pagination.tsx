@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
+import { pluralize } from "@/lib/utils"
 
 /** Taille de page par défaut, alignée sur la pagination du serveur. */
 export const PAGE_SIZE = 50
@@ -33,9 +34,9 @@ export function Pagination({
 
   if (count === 0) return null
 
-  const label = noun
-    ? `${count} ${count > 1 ? noun[1] : noun[0]}`
-    : t("commun.elements", { count })
+  // « 1234 dossiers » plutôt que « 1 234 dossiers » : un compte est un
+  // nombre affiché, il passe par `Intl` comme les autres.
+  const label = noun ? pluralize(count, noun[0], noun[1]) : t("commun.elements", { count })
 
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">

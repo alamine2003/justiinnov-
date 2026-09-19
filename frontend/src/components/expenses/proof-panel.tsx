@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react"
-import { Download, Eye, FileCheck2, Loader2, Upload, X } from "lucide-react"
+import { Download, Eye, FileCheck2, FileText, Loader2, Upload, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { Button } from "@/components/ui/button"
@@ -15,16 +15,7 @@ import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
-import { EmptyRow } from "@/components/ui/table-states"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { ProofPreview } from "@/components/expenses/proof-preview"
 import { ProofStatusBadge } from "@/components/expenses/status-badge"
 import { useAuth } from "@/context/use-auth"
@@ -137,98 +128,110 @@ export function ProofPanel({
 
       <FormError>{error}</FormError>
 
-      <div className="overflow-x-auto rounded-lg border border-border/60 shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead scope="col">{t("champs.file")}</TableHead>
-              <TableHead scope="col">{t("champs.kind")}</TableHead>
-              <TableHead scope="col">{t("commun.statut")}</TableHead>
-              <TableHead scope="col">{t("pieces.colonnes.depot")}</TableHead>
-              <TableHead scope="col" className="text-right">{t("commun.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {proofs.length === 0 ? (
-              <EmptyRow
-                colSpan={5}
-                icon={FileCheck2}
-                title={t("pieces.vide.titre")}
-                hint={
-                  canUpload
-                    ? t("pieces.vide.aide_deposer")
-                    : closed
-                      ? t("pieces.vide.aide_cloture")
-                      : t("pieces.vide.aide_sans_piece")
-                }
-              />
-            ) : (
-              proofs.map((proof) => (
-                <TableRow key={proof.id}>
-                  <TableCell>
-                    <p className="font-medium">{proof.original_name}</p>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      v{proof.version} · {formatSize(t, proof.size)} ·{" "}
-                      {proof.sha256.slice(0, 12)}…
-                    </p>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {proof.kind_display || proofKindLabel(t, proof.kind)}
-                  </TableCell>
-                  <TableCell>
-                    <ProofStatusBadge status={proof.status} label={proof.status_display} />
-                    {proof.rejection_reason && (
-                      <p className="mt-1 max-w-[16rem] text-xs italic text-muted-foreground">
-                        {proof.rejection_reason}
-                      </p>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {formatDate(proof.created_at)}
-                    {proof.uploaded_by && <br />}
-                    {proof.uploaded_by && t("pieces.par", { nom: proof.uploaded_by })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {isPreviewable(proof) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t("pieces.previsualiser_aria", { nom: proof.original_name })}
-                        onClick={() => setPreviewing(proof)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    )}
+      {/* Les pièces sont des documents : elles se présentent comme telles,
+          en vignettes, et non en lignes de tableau. Le statut se lit sur la
+          vignette, pas dans une colonne à l'autre bout de l'écran. */}
+      {proofs.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border/60 p-6 text-center">
+          <FileCheck2 className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
+          <p className="mt-2 text-sm font-medium">{t("pieces.vide.titre")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {canUpload
+              ? t("pieces.vide.aide_deposer")
+              : closed
+                ? t("pieces.vide.aide_cloture")
+                : t("pieces.vide.aide_sans_piece")}
+          </p>
+        </div>
+      ) : (
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {proofs.map((proof) => (
+            <li
+              key={proof.id}
+              className="overflow-hidden rounded-lg border border-border/60 shadow-sm"
+            >
+              <div className="relative flex h-24 items-center justify-center border-b border-border/60 bg-muted/50">
+                <FileText className="h-7 w-7 text-muted-foreground/70" aria-hidden />
+                <span className="absolute right-2 top-2">
+                  <ProofStatusBadge status={proof.status} label={proof.status_display} />
+                </span>
+              </div>
+              <div className="p-2.5">
+                <p className="break-words text-xs font-medium">{proof.original_name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {proof.kind_display || proofKindLabel(t, proof.kind)} ·{" "}
+                  {formatSize(t, proof.size)} · v{proof.version}
+                </p>
+                <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                  {proof.sha256.slice(0, 12)}…
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {formatDate(proof.created_at)}
+                  {proof.uploaded_by && ` · ${t("pieces.par", { nom: proof.uploaded_by })}`}
+                </p>
+                {proof.rejection_reason && (
+                  <p className="mt-1 text-xs italic text-muted-foreground">
+                    {proof.rejection_reason}
+                  </p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {isPreviewable(proof) && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={t("pieces.telecharger_aria", { nom: proof.original_name })}
-                      disabled={busyId === proof.id}
-                      onClick={() => void handleDownload(proof)}
+                      className="h-7 w-7"
+                      aria-label={t("pieces.previsualiser_aria", { nom: proof.original_name })}
+                      onClick={() => setPreviewing(proof)}
                     >
-                      {busyId === proof.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="h-4 w-4" />
-                      )}
+                      <Eye className="h-3.5 w-3.5" />
                     </Button>
-                    {reviewChoices(proof).length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t("pieces.controler_aria", { nom: proof.original_name })}
-                        onClick={() => setReviewing(proof)}
-                      >
-                        <FileCheck2 className="h-4 w-4" />
-                      </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label={t("pieces.telecharger_aria", { nom: proof.original_name })}
+                    disabled={busyId === proof.id}
+                    onClick={() => void handleDownload(proof)}
+                  >
+                    {busyId === proof.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
                     )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                  </Button>
+                  {reviewChoices(proof).length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label={t("pieces.controler_aria", { nom: proof.original_name })}
+                      onClick={() => setReviewing(proof)}
+                    >
+                      <FileCheck2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {canUpload && proofs.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setUploadOpen(true)}
+          className="flex w-full items-center gap-2.5 rounded-lg border border-dashed border-border p-3 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Upload className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="text-xs text-muted-foreground">
+            {rules.formats.length > 0
+              ? t("pieces.depot.formats", { formats: rules.formats.join(", ") })
+              : t("pieces.depot.formats_generique")}
+          </span>
+        </button>
+      )}
 
       {uploadOpen && (
         <UploadDialog

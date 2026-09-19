@@ -276,12 +276,25 @@ async function main() {
   expect((await hq.textContent("h1"))?.includes("Budgets") ?? false, "la page Budgets s'ouvre")
   await shot(hq, "budgets_pays")
 
-  await hq.getByRole("tab", { name: "Enveloppes" }).click()
-  await hq.waitForTimeout(600)
+  // La page n'a plus d'onglets : tous les pays se comparent en barres, et un
+  // pays choisi ouvre son enveloppe en rail avec ses sous-enveloppes. Un
+  // compte qui n'a qu'un pays n'a pas de sélecteur : le sien s'ouvre seul.
+  const choixPays = hq.getByLabel("Pays")
+  if ((await choixPays.count()) === 1) {
+    await choixPays.selectOption({ index: 1 })
+    await hq.waitForTimeout(900)
+  }
+  expect(
+    (await hq.getByRole("heading", { name: /enveloppe du pays/ }).count()) === 1,
+    "l'enveloppe d'un pays s'ouvre en rail",
+  )
   await shot(hq, "budgets_enveloppes")
 
-  await hq.getByRole("tab", { name: "Réallocations" }).click()
-  await hq.waitForTimeout(600)
+  // Les réallocations sont sur la même page, en flux, sous les enveloppes.
+  const reallocations = hq.getByRole("heading", { name: "Réallocations" })
+  expect((await reallocations.count()) === 1, "les réallocations suivent sur la même page")
+  await reallocations.scrollIntoViewIfNeeded()
+  await hq.waitForTimeout(400)
   await shot(hq, "budgets_reallocations")
 
   await goto(hq, "/configuration", 1200)

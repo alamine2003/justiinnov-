@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JUSTI INNOV\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-14 18:34+0000\n"
+"POT-Creation-Date: 2026-09-19 00:41+0000\n"
 "PO-Revision-Date: 2026-09-05 00:00+0000\n"
 "Last-Translator: Équipe JUSTI INNOV\n"
 "Language-Team: English\n"
@@ -423,7 +423,7 @@ msgid "Votre rôle ne permet pas cette action."
 msgstr "Your role does not allow this action."
 
 #: accounts/referentiel.py:81 accounts/referentiel.py:120 budget/models.py:109
-#: budget/serializers.py:78 core/models.py:72 core/models.py:92
+#: budget/serializers.py:81 core/models.py:72 core/models.py:92
 #: core/models.py:118 core/models.py:142 core/models.py:171 core/models.py:191
 #: core/models.py:232 core/models.py:258 expenses/models.py:69
 #: expenses/models.py:164 expenses/models.py:323 expenses/models.py:658
@@ -560,17 +560,17 @@ msgstr "Require approval"
 msgid "Année"
 msgstr "Year"
 
-#: budget/models.py:121 budget/serializers.py:82 core/models.py:154
+#: budget/models.py:121 budget/serializers.py:85 core/models.py:154
 #: core/models.py:236 expenses/models.py:340
 msgid "Projet"
 msgstr "Project"
 
-#: budget/models.py:129 budget/serializers.py:86 core/models.py:100
+#: budget/models.py:129 budget/serializers.py:89 core/models.py:100
 #: core/models.py:234 expenses/models.py:172 expenses/models.py:327
 msgid "Équipe"
 msgstr "Team"
 
-#: budget/models.py:137 budget/serializers.py:90 core/models.py:233
+#: budget/models.py:137 budget/serializers.py:93 core/models.py:233
 msgid "Manager"
 msgstr "Manager"
 
@@ -614,11 +614,11 @@ msgstr "Approved"
 msgid "Refusée"
 msgstr "Refused"
 
-#: budget/models.py:242 budget/serializers.py:287
+#: budget/models.py:242 budget/serializers.py:290
 msgid "Enveloppe source"
 msgstr "Source envelope"
 
-#: budget/models.py:246 budget/serializers.py:291
+#: budget/models.py:246 budget/serializers.py:294
 msgid "Enveloppe destinataire"
 msgstr "Target envelope"
 
@@ -697,79 +697,83 @@ msgstr "Submitted or under review: taken out of the budget, not yet recorded by 
 msgid "Consommé sans preuve à l'appui."
 msgstr "Consumed without supporting proof."
 
-#: budget/serializers.py:60
+#: budget/serializers.py:49
+msgid "Part de l'enveloppe du pays qui n'est pas encore découpée."
+msgstr "Share of the country envelope not yet carved up."
+
+#: budget/serializers.py:63
 msgid "Devises sans taux connu, laissées hors du total."
 msgstr "Currencies without a known rate, left out of the total."
 
-#: budget/serializers.py:174
+#: budget/serializers.py:177
 #, python-brace-format
 msgid "Une sous-enveloppe ne découpe qu'une dimension à la fois (reçu : {received})."
 msgstr "A sub-envelope splits along only one dimension at a time (received: {received})."
 
-#: budget/serializers.py:183
+#: budget/serializers.py:186
 msgid "Cette entité doit appartenir au pays de l'enveloppe."
 msgstr "This entity must belong to the envelope's country."
 
-#: budget/serializers.py:195
+#: budget/serializers.py:198
 msgid "Ce manager n'est pas rattaché au pays de l'enveloppe."
 msgstr "This manager is not attached to the envelope's country."
 
-#: budget/serializers.py:221
+#: budget/serializers.py:224
 #, python-brace-format
 msgid "Cette enveloppe porte {count} ligne(s) déclarée(s) : elle ne se désactive pas, ses dépenses disparaîtraient du consommé."
 msgstr "This envelope carries {count} declared line(s): it cannot be deactivated, its expenses would disappear from the consumed total."
 
-#: budget/serializers.py:235
+#: budget/serializers.py:238
 msgid "Des dépenses sont imputées à cette enveloppe : son pays, son année et son découpage ne se modifient plus."
 msgstr "Expenses are charged to this envelope: its country, year and split can no longer be changed."
 
-#: budget/serializers.py:256
+#: budget/serializers.py:259
 msgid "ce projet"
 msgstr "this project"
 
-#: budget/serializers.py:257
+#: budget/serializers.py:260
 msgid "cette équipe"
 msgstr "this team"
 
-#: budget/serializers.py:258
+#: budget/serializers.py:261
 msgid "ce manager"
 msgstr "this manager"
 
-#: budget/serializers.py:272
+#: budget/serializers.py:275
 msgid "Une enveloppe existe déjà pour ce pays et cette année."
 msgstr "An envelope already exists for this country and year."
 
-#: budget/serializers.py:275
+#: budget/serializers.py:278
 #, python-brace-format
 msgid "Une sous-enveloppe existe déjà pour {scope} et cette année."
 msgstr "A sub-envelope already exists for {scope} and this year."
 
-#: budget/serializers.py:332 budget/transitions.py:176
+#: budget/serializers.py:335 budget/transitions.py:176
 msgid "La justification est obligatoire."
 msgstr "A justification is required."
 
-#: budget/serializers.py:340 budget/transitions.py:166
+#: budget/serializers.py:343 budget/transitions.py:166
 msgid "La source et la destination doivent différer."
 msgstr "Source and target must differ."
 
-#: budget/serializers.py:350 budget/transitions.py:171
+#: budget/serializers.py:353 budget/transitions.py:171
 #, python-brace-format
 msgid "Les deux enveloppes doivent être dans la même devise ({source} → {target})."
 msgstr "Both envelopes must be in the same currency ({source} → {target})."
 
-#: budget/serializers.py:388
+#: budget/serializers.py:391
 msgid "Le taux doit être strictement positif."
 msgstr "The rate must be strictly positive."
 
-#: budget/serializers.py:398
+#: budget/serializers.py:401
 msgid "Un taux ne se publie pas pour une date future."
 msgstr "A rate cannot be published for a future date."
 
-#: budget/serializers.py:415
+#: budget/serializers.py:418
 msgid "Un taux publié ne se modifie pas : publiez un nouveau taux, daté du jour de son entrée en vigueur."
 msgstr "A published rate cannot be modified: publish a new rate, dated the day it comes into effect."
 
-#: budget/serializers.py:432
+#: budget/serializers.py:435
 #, python-brace-format
 msgid "Les taux se publient dans l'ordre du temps : le dernier taux {currency} est daté du {date}."
 msgstr "Rates are published in chronological order: the latest {currency} rate is dated {date}."

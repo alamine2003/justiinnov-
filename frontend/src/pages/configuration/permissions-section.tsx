@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Legende } from "@/components/ui/charts"
 import { FormError } from "@/components/ui/form-error"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -21,6 +22,7 @@ import { ApiError, type FieldErrors } from "@/lib/api"
 import { STATUS_TONES } from "@/lib/status-styles"
 import type { PermissionMatrix } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
+import { cn } from "@/lib/utils"
 import { Chargement, Erreur } from "@/pages/configuration/section-states"
 
 export function PermissionsSection() {
@@ -165,7 +167,19 @@ export function MatriceDesDroits({
                         const horsDefaut = !memes(choix[capability.key], capability.default_roles)
                         return (
                           <TableRow key={capability.key}>
-                            <TableCell className="sticky left-0 z-10 bg-card align-top">
+                            {/* Une ligne modifiée porte un filet à son
+                                entrée : la pastille « Modifié » seule se
+                                perdait au milieu de cinquante lignes. La
+                                colonne est figée au défilement horizontal,
+                                donc son fond reste opaque — un aplat teinté
+                                y laisserait voir les colonnes qui passent
+                                dessous. */}
+                            <TableCell
+                              className={cn(
+                                "sticky left-0 z-10 border-l-[3px] bg-card align-top",
+                                modifiee ? "border-l-marque" : "border-l-transparent",
+                              )}
+                            >
                               <div className="flex items-start justify-between gap-2">
                                 <div>
                                   <p className="font-medium">{capability.label}</p>
@@ -220,7 +234,16 @@ export function MatriceDesDroits({
                                 role: role.label,
                               })
                               return (
-                                <TableCell key={role.value} className="text-center align-top">
+                                // Une case verrouillée se voit : son fond
+                                // grisé dit « ici, rien à régler » avant même
+                                // qu'on lise l'icône.
+                                <TableCell
+                                  key={role.value}
+                                  className={cn(
+                                    "text-center align-top",
+                                    (toujours || jamais) && "bg-muted/50",
+                                  )}
+                                >
                                   {toujours || jamais ? (
                                     <span
                                       className="inline-flex items-center justify-center text-muted-foreground/60"
@@ -277,12 +300,41 @@ export function MatriceDesDroits({
             </Alert>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground" aria-live="polite">
-              {modifiees.length > 0
-                ? t("configuration.permissions.modifications", { count: modifiees.length })
-                : ""}
-            </p>
+          {/* Ce qui reste à enregistrer se lit en pied de matrice, avec la
+              légende des cases : c'est là que le regard revient après avoir
+              parcouru les cinq colonnes. */}
+          <div
+            className={cn(
+              "-mx-6 -mb-6 flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4",
+              modifiees.length > 0 ? "border-marque/30 bg-marque/5" : "border-border/60",
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  modifiees.length > 0 ? "text-marque-fort" : "text-muted-foreground",
+                )}
+                aria-live="polite"
+              >
+                {modifiees.length > 0
+                  ? t("configuration.permissions.modifications", { count: modifiees.length })
+                  : t("configuration.permissions.aucune_modification")}
+              </p>
+              <Legende
+                items={[
+                  { tone: "bg-primary", label: t("configuration.permissions.legende_accorde") },
+                  {
+                    tone: "bg-muted-foreground/50",
+                    label: t("configuration.permissions.toujours"),
+                  },
+                  {
+                    tone: "border border-border bg-muted",
+                    label: t("configuration.permissions.jamais"),
+                  },
+                ]}
+              />
+            </div>
             <div className="flex gap-2">
               {modifiees.length > 0 && (
                 <Button

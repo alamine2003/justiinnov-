@@ -14,6 +14,7 @@ import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
+import { MontantNormalise } from "@/components/ui/montant-normalise"
 import { Textarea } from "@/components/ui/textarea"
 import type {
   Beneficiary,
@@ -73,7 +74,7 @@ interface ExpenseFormProps {
 export function ExpenseForm({ open, onOpenChange, editing, ...rest }: ExpenseFormProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         {/* Monté à l'ouverture seulement : l'état repart de la dépense
             éditée sans effet de réinitialisation. */}
         {open && (
@@ -245,11 +246,15 @@ function ExpenseFormBody({
               disabled={devisePresente}
               placeholder={
                 devisePresente
-                  ? t("depenses.formulaire.converti_serveur")
+                  ? // Le repli « autre devise » peut être refermé : sans
+                    // nommer la devise, le champ restait grisé sans que sa
+                    // raison soit visible nulle part.
+                    t("depenses.formulaire.converti_serveur_devise", { devise })
                   : t("depenses.formulaire.montant_placeholder")
               }
               required={!devisePresente}
             />
+            <MontantNormalise value={amount} currency={currency} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="exp-payment">{t("champs.payment_method")}</Label>
@@ -301,6 +306,7 @@ function ExpenseFormBody({
                 placeholder={t("depenses.formulaire.montant_decaisse_placeholder")}
                 required={devisePresente}
               />
+              <MontantNormalise value={montantDevise} currency={devise} />
             </div>
           </div>
         </details>
