@@ -130,13 +130,45 @@ WSGI_APPLICATION = "config.wsgi.application"
 #: chaque nom de compte essayé créant une clé.
 CACHE_MAX_ENTRIES = int(os.environ.get("DJANGO_CACHE_MAX_ENTRIES", "2000"))
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "django_cache",
-        "OPTIONS": {"MAX_ENTRIES": CACHE_MAX_ENTRIES},
-    }
+#: Cache principal. Sans ``REDIS_URL``, la base de données le porte comme
+#: avant : la pile reste démarrable sans Redis, et un poste de
+#: développement n'a rien de plus à installer.
+REDIS_URL = os.environ.get("REDIS_URL", "")
+
+#: Un cache doit renoncer vite : s'il hésite, on perd plus de temps qu'il
+#: n'en fait gagner. Une seconde suffit — le secours, lui, répond en
+#: millisecondes. (Les délais de la base, eux, sont plus longs : on ne peut
+#: pas se passer d'elle. Ici, si.)
+_DELAIS_REDIS = {
+    "socket_connect_timeout": float(os.environ.get("REDIS_CONNECT_TIMEOUT", "1")),
+    "socket_timeout": float(os.environ.get("REDIS_TIMEOUT", "1")),
+    # Une connexion du pool restée ouverte vers un Redis redémarré est
+    # détectée à l'usage plutôt qu'au bout d'un délai réseau.
+    "health_check_interval": 30,
+    # Pas de seconde tentative : on bascule sur le secours, c'est plus
+    # rapide et cela ne masque pas la panne.
+    "retry_on_timeout": False,
 }
+
+_CACHE_BASE = {
+    "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+    "LOCATION": "django_cache",
+    "OPTIONS": {"MAX_ENTRIES": CACHE_MAX_ENTRIES},
+}
+
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "core.cache.CacheAvecSecours",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {"SECOURS": "secours", **_DELAIS_REDIS},
+        },
+        # La table reste créée (`entrypoint.sh`) et reste le filet : une
+        # panne de Redis doit ralentir la plateforme, jamais la fermer.
+        "secours": _CACHE_BASE,
+    }
+else:
+    CACHES = {"default": _CACHE_BASE}
 
 
 

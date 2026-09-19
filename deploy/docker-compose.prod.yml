@@ -95,6 +95,12 @@ x-django: &django
   POSTGRES_MIGRATION_PASSWORD_FILE: /run/secrets/postgres_migration_password
   DATABASE_URL: ${DATABASE_URL:-}
   DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-}
+  # --- Cache principal ---
+  # Videz cette variable et la base de données reprend le rôle : la pile
+  # démarre sans Redis. Le serveur et l'ordonnanceur doivent pointer sur le
+  # même cache — la configuration du circuit y est gardée sans expiration,
+  # et c'est le serveur qui l'invalide quand elle change.
+  REDIS_URL: ${REDIS_URL-redis://redis:6379/0}
   # --- Stockage des justificatifs ---
   AWS_S3_ENDPOINT_URL: "http://minio:9000"
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID manquant}
@@ -179,6 +185,26 @@ services:
     restart: unless-stopped
     logging: *journal
 
+  redis:
+    image: redis:7.4-alpine
+    # Aucune persistance : un cache perdu se reconstruit, et un cache qu'on
+    # sauvegarde coûte des écritures pour rien — c'est précisément ce qu'on
+    # cherche à éviter. L'éviction porte sur la clé la moins récemment
+    # utilisée : un compteur anti-bourrage qu'on vient de toucher est donc le
+    # dernier à partir, là où la purge de `DatabaseCache` supprimait par
+    # ordre alphabétique et l'emportait en premier (décision 69).
+    command: >
+      redis-server --save "" --appendonly no
+      --maxmemory ${REDIS_MAXMEMORY:-128mb} --maxmemory-policy allkeys-lru
+    mem_limit: 192m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    logging: *journal
+
   minio:
     # Registre de MinIO (quay.io), sans limite de téléchargement anonyme —
     # Docker Hub refusait l'image aux runners de la CI ; même étiquette,
@@ -224,6 +250,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       minio:
         condition: service_healthy
 
@@ -256,6 +284,8 @@ services:
       retries: 3
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       backend:
         condition: service_healthy

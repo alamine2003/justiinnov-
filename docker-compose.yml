@@ -18,6 +18,29 @@ services:
     ports:
       - "127.0.0.1:5433:5432"
 
+  redis:
+    # Cache principal (config/settings.py). Sans lui la plateforme tourne
+    # quand même — la base de données reprend le rôle —, mais chaque lecture
+    # d'API réécrit alors le compteur de limitation de débit dans Postgres :
+    # 1,5 ko de journal d'écriture par GET, mesuré.
+    image: redis:7.4-alpine
+    container_name: justi_redis
+    # Aucune persistance : un cache perdu se reconstruit, et un cache qu'on
+    # sauvegarde coûte des écritures pour rien. L'éviction se fait sur la
+    # clé la moins récemment utilisée — un compteur qu'on vient de toucher
+    # est donc le dernier à partir, contrairement à la purge par ordre
+    # alphabétique de `DatabaseCache` (décision 69).
+    command: >
+      redis-server --save "" --appendonly no
+      --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "127.0.0.1:6379:6379"
+
   minio:
     # La même version qu'en production (deploy/docker-compose.prod.yml),
     # tirée du registre de MinIO (quay.io) : Docker Hub refuse les
@@ -60,10 +83,15 @@ services:
       AWS_ACCESS_KEY_ID: "justi"
       AWS_SECRET_ACCESS_KEY: "justi-minio-dev"
       AWS_STORAGE_BUCKET_NAME: "justificatifs"
+      # Cache principal. Retirez cette ligne et la base de données reprend
+      # le rôle : la pile démarre sans Redis.
+      REDIS_URL: "redis://redis:6379/0"
     volumes:
       - ./backend:/app
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -103,6 +131,12 @@ services:
       AWS_ACCESS_KEY_ID: "justi"
       AWS_SECRET_ACCESS_KEY: "justi-minio-dev"
       AWS_STORAGE_BUCKET_NAME: "justificatifs"
+      # Le même cache que le serveur, et ce n'est pas un détail : la
+      # configuration du circuit y est gardée sans expiration, et c'est le
+      # serveur qui l'invalide quand elle change. Deux caches distincts
+      # laisseraient l'ordonnanceur notifier selon une politique périmée,
+      # indéfiniment.
+      REDIS_URL: "redis://redis:6379/0"
       # Cadences surchargeables sans reconstruire l'image.
       SCHEDULE_EMAILS: "*/5 * * * *"
       SCHEDULE_SUPPRESSIONS: "*/5 * * * *"
@@ -113,6 +147,8 @@ services:
       - ./backend:/app
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       backend:
         condition: service_started

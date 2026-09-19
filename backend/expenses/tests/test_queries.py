@@ -249,3 +249,73 @@ class RelationsSansJointureTests(ExpenseTestCase):
             self._jointures_de_la_requete_principale("/api/expenses/register/"),
             self.LIMITE,
         )
+
+
+@in_memory_storage
+class IndexDeTriTests(ExpenseTestCase):
+    """L'index de tri doit rester aligné sur ``ordering``.
+
+    Trouvé par l'audit de résilience. La liste des dépenses se trie par
+    ``-date, -created_at, -pk`` ; sans index correspondant, Postgres
+    parcourait les 6 009 lignes du banc et les triait pour n'en garder
+    vingt-cinq — **3,06 ms contre 0,03 ms** après, et 3,56 → 0,24 ms à la
+    quarantième page. Le plan passe d'un parcours complet suivi d'un tri à
+    un simple parcours d'index sur cinq pages.
+
+    Ce que ce test garde n'est pas « l'index existe » — cela se verrait à
+    l'œil — mais **qu'il corresponde encore au tri**. Changer ``ordering``
+    sans changer l'index ne casse rien de visible : la liste reste juste, et
+    redevient simplement lente, en silence. C'est exactement le genre de
+    régression qu'on ne remarque qu'en production.
+    """
+
+    NOM = "depense_tri_liste"
+
+    def _index_du_modele(self):
+        for index in Expense._meta.indexes:
+            if index.name == self.NOM:
+                return index
+        self.fail(f"l'index {self.NOM} a disparu du modèle")
+
+    @staticmethod
+    def _normaliser(champs):
+        """``-pk`` et ``-id`` désignent la même colonne."""
+        return ["-id" if champ == "-pk" else champ for champ in champs]
+
+    def test_l_index_suit_le_tri_de_la_liste(self):
+        self.assertEqual(
+            self._index_du_modele().fields,
+            self._normaliser(Expense._meta.ordering),
+            "le tri des listes et l'index ne disent plus la même chose : "
+            "la liste reste juste, mais redevient lente sans rien dire",
+        )
+
+    def test_le_tri_se_lit_dans_l_index_sans_trier(self):
+        """Un index qui existe mais qu'il faut retrier ne sert à rien.
+
+        On coupe le parcours séquentiel : sur les quelques lignes d'une base
+        de test, Postgres le préférerait de toute façon, et le plan ne dirait
+        rien de ce qui se passe à six mille lignes.
+        """
+        for index in range(3):
+            self._ligne_complete(index)
+        requete = Expense.objects.with_rectification().order_by(*Expense._meta.ordering)[:25]
+        sql, params = requete.query.sql_with_params()
+
+        with connection.cursor() as curseur:
+            curseur.execute("SET LOCAL enable_seqscan = off")
+            curseur.execute("EXPLAIN (FORMAT JSON) " + sql, params)
+            plan = str(curseur.fetchone()[0])
+
+        self.assertIn(self.NOM, plan, "le tri n'emprunte pas l'index")
+        self.assertNotIn(
+            "Sort", plan,
+            "Postgres trie encore : l'index ne couvre pas l'ordre demandé",
+        )
+
+    def _ligne_complete(self, index):
+        return Expense.objects.create(
+            dossier=self.dossier, country=self.togo, team=self.team,
+            owner=self.manager, date=f"{self.year}-02-01T10:00:00Z",
+            title=f"Ligne {index}", amount=Decimal("100.00"),
+        )
