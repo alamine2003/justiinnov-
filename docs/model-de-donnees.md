@@ -492,6 +492,10 @@ AuditLog, ChangeLog, Notification ─▶ Country (null)
 
 ## 8. Décisions de modélisation validées
 
+Les décisions **60 à 71** viennent toutes de l'audit de résilience de
+septembre 2026 : ce qu'elles corrigent, comment cela a été mesuré et ce
+qui reste non couvert sont dans [`audit-resilience.md`](audit-resilience.md).
+
 | # | Décision | Choix |
 |---|---|---|
 | 1 | Contexte (pays, équipe, propriétaire, date) | **dupliqué sur chaque ligne** |
