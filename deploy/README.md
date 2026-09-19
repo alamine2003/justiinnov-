@@ -1055,6 +1055,88 @@ de 2 à 4, sortie complète de `verifier_restauration`, écarts constatés,
 limites restantes. Un écart inexpliqué est un incident, pas une note de
 bas de page.
 
+## Reprise à un instant donné
+
+Le dump de 02:00 dit où l'on était cette nuit-là. **Les segments de journal
+disent tout ce qui s'est passé depuis.** Sans eux, une panne de disque à
+01:59 perdrait toute la journée : les dépenses saisies, les pièces
+rattachées, les décisions du siège. Avec eux, on perd quelques minutes — et
+l'on peut aussi revenir à 14:31 pour défaire un effacement de 14:32, ce
+qu'aucun dump quotidien ne permet.
+
+Trois pièces, et il faut les trois :
+
+| pièce | qui la produit | à quoi elle sert |
+|---|---|---|
+| segments de journal | Postgres, via `archiver_wal.sh` (`archive_command`) | rejouer ce qui s'est passé |
+| sauvegarde physique | `sauvegarder.sh base`, une fois par semaine | le point de départ. **Un `pg_dump` ne peut pas en tenir lieu** |
+| copie hors machine | `sauvegarde-distante`, comme pour les dumps | survivre à la perte du serveur |
+
+### Ce qu'il faut savoir avant d'y toucher
+
+> **Tant que l'archivage échoue, Postgres conserve ses segments.** Ils
+> s'accumulent dans `pg_wal`, et un archivage cassé assez longtemps remplit
+> le disque de la base — donc l'arrête. C'est délibéré de la part de
+> Postgres : il préfère s'arrêter que perdre. C'est pourquoi
+> `manage.py verifier_sauvegardes` surveille `pg_stat_archiver` et prévient
+> les administrateurs dès qu'un échec est **postérieur** au dernier succès.
+> Ne coupez pas cette surveillance.
+
+L'alerte ne se déclenche pas sur l'ancienneté du dernier segment : une nuit
+sans écriture n'en produit aucun, et crier au loup tous les week-ends
+reviendrait à n'être plus lu.
+
+### Répéter la reprise — à faire tous les trimestres
+
+Le mode par défaut ne touche à rien : il déplie une copie dans un répertoire
+jetable et ouvre une base temporaire à côté.
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm \
+  --entrypoint /restaurer_a_la_date.sh sauvegarde \
+  --a '2026-09-19 14:31:00+00'
+```
+
+Il dit alors comment l'interroger, puis comment la jeter. La pile continue
+de servir pendant ce temps.
+
+**Une reprise jamais répétée n'est pas un plan.** Notez la durée à chaque
+répétition : c'est votre RTO réel, et il grandit avec la base.
+
+### Le jour où il faut vraiment
+
+```bash
+docker compose -f docker-compose.prod.yml stop backend scheduler db
+docker compose -f docker-compose.prod.yml run --rm \
+  --entrypoint /restaurer_a_la_date.sh sauvegarde \
+  --a '2026-09-19 14:31:00+00' --en-production
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Le script demande une confirmation tapée à la main, et **met l'ancien
+répertoire de côté au lieu de l'effacer** : si la reprise tourne mal, il
+reste la seule chose qui contienne encore les données. Vérifiez les données
+avant de l'effacer.
+
+Si les segments sont chiffrés (`SAUVEGARDE_CLE_PUBLIQUE`), apportez la clé
+privée du coffre et renseignez `SAUVEGARDE_CLE_PRIVEE` le temps de
+l'opération. Elle n'a pas sa place sur le serveur le reste du temps.
+
+### Ce qui a été mesuré
+
+Sur un banc de 72 Mo, pendant l'audit de résilience :
+
+| étape | durée |
+|---|---|
+| sauvegarde physique (`pg_basebackup`) | 3,0 s |
+| reprise à un instant précis, base ouverte | 0,6 s |
+
+Et le résultat : les 3 000 lignes effacées par erreur retrouvées, l'erreur
+elle-même absente, la pile d'origine intacte. **Ces durées sont celles d'un
+banc**, sans rapatriement depuis la copie distante — qui domine le temps
+réel quand le serveur est perdu. Mesurez les vôtres à la prochaine
+répétition.
+
 ## Après une fuite
 
 Une sauvegarde lue par un tiers, un `.env` copié, un poste d'exploitation

@@ -22,6 +22,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db import connection
 from django.utils import timezone
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
@@ -35,6 +36,18 @@ SAUVEGARDES = {
     "base": _("la sauvegarde de la base"),
     "pieces": _("le miroir des justificatifs"),
     "distant": _("la copie hors machine"),
+    "base-physique": _("la sauvegarde physique"),
+}
+
+#: Seuils propres à certaines sauvegardes. La sauvegarde physique est
+#: hebdomadaire : lui appliquer le seuil quotidien la déclarerait en retard
+#: six jours sur sept, et une alerte qui crie tous les jours n'est plus lue.
+#: Huit jours laissent passer un retard d'un jour sans rien dire.
+AGES_MAX_HEURES = {"base-physique": 24 * 8}
+
+#: Suffixe du service à consulter dans les journaux, par sauvegarde.
+SERVICES = {
+    "base": "", "base-physique": "", "pieces": "-pieces", "distant": "-distante",
 }
 
 #: Qui est prévenu : ceux qui tiennent l'exploitation.
@@ -69,12 +82,48 @@ def anomalies(dossier, *, age_max, maintenant=None):
     maintenant = maintenant or timezone.now()
     trouvees = []
     for quoi in SAUVEGARDES:
+        seuil = age_max
+        if quoi in AGES_MAX_HEURES:
+            seuil = timedelta(hours=AGES_MAX_HEURES[quoi])
         derniere = lire_marqueur(dossier, quoi)
         if derniere is None and quoi == "base":
             derniere = dernier_dump(dossier)
-        if derniere is None or maintenant - derniere > age_max:
+        if derniere is None or maintenant - derniere > seuil:
             trouvees.append((quoi, derniere))
     return trouvees
+
+
+def archivage_en_panne():
+    """L'archivage des segments est-il cassé *en ce moment* ?
+
+    On ne regarde pas l'ancienneté du dernier segment archivé : une nuit
+    sans écriture n'en produit aucun, et alerter là-dessus crierait au loup
+    tous les week-ends. Le signal juste est la comparaison des deux
+    horodatages de ``pg_stat_archiver`` — un échec **postérieur** au dernier
+    succès veut dire que Postgres réessaie et n'y arrive pas.
+
+    Cela n'attend pas : tant que l'archivage échoue, Postgres conserve ses
+    segments dans ``pg_wal``, où ils s'accumulent jusqu'à remplir le disque
+    de la base — et l'arrêter.
+
+    Rend ``(segment, instant)`` de l'échec, ou ``None`` si tout va bien ou
+    si l'archivage n'est pas activé.
+    """
+    with connection.cursor() as curseur:
+        curseur.execute("SHOW archive_mode")
+        if (curseur.fetchone() or [""])[0] not in ("on", "always"):
+            return None
+        curseur.execute(
+            "SELECT last_failed_wal, last_failed_time, last_archived_time "
+            "FROM pg_stat_archiver"
+        )
+        ligne = curseur.fetchone()
+    if not ligne or ligne[1] is None:
+        return None
+    segment, echoue_a, archive_a = ligne
+    if archive_a is not None and archive_a >= echoue_a:
+        return None
+    return segment, echoue_a
 
 
 class Command(BaseCommand):
@@ -101,9 +150,21 @@ class Command(BaseCommand):
         for quoi in SAUVEGARDES:
             derniere = lire_marqueur(dossier, quoi)
             etat = derniere.isoformat(timespec="minutes") if derniere else "jamais (aucun marqueur)"
-            self.stdout.write(f"{quoi:<8} dernière réussite : {etat}")
+            self.stdout.write(f"{quoi:<14} dernière réussite : {etat}")
+
+        panne = archivage_en_panne()
+        if panne is not None:
+            segment, echoue_a = panne
+            self.stdout.write(self.style.ERROR(
+                f"✘ archivage des segments en échec depuis {echoue_a:%d/%m/%Y %H:%M} "
+                f"(segment {segment or '?'})"
+            ))
+            if not options["dry_run"]:
+                self._prevenir_de_l_archivage(segment, echoue_a, maintenant)
+
         if not trouvees:
-            self.stdout.write(self.style.SUCCESS("✔ Sauvegardes à jour."))
+            if panne is None:
+                self.stdout.write(self.style.SUCCESS("✔ Sauvegardes à jour."))
             return
 
         for quoi, derniere in trouvees:
@@ -130,9 +191,34 @@ class Command(BaseCommand):
                 body=format_lazy(
                     _("{detail} Vérifiez « docker compose logs sauvegarde{suffixe} » sur le serveur (deploy/README.md, « Sauvegardes et restauration »)."),
                     detail=detail,
-                    suffixe={"base": "", "pieces": "-pieces", "distant": "-distante"}[quoi],
+                    suffixe=SERVICES[quoi],
                 ),
                 link="/configuration",
                 dedup_key=f"sauvegardes:{jour}:{quoi}",
             )
         self.stdout.write(f"{len(trouvees)} notification(s) émise(s).")
+
+    def _prevenir_de_l_archivage(self, segment, echoue_a, maintenant):
+        """Un archivage cassé ne se contente pas d'interrompre la reprise :
+        Postgres garde ses segments et finit par remplir le disque."""
+        notify(
+            recipients_for(DESTINATAIRES),
+            kind=Notification.Kind.STORAGE_ERROR,
+            level=Notification.Level.CRITICAL,
+            title=_("Archivage des journaux en échec"),
+            body=format_lazy(
+                _(
+                    "Depuis le {quand}, Postgres n'arrive plus à archiver ses "
+                    "journaux (segment {segment}). Deux conséquences : la reprise "
+                    "à un instant donné s'arrête à la dernière réussite, et les "
+                    "segments s'accumulent sur le disque de la base jusqu'à la "
+                    "bloquer. Vérifiez « docker compose logs db » et l'espace "
+                    "libre du volume des sauvegardes (deploy/README.md, "
+                    "« Reprise à un instant donné »)."
+                ),
+                quand=timezone.localtime(echoue_a).strftime("%d/%m/%Y %H:%M"),
+                segment=segment or "?",
+            ),
+            link="/configuration",
+            dedup_key=f"archivage:{maintenant.date().isoformat()}",
+        )

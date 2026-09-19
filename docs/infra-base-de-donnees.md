@@ -44,33 +44,45 @@ Ce que la pile fait aujourd'hui :
 | | dispositif | mesuré / constaté |
 |---|---|---|
 | Sauvegarde | `pg_dump -Fc` quotidien à 02:00, chiffré AES-256 à la sortie du tube | rotation 30 jours, copie mensuelle **jamais supprimée** |
+| **Archivage des journaux** | `archive_command` → `archiver_wal.sh`, chiffré de même | **ajouté depuis** (décision 74) : RPO de 24 h → quelques minutes |
+| **Sauvegarde physique** | `pg_basebackup` hebdomadaire | **ajoutée depuis** : point de départ obligatoire d'une reprise |
 | Copie hors machine | `rclone crypt`, incrémentale, vérifiée (`rclone check`) | chiffrée en transit et au repos distant |
 | Justificatifs | miroir séparé | même chaîne |
 | Contrôle | `manage.py verifier_sauvegardes` lit les marqueurs, notifie les administrateurs | tâche de l'ordonnanceur |
 | Restauration | `restaurer.sh`, depuis le volume ou depuis la copie distante | script écrit et documenté |
 
-C'est une chaîne sérieuse, et plus complète que ce qu'on voit d'ordinaire à
-cette échelle. Mais elle a **un trou, et il est béant** :
+C'était une chaîne sérieuse, et plus complète que ce qu'on voit d'ordinaire
+à cette échelle. Mais elle avait **un trou, et il était béant** :
 
-> **Il n'y a pas d'archivage des journaux de transaction.** Pas
-> d'`archive_mode`, pas de `restore_command`, pas de sauvegarde continue.
-> La seule granularité de reprise est le dump quotidien.
-
-Conséquence, en clair : **une panne de disque à 01:59 perd toute la journée
-de travail.** Toutes les dépenses saisies, toutes les pièces rattachées,
-toutes les décisions du siège, tous les journaux d'audit de la journée.
+> **Il n'y avait pas d'archivage des journaux de transaction.** Ni
+> `archive_mode`, ni `restore_command`, ni sauvegarde continue. La seule
+> granularité de reprise était le dump quotidien — donc **une panne de
+> disque à 01:59 perdait toute la journée de travail**. Toutes les dépenses
+> saisies, toutes les pièces rattachées, toutes les décisions du siège, tous
+> les journaux d'audit de la journée.
 
 Pour une application dont la raison d'être est « savoir ce qui a été
-dépensé, et où est la preuve », c'est le risque le plus sérieux de toute
-l'infrastructure — bien avant la performance. Et il n'est écrit nulle
-part : ni `RPO` ni `RTO` n'apparaissent dans `deploy/README.md`.
+dépensé, et où est la preuve », c'était le risque le plus sérieux de toute
+l'infrastructure — bien avant la performance.
 
-### Ce que ces deux mots veulent dire, pour la direction
+**C'est fait** (décision 74) : les segments sont archivés, une sauvegarde
+physique hebdomadaire leur sert de point de départ, et
+`restaurer_a_la_date.sh` rejoue les deux jusqu'à l'instant demandé. Éprouvé
+de bout en bout sur un banc de 72 Mo : sauvegarde physique en 3,0 s, reprise
+en 0,6 s, les 3 000 lignes effacées par erreur retrouvées et la bêtise
+absente.
 
-- **RPO** — ce qu'on accepte de **perdre**. Aujourd'hui : **jusqu'à 24 h**.
-- **RTO** — le temps qu'on met à **repartir**. Aujourd'hui : non mesuré.
-  `restaurer.sh` existe, mais une restauration n'a jamais été chronométrée
-  sur le serveur réel. Un plan de reprise jamais joué n'est pas un plan.
+### Ce qui reste à décider, et qui ne se code pas
+
+- **RPO** — ce qu'on accepte de **perdre**. Plus 24 h ; désormais borné par
+  `POSTGRES_ARCHIVE_TIMEOUT` (300 s par défaut). Mais **le chiffre qu'on
+  garantit n'est toujours écrit nulle part**, et c'est à la direction de le
+  fixer, pas au code.
+- **RTO** — le temps qu'on met à **repartir**. Mesuré sur le banc (0,6 s),
+  **jamais sur le serveur réel**, où le rapatriement depuis la copie
+  distante dominera. Il se mesure à la prochaine répétition trimestrielle —
+  `restaurer_a_la_date.sh` sans argument destructeur ne touche à rien, il
+  n'y a donc aucune raison de ne pas la faire.
 
 ---
 
@@ -153,9 +165,11 @@ distante, avec `restaurer.sh`. On saura alors le RTO au lieu de l'espérer.
 À refaire à chaque changement d'infrastructure — un plan de reprise se
 répète.
 
-**3. Archiver les journaux de transaction** (option A). C'est le seul
-changement qui déplace vraiment le risque : de « perdre une journée » à
-« perdre quelques minutes ».
+**3. Archiver les journaux de transaction** (option A) — **fait**, voir
+`deploy/README.md`, « Reprise à un instant donné », et la décision 74. Le
+risque passe de « perdre une journée » à « perdre quelques minutes », et
+l'effacement par erreur devient réparable. Éprouvé sur un banc de 72 Mo :
+sauvegarde physique en 3,0 s, reprise en 0,6 s, l'erreur défaite.
 
 **4. Surveiller ce qui est déjà en place.** `postgres-exporter` alimente
 déjà Prometheus ; ajouter une alerte sur l'âge de la dernière sauvegarde

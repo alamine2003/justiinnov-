@@ -164,9 +164,34 @@ services:
     # connexion. Cinquante tient dans la limite et laisse le double de ce
     # que la pile consomme (voir POSTGRES_MAX_CONNECTIONS dans
     # `.env.example` pour le détail du budget).
-    command: >
-      postgres -c shared_buffers=256MB -c effective_cache_size=768MB
-      -c max_connections=${POSTGRES_MAX_CONNECTIONS:-50}
+    #
+    # `archive_command` : chaque segment de journal rempli est copié hors de
+    # `pg_wal` (archiver_wal.sh). C'est ce qui permet la reprise à un instant
+    # donné — le dump de 02:00 dit où l'on était, les segments disent tout ce
+    # qui s'est passé depuis. Sans eux, une panne à 01:59 perd la journée.
+    #
+    # La commande est écrite en **liste** et non en chaîne : `%p %f` et les
+    # espaces de `archive_command` dépendraient sinon d'une découpe de shell,
+    # et une erreur de guillemets ne se verrait qu'au premier segment perdu.
+    #
+    # `archive_timeout` borne ce qu'on risque quand le trafic est faible :
+    # sans lui, un segment à moitié rempli attend d'être plein, et le travail
+    # d'une soirée calme resterait hors de l'archive. Postgres ne force le
+    # changement que s'il y a eu écriture : une base au repos ne produit rien.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-50}
+      - -c
+      - archive_mode=${POSTGRES_ARCHIVE_MODE:-on}
+      - -c
+      - archive_command=/archiver_wal.sh %p %f
+      - -c
+      - archive_timeout=${POSTGRES_ARCHIVE_TIMEOUT:-300}
     shm_size: 256m
     mem_limit: 1g
     # Le superutilisateur du conteneur est le rôle propriétaire : celui qui
@@ -175,8 +200,18 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-justi_innov}
       POSTGRES_USER: ${POSTGRES_MIGRATION_USER:-${POSTGRES_USER:-justi}}
       POSTGRES_PASSWORD: ${POSTGRES_MIGRATION_PASSWORD:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}}
+      # Un segment contient les mêmes données qu'un dump : lignes, jetons,
+      # secrets TOTP. S'il est demandé pour les dumps, il l'est ici aussi —
+      # sinon l'archive serait le trou de la serrure.
+      SAUVEGARDE_CLE_PUBLIQUE: ${SAUVEGARDE_CLE_PUBLIQUE:-}
+      SAUVEGARDE_DESTINATION: /sauvegardes
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # L'archivage écrit dans le volume des sauvegardes : c'est Postgres
+      # lui-même qui appelle le script, il faut donc que la base y accède.
+      # En lecture seule pour le script, en écriture pour l'archive.
+      - ./archiver_wal.sh:/archiver_wal.sh:ro
+      - sauvegardes:/sauvegardes
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_MIGRATION_USER:-${POSTGRES_USER:-justi}} -d ${POSTGRES_DB:-justi_innov}"]
       interval: 10s

@@ -60,9 +60,22 @@ class BudgetDeConnexionsTests(SimpleTestCase):
         super().setUpClass()
         cls.db = yaml.safe_load(PILE.read_text())["services"]["db"]
 
+    @staticmethod
+    def _commande(service):
+        """La commande du service, en une chaîne.
+
+        Compose accepte les deux formes ; celle de la base est passée en
+        liste depuis que ``archive_command`` y figure — ``%p %f`` et ses
+        espaces ne doivent dépendre d'aucune découpe de shell.
+        """
+        commande = service.get("command", "")
+        if isinstance(commande, list):
+            return " ".join(str(morceau) for morceau in commande)
+        return str(commande)
+
     def _plafond_de_la_pile(self):
         """``max_connections`` tel que la pile le passe à Postgres."""
-        commande = str(self.db.get("command", ""))
+        commande = self._commande(self.db)
         trouve = re.search(
             r"-c\s+max_connections=\$\{POSTGRES_MAX_CONNECTIONS:-(\d+)\}", commande
         )
@@ -104,7 +117,7 @@ class BudgetDeConnexionsTests(SimpleTestCase):
         """
         limite_mo = int(re.fullmatch(r"(\d+)g", str(self.db["mem_limit"])).group(1)) * 1024
         tampons_mo = int(
-            re.search(r"shared_buffers=(\d+)MB", str(self.db["command"])).group(1)
+            re.search(r"shared_buffers=(\d+)MB", self._commande(self.db)).group(1)
         )
         cout_connexion_mo = 2.4  # haut de la fourchette mesurée
         plafond = self._plafond_de_la_pile()
