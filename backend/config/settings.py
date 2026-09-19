@@ -115,10 +115,26 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Cache partagé entre les workers gunicorn. Indispensable pour la limitation
 # de débit : un cache local à chaque processus multiplierait la limite par le
 # nombre de workers.
+#: Nombre d'entrées au-delà duquel Django purge la table du cache. Son
+#: défaut — 300 — n'avait jamais été choisi, et **la purge supprime par
+#: ordre alphabétique de clé, pas par ancienneté** (``_cull``,
+#: ``cache_key_culling_sql``). Or les compteurs anti-bourrage s'appellent
+#: ``throttle_login_<adresse>`` : ils se classent parmi les plus bas, donc
+#: partent les premiers. Mesuré pendant l'audit de résilience : à 250
+#: comptes actifs dans l'heure le compteur survit, à **400 il est effacé** —
+#: sans attaquant, par la seule croissance de l'application, puisque chaque
+#: compte actif laisse une clé pendant une heure. Deux mille laisse la place
+#: à bien plus de comptes que le groupe n'en aura, en bornant la table à
+#: quelques mégaoctets. Cela ferme le cas accidentel ; cela ne rend pas la
+#: limite insensible à un remplissage délibéré venu de nombreuses adresses,
+#: chaque nom de compte essayé créant une clé.
+CACHE_MAX_ENTRIES = int(os.environ.get("DJANGO_CACHE_MAX_ENTRIES", "2000"))
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "django_cache",
+        "OPTIONS": {"MAX_ENTRIES": CACHE_MAX_ENTRIES},
     }
 }
 
