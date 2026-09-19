@@ -58,7 +58,8 @@
     "equipes": "Teams",
     "supervision": "Monitoring",
     "activer_2fa": "Enable two-factor authentication",
-    "totp_active": "2FA active"
+    "totp_active": "2FA active",
+    "version_api": "API version {{version}}"
   },
   "erreurs": {
     "injoignable": "Server unreachable. Check your connection.",
@@ -929,6 +930,7 @@
       "parametres_titre": "Server and workflow settings",
       "parametres_texte": "Server settings are read-only. The workflow policy below can be changed by headquarters and takes effect without a restart.",
       "application": "Application",
+      "version_api": "API version",
       "developpement": "Development",
       "fuseau_serveur": "Server time zone",
       "mode_debug": "Debug mode",

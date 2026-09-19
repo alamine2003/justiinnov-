@@ -5,6 +5,7 @@ l'application :mod:`core`.
 """
 
 import os
+import re
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlparse
 
@@ -14,6 +15,32 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Le mode debug doit être un choix explicite : par défaut, on est en production.
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
+
+# Forme attendue d'une étiquette d'image : un SHA court, un tag sémantique
+# (``v1.0.6``) ou une combinaison des deux (``1.0.6+sha.abc123``). Jamais de
+# chevrons, d'espace ou de séparateur qui laisserait croire que la valeur est
+# recopiée telle quelle quelque part de sensible : elle est affichée à des
+# comptes du siège authentifiés, pas exécutée, mais une forme bornée coûte
+# rien et évite qu'un ``.env`` mal posé n'affiche n'importe quoi.
+_FORME_VERSION = re.compile(r"^[A-Za-z0-9._+-]{1,40}$")
+
+
+def lire_version(valeur):
+    """Étiquette d'image à afficher, ou repli sur ``dev``.
+
+    Fonction pure (testée dans ``config/tests/test_version_env.py``) : une
+    chaîne vide, uniquement faite d'espaces, trop longue ou de forme
+    inattendue retombe sur ``dev`` plutôt que d'être affichée telle quelle.
+    """
+    valeur = valeur.strip()
+    if not valeur or not _FORME_VERSION.fullmatch(valeur):
+        return "dev"
+    return valeur
+
+
+# Version affichée dans le menu du compte et en back-office (étiquette
+# d'image posée par le déploiement).
+APP_VERSION = lire_version(os.environ.get("APP_VERSION", ""))
 # L'admin Django n'est monté qu'en développement (décision 44) : en
 # production nginx ne le relaie pas, et une session ouverte sur
 # ``/admin/login/`` avec le seul mot de passe contournerait le second

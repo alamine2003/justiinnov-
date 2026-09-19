@@ -44,6 +44,10 @@ export function GeneralSection() {
         <Bloc titre={t("configuration.general.application")}>
           <Ligne label={t("commun.nom")} valeur={BRAND.name} />
           <Ligne label={t("layout.version")} valeur={BRAND.version} />
+          <Ligne
+            label={t("configuration.general.version_api")}
+            valeur={config.systeme.version_api}
+          />
           <Ligne label={t("configuration.general.developpement")} valeur={BRAND.developer} />
           <Ligne
             label={t("configuration.general.fuseau_serveur")}

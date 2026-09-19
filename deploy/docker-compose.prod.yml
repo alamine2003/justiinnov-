@@ -118,6 +118,10 @@ x-django: &django
   # (/api/configuration/) le renvoie à l'interface, qui n'affiche l'entrée
   # « Supervision » que s'il vaut 1 — sinon le lien mènerait à un 404.
   SUPERVISION: ${SUPERVISION:-0}
+  # Étiquette d'image posée par la livraison continue : affichée dans le
+  # menu du compte et en back-office (« Configuration › Général »). Sans
+  # ``APP_VERSION`` ni ``IMAGE_TAG``, repli sur ``dev``.
+  APP_VERSION: ${APP_VERSION:-${IMAGE_TAG:-dev}}
   # --- Ordonnanceur ---
   SCHEDULE_EMAILS: ${SCHEDULE_EMAILS:-*/5 * * * *}
   SCHEDULE_SUPPRESSIONS: ${SCHEDULE_SUPPRESSIONS:-*/5 * * * *}

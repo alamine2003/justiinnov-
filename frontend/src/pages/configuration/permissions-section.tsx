@@ -28,9 +28,11 @@ import { Chargement, Erreur } from "@/pages/configuration/section-states"
 export function PermissionsSection() {
   const query = useQuery("permissions", () => fetchPermissionMatrix())
   // Chaque enregistrement remonte une matrice neuve : la clé remonte le
-  // formulaire, dont l'état local repart de ce que le serveur a retenu.
+  // formulaire, dont l'état local repart de ce que le serveur a retenu. La
+  // confirmation, elle, survit au remontage : elle vit ici.
   const [version, setVersion] = useState(0)
   const [matrix, setMatrix] = useState<PermissionMatrix | null>(null)
+  const [enregistre, setEnregistre] = useState(false)
   const courante = matrix ?? query.data ?? null
 
   if (query.loading && !courante) return <Chargement />
@@ -41,8 +43,11 @@ export function PermissionsSection() {
     <MatriceDesDroits
       key={version}
       matrix={courante}
+      enregistre={enregistre}
+      onModification={() => setEnregistre(false)}
       onSaved={(suivante) => {
         setMatrix(suivante)
+        setEnregistre(true)
         setVersion((v) => v + 1)
       }}
     />
@@ -51,9 +56,14 @@ export function PermissionsSection() {
 
 export function MatriceDesDroits({
   matrix,
+  enregistre = false,
+  onModification,
   onSaved,
 }: {
   matrix: PermissionMatrix
+  /** Le dernier enregistrement a réussi et rien n'a bougé depuis. */
+  enregistre?: boolean
+  onModification?: () => void
   onSaved: (matrix: PermissionMatrix) => void
 }) {
   const { t } = useTranslation()
@@ -62,7 +72,6 @@ export function MatriceDesDroits({
     Object.fromEntries(matrix.capabilities.map((c) => [c.key, c.roles])),
   )
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
@@ -72,7 +81,7 @@ export function MatriceDesDroits({
   const groupes = [...new Set(matrix.capabilities.map((c) => c.group))]
 
   const basculer = (cle: string, role: string, accorde: boolean) => {
-    setSaved(false)
+    onModification?.()
     setChoix((etat) => ({
       ...etat,
       [cle]: accorde ? [...etat[cle], role] : etat[cle].filter((r) => r !== role),
@@ -92,7 +101,6 @@ export function MatriceDesDroits({
       // Le serveur a enregistré : une relecture qui échoue ne doit pas le
       // faire passer pour un refus.
       await refreshProfile().catch(() => undefined)
-      setSaved(true)
       onSaved(suivante)
     } catch (err) {
       if (err instanceof ApiError) {
@@ -200,7 +208,7 @@ export function MatriceDesDroits({
                                         droit: capability.label,
                                       })}
                                       onClick={() => {
-                                        setSaved(false)
+                                        onModification?.()
                                         setChoix((etat) => ({
                                           ...etat,
                                           [capability.key]: capability.default_roles,
@@ -285,7 +293,7 @@ export function MatriceDesDroits({
           </div>
 
           {error && <FormError>{error}</FormError>}
-          {saved && modifiees.length === 0 && (
+          {enregistre && modifiees.length === 0 && (
             <Alert>
               <CheckCircle2 className="h-4 w-4" />
               <AlertDescription>{t("configuration.permissions.enregistre")}</AlertDescription>
@@ -333,7 +341,7 @@ export function MatriceDesDroits({
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setSaved(false)
+                    onModification?.()
                     setChoix(Object.fromEntries(matrix.capabilities.map((c) => [c.key, c.roles])))
                   }}
                 >

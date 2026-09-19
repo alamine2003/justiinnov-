@@ -2197,6 +2197,8 @@ export interface components {
         ConfigurationSysteme: {
             readonly fuseau: string
             readonly mode_debug: boolean
+            /** @description Version du serveur en service (``APP_VERSION``, ``dev`` par défaut). */
+            readonly version_api: string
         }
         ConsolidatedXof: {
             /** Format: decimal */
@@ -3233,6 +3235,7 @@ export interface components {
             readonly permissions: components["schemas"]["Permissions"]
             readonly workflow: components["schemas"]["MeWorkflow"]
             readonly supervision: boolean
+            readonly api_version: string
         }
         /** @description Politique du circuit que l'interface doit connaître. */
         MeWorkflow: {

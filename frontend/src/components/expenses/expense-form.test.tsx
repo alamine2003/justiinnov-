@@ -91,3 +91,17 @@ describe("ExpenseForm — équipe d'un manager rattaché", () => {
     expect(onSave.mock.calls[0][0]).toMatchObject({ amount: "2500", team: null })
   })
 })
+
+
+describe("ExpenseForm — manager du dossier", () => {
+  it("une ligne nouvelle reprend le manager du dossier", () => {
+    afficher({
+      managers: [
+        { id: 7, name: "Kodjo Mensah", email: "", title: "", is_active: true, countries: [1], created_at: "", updated_at: "" },
+      ],
+      defaultOwner: 7,
+    })
+
+    expect(screen.getByLabelText(/Manager responsable/)).toHaveValue("7")
+  })
+})

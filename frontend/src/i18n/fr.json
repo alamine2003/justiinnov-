@@ -58,7 +58,8 @@
     "equipes": "Équipes",
     "supervision": "Supervision",
     "activer_2fa": "Activer la double authentification",
-    "totp_active": "2FA active"
+    "totp_active": "2FA active",
+    "version_api": "Version de l'API {{version}}"
   },
   "erreurs": {
     "injoignable": "Serveur injoignable. Vérifiez votre connexion.",
@@ -929,6 +930,7 @@
       "parametres_titre": "Paramètres du serveur et du workflow",
       "parametres_texte": "Les paramètres du serveur sont en lecture seule. La politique du workflow ci-dessous est modifiable par le siège et prend effet sans redémarrage.",
       "application": "Application",
+      "version_api": "Version de l'API",
       "developpement": "Développement",
       "fuseau_serveur": "Fuseau du serveur",
       "mode_debug": "Mode debug",

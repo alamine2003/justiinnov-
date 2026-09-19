@@ -443,6 +443,7 @@ export function DossierDetailPage() {
         expenseTitles={expenseTitles}
         marketingCategories={marketingCategories}
         managers={managers}
+        defaultOwner={dossier.owner}
         currency={currencySymbol}
         timezone={dossier.country_timezone}
         teamRequired={teamRequired(me)}

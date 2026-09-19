@@ -341,7 +341,16 @@ celle du pays.
 En haut à droite, à côté des sélecteurs de thème et de langue
 (`user-menu.tsx`). Il porte, dans l'ordre : l'identité (`username ·
 role_display`) avec une pastille **« 2FA active »** (`Badge`,
-`STATUS_TONES.SUCCES`) quand `totp_confirmed` est vrai ; les équipes d'un
+`STATUS_TONES.SUCCES`) quand `totp_confirmed` est vrai ; sous l'identité, la
+version de l'API (`nav.version_api`, « Version de l'API {{version}} » /
+« API version {{version}} »), en `DropdownMenuLabel` discret
+(`text-xs text-muted-foreground`, comme les autres éléments d'information de
+ce menu), affichée **seulement** si `me.api_version` est renseigné — rien
+sinon. Ce n'est pas une action : un label dans un `DropdownMenuGroup`, jamais
+un `DropdownMenuItem`, rien à cliquer. La valeur vient du **serveur** qui
+répond (`/api/me/`) ; ne la confondez pas avec `BRAND.version`, la version du
+**client**, déjà affichée ailleurs (pied de page, écran de connexion,
+Configuration) ; les équipes d'un
 manager qui y est rattaché ; **« Activer la double authentification »**
 (icône `ShieldCheck`, lien vers `/2fa`) tant que `totp_confirmed` est
 faux — rien quand le serveur ne connaît pas la 2FA ; **« Supervision »**
