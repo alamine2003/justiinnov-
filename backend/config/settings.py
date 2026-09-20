@@ -814,6 +814,14 @@ if EN_TEST:
     LOGGING["handlers"]["console"]["level"] = "CRITICAL"
     TEST_RUNNER = "core.tests.runner.LanceurDeTests"
 
+# Nom que cette machine donne d'elle-même dans ``/api/health/`` (``machine``).
+# Vide, le champ n'apparaît pas : le point de santé ne révèle rien de plus
+# qu'aujourd'hui. Renseigné (« 1 », « 2 », « dakar »…), il dit **qui répond**
+# derrière un nom de domaine partagé — la seule façon, pendant une bascule,
+# de voir l'aiguillage changer de machine, et de constater qu'une ancienne
+# primaire redémarrée reprend le trafic (docs/audit-resilience.md §9).
+SERVEUR_NOM = os.environ.get("SERVEUR_NOM", "").strip()
+
 # Surveillance des erreurs : muette sans ``SENTRY_DSN``, et jamais installée
 # pendant les tests — une suite qui lève exprès n'a pas à remplir un tableau
 # de bord. Ce qu'elle laisse sortir, et ce qu'elle retient, est réglé dans le

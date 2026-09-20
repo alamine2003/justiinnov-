@@ -1274,6 +1274,50 @@ l'aller-retour du réseau, et le temps réel d'indisponibilité sera dominé par
 le DNS. C'est la première répétition sur les vraies machines qui le dira —
 faites-la avant d'en avoir besoin.
 
+## Répéter la bascule sur les deux vraies machines
+
+Le banc a mesuré la bascule sur une seule machine, avec deux bases et deux
+applications (`docs/audit-resilience.md` §9). Il ne peut pas la jouer sur
+deux machines réelles : cela se fait ici, et cela se **mesure** — sinon on
+saura seulement que « ça a marché », pas en combien de temps, ni ce qui
+s'est passé quand l'ancienne primaire est revenue.
+
+**Avant** : sur chaque machine, `SERVEUR_NOM=1` (primaire) et `SERVEUR_NOM=2`
+(seconde) dans `.env`, puis `up -d backend scheduler`. Dès lors,
+`/api/health/` dit quelle machine répond. Sans ce nom, le champ est absent et
+seul le code d'état renseigne.
+
+**Pendant**, depuis un poste qui n'est aucune des deux machines :
+
+```bash
+./chronometrer_bascule.sh https://<le domaine> --duree 900
+```
+
+Il n'écrit une ligne que quand quelque chose change, et donne à la fin les
+durées. Puis, sur la seconde machine, la répétition ordinaire :
+
+```bash
+./promouvoir_replique.sh --primaire-perdue <ip-primaire> --repetition   # rien d'irréversible
+./promouvoir_replique.sh --primaire-perdue <ip-primaire>                # la vraie
+```
+
+**Les trois lignes à lire dans le chronomètre**, et ce que le banc a donné :
+
+| moment | banc | ce qui compte |
+|---|---|---|
+| perte de « 1 » → première erreur | immédiate | la seule chose qu'on ne peut pas raccourcir |
+| promotion de « 2 » → premier 200 avec `machine: 2` | 4,8 s | un intervalle de contrôle de l'aiguillage ; **des minutes** sans aiguillage (TTL du DNS) |
+| rallumage de « 1 » telle quelle → `machine: 1` revient | **5,1 s** | **la panne que rien n'empêche** : « 1 » sert une base périmée |
+
+La troisième ligne est celle qu'il faut avoir vue une fois de ses yeux. Le
+chronomètre la signale en toutes lettres. Ne jouez ce troisième temps
+qu'en répétition, avec une base jetable — puis coupez « 1 » et refaites-la en
+réplique (`preparer_replique.sh`), comme le dit `promouvoir_replique.sh`.
+
+**Après** : reportez les trois durées ici, dans `docs/audit-resilience.md`
+§9, à côté de celles du banc. Ce sont vos vrais chiffres ; ceux du banc ne
+sont qu'une borne.
+
 ## Répartiteur : un seul nom pour deux machines
 
 **Ce n'est pas une répartition de charge, et le mot trompe.** Les deux

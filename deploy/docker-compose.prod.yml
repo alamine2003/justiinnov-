@@ -101,6 +101,11 @@ x-django: &django
   # même cache — la configuration du circuit y est gardée sans expiration,
   # et c'est le serveur qui l'invalide quand elle change.
   REDIS_URL: ${REDIS_URL-redis://redis:6379/0}
+  # --- Cette machine, vue de dehors ---
+  # Vide, /api/health/ ne dit rien de plus. Renseigné (« 1 », « 2 »), il dit
+  # quelle machine a répondu derrière un nom de domaine partagé : pendant une
+  # bascule, c'est la seule façon de voir l'aiguillage changer de machine.
+  SERVEUR_NOM: ${SERVEUR_NOM:-}
   # --- Surveillance des erreurs ---
   # Vide : rien ne s'installe, rien ne sort, aucune dépendance réseau de
   # plus. Renseigner l'adresse est une décision — une donnée de la plateforme

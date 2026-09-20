@@ -8,6 +8,7 @@ répondre sans compte, sans jeton, et dire vrai sur la base.
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.core.cache import cache
 from django.db import OperationalError
 from django.test import override_settings
@@ -78,6 +79,36 @@ class HealthTests(APITestCase):
             response = self.client.get("/api/health/")
 
         self.assertFalse(response.json()["writable"])
+
+    def test_sans_nom_la_machine_ne_se_presente_pas(self):
+        """Le défaut ne révèle rien de plus qu'avant : le champ est absent,
+        pas vide."""
+        with self.settings(SERVEUR_NOM=""):
+            response = self.client.get("/api/health/")
+
+        self.assertNotIn("machine", response.json())
+
+    def test_avec_un_nom_la_machine_dit_qui_repond(self):
+        """Derrière un aiguillage, deux machines rendent le même corps pour
+        le même nom de domaine. Pendant une bascule, savoir laquelle a servi
+        est la seule question — et c'est ainsi qu'on voit une ancienne
+        primaire rallumée reprendre le trafic (audit de résilience §9)."""
+        with self.settings(SERVEUR_NOM="2"):
+            response = self.client.get("/api/health/")
+
+        self.assertEqual(response.json()["machine"], "2")
+
+    def test_une_replique_se_presente_aussi(self):
+        """La machine qui refuse le trafic doit pouvoir dire que c'est elle :
+        sinon le chronomètre ne distingue pas « 2 en réplique » de « 2 en
+        panne »."""
+        with self.settings(SERVEUR_NOM="2"), patch.object(connection, "cursor") as cursor:
+            cursor.return_value.__enter__.return_value.fetchone.return_value = (True,)
+            response = self.client.get("/api/health/")
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.json()["status"], "replique")
+        self.assertEqual(response.json()["machine"], "2")
 
     def test_reste_joignable_avec_un_mot_de_passe_provisoire(self):
         # Le verrou du mot de passe provisoire ferme toute l'API ; la santé de

@@ -5,6 +5,7 @@ L'API du référentiel, l'authentification et le back-office vivent dans
 (décision 40). Ne reste ici que ce qui ne demande aucun compte.
 """
 
+from django.conf import settings
 from django.db import OperationalError, connection
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -92,7 +93,22 @@ class HealthView(APIView):
             )
         if en_reprise:
             return Response(
-                {"status": "replique", "database": "ok", "writable": False},
+                self._nommer({"status": "replique", "database": "ok", "writable": False}),
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        return Response({"status": "ok", "database": "ok", "writable": True})
+        return Response(self._nommer({"status": "ok", "database": "ok", "writable": True}))
+
+    @staticmethod
+    def _nommer(corps):
+        """Ajoute le nom de la machine, seulement si elle en a un.
+
+        Derrière un aiguillage, deux machines répondent au même nom de
+        domaine et rendent le même corps : rien ne dit laquelle a servi.
+        Pendant une bascule, c'est pourtant la seule question — et c'est
+        ainsi que l'on constate, chiffres à l'appui, qu'une ancienne primaire
+        redémarrée reprend le trafic. Sans ``SERVEUR_NOM``, le champ est
+        absent : le point de santé ne révèle rien de plus qu'avant.
+        """
+        if settings.SERVEUR_NOM:
+            corps["machine"] = settings.SERVEUR_NOM
+        return corps

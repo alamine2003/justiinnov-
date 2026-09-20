@@ -3107,6 +3107,7 @@ export interface components {
             readonly status: components["schemas"]["HealthStatusEnum"]
             readonly database: components["schemas"]["DatabaseEnum"]
             readonly writable: boolean
+            readonly machine: string
         }
         /**
          * @description * `ok` - ok

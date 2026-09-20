@@ -36,6 +36,8 @@ PRIMAIRE = RACINE / "deploy" / "docker-compose.prod.yml"
 REPLIQUE = RACINE / "deploy" / "docker-compose.replique.yml"
 PREPARATION = RACINE / "deploy" / "preparer_replique.sh"
 PROMOTION = RACINE / "deploy" / "promouvoir_replique.sh"
+CHRONOMETRE = RACINE / "deploy" / "chronometrer_bascule.sh"
+README = RACINE / "deploy" / "README.md"
 ROLE = RACINE / "deploy" / "creer_role_replication.sql"
 EXEMPLE = RACINE / "deploy" / ".env.example"
 
@@ -155,8 +157,24 @@ class RepliqueEnAttenteChaudeTests(SimpleTestCase):
         self.assertIn("NOSUPERUSER", source)
         self.assertIn("REVOKE CONNECT", source)
 
+    def test_le_chronometre_mesure_ce_que_le_banc_a_mesure(self):
+        """La bascule sur deux machines réelles ne peut pas être jouée depuis
+        l'environnement de développement (aucune adresse routable, aucune
+        sortie TCP brute). Elle se joue sur les vraies machines — et il faut
+        alors pouvoir la *mesurer*, avec la même méthode que le banc : une
+        sonde d'ailleurs, une ligne par changement, et les trois durées qui
+        comptent. Surtout la troisième : le retour d'une ancienne primaire,
+        que rien n'empêche, et que seul le chronomètre rend visible."""
+        source = CHRONOMETRE.read_text()
+
+        self.assertTrue(os.access(CHRONOMETRE, os.X_OK))
+        self.assertIn("/api/health/", source)
+        self.assertIn('"machine"', source)
+        self.assertIn("RETOUR DE L'ANCIENNE PRIMAIRE", source)
+        self.assertIn("chronometrer_bascule.sh", README.read_text())
+
     def test_les_scripts_sont_executables(self):
-        for script in (PREPARATION, PROMOTION):
+        for script in (PREPARATION, PROMOTION, CHRONOMETRE):
             with self.subTest(script=script.name):
                 self.assertTrue(
                     os.stat(script).st_mode & stat.S_IXUSR,

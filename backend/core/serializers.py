@@ -348,6 +348,10 @@ class HealthSerializer(serializers.Serializer):
     #: seule — c'est ce que le répartiteur de charge regarde pour ne pas y
     #: envoyer de monde (core/views.py).
     writable = serializers.BooleanField(read_only=True)
+    #: Nom que la machine se donne (``SERVEUR_NOM``). Absent tant qu'il n'est
+    #: pas réglé : derrière un aiguillage, c'est lui qui dit quelle machine a
+    #: répondu, et c'est la seule trace d'une bascule vue du dehors.
+    machine = serializers.CharField(read_only=True, required=False)
 
 
 class AvailableCountrySerializer(serializers.Serializer):

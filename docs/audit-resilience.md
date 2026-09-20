@@ -437,6 +437,37 @@ tombe — ce que cet audit a corrigé.
    lui-même** (§ ci-dessous : deux obstacles indépendants, dont un de
    topologie), et deux machines réelles.
 
+### Deux machines réelles : pourquoi pas d'ici, et comment le mesurer là-bas
+
+Demandé après la bascule sur banc. Vérifié plutôt que supposé : cette session
+ne dispose que d'un environnement cloud, sans sortie TCP brute (SSH est
+réécrit en HTTPS par le mandataire, un port quelconque expire), et une
+seconde session serait un autre conteneur isolé en TEST-NET, incapable de
+joindre le premier. Deux machines réelles ne s'opèrent donc pas d'ici, et un
+troisième banc sur une seule machine n'aurait rien appris de plus.
+
+Ce qui manquait pour que **vous** la jouiez n'était pas un script de plus
+pour promouvoir — `promouvoir_replique.sh --repetition` existe —, c'était de
+pouvoir la **mesurer**. Après une bascule, `curl /api/health/` rendait le
+même corps quelle que soit la machine : rien ne disait laquelle avait servi,
+alors que c'est la seule question. Deux ajouts, petits :
+
+* `/api/health/` porte un champ `machine` quand `SERVEUR_NOM` est réglé —
+  **absent sinon**, pour ne rien révéler de plus qu'avant ;
+* `deploy/chronometrer_bascule.sh` interroge le domaine chaque seconde
+  depuis un poste tiers, n'écrit qu'aux changements, et rend les trois durées
+  du banc : première erreur, service rétabli, et **le retour d'une machine
+  écartée**, qu'il signale en toutes lettres.
+
+Éprouvé sur une séquence réelle (une application relancée sous trois noms
+successifs) : il a vu « 1 2 1 », donné les durées, et déclenché l'alerte au
+retour de 1. Deux de ses défauts en sont sortis : une expansion de shell qui
+imprimait « +6 s6 », et une liste dédoublonnée qui cachait justement le
+retour.
+
+Les chiffres du banc sont une borne, pas une mesure : la première répétition
+sur les vraies machines doit reporter les siens ici.
+
 ### Let's Encrypt lui-même : pourquoi il n'a pas pu être joué ici
 
 Demandé deux fois, tenté pour de bon la seconde. **Deux obstacles
