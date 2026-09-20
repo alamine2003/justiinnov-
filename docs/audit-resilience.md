@@ -1,17 +1,78 @@
 # Audit de résilience — JUSTI INNOV
 
-Septembre 2026. Dix phases, injection de pannes réelles sur un banc dédié.
+Septembre 2026. **Deux séries.** La première : dix phases d'injection de
+pannes sur un banc dédié, seize scénarios, un rapport (§1 à §8). La seconde,
+ouverte par ce rapport : huit chantiers d'infrastructure — index et cache,
+archivage et reprise, réplique, aiguillage, dépôt de 20 Mo, TLS,
+surveillance, deux machines — chacun joué, mesuré, et souvent contredit par
+la mesure (§9).
 
 Ce document est le compte rendu complet : ce qui a été éprouvé, ce qui a
 cédé, ce qui a tenu, ce qui a été corrigé, ce qui ne l'a pas été et
 pourquoi. Les décisions elles-mêmes vivent dans
-[`model-de-donnees.md`](model-de-donnees.md) §8, numéros **60 à 71** ; on
+[`model-de-donnees.md`](model-de-donnees.md) §8, numéros **60 à 77** ; on
 les référence ici sans les recopier.
 
 **Tous les chiffres de ce document ont été mesurés.** Aucun n'est estimé.
-Quand une mesure manque, c'est écrit.
+Quand une mesure manque, c'est écrit. Quand une mesure a contredit ce que
+le dépôt affirmait, c'est écrit aussi — c'est arrivé quatre fois.
 
 ---
+
+## 0. Le rapport en une page
+
+**Ce que l'audit a établi.** L'architecture était juste pour la charge :
+cinquante requêtes par seconde à 6 009 lignes, soit cinquante personnes qui
+cliquent en même temps, quand les dix-sept filiales n'en approchent pas.
+Ce qui manquait n'étaient pas des briques mais des **bornes** : chaque
+attente était infinie, et chaque panne partielle — stockage muet, base
+muette — devenait un arrêt total sans reprise. Seize scénarios, onze échecs
+ou partiels, dix corrigés, un assumé.
+
+**Ce que la seconde série a ajouté**, et pourquoi chaque ajout a été
+justifié par une mesure avant d'exister :
+
+| chantier | mesure qui a tranché | décision |
+|---|---|---|
+| index de tri | coût plat : 15,59 → 0,018 ms à 600 000 lignes ; **aucun débit gagné aujourd'hui** (63,9 contre 62,7 req/s, bruit) | 72 |
+| Redis comme cache, avec filet | 1 478 octets de journal d'écriture **par `GET`** → 0 ; le filet mesuré, sans lui la plateforme serait *moins* sûre | 73 |
+| archivage et reprise à un instant donné | une panne à 01:59 perdait la journée ; reprise en **0,6 s**, 3 000 lignes retrouvées | 74 |
+| réplique en attente chaude | retard 0,69 ms, promotion 0,11 s, aucune perte sous `SIGKILL` ; `max_slot_wal_keep_size` protège la primaire | 75 |
+| aiguillage devant deux machines | service rétabli **4,8 s** après promotion ; **22 s** d'indisponibilité dont 17 d'attente humaine | 76 |
+| surveillance des erreurs | trois fuites trouvées **en lisant un événement réel**, aucune visible dans le code | 77 |
+
+**Ce que la mesure a contredit** — le résultat le plus important de la
+seconde série, à lire avant le reste :
+
+1. **L'aiguillage ne protège pas du retour d'une ancienne primaire.** Trois
+   textes du dépôt affirmaient le contraire. Mesuré : rallumée telle quelle,
+   elle reprend le trafic **5,1 s** après son retour, sur une base périmée,
+   et 22 requêtes sur 24 y sont allées. Aucune correction technique
+   proportionnée n'existe ; la consigne d'exploitation est désormais la
+   seule protection, et elle est écrite comme telle (§9.5).
+2. **Un dépôt de 20 Mo exigeait une liaison à plus de 70 Ko/s** — alors
+   que le délai en cause était justifié, dans son commentaire, par « une
+   liaison lente ». Coupé à 301,8 s ; désormais 201 en 341,3 s à 60 Ko/s
+   (§9.6).
+3. **La même panne de stockage donnait un 503 clair en sortie et un 500
+   opaque en entrée** (§9.7).
+4. **Une configuration de confidentialité ne se relit pas, elle se mesure**
+   : `send_default_pii=False` laissait partir le compte, l'adresse et les
+   données validées (§9.9).
+
+**Ce qui reste hors d'atteinte du banc**, et se joue sur le serveur : Let's
+Encrypt lui-même (deux obstacles, dont un de topologie), MinIO lui-même,
+deux machines réelles. Pour chacun, l'outil qui rend la vérification
+possible là-bas est livré : `verifier_tls.sh`, `chronometrer_bascule.sh`,
+et le mode opératoire dans `deploy/README.md` (§10).
+
+**En chiffres** : 21 commits, 154 tests ajoutés — chacun vérifié rouge sur
+le code d'avant —, suite complète à **1 233 tests**, verte ; 18 décisions
+consignées (60 à 77) ; 4 affirmations du dépôt démenties et corrigées.
+
+---
+
+# Première partie — dix phases sur banc
 
 ## 1. Méthode et garde-fous
 
@@ -97,10 +158,10 @@ cette réserve : une panne de l'hôte les emporte tous.
 | composant | conséquence de sa perte | état après l'audit |
 |---|---|---|
 | **PostgreSQL** | arrêt total — base, cache, files, verrous | perte **bornée** : 503 + `Retry-After` en 3,0 s (déc. 70) |
-| **MinIO** | dépôt et téléchargement de pièces | perte **bornée** : 503 en 31–34 s au téléchargement, **et désormais au dépôt aussi** (§9) ; reste de l'API intact (déc. 60) |
+| **MinIO** | dépôt et téléchargement de pièces | perte **bornée** : 503 en 31–34 s au téléchargement, **et désormais au dépôt aussi** (§10) ; reste de l'API intact (déc. 60) |
 | **gunicorn** | API | worker abattu : perte des seules requêtes en vol, renaissance en 0,39 s |
 | **ordonnanceur** | relances d'e-mails, alertes, contrôle des sauvegardes | **dégradation seulement** : les files sont des tables, le travail attend |
-| **nginx / Caddy** | accès | bascule à deux machines jouée : 22,0 s d'indisponibilité, dont 17,1 s d'attente humaine ; retour d'une ancienne primaire **non protégé** (§9) |
+| **nginx / Caddy** | accès | bascule à deux machines jouée : 22,0 s d'indisponibilité, dont 17,1 s d'attente humaine ; retour d'une ancienne primaire **non protégé** (§10) |
 
 La conclusion qui compte : **aucun de ces points n'était borné avant
 l'audit**, et deux d'entre eux — stockage et base — transformaient une panne
@@ -118,7 +179,7 @@ tout ce qui suit.
 | 3 | Base injoignable (arrêt net) | **ÉCHEC** | 500 au lieu de 503, aucun journal, page HTML |
 | 4 | Base lente (latence injectée) | **RÉUSSITE** | Dégradation régulière, sans falaise |
 | 5 | Base muette (trou noir) | **ÉCHEC** | Toute l'API pendue > 90 s |
-| 6 | Base figée (`SIGSTOP`) | **ÉCHEC — non corrigé** | Toujours > 95 s ; aucun réglage ne peut y répondre (§9) |
+| 6 | Base figée (`SIGSTOP`) | **ÉCHEC — non corrigé** | Toujours > 95 s ; aucun réglage ne peut y répondre (§10) |
 | 7 | Stockage muet | **ÉCHEC** | Toute l'API muette, sans reprise |
 | 8 | Serveur de courrier mort | **PARTIEL** | Mécanisme sain, abandon final silencieux |
 | 9 | Deux ordonnanceurs simultanés | **RÉUSSITE** | 60 envoyés, 60 reçus, **0 doublon** |
@@ -127,7 +188,7 @@ tout ce qui suit.
 | 12 | `EXPLAIN` sur `/api/expenses/` | **ÉCHEC** | Planification 91 ms pour 43 ms d'exécution |
 | 13 | Limite de connexion sous concurrence | **ÉCHEC** | 5 annoncées, 13 passées |
 | 14 | Purge du cache | **ÉCHEC** | 400 comptes actifs effaçaient l'anti-bourrage |
-| 15 | Invariants métier après chaos | **RÉUSSITE** | 15 invariants, tenus (réserve en §9) |
+| 15 | Invariants métier après chaos | **RÉUSSITE** | 15 invariants, tenus (réserve en §10) |
 | 16 | Pannes combinées (Phase 3) | **RÉUSSITE** | **Aucune amplification** entre pannes |
 
 Onze échecs ou partiels, dix corrigés, **un assumé** (scénario 6).
@@ -378,293 +439,103 @@ tombe — ce que cet audit a corrigé.
 
 ---
 
-## 9. Limites connues, non couvertes
+# Seconde partie — après le rapport des dix phases
 
-Écrites ici pour qu'elles ne se redécouvrent pas en production.
+## 9. Huit chantiers, joués et mesurés
 
-1. **Une base vivante au niveau TCP mais qui ne répond plus** — processus
-   figé, ou machine dont le noyau acquitte encore. Mesuré : la requête pend
-   **au-delà de 95 s**. `connect_timeout` ne s'applique pas à une connexion
-   ouverte, `statement_timeout` est appliqué par le serveur — justement ce
-   qui manque —, et les sondes TCP reçoivent leurs acquittements du noyau
-   distant. **Aucun réglage de connexion ne peut y répondre.**
+Le rapport des dix phases concluait qu'aucune brique ne manquait. Les
+chantiers suivants ont été demandés ensuite, un par un ; chacun est entré
+dans le dépôt seulement après mesure, et trois d'entre eux ont fini par
+contredire ce que le dépôt affirmait. L'ordre est chronologique.
 
-2. **Un conteneur déclaré malsain n'est pas relevé.** `restart:
-   unless-stopped` redémarre un conteneur **sorti**, pas un conteneur
-   enlisé. Le rétablissement reste manuel.
+### 9.1 Index de tri, Redis comme cache, infrastructure de la base
 
-3. **La santé du conteneur n'est pas la santé des tâches.** Le battement de
-   cœur de l'ordonnanceur ne touche pas la base : le conteneur reste sain
-   pendant que ses six tâches échouent. C'est voulu (voir §7), mais la
-   surveillance doit passer par le journal.
+Décisions 72 et 73 ; `docs/infra-base-de-donnees.md` pour le
+dimensionnement. Deux résultats, dont un négatif qu'il faut garder :
 
-4. **Le remplissage délibéré du cache reste possible** depuis de nombreuses
-   adresses — chaque nom de compte essayé crée une clé. Le correctif ferme
-   le cas accidentel ; il faudrait aujourd'hui une quarantaine d'adresses
-   pour le provoquer, la limite par adresse étant redevenue exacte.
+| mesure | avant | après |
+|---|---|---|
+| tri d'une page de 25 lignes, 6 000 lignes en table | 0,95 ms | 0,015 ms |
+| à 60 000 lignes | 3,37 ms | 0,016 ms |
+| à 600 000 lignes | 15,59 ms | 0,018 ms |
+| prix à l'écriture | — | +11 %, soit 2 µs par ligne |
+| débit sous charge à 6 009 lignes | 62,7 req/s | 63,9 req/s — **dans le bruit** |
 
-5. **Scénarios non joués, faute de Docker sur le banc** : limites CPU et
-   mémoire de conteneur, tueur de mémoire (OOM), disque plein, ordre de
-   redémarrage des conteneurs. Ils restent à éprouver sur le serveur de
-   préproduction.
+L'index `depense_tri_liste` n'achète **pas** de débit aujourd'hui : la
+requête SQL pèse 3 ms sur 250. Il achète la tenue dans dix ans, et c'est
+pour cela qu'il est là. Un second index candidat a été mesuré puis écarté —
+jamais choisi par le planificateur, payé à chaque écriture —, et aucun n'a
+été ajouté aux tables qui tiennent sur une page.
 
-6. **Réserve sur le scénario 15.** Les quinze invariants métier tiennent,
-   mais l'un d'eux — « toute ligne sortie du brouillon est tracée » —
-   signale les 6 009 lignes du banc : elles ont été créées directement en
-   base par le script de remplissage, sans passer par `transitions.soumettre`,
-   le seul chemin qui écrit le journal d'audit. C'est un défaut **du banc**,
-   pas de l'application (62 entrées d'audit, aucune sur une ligne). La
-   propriété reste donc à vérifier sur des lignes réellement soumises.
+Redis remplace `DatabaseCache` pour une raison mesurée, pas pour la vitesse
+(62,0 contre 62,6 req/s) : la limitation de débit écrivait **1 478 octets de
+journal de transaction par `GET`** et quatre requêtes sur `django_cache` par
+appel, désormais zéro — ce qui referme une exception non documentée à la
+règle « une requête `GET` n'écrit rien ». Le filet (`CacheAvecSecours`) n'est
+pas optionnel : un cache sans repli ferait de chaque requête une 500 quand
+Redis tombe, et la plateforme serait *moins* sûre qu'avant. Le repli est
+mesuré : écriture et lecture passent, une ligne de journal par minute.
 
-7. **L'aiguillage a été mis en service et la bascule jouée** (§ ci-dessous) :
-   deux grappes PostgreSQL 16 en réplication par flux, deux instances
-   gunicorn servant la vraie application sur `127.0.0.2:80` et
-   `127.0.0.3:80`, et Caddy 2.8.4 devant, avec le `balanceur/Caddyfile` du
-   dépôt **sans retouche**. La bascule marche ; le retour de l'ancienne
-   primaire, non. Restent non éprouvés : deux machines réelles sur un réseau
-   réel, TLS et Let's Encrypt (le banc sert en clair), nginx entre
-   l'aiguillage et gunicorn, et le dépôt d'une pièce de 20 Mo à travers le
-   relais. Rien dans la suite de tests n'exécute Caddy : l'invariant des
-   variables est vérifié sur le texte des fichiers, pas par le programme qui
-   les lit.
+### 9.2 Archivage des journaux et reprise à un instant donné
 
-   **Le dépôt d'une pièce de 20 Mo a été joué à travers les quatre étages**,
-   d'abord sur disque local, puis **avec un stockage objet dans la boucle**
-   (§ ci-dessous). **L'émission d'un certificat et le service en TLS ont été
-   joués aussi** (§ ci-dessous). Restent hors d'atteinte : MinIO lui-même —
-   son domaine de téléchargement est refusé par la politique de sortie du
-   banc, un autre serveur S3 a donc tenu sa place —, **Let's Encrypt
-   lui-même** (§ ci-dessous : deux obstacles indépendants, dont un de
-   topologie), et deux machines réelles.
+Décision 74. La chaîne de sauvegarde était sérieuse — dump quotidien
+chiffré, copie mensuelle, miroir hors machine vérifié — mais sa seule
+granularité de reprise était le dump de 02:00 : **une panne de disque à
+01:59 perdait toute la journée**, pour une application dont la raison d'être
+est de savoir où est la preuve.
 
-### Deux machines réelles : pourquoi pas d'ici, et comment le mesurer là-bas
+Éprouvé de bout en bout sur un banc de 72 Mo : sauvegarde physique en
+**3,0 s**, reprise à l'instant demandé en **0,6 s**, les 3 000 lignes
+effacées par erreur retrouvées et l'erreur absente. Le mode de panne à
+connaître : tant que l'archivage échoue, Postgres garde ses segments dans
+`pg_wal` jusqu'à remplir le disque — il préfère s'arrêter que perdre.
+`verifier_sauvegardes` le surveille. Ce mécanisme a d'ailleurs rattrapé le
+banc lui-même, deux fois : un emplacement de réplication orphelin, puis un
+archivage relancé sans destination — chaque fois vu par la suite de tests
+avant d'être compris.
 
-Demandé après la bascule sur banc. Vérifié plutôt que supposé : cette session
-ne dispose que d'un environnement cloud, sans sortie TCP brute (SSH est
-réécrit en HTTPS par le mandataire, un port quelconque expire), et une
-seconde session serait un autre conteneur isolé en TEST-NET, incapable de
-joindre le premier. Deux machines réelles ne s'opèrent donc pas d'ici, et un
-troisième banc sur une seule machine n'aurait rien appris de plus.
+### 9.3 Réplique en attente chaude
 
-Ce qui manquait pour que **vous** la jouiez n'était pas un script de plus
-pour promouvoir — `promouvoir_replique.sh --repetition` existe —, c'était de
-pouvoir la **mesurer**. Après une bascule, `curl /api/health/` rendait le
-même corps quelle que soit la machine : rien ne disait laquelle avait servi,
-alors que c'est la seule question. Deux ajouts, petits :
+Décision 75. Deux grappes locales, réplication par flux : retard **0 octet /
+0,69 ms**, copie initiale de 15 Mo en **0,5 s**, promotion en **0,11 s**,
+et **aucune perte** après un `SIGKILL` de la primaire. Le cœur de la décision
+est la borne `max_slot_wal_keep_size` : sans elle, une réplique absente fait
+grandir `pg_wal` jusqu'à remplir le disque de la primaire — mesuré ; avec
+elle, l'emplacement passe à `lost`, la primaire continue, et c'est la
+réplique qu'on refait. Réplication asynchrone, assumée : en synchrone, une
+réplique absente bloquerait toute la plateforme.
 
-* `/api/health/` porte un champ `machine` quand `SERVEUR_NOM` est réglé —
-  **absent sinon**, pour ne rien révéler de plus qu'avant ;
-* `deploy/chronometrer_bascule.sh` interroge le domaine chaque seconde
-  depuis un poste tiers, n'écrit qu'aux changements, et rend les trois durées
-  du banc : première erreur, service rétabli, et **le retour d'une machine
-  écartée**, qu'il signale en toutes lettres.
+### 9.4 L'aiguillage : ce que l'analyse des `Caddyfile` a trouvé
 
-Éprouvé sur une séquence réelle (une application relancée sous trois noms
-successifs) : il a vu « 1 2 1 », donné les durées, et déclenché l'alerte au
-retour de 1. Deux de ses défauts en sont sortis : une expansion de shell qui
-imprimait « +6 s6 », et une liste dédoublonnée qui cachait justement le
-retour.
+`email {$ACME_EMAIL}` n'était pas entre guillemets. Une variable **posée
+vide** fait disparaître le placeholder : la directive se retrouve sans
+argument et **Caddy refuse de démarrer**, sur une erreur qui ne nomme que
+`email`. Le défaut `{$NOM:valeur}` n'y change rien — mesuré : il ne joue que
+si la variable est *absente*, jamais si elle est posée vide.
 
-Les chiffres du banc sont une borne, pas une mesure : la première répétition
-sur les vraies machines doit reporter les siens ici.
+Le cas n'était pas atteignable par la commande documentée, et il faut le dire
+aussi nettement : `docker compose config` refuse un `ACME_EMAIL` vide, parce
+que le `:?` de `docker-compose.prod.yml` s'applique avant la surcharge. Mais
+`docker-compose.derriere-balanceur.yml` posait `${ACME_EMAIL:-}`, c'est-à-dire
+une ligne qui **annonçait une souplesse qu'elle ne pouvait pas tenir** :
+l'exploitant reste obligé de renseigner une adresse dont cette machine ne se
+sert pas, et le jour où quelqu'un relâcherait `prod.yml` en s'y fiant,
+l'entrée publique ne démarrerait plus.
 
-### Let's Encrypt lui-même : pourquoi il n'a pas pu être joué ici
+Corrigé en trois points : le placeholder est entre guillemets dans les deux
+fichiers (renseigné, il part à ACME à l'identique — vérifié sur la
+configuration produite) ; la ligne trompeuse est remplacée par ce qu'elle
+aurait dû dire ; et `core/tests/test_caddy.py` vérifie la règle générale —
+*un placeholder sans guillemets n'est acceptable que si Compose garantit une
+valeur non vide*. Ce test est rouge sur le code d'avant.
 
-Demandé deux fois, tenté pour de bon la seconde. **Deux obstacles
-indépendants, mesurés et non supposés** :
+Pourquoi rien ne l'avait vu : l'intégration continue renseigne une adresse
+factice (`ci@example.invalid`) alors qu'elle ne termine pas TLS. Le seul
+chemin qui aurait révélé le défaut était celui que personne ne joue.
 
-1. la politique de sortie de l'environnement refuse les deux points d'entrée
-   ACME — `acme-staging-v02` et `acme-v02.api.letsencrypt.org` répondent 403
-   au `CONNECT` du mandataire ;
-2. la seule adresse non locale de la machine est `192.0.2.2/24`, soit
-   **TEST-NET-1** (RFC 5737), une plage de documentation non routable. Même
-   avec la sortie ouverte, aucune validation entrante n'est possible : c'est
-   Let's Encrypt qui ouvre la connexion vers le port 80.
+---
 
-Le second obstacle ne se contourne par aucun réglage : il n'est pas question
-d'outillage mais de topologie. La conclusion utile n'est donc pas un banc de
-plus, c'est **le contrôle à passer là où la réponse existe** — sur le
-serveur. `deploy/verifier_tls.sh` vérifie le nom, le CAA, qui occupe le port
-80, la sortie vers l'ACME et le certificat en place ; il dit aussi, en toutes
-lettres, ce qu'il ne peut pas vérifier.
-
-Il attrape en particulier la panne qui ne se voit pas de l'intérieur :
-**quand l'ACME échoue, Caddy ne s'arrête pas — il signe avec son autorité
-interne.** Le site répond en TLS, les journaux du serveur sont calmes, et
-tous les navigateurs refusent.
-
-Le script a été éprouvé dans les deux sens, ce qu'un contrôle mérite : il
-approuve une machine saine (nom résolu, Caddy sur le port 80, certificat
-lisible) et il refuse ce qu'il doit refuser — un serveur étranger posé sur le
-port 80 est signalé par l'en-tête `Server`, et l'autorité interne est
-signalée comme telle. Deux de ses propres défauts sont sortis de cette
-épreuve : un code HTTP concaténé avec son repli (`000000`), et un `404`
-attendu là où Caddy répond légitimement `308` hors émission.
-
-### Ce que TLS a montré
-
-Le `Caddyfile` de production a demandé un certificat par le vrai circuit
-ACME — compte, commande, défi HTTP-01, installation — à une **autorité
-locale** tenue par un second Caddy. Ce n'est pas Let's Encrypt : le protocole
-et les étapes sont les mêmes, mais ni ses quotas, ni ses enregistrements CAA,
-ni le DNS public ne sont éprouvés. Deux lignes ont été ajoutées à une copie du
-fichier pour viser cette autorité ; le reste est celui du dépôt.
-
-| vérification | résultat |
-|---|---|
-| émission | **certificat obtenu**, SAN `justi.banc.test`, chaîne vérifiée |
-| protocole | **TLS 1.3**, `TLS_AES_128_GCM_SHA256` |
-| redirection depuis le clair | **308** vers `https://` |
-| HSTS | `max-age=31536000; includeSubDomains; preload`, **une seule source** |
-| `/api/health/` en TLS | **200** |
-| dépôt de 20 Mo en TLS | **201 en 0,26 s**, empreinte identique |
-
-Django ne boucle pas malgré `DJANGO_SECURE_SSL_REDIRECT=1` : le
-`X-Forwarded-Proto` posé par Caddy et transmis par nginx est lu, comme la
-décision le prévoyait. C'était la crainte écrite dans les commentaires ; elle
-est levée.
-
-**Un défaut mineur, mesuré au passage** : quatre en-têtes de sécurité sont
-servis **en double** sur une réponse d'API — `X-Frame-Options`,
-`X-Content-Type-Options` et `Referrer-Policy` viennent de Django *et* de
-nginx ; `Permissions-Policy` de nginx *et* de Caddy. HSTS et la politique de
-sécurité du contenu, elles, n'ont qu'une source — c'est justement celle dont
-le `Caddyfile` se préoccupait. Les valeurs sont identiques, donc sans effet
-pratique aujourd'hui ; mais un `X-Frame-Options` en double a déjà été motif,
-chez certains navigateurs, à ignorer l'en-tête. Noté, non corrigé : choisir
-la source unique de chacun demande de décider ce qui protège les réponses que
-Django ne sert pas (les fichiers statiques), et cela se décide.
-
-### Ce que Sentry a montré — **IMPORTANT**
-
-L'intégration (décision 77) est éteinte tant qu'on ne lui donne pas
-d'adresse. Pour vérifier ce qu'elle laisse sortir, un faux point d'entrée
-Sentry a été monté sur le banc, l'adresse pointée sur lui, et une **vraie
-erreur** provoquée — un dépôt vers un stockage injoignable. L'événement a
-ensuite été lu, champ par champ.
-
-**Les deux réglages annoncés ne suffisaient pas.** Avec
-`send_default_pii=False` et `max_request_body_size="never"` déjà en place,
-l'événement portait encore :
-
-| ce qui partait | d'où |
-|---|---|
-| `uploaded_by='manager.banc'`, `validated_data` du sérialiseur | **variables locales** de chaque cadre de pile, jointes par défaut |
-| `extra.compte` = le nom du déposant | `core.journalisation` attache le compte à **chaque ligne de journal** ; Sentry recopie les attributs d'un enregistrement |
-| adresse du client | en-têtes `X-Forwarded-For` et `X-Real-Ip` — `send_default_pii` ne couvre que l'adresse vue de la socket |
-
-Ce qui marchait déjà : la valeur de `Authorization` arrivait `[Filtered]`, et
-le corps de la requête était vide.
-
-**Corrigé** : `include_local_variables=False` et un `before_send` qui retire
-les en-têtes porteurs d'adresse, le compte et l'adresse du contexte de
-journal, et les arguments de la ligne de commande — `revoquer_sessions
---compte <nom>` les mettrait dans `sys.argv`, que Sentry joint de lui-même.
-Rejoué sur la même erreur : plus de nom de compte, plus d'adresse de client,
-et il reste l'exception, la pile avec le code source, le chemin de la
-requête, la version, et l'identifiant de requête que l'utilisateur cite quand
-il signale un incident.
-
-La leçon dépasse Sentry : **une configuration de confidentialité ne se relit
-pas, elle se mesure.** Les trois fuites étaient dans la documentation de
-l'outil ; aucune n'était visible dans le code qui les configurait.
-
-### Ce que le stockage objet a montré — **IMPORTANT**
-
-Même banc, avec cette fois un serveur S3 à la place du disque local. **Ce
-n'est pas MinIO** : son binaire n'est pas récupérable depuis ce banc, et
-aucun paquet ne le fournit. Ce qui est donc éprouvé, c'est tout le chemin de
-l'application — `django-storages`, `botocore`, le découpage en parties, les
-délais, la mémoire — et non le comportement propre de MinIO. Les durées
-tiennent à l'implémentation d'en face ; les conclusions de code, non.
-
-| essai | résultat |
-|---|---|
-| 20 Mo déposés | **201 en 1,05 s** (0,39 s sur disque local), objet **identique octet pour octet** |
-| 20 Mo téléchargés | **200 en 0,51 s**, fichier identique |
-| huit dépôts de 20 Mo simultanés | **8 × 201** en 2,0 à 4,4 s, neuf objets tous conformes |
-| mémoire des workers au pic | **487,5 Mo** cumulés, contre `mem_limit: 768m` — **+161,6 Mo** pour les huit dépôts |
-| forme de l'envoi | **trois parties de 8 Mo**, en parallèle (découpage par défaut de boto3) |
-
-La mémoire ne redescend pas après coup : elle atteint un palier et y reste.
-C'est ce palier qui compte face à la limite du conteneur, et il laisse
-280 Mo de marge à huit dépôts simultanés de 20 Mo.
-
-**Le défaut est ailleurs, et il est dans le code.** Avec un stockage bridé,
-un dépôt de 20 Mo échouait en **500 « Erreur interne du serveur »**. Or le
-*téléchargement* traduit depuis longtemps la même panne en **503** clair
-— « Le stockage des justificatifs ne répond pas : réessayez dans un
-instant. » (décision 60, `ProofViewSet.download`). Le *dépôt* ne traduisait
-rien : `PANNES_DE_BASE` ne couvre que `OperationalError` et
-`InterfaceError`, donc la base, et les exceptions botocore remontaient
-jusqu'au gestionnaire 500. La même panne donnait une réponse claire en
-sortie et une réponse opaque en entrée — un 500 n'invite à aucune reprise,
-alors que rien n'est perdu et que réessayer suffit.
-
-**Corrigé** : `ProofViewSet.create` traduit les pannes du client S3
-(`BotoCoreError`, `ClientError`) en `StockageIndisponible`, dans le bloc qui
-nettoie déjà les fichiers orphelins. Rejoué sur la chaîne complète :
-**503 en 16,8 s** avec le message traduit, une seule ligne de journal, aucun
-objet orphelin ni envoi en plusieurs parties resté ouvert.
-
-`OSError` est volontairement **hors** de cette famille, bien qu'elle couvre
-le disque plein : un test existant la lève pour simuler une trace d'audit
-impossible et exige qu'elle **remonte**. Une trace impossible n'est pas une
-panne de stockage, et l'habiller en « réessayez » laisserait croire qu'il ne
-s'est rien passé. Le premier jet l'incluait ; c'est ce test qui l'a arrêté.
-
-### Ce que le dépôt d'une pièce de 20 Mo a montré
-
-Banc : les quatre étages de la production, chacun dans sa configuration du
-dépôt, sans retouche — aiguillage Caddy, Caddy de la machine, nginx (le
-gabarit `frontend/nginx.conf` rendu par son propre script d'entrée), puis
-gunicorn et Django. nginx tourne dans son espace de noms réseau, comme un
-conteneur, pour que le port 80 de chacun soit vraiment le sien. Les pièces
-sont de vrais PDF ; l'empreinte SHA-256 de la source est comparée à celle du
-fichier stocké.
-
-| essai | résultat |
-|---|---|
-| 20 Mo, liaison locale | **201 Créé en 0,39 s**, fichier stocké **identique octet pour octet** |
-| 20 Mo à 200 Ko/s | **201 Créé en 102,4 s** |
-| 20 Mo à 60 Ko/s | **coupé à 301,8 s** après 18,5 Mo → 502, **dépôt perdu** |
-| 21 Mo (au-dessus de MAX_PROOF_SIZE) | 400 : « Fichier trop volumineux (maximum 20 Mo). » |
-| le même fichier deux fois | 400 : « Ce fichier est déjà rattaché à ce dossier (doublon). » — la contrainte de la décision 45 tient de bout en bout |
-
-**Le troisième essai est le défaut, et il vise exactement les filiales.**
-nginx met le corps de la requête en fichier temporaire et **ne répond qu'une
-fois le dépôt entièrement reçu** ; le temps de téléversement tombe donc dans
-le `read_timeout` de l'aiguillage, qui est un délai *total*. À 300 s, une
-pièce de 20 Mo exigeait une liaison à plus de ~70 Ko/s (560 kbit/s) — et le
-commentaire du `Caddyfile` invoquait pourtant « le dépôt d'une pièce de 20 Mo
-sur une liaison lente » pour justifier cette valeur. Le délai ne tenait pas
-ce que son commentaire promettait.
-
-**Corrigé** : `read_timeout 900s`, ce qui descend le plancher à ~23 Ko/s
-(185 kbit/s). Rejoué à 60 Ko/s : **201 Créé en 341,3 s**, fichier intact. Ce
-que cela coûte, et c'est assumé : une connexion enlisée tient jusqu'à quinze
-minutes, Caddy n'offrant pas de délai « par lecture » comme nginx. Un test
-lie désormais les deux nombres qui doivent s'accorder — `MAX_PROOF_SIZE` et
-`read_timeout` — pour qu'une pièce plus grosse, un jour, rouvre la question.
-
-**Une correction que j'ai faite puis retirée, faute d'avoir mesuré avant.**
-Un fichier de 26 Mo, au-dessus des 25 Mo des mandataires, est refusé par
-nginx sur `Content-Length` — donc immédiatement —, mais sa réponse 413 est
-parfois détruite en route : nginx ferme la connexion pendant que Caddy lui
-écrit encore, et le client reçoit un 502 à corps vide. J'ai voulu relever la
-borne de nginx pour que Caddy rende le 413 lui-même. Mesuré : c'est **pire**.
-Caddy ne découvre le dépassement qu'en lisant, donc le client envoie 25 Mo
-pour rien avant d'être coupé, et n'obtient souvent aucun statut exploitable.
-Rétabli. Le comportement livré, mesuré sur trois essais, est rapide et
-imparfait : refus en ~2 ms après ~2 Mo envoyés, statut 413 ou 502 selon la
-course. Cela ne touche pas les utilisateurs : l'interface refuse le fichier
-avant l'envoi, sur une borne que le serveur lui donne
-(`configuration.justificatifs.taille_max_mo`). Rendre ce statut déterministe
-demanderait de comparer `Content-Length` dans l'aiguillage, soit une
-troisième copie de la borne à tenir en accord — non justifié pour un cas que
-seuls les clients hors interface rencontrent.
-
-### Ce que la bascule réelle a montré — **IMPORTANT**
+### 9.5 La bascule jouée — **IMPORTANT** : la garantie qui n'existait pas
 
 Banc : PostgreSQL 16 primaire (`m1`) et réplique en flux (`m2`, montée avec
 les options exactes de `preparer_replique.sh`), la vraie application Django
@@ -741,94 +612,368 @@ par Django dépasse 60 requêtes par minute, ce qui suppose un
 `DJANGO_NUM_PROXIES` faux — précisément ce que `test_balanceur.py` vérifie
 déjà.
 
-### Ce que l'analyse des `Caddyfile` a trouvé
+### 9.6 Le dépôt d'une pièce de 20 Mo, et la liaison lente
 
-`email {$ACME_EMAIL}` n'était pas entre guillemets. Une variable **posée
-vide** fait disparaître le placeholder : la directive se retrouve sans
-argument et **Caddy refuse de démarrer**, sur une erreur qui ne nomme que
-`email`. Le défaut `{$NOM:valeur}` n'y change rien — mesuré : il ne joue que
-si la variable est *absente*, jamais si elle est posée vide.
+Banc : les quatre étages de la production, chacun dans sa configuration du
+dépôt, sans retouche — aiguillage Caddy, Caddy de la machine, nginx (le
+gabarit `frontend/nginx.conf` rendu par son propre script d'entrée), puis
+gunicorn et Django. nginx tourne dans son espace de noms réseau, comme un
+conteneur, pour que le port 80 de chacun soit vraiment le sien. Les pièces
+sont de vrais PDF ; l'empreinte SHA-256 de la source est comparée à celle du
+fichier stocké.
 
-Le cas n'était pas atteignable par la commande documentée, et il faut le dire
-aussi nettement : `docker compose config` refuse un `ACME_EMAIL` vide, parce
-que le `:?` de `docker-compose.prod.yml` s'applique avant la surcharge. Mais
-`docker-compose.derriere-balanceur.yml` posait `${ACME_EMAIL:-}`, c'est-à-dire
-une ligne qui **annonçait une souplesse qu'elle ne pouvait pas tenir** :
-l'exploitant reste obligé de renseigner une adresse dont cette machine ne se
-sert pas, et le jour où quelqu'un relâcherait `prod.yml` en s'y fiant,
-l'entrée publique ne démarrerait plus.
+| essai | résultat |
+|---|---|
+| 20 Mo, liaison locale | **201 Créé en 0,39 s**, fichier stocké **identique octet pour octet** |
+| 20 Mo à 200 Ko/s | **201 Créé en 102,4 s** |
+| 20 Mo à 60 Ko/s | **coupé à 301,8 s** après 18,5 Mo → 502, **dépôt perdu** |
+| 21 Mo (au-dessus de MAX_PROOF_SIZE) | 400 : « Fichier trop volumineux (maximum 20 Mo). » |
+| le même fichier deux fois | 400 : « Ce fichier est déjà rattaché à ce dossier (doublon). » — la contrainte de la décision 45 tient de bout en bout |
 
-Corrigé en trois points : le placeholder est entre guillemets dans les deux
-fichiers (renseigné, il part à ACME à l'identique — vérifié sur la
-configuration produite) ; la ligne trompeuse est remplacée par ce qu'elle
-aurait dû dire ; et `core/tests/test_caddy.py` vérifie la règle générale —
-*un placeholder sans guillemets n'est acceptable que si Compose garantit une
-valeur non vide*. Ce test est rouge sur le code d'avant.
+**Le troisième essai est le défaut, et il vise exactement les filiales.**
+nginx met le corps de la requête en fichier temporaire et **ne répond qu'une
+fois le dépôt entièrement reçu** ; le temps de téléversement tombe donc dans
+le `read_timeout` de l'aiguillage, qui est un délai *total*. À 300 s, une
+pièce de 20 Mo exigeait une liaison à plus de ~70 Ko/s (560 kbit/s) — et le
+commentaire du `Caddyfile` invoquait pourtant « le dépôt d'une pièce de 20 Mo
+sur une liaison lente » pour justifier cette valeur. Le délai ne tenait pas
+ce que son commentaire promettait.
 
-Pourquoi rien ne l'avait vu : l'intégration continue renseigne une adresse
-factice (`ci@example.invalid`) alors qu'elle ne termine pas TLS. Le seul
-chemin qui aurait révélé le défaut était celui que personne ne joue.
+**Corrigé** : `read_timeout 900s`, ce qui descend le plancher à ~23 Ko/s
+(185 kbit/s). Rejoué à 60 Ko/s : **201 Créé en 341,3 s**, fichier intact. Ce
+que cela coûte, et c'est assumé : une connexion enlisée tient jusqu'à quinze
+minutes, Caddy n'offrant pas de délai « par lecture » comme nginx. Un test
+lie désormais les deux nombres qui doivent s'accorder — `MAX_PROOF_SIZE` et
+`read_timeout` — pour qu'une pièce plus grosse, un jour, rouvre la question.
+
+**Une correction que j'ai faite puis retirée, faute d'avoir mesuré avant.**
+Un fichier de 26 Mo, au-dessus des 25 Mo des mandataires, est refusé par
+nginx sur `Content-Length` — donc immédiatement —, mais sa réponse 413 est
+parfois détruite en route : nginx ferme la connexion pendant que Caddy lui
+écrit encore, et le client reçoit un 502 à corps vide. J'ai voulu relever la
+borne de nginx pour que Caddy rende le 413 lui-même. Mesuré : c'est **pire**.
+Caddy ne découvre le dépassement qu'en lisant, donc le client envoie 25 Mo
+pour rien avant d'être coupé, et n'obtient souvent aucun statut exploitable.
+Rétabli. Le comportement livré, mesuré sur trois essais, est rapide et
+imparfait : refus en ~2 ms après ~2 Mo envoyés, statut 413 ou 502 selon la
+course. Cela ne touche pas les utilisateurs : l'interface refuse le fichier
+avant l'envoi, sur une borne que le serveur lui donne
+(`configuration.justificatifs.taille_max_mo`). Rendre ce statut déterministe
+demanderait de comparer `Content-Length` dans l'aiguillage, soit une
+troisième copie de la borne à tenir en accord — non justifié pour un cas que
+seuls les clients hors interface rencontrent.
+
+### 9.7 Le stockage objet — **IMPORTANT** : la même panne, deux réponses
+
+Même banc, avec cette fois un serveur S3 à la place du disque local. **Ce
+n'est pas MinIO** : son binaire n'est pas récupérable depuis ce banc, et
+aucun paquet ne le fournit. Ce qui est donc éprouvé, c'est tout le chemin de
+l'application — `django-storages`, `botocore`, le découpage en parties, les
+délais, la mémoire — et non le comportement propre de MinIO. Les durées
+tiennent à l'implémentation d'en face ; les conclusions de code, non.
+
+| essai | résultat |
+|---|---|
+| 20 Mo déposés | **201 en 1,05 s** (0,39 s sur disque local), objet **identique octet pour octet** |
+| 20 Mo téléchargés | **200 en 0,51 s**, fichier identique |
+| huit dépôts de 20 Mo simultanés | **8 × 201** en 2,0 à 4,4 s, neuf objets tous conformes |
+| mémoire des workers au pic | **487,5 Mo** cumulés, contre `mem_limit: 768m` — **+161,6 Mo** pour les huit dépôts |
+| forme de l'envoi | **trois parties de 8 Mo**, en parallèle (découpage par défaut de boto3) |
+
+La mémoire ne redescend pas après coup : elle atteint un palier et y reste.
+C'est ce palier qui compte face à la limite du conteneur, et il laisse
+280 Mo de marge à huit dépôts simultanés de 20 Mo.
+
+**Le défaut est ailleurs, et il est dans le code.** Avec un stockage bridé,
+un dépôt de 20 Mo échouait en **500 « Erreur interne du serveur »**. Or le
+*téléchargement* traduit depuis longtemps la même panne en **503** clair
+— « Le stockage des justificatifs ne répond pas : réessayez dans un
+instant. » (décision 60, `ProofViewSet.download`). Le *dépôt* ne traduisait
+rien : `PANNES_DE_BASE` ne couvre que `OperationalError` et
+`InterfaceError`, donc la base, et les exceptions botocore remontaient
+jusqu'au gestionnaire 500. La même panne donnait une réponse claire en
+sortie et une réponse opaque en entrée — un 500 n'invite à aucune reprise,
+alors que rien n'est perdu et que réessayer suffit.
+
+**Corrigé** : `ProofViewSet.create` traduit les pannes du client S3
+(`BotoCoreError`, `ClientError`) en `StockageIndisponible`, dans le bloc qui
+nettoie déjà les fichiers orphelins. Rejoué sur la chaîne complète :
+**503 en 16,8 s** avec le message traduit, une seule ligne de journal, aucun
+objet orphelin ni envoi en plusieurs parties resté ouvert.
+
+`OSError` est volontairement **hors** de cette famille, bien qu'elle couvre
+le disque plein : un test existant la lève pour simuler une trace d'audit
+impossible et exige qu'elle **remonte**. Une trace impossible n'est pas une
+panne de stockage, et l'habiller en « réessayez » laisserait croire qu'il ne
+s'est rien passé. Le premier jet l'incluait ; c'est ce test qui l'a arrêté.
+
+### 9.8 TLS : l'émission éprouvée contre une autorité locale
+
+Le `Caddyfile` de production a demandé un certificat par le vrai circuit
+ACME — compte, commande, défi HTTP-01, installation — à une **autorité
+locale** tenue par un second Caddy. Ce n'est pas Let's Encrypt : le protocole
+et les étapes sont les mêmes, mais ni ses quotas, ni ses enregistrements CAA,
+ni le DNS public ne sont éprouvés. Deux lignes ont été ajoutées à une copie du
+fichier pour viser cette autorité ; le reste est celui du dépôt.
+
+| vérification | résultat |
+|---|---|
+| émission | **certificat obtenu**, SAN `justi.banc.test`, chaîne vérifiée |
+| protocole | **TLS 1.3**, `TLS_AES_128_GCM_SHA256` |
+| redirection depuis le clair | **308** vers `https://` |
+| HSTS | `max-age=31536000; includeSubDomains; preload`, **une seule source** |
+| `/api/health/` en TLS | **200** |
+| dépôt de 20 Mo en TLS | **201 en 0,26 s**, empreinte identique |
+
+Django ne boucle pas malgré `DJANGO_SECURE_SSL_REDIRECT=1` : le
+`X-Forwarded-Proto` posé par Caddy et transmis par nginx est lu, comme la
+décision le prévoyait. C'était la crainte écrite dans les commentaires ; elle
+est levée.
+
+**Un défaut mineur, mesuré au passage** : quatre en-têtes de sécurité sont
+servis **en double** sur une réponse d'API — `X-Frame-Options`,
+`X-Content-Type-Options` et `Referrer-Policy` viennent de Django *et* de
+nginx ; `Permissions-Policy` de nginx *et* de Caddy. HSTS et la politique de
+sécurité du contenu, elles, n'ont qu'une source — c'est justement celle dont
+le `Caddyfile` se préoccupait. Les valeurs sont identiques, donc sans effet
+pratique aujourd'hui ; mais un `X-Frame-Options` en double a déjà été motif,
+chez certains navigateurs, à ignorer l'en-tête. Noté, non corrigé : choisir
+la source unique de chacun demande de décider ce qui protège les réponses que
+Django ne sert pas (les fichiers statiques), et cela se décide.
+
+### 9.8 bis Let's Encrypt lui-même : pourquoi pas d'ici
+
+Demandé deux fois, tenté pour de bon la seconde. **Deux obstacles
+indépendants, mesurés et non supposés** :
+
+1. la politique de sortie de l'environnement refuse les deux points d'entrée
+   ACME — `acme-staging-v02` et `acme-v02.api.letsencrypt.org` répondent 403
+   au `CONNECT` du mandataire ;
+2. la seule adresse non locale de la machine est `192.0.2.2/24`, soit
+   **TEST-NET-1** (RFC 5737), une plage de documentation non routable. Même
+   avec la sortie ouverte, aucune validation entrante n'est possible : c'est
+   Let's Encrypt qui ouvre la connexion vers le port 80.
+
+Le second obstacle ne se contourne par aucun réglage : il n'est pas question
+d'outillage mais de topologie. La conclusion utile n'est donc pas un banc de
+plus, c'est **le contrôle à passer là où la réponse existe** — sur le
+serveur. `deploy/verifier_tls.sh` vérifie le nom, le CAA, qui occupe le port
+80, la sortie vers l'ACME et le certificat en place ; il dit aussi, en toutes
+lettres, ce qu'il ne peut pas vérifier.
+
+Il attrape en particulier la panne qui ne se voit pas de l'intérieur :
+**quand l'ACME échoue, Caddy ne s'arrête pas — il signe avec son autorité
+interne.** Le site répond en TLS, les journaux du serveur sont calmes, et
+tous les navigateurs refusent.
+
+Le script a été éprouvé dans les deux sens, ce qu'un contrôle mérite : il
+approuve une machine saine (nom résolu, Caddy sur le port 80, certificat
+lisible) et il refuse ce qu'il doit refuser — un serveur étranger posé sur le
+port 80 est signalé par l'en-tête `Server`, et l'autorité interne est
+signalée comme telle. Deux de ses propres défauts sont sortis de cette
+épreuve : un code HTTP concaténé avec son repli (`000000`), et un `404`
+attendu là où Caddy répond légitimement `308` hors émission.
+
+### 9.9 Surveillance des erreurs — **IMPORTANT** : ce qu'un événement réel a révélé
+
+L'intégration (décision 77) est éteinte tant qu'on ne lui donne pas
+d'adresse. Pour vérifier ce qu'elle laisse sortir, un faux point d'entrée
+Sentry a été monté sur le banc, l'adresse pointée sur lui, et une **vraie
+erreur** provoquée — un dépôt vers un stockage injoignable. L'événement a
+ensuite été lu, champ par champ.
+
+**Les deux réglages annoncés ne suffisaient pas.** Avec
+`send_default_pii=False` et `max_request_body_size="never"` déjà en place,
+l'événement portait encore :
+
+| ce qui partait | d'où |
+|---|---|
+| `uploaded_by='manager.banc'`, `validated_data` du sérialiseur | **variables locales** de chaque cadre de pile, jointes par défaut |
+| `extra.compte` = le nom du déposant | `core.journalisation` attache le compte à **chaque ligne de journal** ; Sentry recopie les attributs d'un enregistrement |
+| adresse du client | en-têtes `X-Forwarded-For` et `X-Real-Ip` — `send_default_pii` ne couvre que l'adresse vue de la socket |
+
+Ce qui marchait déjà : la valeur de `Authorization` arrivait `[Filtered]`, et
+le corps de la requête était vide.
+
+**Corrigé** : `include_local_variables=False` et un `before_send` qui retire
+les en-têtes porteurs d'adresse, le compte et l'adresse du contexte de
+journal, et les arguments de la ligne de commande — `revoquer_sessions
+--compte <nom>` les mettrait dans `sys.argv`, que Sentry joint de lui-même.
+Rejoué sur la même erreur : plus de nom de compte, plus d'adresse de client,
+et il reste l'exception, la pile avec le code source, le chemin de la
+requête, la version, et l'identifiant de requête que l'utilisateur cite quand
+il signale un incident.
+
+La leçon dépasse Sentry : **une configuration de confidentialité ne se relit
+pas, elle se mesure.** Les trois fuites étaient dans la documentation de
+l'outil ; aucune n'était visible dans le code qui les configurait.
+
+### 9.10 Deux machines réelles : pourquoi pas d'ici, et comment le mesurer là-bas
+
+Demandé après la bascule sur banc. Vérifié plutôt que supposé : cette session
+ne dispose que d'un environnement cloud, sans sortie TCP brute (SSH est
+réécrit en HTTPS par le mandataire, un port quelconque expire), et une
+seconde session serait un autre conteneur isolé en TEST-NET, incapable de
+joindre le premier. Deux machines réelles ne s'opèrent donc pas d'ici, et un
+troisième banc sur une seule machine n'aurait rien appris de plus.
+
+Ce qui manquait pour que **vous** la jouiez n'était pas un script de plus
+pour promouvoir — `promouvoir_replique.sh --repetition` existe —, c'était de
+pouvoir la **mesurer**. Après une bascule, `curl /api/health/` rendait le
+même corps quelle que soit la machine : rien ne disait laquelle avait servi,
+alors que c'est la seule question. Deux ajouts, petits :
+
+* `/api/health/` porte un champ `machine` quand `SERVEUR_NOM` est réglé —
+  **absent sinon**, pour ne rien révéler de plus qu'avant ;
+* `deploy/chronometrer_bascule.sh` interroge le domaine chaque seconde
+  depuis un poste tiers, n'écrit qu'aux changements, et rend les trois durées
+  du banc : première erreur, service rétabli, et **le retour d'une machine
+  écartée**, qu'il signale en toutes lettres.
+
+Éprouvé sur une séquence réelle (une application relancée sous trois noms
+successifs) : il a vu « 1 2 1 », donné les durées, et déclenché l'alerte au
+retour de 1. Deux de ses défauts en sont sortis : une expansion de shell qui
+imprimait « +6 s6 », et une liste dédoublonnée qui cachait justement le
+retour.
+
+Les chiffres du banc sont une borne, pas une mesure : la première répétition
+sur les vraies machines doit reporter les siens ici.
 
 ---
 
-## 10. Architecture proposée
+## 10. Limites connues, non couvertes
 
-```
-                    Internet
-                       │
-                  ┌────▼─────┐
-                  │  Caddy   │
-                  └────┬─────┘
-                  ┌────▼─────┐
-                  │  nginx   │  limit_req 40 r/s par IP
-                  └────┬─────┘
-              ┌────────▼─────────┐
-              │    gunicorn      │  2 × 4 fils
-              │                  │  ⊕ vidange 35 s (déc. 64)
-              │                  │  ⊕ 503 + Retry-After (déc. 62)
-              │                  │  ⊕ journal nommé, borné (déc. 61, 63)
-              └───┬──────────┬───┘
-                  │          │
-    connexion 3 s │          │ connexion 3 s, lecture 10 s,
-    requête 15 s  │          │ 2 tentatives (déc. 60)
-    verrou 10 s   │          │
-    (déc. 70)     │          │
-         ┌────────▼───┐  ┌───▼────────┐
-         │ PostgreSQL │  │   MinIO    │
-         │ max_conn 50│  └────────────┘
-         │ (déc. 66)  │
-         │ cache 2000 │
-         │ (déc. 69)  │
-         └─────┬──────┘
-               ├──── ordonnanceur ──── abandons signalés (déc. 65)
-               └──── sauvegardes ───── 3 places réservées au propriétaire
-```
+Écrites ici pour qu'elles ne se redécouvrent pas en production.
 
-**Aucun composant n'est ajouté, aucun n'est retiré.** C'est la conclusion de
-l'audit, et elle mérite d'être dite franchement : l'architecture était juste
-pour cette charge. Ce qui manquait n'étaient pas des **briques**, c'étaient
-des **bornes** — chaque attente était infinie, et chaque panne partielle
-devenait donc un arrêt total.
+1. **Une base vivante au niveau TCP mais qui ne répond plus** — processus
+   figé, ou machine dont le noyau acquitte encore. Mesuré : la requête pend
+   **au-delà de 95 s**. `connect_timeout` ne s'applique pas à une connexion
+   ouverte, `statement_timeout` est appliqué par le serveur — justement ce
+   qui manque —, et les sondes TCP reçoivent leurs acquittements du noyau
+   distant. **Aucun réglage de connexion ne peut y répondre.**
 
-Les douze décisions ajoutent des limites, des journaux et des verrous. Elles
-n'ajoutent pas une seule dépendance.
+2. **Un conteneur déclaré malsain n'est pas relevé.** `restart:
+   unless-stopped` redémarre un conteneur **sorti**, pas un conteneur
+   enlisé. Le rétablissement reste manuel.
+
+3. **La santé du conteneur n'est pas la santé des tâches.** Le battement de
+   cœur de l'ordonnanceur ne touche pas la base : le conteneur reste sain
+   pendant que ses six tâches échouent. C'est voulu (voir §7), mais la
+   surveillance doit passer par le journal.
+
+4. **Le remplissage délibéré du cache reste possible** depuis de nombreuses
+   adresses — chaque nom de compte essayé crée une clé. Le correctif ferme
+   le cas accidentel ; il faudrait aujourd'hui une quarantaine d'adresses
+   pour le provoquer, la limite par adresse étant redevenue exacte.
+
+5. **Scénarios non joués, faute de Docker sur le banc** : limites CPU et
+   mémoire de conteneur, tueur de mémoire (OOM), disque plein, ordre de
+   redémarrage des conteneurs. Ils restent à éprouver sur le serveur de
+   préproduction.
+
+6. **Réserve sur le scénario 15.** Les quinze invariants métier tiennent,
+   mais l'un d'eux — « toute ligne sortie du brouillon est tracée » —
+   signale les 6 009 lignes du banc : elles ont été créées directement en
+   base par le script de remplissage, sans passer par `transitions.soumettre`,
+   le seul chemin qui écrit le journal d'audit. C'est un défaut **du banc**,
+   pas de l'application (62 entrées d'audit, aucune sur une ligne). La
+   propriété reste donc à vérifier sur des lignes réellement soumises.
+
+7. **Trois choses ne se jouent que sur le serveur**, et l'outil pour les
+   vérifier là-bas est livré : **Let's Encrypt lui-même** (§9.8 bis —
+   `deploy/verifier_tls.sh`), **deux machines réelles** (§9.10 —
+   `deploy/chronometrer_bascule.sh`, `SERVEUR_NOM`), et **MinIO lui-même**
+   (§9.7 — un autre serveur S3 a tenu sa place ; le chemin de l'application
+   est éprouvé, pas le comportement propre de MinIO).
+
+8. **Le retour d'une ancienne primaire n'est protégé par aucun programme**
+   (§9.5). C'est une consigne d'exploitation, écrite dans
+   `promouvoir_replique.sh` et tenue par un test ; départager deux bases
+   demanderait un arbitre extérieur, non justifié pour un dispositif qui
+   bascule à la main.
+
+9. **Rien dans la suite de tests n'exécute Caddy** : l'invariant des
+   variables vides (§9.4) est vérifié sur le texte des fichiers, pas par le
+   programme qui les lit. Les deux `Caddyfile` ont été validés par Caddy
+   2.8.4 sur le banc, dans chaque mode livré.
+
+10. **Quatre en-têtes de sécurité sont servis en double** sur une réponse
+    d'API — Django et nginx, nginx et Caddy (§9.8). Valeurs identiques,
+    sans effet pratique ; noté, non corrigé, parce que choisir la source
+    unique demande de décider ce qui protège les réponses que Django ne
+    sert pas.
+
+11. **L'interface n'est pas surveillée** (§9.9) : la politique de sécurité
+    du contenu n'autorise que l'origine, et l'ouvrir à un tiers se décide.
 
 ---
 
-## 11. Bilan
+## 11. Architecture : ce qui a été ajouté, et ce qui ne l'a pas été
 
-- **10 commits**, **60 tests ajoutés** — chacun vérifié rouge sur le code
-  d'avant —, suite complète à **1 140 tests**, verte ;
-- **12 décisions** consignées (60 à 71) ;
-- **2 défauts critiques** corrigés, chacun transformant une panne partielle
-  en arrêt total sans reprise ;
-- **2 défauts de sécurité** corrigés sur la protection anti-bourrage ;
-- **1 défaut introduit par un correctif**, trouvé en remesurant, et corrigé ;
-- **1 limite assumée**, écrite noir sur blanc.
+```
+                       Internet
+                          │
+                   ┌──────▼──────┐
+                   │  aiguillage │  troisième machine — Caddy, lb_policy first,
+                   │  (déc. 76)  │  /api/health/ toutes les 5 s, read_timeout 900 s
+                   └──┬───────┬──┘
+          machine 1   │       │   machine 2 (déc. 75)
+      ┌───────────────▼──┐ ┌──▼───────────────┐
+      │ Caddy · nginx    │ │ Caddy · nginx    │  application à l'arrêt
+      │ gunicorn 2 × 4   │ │ (profil bascule) │  jusqu'à la promotion
+      │ Redis ⊕ filet    │ │                  │
+      │ (déc. 73)        │ │                  │
+      │ PostgreSQL ──────┼─┼─▶ réplique       │  flux asynchrone, 0,69 ms
+      │  index (déc. 72) │ │   (lecture seule)│  max_slot_wal_keep_size
+      │  archivage WAL ──┼─┼─▶ reprise à      │
+      │  (déc. 74)       │ │   l'instant      │
+      │ MinIO            │ │                  │
+      └──────────────────┘ └──────────────────┘
+                  │
+                  └── Sentry (déc. 77), éteint sans SENTRY_DSN
+```
+
+**La première série n'a ajouté aucun composant** : elle a posé des bornes.
+**La seconde en a ajouté quatre**, et chacun a dû justifier son existence
+par une mesure avant d'entrer — Redis parce que le cache en base écrivait à
+chaque lecture, la réplique parce que le dump de 02:00 était la seule
+reprise, l'aiguillage parce que le TTL du DNS décidait du retour du service,
+Sentry parce que Grafana dit *que* la plateforme va mal et jamais *pourquoi*.
+Chacun est **facultatif** ou **muni d'un filet** : la pile démarre sans
+Redis, sans réplique, sans aiguillage et sans Sentry, exactement comme
+avant.
+
+Ce qui a été écarté après mesure, dans la seconde série comme dans la
+première : un second index, une borne nginx relevée (mesurée pire), un
+arbitre de bascule (Patroni, etcd), un statut 413 déterministe (une
+troisième copie de la borne), la surveillance de l'interface (ouvrir la
+politique de sécurité du contenu). La liste de la première série est au §7.
+
+---
+
+## 12. Bilan des deux séries
+
+| | première série | seconde série | total |
+|---|---|---|---|
+| commits | 10 | 11 | **21** |
+| tests ajoutés, vérifiés rouges avant | 60 | 94 | **154** |
+| suite complète | 1 140 | 1 233 | **1 233**, verte |
+| décisions consignées | 60 à 71 | 72 à 77 | **18** |
+| défauts critiques corrigés | 2 | 0 | 2 |
+| affirmations du dépôt démenties par la mesure | 1 (§6.3) | 4 | **5** |
+| limites assumées, écrites | 1 | 4 | 5 |
 
 Ce que l'audit n'a **pas** trouvé mérite autant d'être dit : aucun N+1,
 aucun invariant métier rompu par le chaos, aucune perte de données sous
-`SIGKILL`, aucun doublon d'e-mail même avec deux ordonnanceurs simultanés,
-et aucune amplification entre pannes combinées. Le cœur métier — le circuit
-de justification, les verrous, l'atomicité des transitions — a tenu tout ce
-qu'on lui a fait subir.
+`SIGKILL` — ni sur une base seule, ni sur une primaire répliquée —, aucun
+doublon d'e-mail avec deux ordonnanceurs, aucune amplification entre pannes
+combinées, et un dépôt de 20 Mo identique octet pour octet à travers quatre
+étages, en clair comme en TLS, sur disque comme sur stockage objet, seul
+comme à huit en parallèle. Le cœur métier a tenu tout ce qu'on lui a fait
+subir.
+
+Ce que l'audit a appris sur lui-même, et qui vaut pour la suite : **une
+garantie écrite n'en est pas une** — cinq fois, la mesure a contredit le
+dépôt, et trois de ces cinq affirmations avaient été écrites pendant l'audit
+lui-même. La seule protection contre cela est celle qui a été appliquée à
+chaque fois : jouer la panne, lire ce qui sort, et ne corriger qu'ensuite.
