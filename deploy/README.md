@@ -1324,6 +1324,24 @@ service est revenu en **4,8 s**, sans toucher au DNS.
 > l'hôte, `restart: unless-stopped` —, coupez-la avant :
 > `ssh <machine perdue> 'cd ~/justi-innov && docker compose -f docker-compose.prod.yml down'`.
 
+### Ce qu'il faut de liaison pour déposer une pièce
+
+Une pièce peut peser 20 Mo, et nginx ne répond qu'une fois le dépôt
+entièrement reçu : le temps de téléversement tombe donc dans le
+`read_timeout` de l'aiguillage, qui est un délai **total**. À 900 s, un
+dépôt de 20 Mo passe jusqu'à environ **23 Ko/s (185 kbit/s)** ; en dessous,
+il est coupé en route et perdu. Mesuré à travers les quatre étages :
+
+| débit | 20 Mo |
+|---|---|
+| 200 Ko/s | 201 Créé en 102 s |
+| 60 Ko/s | 201 Créé en 341 s |
+| moins de ~23 Ko/s | coupé, dépôt perdu |
+
+Si une filiale se plaint de dépôts qui échouent après plusieurs minutes,
+c'est ici qu'il faut regarder avant de soupçonner l'application — et c'est
+`read_timeout`, dans `balanceur/Caddyfile`, qu'il faut relever.
+
 Pourquoi pas mieux : départager deux bases qui se disent toutes deux
 primaires demande un arbitre extérieur — Patroni, repmgr, etcd —, donc un
 quorum et une machine de plus à tenir, pour un dispositif qui bascule à la

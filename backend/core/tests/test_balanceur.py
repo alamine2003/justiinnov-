@@ -26,9 +26,11 @@ Trois réglages doivent être vrais **ensemble** ; deux d'entre eux cassent
 quelque chose en silence s'ils manquent, et c'est là que ce test sert.
 """
 
+import re
 from pathlib import Path
 
 import yaml
+from django.conf import settings
 from django.test import SimpleTestCase
 
 RACINE = Path(__file__).resolve().parents[3]
@@ -92,6 +94,35 @@ class AiguillageTests(SimpleTestCase):
         largement les délais par défaut ; couper ici annulerait une requête
         que la machine allait servir."""
         self.assertIn("response_header_timeout 120s", self.caddy_balanceur)
+
+    def test_le_delai_de_lecture_laisse_passer_une_piece_sur_une_mauvaise_liaison(self):
+        """``read_timeout`` borne le **débit minimal** d'un dépôt, et rien
+        dans son nom ne le dit.
+
+        nginx, en aval, met le corps en fichier temporaire et ne répond
+        qu'une fois le dépôt entièrement reçu : le temps de téléversement
+        tombe donc dans ce délai *total*. À 300 s, une pièce de 20 Mo
+        exigeait une liaison à plus de ~70 Ko/s — mesuré, un dépôt à
+        60 Ko/s était coupé à 301,8 s après 18,5 Mo, et perdu. Les filiales
+        sont précisément celles qui ont de mauvaises liaisons.
+
+        Le test lie les deux nombres qui doivent s'accorder : si l'on relève
+        un jour la taille maximale d'une pièce, il faudra rouvrir ce délai —
+        ou décider, en connaissance de cause, d'exclure les liaisons lentes.
+        """
+        # Plancher assumé : 25 Ko/s, soit 200 kbit/s.
+        debit_plancher = 25 * 1024
+        necessaire = settings.MAX_PROOF_SIZE / debit_plancher
+
+        trouve = re.search(r"read_timeout (\d+)s", self.caddy_balanceur)
+        self.assertIsNotNone(trouve, "l'aiguillage ne déclare aucun read_timeout")
+        self.assertGreaterEqual(
+            int(trouve.group(1)),
+            necessaire,
+            f"read_timeout={trouve.group(1)}s ne suffit pas à déposer "
+            f"{settings.MAX_PROOF_SIZE // (1024 * 1024)} Mo à {debit_plancher // 1024} Ko/s "
+            f"({necessaire:.0f}s nécessaires) : le dépôt serait coupé en route, et perdu.",
+        )
 
     # --- Ce qui casse en silence si on l'oublie ---------------------------
 

@@ -97,14 +97,32 @@
 		fail_duration 30s
 		max_fails 2
 
-		# Le délai de lecture couvre le plus long des usages réels : un
-		# export d'année complète, ou le dépôt d'une pièce de 20 Mo sur une
-		# liaison lente (GUNICORN_TIMEOUT vaut 120 s en aval). Plus court,
-		# l'aiguillage couperait une requête que la machine allait servir.
+		# Ces trois délais ne mesurent pas la même chose, et c'est
+		# `read_timeout` qui décide du sort d'un gros dépôt.
+		#
+		# nginx, en aval, met le corps de la requête en fichier temporaire et
+		# **ne répond qu'une fois le dépôt entièrement reçu**. Le temps de
+		# téléversement tombe donc dans `read_timeout`, qui est un délai
+		# *total* : il borne, de fait, la durée d'un dépôt — donc le débit
+		# minimal d'une liaison.
+		#
+		# Mesuré sur un banc à quatre étages, avec une pièce de 20 Mo :
+		#   200 Ko/s → 102 s → 201 Créé
+		#    60 Ko/s → coupé à 301,8 s après 18,5 Mo → 502, dépôt perdu
+		#
+		# 300 s excluaient donc toute liaison sous ~70 Ko/s, alors que les
+		# filiales sont précisément celles qui en ont de mauvaises. À 900 s,
+		# une pièce de 20 Mo passe jusqu'à ~23 Ko/s (185 kbit/s). Ce que cela
+		# coûte, et c'est assumé : une connexion enlisée tient jusqu'à quinze
+		# minutes, Caddy n'offrant pas de délai « par lecture » comme nginx.
+		#
+		# `response_header_timeout` ne court qu'une fois la requête écrite :
+		# il mesure le travail de Django, et 120 s est la valeur de
+		# GUNICORN_TIMEOUT. Il n'a pas à couvrir le téléversement.
 		transport http {
 			dial_timeout 3s
 			response_header_timeout 120s
-			read_timeout 300s
+			read_timeout 900s
 		}
 	}
 

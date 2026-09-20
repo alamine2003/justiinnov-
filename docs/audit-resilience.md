@@ -428,6 +428,62 @@ tombe — ce que cet audit a corrigé.
    variables est vérifié sur le texte des fichiers, pas par le programme qui
    les lit.
 
+   **Le dépôt d'une pièce de 20 Mo a été joué à travers les quatre étages**
+   (§ ci-dessous) ; il reste hors d'atteinte du banc : MinIO — les pièces y
+   sont tombées sur le disque local, la traversée réseau vers le stockage
+   objet n'est donc pas mesurée —, TLS, et deux machines réelles.
+
+### Ce que le dépôt d'une pièce de 20 Mo a montré
+
+Banc : les quatre étages de la production, chacun dans sa configuration du
+dépôt, sans retouche — aiguillage Caddy, Caddy de la machine, nginx (le
+gabarit `frontend/nginx.conf` rendu par son propre script d'entrée), puis
+gunicorn et Django. nginx tourne dans son espace de noms réseau, comme un
+conteneur, pour que le port 80 de chacun soit vraiment le sien. Les pièces
+sont de vrais PDF ; l'empreinte SHA-256 de la source est comparée à celle du
+fichier stocké.
+
+| essai | résultat |
+|---|---|
+| 20 Mo, liaison locale | **201 Créé en 0,39 s**, fichier stocké **identique octet pour octet** |
+| 20 Mo à 200 Ko/s | **201 Créé en 102,4 s** |
+| 20 Mo à 60 Ko/s | **coupé à 301,8 s** après 18,5 Mo → 502, **dépôt perdu** |
+| 21 Mo (au-dessus de MAX_PROOF_SIZE) | 400 : « Fichier trop volumineux (maximum 20 Mo). » |
+| le même fichier deux fois | 400 : « Ce fichier est déjà rattaché à ce dossier (doublon). » — la contrainte de la décision 45 tient de bout en bout |
+
+**Le troisième essai est le défaut, et il vise exactement les filiales.**
+nginx met le corps de la requête en fichier temporaire et **ne répond qu'une
+fois le dépôt entièrement reçu** ; le temps de téléversement tombe donc dans
+le `read_timeout` de l'aiguillage, qui est un délai *total*. À 300 s, une
+pièce de 20 Mo exigeait une liaison à plus de ~70 Ko/s (560 kbit/s) — et le
+commentaire du `Caddyfile` invoquait pourtant « le dépôt d'une pièce de 20 Mo
+sur une liaison lente » pour justifier cette valeur. Le délai ne tenait pas
+ce que son commentaire promettait.
+
+**Corrigé** : `read_timeout 900s`, ce qui descend le plancher à ~23 Ko/s
+(185 kbit/s). Rejoué à 60 Ko/s : **201 Créé en 341,3 s**, fichier intact. Ce
+que cela coûte, et c'est assumé : une connexion enlisée tient jusqu'à quinze
+minutes, Caddy n'offrant pas de délai « par lecture » comme nginx. Un test
+lie désormais les deux nombres qui doivent s'accorder — `MAX_PROOF_SIZE` et
+`read_timeout` — pour qu'une pièce plus grosse, un jour, rouvre la question.
+
+**Une correction que j'ai faite puis retirée, faute d'avoir mesuré avant.**
+Un fichier de 26 Mo, au-dessus des 25 Mo des mandataires, est refusé par
+nginx sur `Content-Length` — donc immédiatement —, mais sa réponse 413 est
+parfois détruite en route : nginx ferme la connexion pendant que Caddy lui
+écrit encore, et le client reçoit un 502 à corps vide. J'ai voulu relever la
+borne de nginx pour que Caddy rende le 413 lui-même. Mesuré : c'est **pire**.
+Caddy ne découvre le dépassement qu'en lisant, donc le client envoie 25 Mo
+pour rien avant d'être coupé, et n'obtient souvent aucun statut exploitable.
+Rétabli. Le comportement livré, mesuré sur trois essais, est rapide et
+imparfait : refus en ~2 ms après ~2 Mo envoyés, statut 413 ou 502 selon la
+course. Cela ne touche pas les utilisateurs : l'interface refuse le fichier
+avant l'envoi, sur une borne que le serveur lui donne
+(`configuration.justificatifs.taille_max_mo`). Rendre ce statut déterministe
+demanderait de comparer `Content-Length` dans l'aiguillage, soit une
+troisième copie de la borne à tenir en accord — non justifié pour un cas que
+seuls les clients hors interface rencontrent.
+
 ### Ce que la bascule réelle a montré — **IMPORTANT**
 
 Banc : PostgreSQL 16 primaire (`m1`) et réplique en flux (`m2`, montée avec
