@@ -114,6 +114,25 @@ class RepliqueEnAttenteChaudeTests(SimpleTestCase):
         self.assertIn("LE DOMAINE POINTE ENCORE", source)
         self.assertIn("NE REDÉMARREZ JAMAIS", source)
 
+    def test_la_promotion_dit_comment_empecher_le_retour_de_la_perdue(self):
+        """Le retour d'une ancienne primaire est le seul point du dispositif
+        qu'aucun programme ne tient, et c'est mesuré : redémarrée telle
+        quelle, elle n'est pas en récupération, ``/api/health/`` y répond 200,
+        et l'aiguillage — qui préfère toujours la première machine — lui a
+        rendu le trafic **5,1 s** après son retour, sur une base arrêtée à
+        l'instant de sa perte (docs/audit-resilience.md §9).
+
+        Le rappel « ne la redémarrez jamais » ne suffit pas : avec
+        ``restart: unless-stopped``, l'hôte la rallume sans demander l'avis de
+        personne. Le script doit donner la commande qui l'en empêche, et la
+        donner avant. Une consigne est ici la seule protection ; si elle
+        disparaît d'un nettoyage, plus rien ne couvre le cas."""
+        source = PROMOTION.read_text()
+
+        self.assertIn("docker compose -f docker-compose.prod.yml down", source)
+        self.assertIn("restart: unless-stopped", source)
+        self.assertIn("AUCUN PROGRAMME", source)
+
     def test_la_bascule_se_repete_sans_rien_casser(self):
         """Une répétition qui promeut pour de bon ne se répète qu'une fois."""
         source = PROMOTION.read_text()

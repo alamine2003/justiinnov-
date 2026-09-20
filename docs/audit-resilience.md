@@ -100,7 +100,7 @@ cette réserve : une panne de l'hôte les emporte tous.
 | **MinIO** | dépôt et téléchargement de pièces | perte **bornée** : 503 en 31–34 s, reste de l'API intact (déc. 60) |
 | **gunicorn** | API | worker abattu : perte des seules requêtes en vol, renaissance en 0,39 s |
 | **ordonnanceur** | relances d'e-mails, alertes, contrôle des sauvegardes | **dégradation seulement** : les files sont des tables, le travail attend |
-| **nginx / Caddy** | accès | configuration analysée par Caddy 2.8.4 (un défaut trouvé, §9) ; comportement en service non éprouvé |
+| **nginx / Caddy** | accès | bascule à deux machines jouée : 22,0 s d'indisponibilité, dont 17,1 s d'attente humaine ; retour d'une ancienne primaire **non protégé** (§9) |
 
 La conclusion qui compte : **aucun de ces points n'était borné avant
 l'audit**, et deux d'entre eux — stockage et base — transformaient une panne
@@ -416,17 +416,94 @@ tombe — ce que cet audit a corrigé.
    pas de l'application (62 entrées d'audit, aucune sur une ligne). La
    propriété reste donc à vérifier sur des lignes réellement soumises.
 
-7. **L'aiguillage n'a jamais été mis en service.** Sa *configuration*, elle,
-   ne fait plus partie des inconnues : les deux `Caddyfile` ont été analysés
-   par Caddy 2.8.4 dans chacun des modes livrés — machine en direct, machine
-   derrière l'aiguillage, mode de l'intégration continue, avec et sans
-   supervision, aiguillage seul. Ce passage a trouvé un défaut que la
-   relecture n'avait pas vu (§ ci-dessous). Restent non éprouvés : le
-   comportement en service — bascule réelle entre deux machines, contrôle de
-   santé qui détrompe une ancienne primaire redémarrée, tenue d'un dépôt de
-   20 Mo à travers le relais — et rien dans la suite de tests n'exécute
-   Caddy : l'invariant est vérifié sur le texte des fichiers, pas par le
-   programme qui les lit.
+7. **L'aiguillage a été mis en service et la bascule jouée** (§ ci-dessous) :
+   deux grappes PostgreSQL 16 en réplication par flux, deux instances
+   gunicorn servant la vraie application sur `127.0.0.2:80` et
+   `127.0.0.3:80`, et Caddy 2.8.4 devant, avec le `balanceur/Caddyfile` du
+   dépôt **sans retouche**. La bascule marche ; le retour de l'ancienne
+   primaire, non. Restent non éprouvés : deux machines réelles sur un réseau
+   réel, TLS et Let's Encrypt (le banc sert en clair), nginx entre
+   l'aiguillage et gunicorn, et le dépôt d'une pièce de 20 Mo à travers le
+   relais. Rien dans la suite de tests n'exécute Caddy : l'invariant des
+   variables est vérifié sur le texte des fichiers, pas par le programme qui
+   les lit.
+
+### Ce que la bascule réelle a montré — **IMPORTANT**
+
+Banc : PostgreSQL 16 primaire (`m1`) et réplique en flux (`m2`, montée avec
+les options exactes de `preparer_replique.sh`), la vraie application Django
+sur chacune, `balanceur/Caddyfile` non modifié devant. Une sonde interroge
+l'aiguillage toutes les deux secondes ; les décisions de Caddy sont lues dans
+son propre journal.
+
+| moment | mesure |
+|---|---|
+| perte de `m1` (application et base, arrêt immédiat) | première erreur vue par la sonde : **immédiate** (502) |
+| Caddy constate la perte | **1,6 s** après l'arrêt |
+| réplique non promue, pendant 17 s | **0 requête** servie par `m2` — le contrôle d'écriture fait son travail |
+| promotion + démarrage de l'application sur `m2` | service rétabli **4,8 s** plus tard, soit un intervalle de contrôle |
+| indisponibilité totale | **22,0 s**, dont 17,1 s d'attente de la décision humaine de promouvoir |
+
+Ce qui marche, marche bien : aucune requête n'a été envoyée à une base en
+lecture seule, et l'aiguillage a suivi la nouvelle primaire en moins de cinq
+secondes, sans toucher au DNS. C'est exactement ce que la décision 76
+promettait.
+
+**Ce qui ne marche pas est plus grave que ce que le dépôt écrivait.** Le
+`Caddyfile`, la docstring de `HealthView` et l'en-tête de
+`core/tests/test_balanceur.py` affirmaient tous les trois qu'une ancienne
+primaire redémarrée après une bascule « se déclare indisponible » et que
+« personne n'y retourne ». C'est faux, et la mesure est nette : redémarrée
+telle quelle, elle n'est pas en récupération, elle accepte les écritures,
+`/api/health/` y répond **200 `writable:true`** — en toute sincérité —, et
+`lb_policy first`, qui préfère toujours la première machine, lui **rend la
+préférence**.
+
+| moment | mesure |
+|---|---|
+| retour de l'ancienne primaire (base + application) | — |
+| Caddy la déclare saine | **5,0 s** |
+| première requête servie par la base périmée | **5,1 s** |
+| trafic des 24 requêtes suivantes | **22 sur la périmée**, 2 sur la vraie primaire |
+| divergence au même instant | 1 000 lignes contre 1 500 ; timeline 1 contre 2 |
+
+**Cause racine.** Le contrôle répond à « puis-je écrire ? », pas à « suis-je
+la primaire d'aujourd'hui ? ». Une base déposée répond oui aux deux
+questions qu'on sait lui poser. Aucun signal local ne les distingue : la
+timeline (1 contre 2) le ferait, mais une machine ne connaît que la sienne,
+et le fichier `.history` qui l'annonce est écrit dans l'archive de **l'autre**
+machine — en production, un volume local, pas un dépôt partagé. Et
+l'aiguillage aggrave le cas au lieu de le couvrir : sans lui, il faut qu'une
+personne rebascule le DNS ; avec lui, le retour est automatique.
+
+**Correction.** Aucune n'est technique, et c'est le résultat le plus
+important de cette épreuve. Départager deux bases demanderait qu'une
+troisième instance arbitre — Patroni, repmgr, etcd : une dépendance, un
+quorum, une machine de plus à tenir, pour un dispositif qui bascule à la
+main une fois tous les combien d'années. Ce n'est pas justifié ici, et
+inventer un demi-mécanisme non éprouvé serait pire que la consigne. Donc :
+
+1. les trois endroits qui promettaient la protection disent maintenant ce
+   qui est mesuré, chiffres compris — un exploitant qui croit la machine
+   protégée ne prendra pas la précaution qui, elle, protège ;
+2. `promouvoir_replique.sh` porte l'avertissement en toutes lettres, avec la
+   commande à passer **avant** que l'ancienne machine ne redémarre seule
+   (`docker compose down` à distance), car « restart: unless-stopped » la
+   rallumera au prochain démarrage de l'hôte sans demander l'avis de
+   personne.
+
+**Une piste écartée après mesure**, pour mémoire : ma première passe montrait
+un battement — machines déclarées mortes puis vivantes toutes les trente
+secondes. C'était ma sonde à 5 req/s qui saturait la limite de débit du point
+de santé (60/min par adresse), et les contrôles de Caddy, partageant le même
+compteur, recevaient des 429 ; toute réponse différente de 200 vaut « machine
+morte ». Rejoué à 0,5 req/s : plus un seul 429. Ce n'était donc pas un défaut
+du système — mais la mécanique est réelle, et mérite d'être connue : **une
+réponse 429 sur `/api/health/` fait déclarer une machine saine hors service
+pendant 30 s** (`fail_duration`). Elle ne se déclenche que si l'adresse vue
+par Django dépasse 60 requêtes par minute, ce qui suppose un
+`DJANGO_NUM_PROXIES` faux — précisément ce que `test_balanceur.py` vérifie
+déjà.
 
 ### Ce que l'analyse des `Caddyfile` a trouvé
 

@@ -1295,18 +1295,40 @@ prend 0,11 s.
 Avec lui, le nom de domaine ne bouge jamais. L'aiguillage interroge
 `/api/health/` toutes les cinq secondes et suit la primaire.
 
-### Ce qui le rend sûr
+### Ce qui le rend sûr — et ce qu'il ne couvre pas
 
 `/api/health/` ne répond **200 que si la base accepte les écritures**. Ce
-n'est pas une précaution de confort :
+n'est pas une précaution de confort : une réplique répond parfaitement au
+`SELECT 1`, et sans ce contrôle l'aiguillage y enverrait du monde. Bascule
+jouée sur un banc à deux machines : pendant les 17 s où la primaire était
+perdue et la réplique pas encore promue, **aucune requête** n'est partie vers
+la réplique ; une fois l'application démarrée sur la nouvelle primaire, le
+service est revenu en **4,8 s**, sans toucher au DNS.
 
-- une réplique répond parfaitement au `SELECT 1` — sans ce contrôle,
-  l'aiguillage y enverrait du monde ;
-- surtout, **le jour où l'ancienne primaire redémarre** après une bascule,
-  elle sert une base *périmée*, arrêtée à l'instant de sa perte. Comme
-  l'aiguillage préfère toujours la première machine, il lui rendrait le
-  trafic. C'est le contrôle d'écriture qui l'en empêche : tant qu'elle n'a
-  pas été refaite en réplique, elle se déclare indisponible.
+> **Ce contrôle ne protège PAS du retour d'une ancienne primaire, et c'est le
+> seul point du dispositif qu'aucun programme ne tient.**
+>
+> Redémarrée telle quelle après une bascule, elle n'est pas en récupération :
+> elle accepte les écritures, `/api/health/` y répond 200 en toute
+> sincérité, et l'aiguillage — qui préfère toujours la première machine — lui
+> rend le trafic. Mesuré : **5,1 s** après son retour, puis 22 des 24
+> requêtes suivantes servies par une base arrêtée à l'instant de sa perte,
+> pendant que la vraie primaire poursuivait la sienne.
+>
+> L'aiguillage **aggrave** ce cas : sans lui, il faut qu'une personne
+> rebascule le DNS ; avec lui, le retour est automatique.
+>
+> La consigne, donc : **une machine perdue ne redémarre jamais telle
+> quelle.** Elle reste éteinte jusqu'à être refaite en réplique
+> (`preparer_replique.sh`). Si elle peut se rallumer seule — redémarrage de
+> l'hôte, `restart: unless-stopped` —, coupez-la avant :
+> `ssh <machine perdue> 'cd ~/justi-innov && docker compose -f docker-compose.prod.yml down'`.
+
+Pourquoi pas mieux : départager deux bases qui se disent toutes deux
+primaires demande un arbitre extérieur — Patroni, repmgr, etcd —, donc un
+quorum et une machine de plus à tenir, pour un dispositif qui bascule à la
+main. Le détail de la mesure et le raisonnement sont dans
+`docs/audit-resilience.md` §9.
 
 ### Où il tourne — et où il ne doit pas
 

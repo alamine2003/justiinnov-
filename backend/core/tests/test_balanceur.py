@@ -13,10 +13,14 @@ base a basculé.
 
 **Ce qui le rend sûr tient à `/api/health/`**, qui ne répond 200 que si la
 base accepte les écritures. Une réplique répond parfaitement au `SELECT 1` ;
-sans ce contrôle, l'aiguillage y enverrait du monde. Et surtout : le jour où
-l'ancienne primaire redémarre après une bascule, elle sert une base
-**périmée**, arrêtée à l'instant de sa perte. Avec `lb_policy first`, elle
-redeviendrait la préférée — c'est le contrôle d'écriture qui l'en empêche.
+sans ce contrôle, l'aiguillage y enverrait du monde. Mesuré : pendant les
+dix-sept secondes où la primaire était perdue et la réplique pas encore
+promue, aucune requête n'est partie vers la réplique.
+
+Ce contrôle **ne protège pas** du retour d'une ancienne primaire : redémarrée
+telle quelle, elle accepte les écritures, répond 200, et `lb_policy first` la
+remet en tête — mesuré, 5,1 s après son retour. Ce qui protège là est une
+consigne d'exploitation, pas ce fichier (`docs/audit-resilience.md` §9).
 
 Trois réglages doivent être vrais **ensemble** ; deux d'entre eux cassent
 quelque chose en silence s'ils manquent, et c'est là que ce test sert.

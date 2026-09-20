@@ -108,8 +108,9 @@ cat <<FIN
 
      AVEC UN AIGUILLAGE (docker-compose.balanceur.yml) : rien à faire.
      Il interroge /api/health/ toutes les cinq secondes, voit que cette
-     machine accepte désormais les écritures, et bascule seul. Vérifiez-le
-     plutôt que de le supposer :
+     machine accepte désormais les écritures, et bascule seul. Mesuré sur un
+     banc à deux machines : service rétabli 4,8 s après le démarrage de
+     l'application ici. Vérifiez-le plutôt que de le supposer :
        curl -sS https://<le domaine>/api/health/
 
      SANS AIGUILLAGE : LE DOMAINE POINTE ENCORE SUR $PRIMAIRE.
@@ -121,9 +122,24 @@ cat <<FIN
      qu'un aiguillage supprime.
 
   2. NE REDÉMARREZ JAMAIS $PRIMAIRE EN PRIMAIRE.
+     C'EST LE SEUL POINT QUI N'EST PROTÉGÉ PAR AUCUN PROGRAMME.
+
      Ses données s'arrêtent à l'instant de sa perte ; les vôtres ont
-     continué. La rallumer telle quelle donnerait deux histoires. Quand
-     elle reviendra, elle devra être refaite en réplique de celle-ci :
+     continué. Rallumée telle quelle, elle n'est pas en récupération : elle
+     accepte les écritures, /api/health/ y répond 200 en toute sincérité, et
+     l'aiguillage — qui préfère toujours la première machine — lui rend le
+     trafic. Mesuré sur un banc à deux machines : le trafic y est revenu
+     5,1 s après son retour, et 22 des 24 requêtes suivantes ont été servies
+     par la base périmée. Deux histoires, et rien pour les réunir.
+
+     L'AIGUILLAGE AGGRAVE CE CAS AU LIEU DE LE COUVRIR : sans lui, il faut
+     qu'une personne rebascule le DNS ; avec lui, le retour est automatique.
+
+     Donc, tant que $PRIMAIRE n'est pas refaite en réplique : qu'elle reste
+     éteinte. Si elle peut redémarrer seule (redémarrage de l'hôte,
+     « restart: unless-stopped »), empêchez-la avant qu'elle ne le fasse :
+       ssh $PRIMAIRE 'cd ~/justi-innov && docker compose -f docker-compose.prod.yml down'
+     puis, quand vous êtes prêt à la remettre en service :
        ./preparer_replique.sh --primaire <cette machine>
 
   Et vérifiez ce qui tourne :

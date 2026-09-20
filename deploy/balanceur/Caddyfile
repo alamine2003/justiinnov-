@@ -25,12 +25,28 @@
 #
 # `/api/health/` ne répond 200 que si la base **accepte les écritures**
 # (core/views.py). Une réplique répond parfaitement au `SELECT 1` : sans ce
-# contrôle, l'aiguillage y enverrait du monde. Et surtout — le jour où
-# l'ancienne primaire redémarre après une bascule, elle sert une base
-# **périmée**, arrêtée à l'instant de sa perte. Avec `lb_policy first`, elle
-# redeviendrait la préférée. C'est le contrôle d'écriture qui l'en empêche :
-# tant qu'elle n'a pas été refaite en réplique, elle se déclare
-# indisponible, et personne n'y retourne.
+# contrôle, l'aiguillage y enverrait du monde. Mesuré sur un banc à deux
+# machines : pendant les 17 s qui séparent la perte de la primaire de sa
+# promotion, la réplique n'a reçu aucune requête — elle se déclarait 503.
+# C'est bien ce que ce contrôle apporte, et c'est réel.
+#
+# CE QU'IL N'APPORTE PAS, ET IL FAUT LE SAVOIR
+#
+# Il ne protège **pas** du retour d'une ancienne primaire. Mesuré sur le même
+# banc : redémarrée telle quelle après la bascule, elle n'est pas en
+# récupération, elle accepte donc les écritures, elle répond 200 — et
+# `lb_policy first` la remet **en tête**. Le trafic y est revenu **5,1 s
+# après son retour**, sur une base arrêtée à l'instant de sa perte : 22 des
+# 24 requêtes suivantes y sont allées, pendant que la vraie primaire
+# poursuivait la sienne. Deux histoires, et rien pour les réunir.
+#
+# Aucun réglage de ce fichier n'y change quoi que ce soit : la question que
+# pose le contrôle est « puis-je écrire ? », pas « suis-je la primaire
+# d'aujourd'hui ? », et une base déposée répond oui, sincèrement. Ce qui
+# protège est ailleurs, et c'est une consigne d'exploitation :
+# **une machine perdue ne redémarre jamais telle quelle** — elle se refait en
+# réplique (`preparer_replique.sh`), ou elle reste éteinte. Voir
+# `promouvoir_replique.sh` et README.md, « Répartiteur ».
 #
 # OÙ CE FICHIER TOURNE
 #
