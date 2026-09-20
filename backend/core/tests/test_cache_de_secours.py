@@ -198,8 +198,12 @@ class CacheDeLaPileTests(TransactionTestCase):
         from unittest import mock
 
         base = {
-            "POSTGRES_PASSWORD": "peu-importe",
-            "DJANGO_SECRET_KEY": "peu-importe-mais-assez-longue-pour-passer",
+            # Valeurs de forme, jamais des identifiants : ce test ne se
+            # connecte à rien, il vérifie seulement que les réglages se
+            # chargent. Écrites pour qu'aucun détecteur de secrets ne les
+            # prenne pour vraies.
+            "POSTGRES_PASSWORD": "sans-objet",
+            "DJANGO_SECRET_KEY": "cle-de-forme-" + "x" * 40,
             "DJANGO_TEST": "0",
         }
         with mock.patch.dict(os.environ, {**base, **environnement}, clear=False):

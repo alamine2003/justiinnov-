@@ -196,7 +196,9 @@ class CourseSurLaLimiteTests(TransactionTestCase):
                 depart.wait()
                 reponse = APIClient().post(
                     "/api/token-auth/",
-                    {"username": "dg.innov", "password": "faux-mot-de-passe"},
+                    # Un essai qui doit échouer : la valeur n'a aucune
+                    # importance, seule la course compte.
+                    {"username": "dg.innov", "password": "n-importe-quoi"},
                 )
                 with verrou:
                     codes.append(reponse.status_code)
