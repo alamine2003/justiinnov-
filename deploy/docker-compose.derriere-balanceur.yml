@@ -49,7 +49,14 @@ services:
     environment:
       # Le mode « sans TLS » du Caddyfile, celui de l'intégration continue.
       APP_DOMAIN: "http://:80"
-      ACME_EMAIL: ${ACME_EMAIL:-}
+      # ACME_EMAIL n'est pas repris ici, et c'est volontaire. Cette machine
+      # ne termine plus TLS : l'adresse n'y sert à rien. Mais
+      # docker-compose.prod.yml l'exige (`:?`), et l'exigence vaut pour la
+      # pile entière — la poser vide ici ne la relâcherait pas, Compose
+      # refuserait d'abord sur le fichier de base. Une ligne qui laisserait
+      # croire le contraire serait un piège : le jour où l'on relâcherait
+      # `prod.yml` en s'y fiant, Caddy ne démarrerait plus. Renseignez donc
+      # ACME_EMAIL sur les deux machines ; seul l'aiguillage s'en sert.
       SUPERVISION: ${SUPERVISION:-0}
       MANDATAIRES_DE_CONFIANCE: ${BALANCEUR_RESEAU:?BALANCEUR_RESEAU manquant}
 

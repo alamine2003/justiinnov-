@@ -67,8 +67,13 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    la supervision, mais Compose interpole toute la pile avant d'appliquer
    les profils : `GRAFANA_ADMIN_PASSWORD` doit être renseigné même
    supervision désactivée (« Supervision », plus bas) — générez-le tout de
-   suite, il servira le jour de l'activation. `ACME_EMAIL` est obligatoire : vide,
-   Caddy refuse sa configuration et rien ne démarre. `EMAIL_HOST` l'est
+   suite, il servira le jour de l'activation. `ACME_EMAIL` est obligatoire, et c'est
+   Compose qui l'exige (`:?`), sur les deux machines — même derrière un
+   aiguillage, où la machine ne termine plus TLS et où l'adresse ne sert
+   donc à rien : Compose interpole le fichier de base avant toute
+   surcharge. Le Caddyfile, lui, survit à une valeur vide (le placeholder
+   est entre guillemets) ; il démarrerait alors sans contact ACME, donc
+   sans personne à prévenir avant l'expiration d'un certificat. `EMAIL_HOST` l'est
    aussi : hors mode debug, le backend refuse de démarrer sans serveur SMTP,
    parce que les alertes budgétaires et les rapports partiraient dans les
    journaux sans que personne ne le voie ; une préproduction sans SMTP

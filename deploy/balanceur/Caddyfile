@@ -45,9 +45,10 @@
 #       -e MACHINE_PRIMAIRE=10.0.0.1 -e MACHINE_SECONDE=10.0.0.2 \
 #       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
 #       caddy validate --config /etc/caddy/Caddyfile
-
 {
-	email {$ACME_EMAIL}
+	# Entre guillemets : vide, un placeholder nu donnerait « email » sans
+	# argument et Caddy refuserait de démarrer (voir ../Caddyfile).
+	email "{$ACME_EMAIL}"
 }
 
 {$APP_DOMAIN} {

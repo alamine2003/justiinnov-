@@ -100,7 +100,7 @@ cette réserve : une panne de l'hôte les emporte tous.
 | **MinIO** | dépôt et téléchargement de pièces | perte **bornée** : 503 en 31–34 s, reste de l'API intact (déc. 60) |
 | **gunicorn** | API | worker abattu : perte des seules requêtes en vol, renaissance en 0,39 s |
 | **ordonnanceur** | relances d'e-mails, alertes, contrôle des sauvegardes | **dégradation seulement** : les files sont des tables, le travail attend |
-| **nginx / Caddy** | accès | non éprouvé (hors périmètre du banc) |
+| **nginx / Caddy** | accès | configuration analysée par Caddy 2.8.4 (un défaut trouvé, §9) ; comportement en service non éprouvé |
 
 La conclusion qui compte : **aucun de ces points n'était borné avant
 l'audit**, et deux d'entre eux — stockage et base — transformaient une panne
@@ -415,6 +415,46 @@ tombe — ce que cet audit a corrigé.
    le seul chemin qui écrit le journal d'audit. C'est un défaut **du banc**,
    pas de l'application (62 entrées d'audit, aucune sur une ligne). La
    propriété reste donc à vérifier sur des lignes réellement soumises.
+
+7. **L'aiguillage n'a jamais été mis en service.** Sa *configuration*, elle,
+   ne fait plus partie des inconnues : les deux `Caddyfile` ont été analysés
+   par Caddy 2.8.4 dans chacun des modes livrés — machine en direct, machine
+   derrière l'aiguillage, mode de l'intégration continue, avec et sans
+   supervision, aiguillage seul. Ce passage a trouvé un défaut que la
+   relecture n'avait pas vu (§ ci-dessous). Restent non éprouvés : le
+   comportement en service — bascule réelle entre deux machines, contrôle de
+   santé qui détrompe une ancienne primaire redémarrée, tenue d'un dépôt de
+   20 Mo à travers le relais — et rien dans la suite de tests n'exécute
+   Caddy : l'invariant est vérifié sur le texte des fichiers, pas par le
+   programme qui les lit.
+
+### Ce que l'analyse des `Caddyfile` a trouvé
+
+`email {$ACME_EMAIL}` n'était pas entre guillemets. Une variable **posée
+vide** fait disparaître le placeholder : la directive se retrouve sans
+argument et **Caddy refuse de démarrer**, sur une erreur qui ne nomme que
+`email`. Le défaut `{$NOM:valeur}` n'y change rien — mesuré : il ne joue que
+si la variable est *absente*, jamais si elle est posée vide.
+
+Le cas n'était pas atteignable par la commande documentée, et il faut le dire
+aussi nettement : `docker compose config` refuse un `ACME_EMAIL` vide, parce
+que le `:?` de `docker-compose.prod.yml` s'applique avant la surcharge. Mais
+`docker-compose.derriere-balanceur.yml` posait `${ACME_EMAIL:-}`, c'est-à-dire
+une ligne qui **annonçait une souplesse qu'elle ne pouvait pas tenir** :
+l'exploitant reste obligé de renseigner une adresse dont cette machine ne se
+sert pas, et le jour où quelqu'un relâcherait `prod.yml` en s'y fiant,
+l'entrée publique ne démarrerait plus.
+
+Corrigé en trois points : le placeholder est entre guillemets dans les deux
+fichiers (renseigné, il part à ACME à l'identique — vérifié sur la
+configuration produite) ; la ligne trompeuse est remplacée par ce qu'elle
+aurait dû dire ; et `core/tests/test_caddy.py` vérifie la règle générale —
+*un placeholder sans guillemets n'est acceptable que si Compose garantit une
+valeur non vide*. Ce test est rouge sur le code d'avant.
+
+Pourquoi rien ne l'avait vu : l'intégration continue renseigne une adresse
+factice (`ci@example.invalid`) alors qu'elle ne termine pas TLS. Le seul
+chemin qui aurait révélé le défaut était celui que personne ne joue.
 
 ---
 
