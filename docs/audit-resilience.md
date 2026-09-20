@@ -430,9 +430,79 @@ tombe — ce que cet audit a corrigé.
 
    **Le dépôt d'une pièce de 20 Mo a été joué à travers les quatre étages**,
    d'abord sur disque local, puis **avec un stockage objet dans la boucle**
-   (§ ci-dessous). Restent hors d'atteinte : MinIO lui-même — son domaine de
-   téléchargement est refusé par la politique de sortie du banc, un autre
-   serveur S3 a donc tenu sa place —, TLS, et deux machines réelles.
+   (§ ci-dessous). **L'émission d'un certificat et le service en TLS ont été
+   joués aussi** (§ ci-dessous). Restent hors d'atteinte : MinIO lui-même —
+   son domaine de téléchargement est refusé par la politique de sortie du
+   banc, un autre serveur S3 a donc tenu sa place —, Let's Encrypt lui-même,
+   et deux machines réelles.
+
+### Ce que TLS a montré
+
+Le `Caddyfile` de production a demandé un certificat par le vrai circuit
+ACME — compte, commande, défi HTTP-01, installation — à une **autorité
+locale** tenue par un second Caddy. Ce n'est pas Let's Encrypt : le protocole
+et les étapes sont les mêmes, mais ni ses quotas, ni ses enregistrements CAA,
+ni le DNS public ne sont éprouvés. Deux lignes ont été ajoutées à une copie du
+fichier pour viser cette autorité ; le reste est celui du dépôt.
+
+| vérification | résultat |
+|---|---|
+| émission | **certificat obtenu**, SAN `justi.banc.test`, chaîne vérifiée |
+| protocole | **TLS 1.3**, `TLS_AES_128_GCM_SHA256` |
+| redirection depuis le clair | **308** vers `https://` |
+| HSTS | `max-age=31536000; includeSubDomains; preload`, **une seule source** |
+| `/api/health/` en TLS | **200** |
+| dépôt de 20 Mo en TLS | **201 en 0,26 s**, empreinte identique |
+
+Django ne boucle pas malgré `DJANGO_SECURE_SSL_REDIRECT=1` : le
+`X-Forwarded-Proto` posé par Caddy et transmis par nginx est lu, comme la
+décision le prévoyait. C'était la crainte écrite dans les commentaires ; elle
+est levée.
+
+**Un défaut mineur, mesuré au passage** : quatre en-têtes de sécurité sont
+servis **en double** sur une réponse d'API — `X-Frame-Options`,
+`X-Content-Type-Options` et `Referrer-Policy` viennent de Django *et* de
+nginx ; `Permissions-Policy` de nginx *et* de Caddy. HSTS et la politique de
+sécurité du contenu, elles, n'ont qu'une source — c'est justement celle dont
+le `Caddyfile` se préoccupait. Les valeurs sont identiques, donc sans effet
+pratique aujourd'hui ; mais un `X-Frame-Options` en double a déjà été motif,
+chez certains navigateurs, à ignorer l'en-tête. Noté, non corrigé : choisir
+la source unique de chacun demande de décider ce qui protège les réponses que
+Django ne sert pas (les fichiers statiques), et cela se décide.
+
+### Ce que Sentry a montré — **IMPORTANT**
+
+L'intégration (décision 77) est éteinte tant qu'on ne lui donne pas
+d'adresse. Pour vérifier ce qu'elle laisse sortir, un faux point d'entrée
+Sentry a été monté sur le banc, l'adresse pointée sur lui, et une **vraie
+erreur** provoquée — un dépôt vers un stockage injoignable. L'événement a
+ensuite été lu, champ par champ.
+
+**Les deux réglages annoncés ne suffisaient pas.** Avec
+`send_default_pii=False` et `max_request_body_size="never"` déjà en place,
+l'événement portait encore :
+
+| ce qui partait | d'où |
+|---|---|
+| `uploaded_by='manager.banc'`, `validated_data` du sérialiseur | **variables locales** de chaque cadre de pile, jointes par défaut |
+| `extra.compte` = le nom du déposant | `core.journalisation` attache le compte à **chaque ligne de journal** ; Sentry recopie les attributs d'un enregistrement |
+| adresse du client | en-têtes `X-Forwarded-For` et `X-Real-Ip` — `send_default_pii` ne couvre que l'adresse vue de la socket |
+
+Ce qui marchait déjà : la valeur de `Authorization` arrivait `[Filtered]`, et
+le corps de la requête était vide.
+
+**Corrigé** : `include_local_variables=False` et un `before_send` qui retire
+les en-têtes porteurs d'adresse, le compte et l'adresse du contexte de
+journal, et les arguments de la ligne de commande — `revoquer_sessions
+--compte <nom>` les mettrait dans `sys.argv`, que Sentry joint de lui-même.
+Rejoué sur la même erreur : plus de nom de compte, plus d'adresse de client,
+et il reste l'exception, la pile avec le code source, le chemin de la
+requête, la version, et l'identifiant de requête que l'utilisateur cite quand
+il signale un incident.
+
+La leçon dépasse Sentry : **une configuration de confidentialité ne se relit
+pas, elle se mesure.** Les trois fuites étaient dans la documentation de
+l'outil ; aucune n'était visible dans le code qui les configurait.
 
 ### Ce que le stockage objet a montré — **IMPORTANT**
 

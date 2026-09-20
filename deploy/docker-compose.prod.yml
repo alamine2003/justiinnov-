@@ -101,6 +101,18 @@ x-django: &django
   # même cache — la configuration du circuit y est gardée sans expiration,
   # et c'est le serveur qui l'invalide quand elle change.
   REDIS_URL: ${REDIS_URL-redis://redis:6379/0}
+  # --- Surveillance des erreurs ---
+  # Vide : rien ne s'installe, rien ne sort, aucune dépendance réseau de
+  # plus. Renseigner l'adresse est une décision — une donnée de la plateforme
+  # part alors chez un tiers ; ce qui part, et surtout ce qui ne part pas, est
+  # réglé dans `backend/config/surveillance.py`.
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  # La version du code qui a produit l'erreur : l'étiquette des images.
+  SENTRY_RELEASE: ${SENTRY_RELEASE:-${IMAGE_TAG:-}}
+  # Mesure des performances : un second flux, plus gros que les erreurs, et
+  # Prometheus la fait déjà sans rien faire sortir de la machine.
+  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
   # --- Stockage des justificatifs ---
   AWS_S3_ENDPOINT_URL: "http://minio:9000"
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID manquant}

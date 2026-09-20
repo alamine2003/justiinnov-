@@ -813,3 +813,11 @@ if EN_TEST:
     # qui vérifient les journaux fonctionnent quand même.
     LOGGING["handlers"]["console"]["level"] = "CRITICAL"
     TEST_RUNNER = "core.tests.runner.LanceurDeTests"
+
+# Surveillance des erreurs : muette sans ``SENTRY_DSN``, et jamais installée
+# pendant les tests — une suite qui lève exprès n'a pas à remplir un tableau
+# de bord. Ce qu'elle laisse sortir, et ce qu'elle retient, est réglé dans le
+# module ; tout y est expliqué.
+from config.surveillance import configurer_la_surveillance  # noqa: E402
+
+SURVEILLANCE = configurer_la_surveillance(en_test=EN_TEST)

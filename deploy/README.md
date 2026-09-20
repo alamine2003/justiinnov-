@@ -1446,6 +1446,67 @@ choses n'ouvrent pas les mêmes portes :
 Une restauration ancienne **réactive** des accès révoqués depuis : voir
 « Après une restauration ».
 
+## Surveillance des erreurs (Sentry, facultatif)
+
+Prometheus et Grafana disent **que** la plateforme va mal : un taux d'erreur
+qui monte, une file qui s'allonge. Ils ne disent pas **pourquoi**. Il faut
+alors retrouver la requête dans les journaux du conteneur — et une trace
+d'exception y est déjà partie à la rotation. Sentry garde la trace, la pile,
+la version du code et le chemin de la requête, et regroupe les occurrences
+d'une même cause.
+
+**Il est éteint par défaut.** Sans `SENTRY_DSN`, rien ne s'installe, aucune
+requête ne sort, aucune dépendance réseau n'apparaît. Le renseigner est une
+décision : une donnée de la plateforme part alors chez un tiers.
+
+```bash
+# .env
+SENTRY_DSN=https://…@….ingest.sentry.io/…
+SENTRY_ENVIRONMENT=production
+docker compose -f docker-compose.prod.yml up -d backend scheduler
+```
+
+### Ce qui part, et ce qui ne part pas
+
+Ce qui part : le type et le message de l'exception, sa pile avec le code
+source, le chemin et la méthode de la requête, la version et l'environnement,
+et l'identifiant de requête (`X-Requete-Id`) que l'utilisateur cite quand il
+signale un incident. De quoi corriger, pas de quoi reconstituer un dossier.
+
+Ce qui ne part pas, et c'est **réglé, pas promis**
+(`backend/config/surveillance.py`) :
+
+| retenu | par quoi |
+|---|---|
+| nom de compte, témoins, valeur de `Authorization` | `send_default_pii=False` |
+| corps des requêtes — montants, bénéficiaires, jusqu'à 20 Mo de pièce | `max_request_body_size="never"` |
+| variables locales de chaque cadre de pile | `include_local_variables=False` |
+| adresse du client (`X-Forwarded-For`, `X-Real-Ip`) | `before_send` |
+| compte et adresse joints à chaque ligne de journal | `before_send` |
+| arguments de la ligne de commande | `before_send` |
+
+> **Les trois dernières lignes ont été ajoutées après mesure, pas par
+> précaution.** Un événement réel capté sur un banc, avec les deux premiers
+> réglages déjà en place, portait encore `uploaded_by='manager.banc'` dans
+> les variables locales, `extra.compte`, et l'adresse du client dans les
+> en-têtes. Si vous modifiez cette configuration, **relisez un événement
+> réel** : c'est la seule vérification qui vaille (`docs/audit-resilience.md`
+> §9).
+
+La mesure des performances (`SENTRY_TRACES_SAMPLE_RATE`) est à zéro : c'est
+un second flux, plus volumineux que les erreurs, pour une mesure que
+Prometheus fait déjà sans rien faire sortir de la machine.
+
+### Pourquoi l'interface n'est pas surveillée
+
+La politique de sécurité du contenu n'autorise les requêtes que vers
+l'origine (`connect-src 'self'`, `frontend/nginx.conf`). Un client Sentry
+dans le navigateur ne pourrait rien envoyer sans ouvrir cette politique à un
+domaine tiers — ou sans un relais servi par la plateforme elle-même. Les deux
+se décident : ouvrir la politique affaiblit la protection qui empêche une
+page compromise d'exfiltrer, et un relais est un composant de plus à tenir.
+Tant que personne n'a tranché, l'interface reste hors surveillance.
+
 ## Supervision (Prometheus et Grafana)
 
 Quatre services de la pile, sur le réseau interne ; seul Grafana est
