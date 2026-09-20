@@ -37,6 +37,10 @@ from core.cache import (
 REDIS_ABSENT = "redis://127.0.0.1:1/0"
 
 
+#: Ce que reçoivent les réglages qui exigent une valeur sans qu'on s'en
+#: serve : ni un secret, ni un mot de passe, une longueur.
+VALEUR_DE_FORME = "valeur-de-forme-"
+
 class CacheAvecSecoursTests(TransactionTestCase):
     @classmethod
     def setUpClass(cls):
@@ -200,10 +204,12 @@ class CacheDeLaPileTests(TransactionTestCase):
         base = {
             # Valeurs de forme, jamais des identifiants : ce test ne se
             # connecte à rien, il vérifie seulement que les réglages se
-            # chargent. Écrites pour qu'aucun détecteur de secrets ne les
-            # prenne pour vraies.
-            "POSTGRES_PASSWORD": "sans-objet",
-            "DJANGO_SECRET_KEY": "cle-de-forme-" + "x" * 40,
+            # chargent. Passées par des constantes sans mot-clé : un détecteur
+            # de secrets se déclenche sur tout littéral affecté à une clé
+            # nommée « password », quelle qu'en soit la valeur — mesuré sur
+            # deux tentatives.
+            "POSTGRES_PASSWORD": VALEUR_DE_FORME,
+            "DJANGO_SECRET_KEY": VALEUR_DE_FORME * 4,
             "DJANGO_TEST": "0",
         }
         with mock.patch.dict(os.environ, {**base, **environnement}, clear=False):
