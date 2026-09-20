@@ -1446,6 +1446,66 @@ choses n'ouvrent pas les mêmes portes :
 Une restauration ancienne **réactive** des accès révoqués depuis : voir
 « Après une restauration ».
 
+## Avant le premier certificat : `./verifier_tls.sh`
+
+L'émission ne se répète pas à volonté. Let's Encrypt compte **cinq
+validations échouées par heure et par nom**, et **cinq certificats identiques
+par semaine**. Un DNS qui pointe ailleurs, un enregistrement CAA oublié, un
+port 80 fermé par le pare-feu de l'hébergeur — et les essais sont brûlés
+avant qu'on ait compris ce qui se passait.
+
+```bash
+cd deploy && ./verifier_tls.sh          # lit APP_DOMAIN dans .env
+./verifier_tls.sh --domaine autre.nom   # pour un autre nom
+```
+
+Il vérifie, dans l'ordre, ce qui est vérifiable depuis la machine :
+
+1. **le nom pointe-t-il ici** — et il ne crie pas si l'adresse est ailleurs :
+   c'est normal derrière un aiguillage, une IP flottante ou un NAT ;
+2. **un CAA interdit-il Let's Encrypt** — un enregistrement posé un jour sur
+   le domaine parent fait échouer l'émission sans qu'aucun journal local ne
+   l'explique ;
+3. **qui écoute sur le port 80** — et surtout si c'est bien Caddy : un autre
+   serveur qui répondrait à sa place ferait échouer la validation ;
+4. **la machine joint-elle l'ACME** — un pare-feu sortant donne le même
+   silence qu'un CAA ;
+5. **quel certificat est servi aujourd'hui** — émetteur et échéance.
+
+> **Le point 5 attrape la panne qu'on ne voit pas de l'intérieur.** Quand
+> l'ACME échoue, Caddy ne s'arrête pas : il signe lui-même, avec son autorité
+> interne. Le site répond en TLS, les journaux du serveur sont calmes, et
+> **tous les navigateurs refusent**. Depuis le serveur, tout va bien.
+
+### Ce qu'aucun script ne peut vérifier d'ici
+
+Qu'Internet atteint la machine sur le port 80 : c'est Let's Encrypt qui ouvre
+la connexion, depuis l'extérieur. Faites-le vérifier depuis un autre réseau :
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  http://<le domaine>/.well-known/acme-challenge/essai
+# 404 ou 308 : le port est ouvert et Caddy répond.
+# « connection refused » ou un délai : il est fermé.
+```
+
+### Répéter sans brûler ses essais
+
+L'environnement d'essai de Let's Encrypt ne consomme aucun quota. Ajoutez
+`acme_ca https://acme-staging-v02.api.letsencrypt.org/directory` dans le bloc
+global de `Caddyfile` **le temps de la répétition**, relancez Caddy, et
+attendez « certificate obtained » dans ses journaux. Puis retirez la ligne,
+supprimez le certificat d'essai et relancez — le script donne les commandes
+exactes. Un certificat d'essai laissé en place est refusé par les
+navigateurs, exactement comme l'autorité interne.
+
+> Ce chemin n'a **pas** pu être joué depuis l'environnement de développement :
+> la politique de sortie y refuse les deux points d'entrée ACME de Let's
+> Encrypt, et la machine n'a aucune adresse routable — donc aucune validation
+> entrante possible. Ce qui a été éprouvé, c'est le circuit ACME complet
+> contre une autorité locale (`docs/audit-resilience.md` §9). Le reste se
+> vérifie sur le serveur, avec ce script.
+
 ## Surveillance des erreurs (Sentry, facultatif)
 
 Prometheus et Grafana disent **que** la plateforme va mal : un taux d'erreur

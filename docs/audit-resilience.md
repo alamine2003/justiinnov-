@@ -433,8 +433,42 @@ tombe — ce que cet audit a corrigé.
    (§ ci-dessous). **L'émission d'un certificat et le service en TLS ont été
    joués aussi** (§ ci-dessous). Restent hors d'atteinte : MinIO lui-même —
    son domaine de téléchargement est refusé par la politique de sortie du
-   banc, un autre serveur S3 a donc tenu sa place —, Let's Encrypt lui-même,
-   et deux machines réelles.
+   banc, un autre serveur S3 a donc tenu sa place —, **Let's Encrypt
+   lui-même** (§ ci-dessous : deux obstacles indépendants, dont un de
+   topologie), et deux machines réelles.
+
+### Let's Encrypt lui-même : pourquoi il n'a pas pu être joué ici
+
+Demandé deux fois, tenté pour de bon la seconde. **Deux obstacles
+indépendants, mesurés et non supposés** :
+
+1. la politique de sortie de l'environnement refuse les deux points d'entrée
+   ACME — `acme-staging-v02` et `acme-v02.api.letsencrypt.org` répondent 403
+   au `CONNECT` du mandataire ;
+2. la seule adresse non locale de la machine est `192.0.2.2/24`, soit
+   **TEST-NET-1** (RFC 5737), une plage de documentation non routable. Même
+   avec la sortie ouverte, aucune validation entrante n'est possible : c'est
+   Let's Encrypt qui ouvre la connexion vers le port 80.
+
+Le second obstacle ne se contourne par aucun réglage : il n'est pas question
+d'outillage mais de topologie. La conclusion utile n'est donc pas un banc de
+plus, c'est **le contrôle à passer là où la réponse existe** — sur le
+serveur. `deploy/verifier_tls.sh` vérifie le nom, le CAA, qui occupe le port
+80, la sortie vers l'ACME et le certificat en place ; il dit aussi, en toutes
+lettres, ce qu'il ne peut pas vérifier.
+
+Il attrape en particulier la panne qui ne se voit pas de l'intérieur :
+**quand l'ACME échoue, Caddy ne s'arrête pas — il signe avec son autorité
+interne.** Le site répond en TLS, les journaux du serveur sont calmes, et
+tous les navigateurs refusent.
+
+Le script a été éprouvé dans les deux sens, ce qu'un contrôle mérite : il
+approuve une machine saine (nom résolu, Caddy sur le port 80, certificat
+lisible) et il refuse ce qu'il doit refuser — un serveur étranger posé sur le
+port 80 est signalé par l'en-tête `Server`, et l'autorité interne est
+signalée comme telle. Deux de ses propres défauts sont sortis de cette
+épreuve : un code HTTP concaténé avec son repli (`000000`), et un `404`
+attendu là où Caddy répond légitimement `308` hors émission.
 
 ### Ce que TLS a montré
 
