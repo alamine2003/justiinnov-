@@ -905,13 +905,22 @@ export interface paths {
          *
          *     Le troisième point n'est pas un détail. Une réplique en attente chaude
          *     (décision 75) répond parfaitement au ``SELECT 1`` : sa base est vivante,
-         *     simplement en lecture seule. Sans ce contrôle, un répartiteur y
-         *     enverrait des gens qui ne pourraient plus rien enregistrer — et, le jour
-         *     où l'ancienne primaire redémarre après une bascule, il lui rendrait le
-         *     trafic alors qu'elle sert une base **périmée**, arrêtée à l'instant de sa
-         *     perte. C'est ce contrôle qui rend le basculement sûr : une machine qui
-         *     n'est pas la primaire se déclare indisponible, et le répartiteur cesse
-         *     de la choisir.
+         *     simplement en lecture seule. Sans ce contrôle, un répartiteur y enverrait
+         *     des gens qui ne pourraient plus rien enregistrer. Mesuré sur un banc à
+         *     deux machines : pendant les dix-sept secondes séparant la perte de la
+         *     primaire de sa promotion, la réplique n'a reçu aucune requête.
+         *
+         *     **Ce contrôle ne dit pas qui est la primaire d'aujourd'hui.** Il dit
+         *     « puis-je écrire ? », et une ancienne primaire redémarrée après une
+         *     bascule répond oui, sincèrement : elle n'est pas en récupération, elle
+         *     accepte les écritures — dans une histoire qui s'est arrêtée à l'instant
+         *     de sa perte. Mesuré sur le même banc : le répartiteur lui a rendu le
+         *     trafic **5,1 s après son retour**, et 22 des 24 requêtes suivantes y
+         *     sont allées. Distinguer les deux demanderait de savoir ce que fait
+         *     l'autre machine ; rien ici ne le sait. Ce qui protège est une consigne
+         *     d'exploitation — une machine perdue ne redémarre jamais telle quelle —
+         *     et non ce point de santé (``deploy/promouvoir_replique.sh``,
+         *     ``docs/audit-resilience.md`` §9).
          *
          *     ``pg_is_in_recovery()`` est vrai sur une réplique, et pendant une
          *     reprise à un instant donné (décision 74) tant que la base n'est pas

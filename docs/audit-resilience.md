@@ -97,7 +97,7 @@ cette réserve : une panne de l'hôte les emporte tous.
 | composant | conséquence de sa perte | état après l'audit |
 |---|---|---|
 | **PostgreSQL** | arrêt total — base, cache, files, verrous | perte **bornée** : 503 + `Retry-After` en 3,0 s (déc. 70) |
-| **MinIO** | dépôt et téléchargement de pièces | perte **bornée** : 503 en 31–34 s, reste de l'API intact (déc. 60) |
+| **MinIO** | dépôt et téléchargement de pièces | perte **bornée** : 503 en 31–34 s au téléchargement, **et désormais au dépôt aussi** (§9) ; reste de l'API intact (déc. 60) |
 | **gunicorn** | API | worker abattu : perte des seules requêtes en vol, renaissance en 0,39 s |
 | **ordonnanceur** | relances d'e-mails, alertes, contrôle des sauvegardes | **dégradation seulement** : les files sont des tables, le travail attend |
 | **nginx / Caddy** | accès | bascule à deux machines jouée : 22,0 s d'indisponibilité, dont 17,1 s d'attente humaine ; retour d'une ancienne primaire **non protégé** (§9) |
@@ -428,10 +428,55 @@ tombe — ce que cet audit a corrigé.
    variables est vérifié sur le texte des fichiers, pas par le programme qui
    les lit.
 
-   **Le dépôt d'une pièce de 20 Mo a été joué à travers les quatre étages**
-   (§ ci-dessous) ; il reste hors d'atteinte du banc : MinIO — les pièces y
-   sont tombées sur le disque local, la traversée réseau vers le stockage
-   objet n'est donc pas mesurée —, TLS, et deux machines réelles.
+   **Le dépôt d'une pièce de 20 Mo a été joué à travers les quatre étages**,
+   d'abord sur disque local, puis **avec un stockage objet dans la boucle**
+   (§ ci-dessous). Restent hors d'atteinte : MinIO lui-même — son domaine de
+   téléchargement est refusé par la politique de sortie du banc, un autre
+   serveur S3 a donc tenu sa place —, TLS, et deux machines réelles.
+
+### Ce que le stockage objet a montré — **IMPORTANT**
+
+Même banc, avec cette fois un serveur S3 à la place du disque local. **Ce
+n'est pas MinIO** : son binaire n'est pas récupérable depuis ce banc, et
+aucun paquet ne le fournit. Ce qui est donc éprouvé, c'est tout le chemin de
+l'application — `django-storages`, `botocore`, le découpage en parties, les
+délais, la mémoire — et non le comportement propre de MinIO. Les durées
+tiennent à l'implémentation d'en face ; les conclusions de code, non.
+
+| essai | résultat |
+|---|---|
+| 20 Mo déposés | **201 en 1,05 s** (0,39 s sur disque local), objet **identique octet pour octet** |
+| 20 Mo téléchargés | **200 en 0,51 s**, fichier identique |
+| huit dépôts de 20 Mo simultanés | **8 × 201** en 2,0 à 4,4 s, neuf objets tous conformes |
+| mémoire des workers au pic | **487,5 Mo** cumulés, contre `mem_limit: 768m` — **+161,6 Mo** pour les huit dépôts |
+| forme de l'envoi | **trois parties de 8 Mo**, en parallèle (découpage par défaut de boto3) |
+
+La mémoire ne redescend pas après coup : elle atteint un palier et y reste.
+C'est ce palier qui compte face à la limite du conteneur, et il laisse
+280 Mo de marge à huit dépôts simultanés de 20 Mo.
+
+**Le défaut est ailleurs, et il est dans le code.** Avec un stockage bridé,
+un dépôt de 20 Mo échouait en **500 « Erreur interne du serveur »**. Or le
+*téléchargement* traduit depuis longtemps la même panne en **503** clair
+— « Le stockage des justificatifs ne répond pas : réessayez dans un
+instant. » (décision 60, `ProofViewSet.download`). Le *dépôt* ne traduisait
+rien : `PANNES_DE_BASE` ne couvre que `OperationalError` et
+`InterfaceError`, donc la base, et les exceptions botocore remontaient
+jusqu'au gestionnaire 500. La même panne donnait une réponse claire en
+sortie et une réponse opaque en entrée — un 500 n'invite à aucune reprise,
+alors que rien n'est perdu et que réessayer suffit.
+
+**Corrigé** : `ProofViewSet.create` traduit les pannes du client S3
+(`BotoCoreError`, `ClientError`) en `StockageIndisponible`, dans le bloc qui
+nettoie déjà les fichiers orphelins. Rejoué sur la chaîne complète :
+**503 en 16,8 s** avec le message traduit, une seule ligne de journal, aucun
+objet orphelin ni envoi en plusieurs parties resté ouvert.
+
+`OSError` est volontairement **hors** de cette famille, bien qu'elle couvre
+le disque plein : un test existant la lève pour simuler une trace d'audit
+impossible et exige qu'elle **remonte**. Une trace impossible n'est pas une
+panne de stockage, et l'habiller en « réessayez » laisserait croire qu'il ne
+s'est rien passé. Le premier jet l'incluait ; c'est ce test qui l'a arrêté.
 
 ### Ce que le dépôt d'une pièce de 20 Mo a montré
 
