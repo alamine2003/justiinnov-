@@ -169,7 +169,7 @@ services:
   # (pour ses marqueurs), `base/` et `.distant/`. Les pièces restent en root,
   # personne d'autre n'y écrit.
   sauvegardes-init:
-    image: postgres:16.4-alpine
+    image: postgres:18.4-alpine
     user: root
     entrypoint: ["sh", "-ec"]
     command:
@@ -184,7 +184,7 @@ services:
     logging: *journal
 
   db:
-    image: postgres:16.4-alpine
+    image: postgres:18.4-alpine
     # L'image officielle arrête Postgres en mode « fast » : les connexions
     # sont rompues, puis un point de reprise est écrit. C'est rapide sur une
     # base de cette taille, mais un SIGKILL au milieu obligerait au
@@ -441,7 +441,7 @@ services:
   # une seule raison : dire dans leur journal, où l'exploitation regarde,
   # qu'aucune copie hors machine n'est configurée.
   sauvegarde:
-    image: postgres:16.4-alpine
+    image: postgres:18.4-alpine
     mem_limit: 128m
     # Sous `postgres`, comme l'archivage : les dumps, les sauvegardes
     # physiques et la purge des segments se font alors dans des répertoires
@@ -478,7 +478,7 @@ services:
   # démarre à l'intérieur, sous `postgres`, avec ce qu'un Postgres a besoin
   # de mémoire ; 128 Mo ne lui suffiraient pas.
   reprise:
-    image: postgres:16.4-alpine
+    image: postgres:18.4-alpine
     profiles: ["reprise"]
     user: postgres
     mem_limit: 512m
