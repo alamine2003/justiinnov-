@@ -481,7 +481,7 @@ class AdresseUniqueTests(ScopingTestCase):
     def _creer(self, username, email):
         return self.client.post(
             "/api/users/",
-            {"username": username, "email": email, "password": "Provisoire-2026-xyz",
+            {"username": username, "email": email, "password": MOT_DE_PASSE,
              "role": Role.MANAGER, "countries": [self.togo.pk]},
             format="json",
         )

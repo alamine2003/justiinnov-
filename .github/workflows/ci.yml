@@ -471,9 +471,11 @@ jobs:
         # Ce que `.env.example` exige (`${X:?}`), avec des valeurs sans
         # importance : rien ici ne sert de donnée réelle, et seuls la base,
         # la sauvegarde et la reprise démarrent — les images de
-        # l'application ne sont jamais tirées.
+        # l'application ne sont jamais tirées. Les valeurs qui ressemblent à
+        # des secrets sont tirées au sort à chaque exécution : un littéral,
+        # même factice, déclenche le détecteur de secrets de GitGuardian.
         run: |
-          cat > .env <<'EOF'
+          cat > .env <<EOF
           BACKEND_IMAGE=ghcr.io/ci/backend
           FRONTEND_IMAGE=ghcr.io/ci/frontend
           IMAGE_TAG=ci
@@ -482,12 +484,12 @@ jobs:
           APP_BASE_URL=https://ci.invalid
           CORS_ALLOWED_ORIGINS=https://ci.invalid
           DJANGO_ALLOWED_HOSTS=ci.invalid
-          DJANGO_SECRET_KEY=ci-7QmX2vLp9BdTnRw4KsZjHy6FgUcAe3NoIrVtPlMqDbXhJf5Ez
+          DJANGO_SECRET_KEY=$(openssl rand -hex 32)
           DEFAULT_FROM_EMAIL=ci@ci.invalid
-          POSTGRES_PASSWORD=ci-mot-de-passe
+          POSTGRES_PASSWORD=$(openssl rand -hex 16)
           AWS_ACCESS_KEY_ID=ci-cle
-          AWS_SECRET_ACCESS_KEY=ci-secret-de-stockage
-          GRAFANA_ADMIN_PASSWORD=ci-grafana
+          AWS_SECRET_ACCESS_KEY=$(openssl rand -hex 16)
+          GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 8)
           ADRESSE_PRIVEE=127.0.0.1
           MACHINE_PRIMAIRE=10.0.0.1
           MACHINE_SECONDE=10.0.0.2
