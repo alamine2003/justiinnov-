@@ -96,27 +96,40 @@ ARCHIVE="$DESTINATION/base/wal"
 # d'une plus récente que la cible rendrait la reprise impossible — Postgres
 # refuse de remonter le temps, et le dirait par une erreur obscure.
 #
-# `date -d` est une extension GNU ; le BusyBox de l'image Alpine ne la
-# comprend pas toujours. Plutôt que de deviner et de choisir mal, on
-# demande alors à l'exploitant de nommer le point de départ.
+# Sans `date -d` : c'est une extension GNU que le BusyBox de l'image Alpine
+# n'a pas, et la CI l'a vu à sa première exécution — le script demandait
+# --depuis à chaque fois. On compare des chaînes : le nom d'une sauvegarde
+# est « 2026-09-19T020000Z », l'instant est ramené à la même forme compacte
+# « 20260919020000 » dès qu'il est écrit en UTC (suffixe +00, +0000,
+# +00:00, Z, ou sans décalage — Postgres lit alors l'heure du serveur, qui
+# est UTC dans la pile). Un instant dans un autre fuseau n'est pas deviné :
+# l'exploitant nomme le point de départ.
+compact_utc() {
+  # "2026-09-19 14:31:00.123+00" → "20260919143100" ; vide si pas en UTC.
+  printf '%s' "$1" | sed -n -E \
+    's/^([0-9]{4})-([0-9]{2})-([0-9]{2})[T ]([0-9]{2}):([0-9]{2})(:([0-9]{2}))?(\.[0-9]+)?[[:space:]]*(Z|\+00(:?00)?|UTC)?$/\1\2\3\4\5\7/p' \
+    | sed -E 's/^([0-9]{12})$/\100/'
+}
+
 choisir_le_point_de_depart() {
   if [ -n "$DEPUIS" ]; then
     [ -d "$PHYSIQUES/$DEPUIS" ] || echec "sauvegarde physique inconnue : $DEPUIS (voir $PHYSIQUES)"
     echo "$PHYSIQUES/$DEPUIS/"
     return 0
   fi
-  instant_epoch="$(date -u -d "$INSTANT" +%s 2>/dev/null || echo "")"
-  if [ -z "$instant_epoch" ]; then
+  instant_compact="$(compact_utc "$INSTANT")"
+  if [ -z "$instant_compact" ]; then
     echo "" ; return 0
   fi
   trouvee=""
   for candidate in "$PHYSIQUES"/*/; do
     [ -d "$candidate" ] || continue
-    # L'horodatage est dans le nom : 2026-09-19T020000Z
     nom="$(basename "$candidate")"
-    quand="$(echo "$nom" | sed 's/T\([0-9][0-9]\)\([0-9][0-9]\)\([0-9][0-9]\)Z/ \1:\2:\3+00/')"
-    quand_epoch="$(date -u -d "$quand" +%s 2>/dev/null || echo 0)"
-    if [ "$quand_epoch" -ne 0 ] && [ "$quand_epoch" -le "$instant_epoch" ]; then
+    # 2026-09-19T020000Z → 20260919020000 ; un nom d'une autre forme est ignoré.
+    quand="$(printf '%s' "$nom" | sed -n -E 's/^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{6})Z$/\1\2\3\4/p')"
+    [ -n "$quand" ] || continue
+    # Deux nombres de quatorze chiffres : la comparaison numérique est POSIX.
+    if [ "$quand" -le "$instant_compact" ]; then
       trouvee="$candidate"
     fi
   done
@@ -127,7 +140,7 @@ choisie="$(choisir_le_point_de_depart)"
 if [ -z "$choisie" ]; then
   echo "Sauvegardes physiques disponibles :" >&2
   ls -1 "$PHYSIQUES" >&2 2>/dev/null || true
-  echec "impossible de choisir seul le point de départ (date illisible, ou aucune sauvegarde antérieure à $INSTANT). Nommez-le : --depuis <horodatage>"
+  echec "impossible de choisir seul le point de départ (instant hors UTC ou illisible, ou aucune sauvegarde antérieure à $INSTANT). Nommez-le : --depuis <horodatage>"
 fi
 journal "point de départ : $choisie"
 
