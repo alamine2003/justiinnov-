@@ -137,8 +137,9 @@ le `df` tranche — justifie, refuse ou clôture. Un `manager` ne peut ni
 justifier, ni déclarer non justifiée, ni mettre en contrôle, ni clôturer
 une dépense — pas même les siennes. Autrement, il pourrait décaisser puis
 se donner quitus, ce qui viderait l'application de sa raison d'être. Un
-`dm` ne constate pas ; un `df` ne met pas en contrôle. `admin` et
-`super_admin` peuvent tout.
+`dm` ne constate pas. Le `df` peut mettre en contrôle comme tout le
+siège (`expenses.review`), mais il est le seul, avec les administrateurs,
+à constater. `admin` et `super_admin` peuvent tout.
 
 La séparation vaut aussi **à l'intérieur du siège** : celui qui a saisi une
 dépense ne peut pas la justifier lui-même. Il faut deux personnes.
@@ -416,7 +417,7 @@ détruit à la fin ; la seconde suite détruirait celle de la première. Donnez
 ## Intégration et livraison continues
 
 L'intégration continue (`.github/workflows/ci.yml`) tourne sur chaque PR et
-au sein de la livraison continue, en cinq travaux indépendants :
+au sein de la livraison continue, en sept travaux indépendants :
 
 | Travail | Ce qu'il vérifie |
 |---|---|
@@ -424,6 +425,8 @@ au sein de la livraison continue, en cinq travaux indépendants :
 | Frontend | types, lint, tests unitaires, build |
 | Images Docker | les deux images se construisent |
 | Parcours complet | la pile livrable (backend en production sans code monté, frontend nginx, Caddy devant avec le Caddyfile livré) démarre, des comptes jetables entrent par `compose cp` et `seed_users`, `seed_demo --base-jetable` remplit des données, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, `/admin/` répond l'application et non le back-office, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
+| Exploitation | syntaxe et `shellcheck` des scripts de `deploy/`, tests de `sauvegarder.sh` avec des doublures |
+| Pile de production | `deploy/docker-compose.prod.yml` s'interpole dans chacun de ses modes, la base archive un segment dans le volume que `sauvegardes-init` lui a donné, le service de sauvegarde prend une sauvegarde physique sous `postgres`, et la reprise à un instant donné retrouve, dans son conteneur, les lignes effacées juste après cet instant |
 | Dépendances | `pip-audit --strict` et `npm audit --audit-level=high`, **bloquants** |
 
 **La plateforme tourne sur un serveur dédié** (Hetzner), joint par le
@@ -462,8 +465,8 @@ Les mises à jour de dépendances arrivent en PR via Dependabot
 
 ## Déploiement, supervision et sauvegardes
 
-En production, nginx limite `/api/` à 20 requêtes par seconde et par
-adresse (réserve de 40) et répond `429` avec un `detail` en français, ou en
+En production, nginx limite `/api/` à 40 requêtes par seconde et par
+adresse (réserve de 80 ; `frontend/nginx.conf`) et répond `429` avec un `detail` en français, ou en
 anglais si `Accept-Language` commence par `en` ;
 Django garde sa propre limite, plus stricte, sur l'obtention du jeton. Le
 service Django peut tourner avec un rôle Postgres sans droit sur le schéma
@@ -511,6 +514,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `DJANGO_NUM_PROXIES` | — | nombre de proxys de confiance devant Django (2 en production : Caddy puis nginx ; 1 en CI) pour lire la vraie adresse du client |
 | `TOKEN_MAX_AGE_DAYS` | `30` | durée de vie d'un jeton d'API |
 | `DJANGO_TOTP_REQUIRED` | `0` | `1` impose la double authentification à tous les comptes (plateforme fermée jusqu'à l'enrôlement) ; `0` la propose depuis le menu du compte. Exposée par `GET /api/me/` (`totp_required`) |
+| `DJANGO_TOTP_REQUIRED_ROLES` | — | rôles (séparés par des virgules) auxquels la double authentification est imposée quand `DJANGO_TOTP_REQUIRED` vaut `0` : `admin,super_admin` ferme la plateforme aux administrateurs non enrôlés et la laisse proposée aux pays. `GET /api/me/` (`totp_required`) dit la politique **de ce compte**. Un rôle inconnu refuse le démarrage |
 | `ALLOWED_EMAIL_DOMAINS` | `innovpharma.net` | domaines de messagerie admis pour les comptes, séparés par des virgules ; ne peut pas être vide |
 | `METRICS_TOKEN` | — | jeton que Prometheus présente sur `/metrics` (`Authorization: Bearer`) ; vide, le point de collecte répond 404 |
 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | `admin` / — | compte d'administration de Grafana (pile de production) ; le mot de passe est **obligatoire**. Les comptes « direction » et « technique » se créent depuis lui (`deploy/README.md`) |
@@ -536,6 +540,7 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `APP_BASE_URL` | `http://localhost:5173` | base des liens dans les e-mails |
 | `SCHEDULE_EMAILS` / `SCHEDULE_SUPPRESSIONS` / `SCHEDULE_VERIF_SAUVEGARDES` / `SCHEDULE_ALERTS` / `SCHEDULE_WEEKLY_REPORT` / `SCHEDULE_MONTHLY_REPORT` | `*/5 * * * *` / `*/5 * * * *` / `30 8 * * *` / `0 * * * *` / `0 7 * * 1` / `0 7 1 * *` | cadences de l'ordonnanceur, syntaxe cron |
 | `SAUVEGARDES_MARQUEURS` / `SAUVEGARDES_AGE_MAX_HEURES` | vide / `26` | dossier des marqueurs de réussite des sauvegardes (volume monté dans l'ordonnanceur) et âge au-delà duquel une sauvegarde est en défaut |
+| `SAUVEGARDES_DISQUE_MIN_POURCENT` | `15` | espace libre minimal, en pourcentage, du disque qui porte le volume des sauvegardes — le même que la base et ses segments ; en dessous, `verifier_sauvegardes` prévient les administrateurs, sans dépendre de Grafana |
 | `GUNICORN_WORKERS` / `GUNICORN_THREADS` / `GUNICORN_TIMEOUT` | `2` / `4` / `120` | processus, fils par processus et délai (s) du serveur d'application |
 | `PORT` | `8000` (backend), `80` (frontend) | port d'écoute, quand l'hébergeur l'impose (Railway) ; les contrôles de santé le suivent |
 | `NGINX_API_UPSTREAM` / `NGINX_RESOLVER` / `NGINX_RESOLVER_IPV6` / `NGINX_TRUSTED_PROXY` | `http://backend:8000` / résolveur du conteneur / `off` / `127.0.0.1` | image frontend : adresse du backend, résolveur DNS, résolution IPv6 et mandataire public cru pour `X-Forwarded-For` ; `frontend/nginx.conf` est un gabarit rempli au démarrage (`docs/deploiement-railway.md`) |

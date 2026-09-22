@@ -43,8 +43,8 @@ Ce que la pile fait aujourd'hui :
 
 | | dispositif | mesuré / constaté |
 |---|---|---|
-| Sauvegarde | `pg_dump -Fc` quotidien à 02:00, chiffré AES-256 à la sortie du tube | rotation 30 jours, copie mensuelle **jamais supprimée** |
-| **Archivage des journaux** | `archive_command` → `archiver_wal.sh`, chiffré de même | **ajouté depuis** (décision 74) : RPO de 24 h → quelques minutes |
+| Sauvegarde | `pg_dump -Fc` quotidien à 02:00, chiffré AES-256 à la sortie du tube **si `SAUVEGARDE_CLE_PUBLIQUE` est posée** (non par défaut) | rotation 30 jours, copie mensuelle **jamais supprimée** |
+| **Archivage des journaux** | `archive_command` → `archiver_wal.sh`, chiffré de même ; segments et sauvegardes physiques copiés hors machine (décision 78) | **ajouté depuis** (décision 74) : RPO de 24 h → 5 minutes, chiffre écrit dans `deploy/README.md`, « Objectifs » |
 | **Sauvegarde physique** | `pg_basebackup` hebdomadaire | **ajoutée depuis** : point de départ obligatoire d'une reprise |
 | Copie hors machine | `rclone crypt`, incrémentale, vérifiée (`rclone check`) | chiffrée en transit et au repos distant |
 | Justificatifs | miroir séparé | même chaîne |
@@ -74,15 +74,16 @@ absente.
 
 ### Ce qui reste à décider, et qui ne se code pas
 
-- **RPO** — ce qu'on accepte de **perdre**. Plus 24 h ; désormais borné par
-  `POSTGRES_ARCHIVE_TIMEOUT` (300 s par défaut). Mais **le chiffre qu'on
-  garantit n'est toujours écrit nulle part**, et c'est à la direction de le
-  fixer, pas au code.
+- **RPO** — ce qu'on accepte de **perdre**. Écrit à un seul endroit,
+  `deploy/README.md`, tableau « Objectifs » : 5 minutes tant que les
+  segments partent hors machine, 24 h si leur copie est en défaut sans que
+  personne ne lise l'alerte. Ce document n'en donne pas d'autre valeur.
 - **RTO** — le temps qu'on met à **repartir**. Mesuré sur le banc (0,6 s),
   **jamais sur le serveur réel**, où le rapatriement depuis la copie
   distante dominera. Il se mesure à la prochaine répétition trimestrielle —
-  `restaurer_a_la_date.sh` sans argument destructeur ne touche à rien, il
-  n'y a donc aucune raison de ne pas la faire.
+  `docker compose run --rm reprise` en mode essai ne touche à rien, il n'y
+  a donc aucune raison de ne pas la faire. La CI rejoue la chaîne à chaque
+  changement ; elle ne mesure pas votre serveur.
 
 ---
 
@@ -100,7 +101,14 @@ distant que les dumps, et une sauvegarde de base hebdomadaire
 - **Coûte** : un réglage Postgres, un script d'archivage, du volume
   distant. Le trafic WAL est faible, et il vient de baisser : depuis
   Redis, une lecture n'écrit plus rien (décision 73) ; il ne reste que les
-  écritures métier réelles.
+  écritures métier réelles. **Mais `archive_timeout` force un segment de
+  16 Mo par tranche de 300 s dès qu'il y a eu une écriture** : la borne
+  haute est de 16 Mo × 288 = 4,6 Go par jour de saisie continue, et la
+  purge locale ne garde que ce dont les deux sauvegardes physiques
+  conservées ont besoin, soit deux semaines. L'usage réel n'a pas été
+  mesuré sur le serveur ; `verifier_sauvegardes` prévient quand le disque
+  du volume passe sous `SAUVEGARDES_DISQUE_MIN_POURCENT` (15 %), sans
+  dépendre du profil `supervision`.
 - **Ne change pas** : l'architecture. Un composant en plus, aucun.
 
 ### B. Réplique en lecture sur la même machine — **écarté**
