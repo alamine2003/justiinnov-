@@ -31,7 +31,7 @@
 
 services:
   balanceur:
-    image: caddy:2.8-alpine
+    image: caddy:2.11-alpine
     container_name: justi_balanceur
     mem_limit: 128m
     ports:
