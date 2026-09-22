@@ -49,3 +49,17 @@ updates:
       interval: monthly
     commit-message:
       prefix: "Met à jour"
+
+  # Les images tierces de la pile de production (Postgres, Redis, MinIO,
+  # Caddy, rclone, Prometheus, Grafana) ne vivent dans aucun Dockerfile :
+  # sans cette entrée, un correctif de sécurité de Postgres 16 n'était
+  # signalé à personne.
+  - package-ecosystem: docker-compose
+    directories:
+      - /deploy
+      - /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "Met à jour"
+

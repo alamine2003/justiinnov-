@@ -5,6 +5,8 @@ doit pas se lire seulement dans le journal d'un conteneur ; un jeton lu
 dans une sauvegarde doit pouvoir être révoqué, et cela se relit.
 """
 
+import os
+import shutil
 from datetime import timedelta
 from unittest import mock
 from io import StringIO
@@ -26,8 +28,27 @@ from notifications.models import Notification
 from reporting.management.commands.verifier_sauvegardes import (
     anomalies,
     archivage_en_panne,
+    disque_trop_plein,
     replication_en_panne,
+    retards_de_copie,
 )
+
+
+#: Tous les marqueurs d'une nuit qui s'est bien passée : les sauvegardes et,
+#: pour chaque famille, sa copie hors machine.
+FRAIS = (
+    "base", "pieces", "distant", "base-physique",
+    "distant-pieces", "distant-base-physique",
+)
+
+
+def disque_a_l_aise():
+    """Un disque à 40 % libre, quel que soit celui de la machine qui joue
+    les tests : le contrôle d'espace a ses propres cas."""
+    return mock.patch(
+        "reporting.management.commands.verifier_sauvegardes.shutil.disk_usage",
+        return_value=shutil._ntuple_diskusage(100 * 2**30, 60 * 2**30, 40 * 2**30),
+    )
 
 
 def marquer(dossier, quoi, quand):
@@ -46,13 +67,13 @@ class FraicheurTests(ExpenseTestCase):
     def verifier(self, **options):
         sortie = StringIO()
         with override_settings(SAUVEGARDES_MARQUEURS=self.dossier_marqueurs), \
-                self.captureOnCommitCallbacks(execute=True):
+                self.captureOnCommitCallbacks(execute=True), disque_a_l_aise():
             call_command("verifier_sauvegardes", stdout=sortie, **options)
         return sortie.getvalue()
 
     def test_des_marqueurs_frais_ne_notifient_personne(self):
         maintenant = timezone.now()
-        for quoi in ("base", "pieces", "distant", "base-physique"):
+        for quoi in FRAIS:
             marquer(self.dossier_marqueurs, quoi, maintenant - timedelta(hours=6))
 
         sortie = self.verifier()
@@ -80,10 +101,9 @@ class FraicheurTests(ExpenseTestCase):
 
     def test_une_sauvegarde_trop_vieille_est_en_defaut(self):
         maintenant = timezone.now()
+        for quoi in FRAIS:
+            marquer(self.dossier_marqueurs, quoi, maintenant - timedelta(hours=6))
         marquer(self.dossier_marqueurs, "base", maintenant - timedelta(hours=40))
-        marquer(self.dossier_marqueurs, "pieces", maintenant - timedelta(hours=6))
-        marquer(self.dossier_marqueurs, "distant", maintenant - timedelta(hours=6))
-        marquer(self.dossier_marqueurs, "base-physique", maintenant - timedelta(hours=6))
 
         self.verifier()
 
@@ -150,6 +170,192 @@ class FraicheurTests(ExpenseTestCase):
     def test_le_controle_est_planifie(self):
         job = next(j for j in JOBS if j["command"][0] == "verifier_sauvegardes")
         self.assertEqual(job["cron"], "SCHEDULE_VERIF_SAUVEGARDES")
+
+
+class RetardDeCopieTests(ExpenseTestCase):
+    """Une sauvegarde réussie ici et jamais partie là-bas.
+
+    Le marqueur ``distant`` ne disait que la base : le miroir des pièces
+    pouvait échouer chaque nuit, les sauvegardes physiques et les segments
+    ne partaient pas du tout, et aucun marqueur ne le disait. La reprise à
+    un instant donné promettait de survivre à la perte du serveur ; sans les
+    segments hors machine, elle ne survivait qu'à la perte d'un disque.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.dossier = self.temp.name
+        self.maintenant = timezone.now()
+        # Tout est frais côté quotidien, la base est partie : on ne teste
+        # que les copies des autres familles.
+        for quoi in ("base", "pieces", "distant", "base-physique"):
+            marquer(self.dossier, quoi, self.maintenant - timedelta(hours=6))
+
+    def verifier(self, **options):
+        sortie = StringIO()
+        with override_settings(SAUVEGARDES_MARQUEURS=self.dossier), \
+                self.captureOnCommitCallbacks(execute=True), disque_a_l_aise():
+            call_command("verifier_sauvegardes", stdout=sortie, **options)
+        return sortie.getvalue()
+
+    def segment(self, nom, quand):
+        archive = Path(self.dossier) / "base" / "wal"
+        archive.mkdir(parents=True, exist_ok=True)
+        fichier = archive / nom
+        fichier.write_bytes(b"segment")
+        os.utime(fichier, (quand.timestamp(), quand.timestamp()))
+        return fichier
+
+    def test_des_copies_qui_suivent_ne_disent_rien(self):
+        marquer(self.dossier, "distant-pieces", self.maintenant - timedelta(hours=5))
+        marquer(self.dossier, "distant-base-physique", self.maintenant - timedelta(hours=5))
+        self.segment("000000010000000000000001", self.maintenant - timedelta(hours=3))
+        marquer(self.dossier, "distant-wal", self.maintenant - timedelta(hours=2, minutes=30))
+
+        self.assertEqual(retards_de_copie(self.dossier), [])
+        sortie = self.verifier()
+        self.assertIn("✔ Sauvegardes à jour", sortie)
+        self.assertFalse(Notification.objects.exists())
+
+    def test_un_miroir_de_pieces_jamais_copie_se_dit(self):
+        marquer(self.dossier, "distant-base-physique", self.maintenant - timedelta(hours=5))
+
+        retards = retards_de_copie(self.dossier)
+
+        self.assertEqual([(quoi, la_bas) for quoi, _, la_bas in retards], [("pieces", None)])
+        self.verifier()
+        notification = Notification.objects.get(recipient=self.doo)
+        self.assertIn("Copie hors machine en retard", notification.title)
+        self.assertIn("justificatifs", notification.title)
+        self.assertIn("jamais abouti", notification.body)
+        self.assertEqual(notification.level, Notification.Level.CRITICAL)
+
+    def test_une_copie_plus_vieille_que_la_reussite_locale_se_dit(self):
+        marquer(self.dossier, "distant-pieces", self.maintenant - timedelta(hours=5))
+        # La sauvegarde physique a réussi il y a six heures ; sa dernière
+        # copie date de la semaine précédente.
+        marquer(self.dossier, "distant-base-physique", self.maintenant - timedelta(days=7))
+
+        retards = retards_de_copie(self.dossier)
+
+        self.assertEqual([quoi for quoi, _, _ in retards], ["base-physique"])
+        self.verifier()
+        notification = Notification.objects.get(recipient=self.doo)
+        self.assertIn("sauvegarde physique", notification.title)
+        self.assertIn("antérieure à la dernière réussite locale", notification.body)
+
+    def test_un_segment_archive_qui_ne_part_pas_se_dit(self):
+        marquer(self.dossier, "distant-pieces", self.maintenant - timedelta(hours=5))
+        marquer(self.dossier, "distant-base-physique", self.maintenant - timedelta(hours=5))
+        self.segment("000000010000000000000007", self.maintenant - timedelta(hours=3))
+        # Un segment en cours d'écriture ne compte pas comme réussite.
+        self.segment("000000010000000000000008.partiel", self.maintenant)
+
+        retards = retards_de_copie(self.dossier)
+
+        self.assertEqual([(quoi, la_bas) for quoi, _, la_bas in retards], [("wal", None)])
+        self.verifier()
+        notification = Notification.objects.get(recipient=self.doo)
+        self.assertIn("segments de journal", notification.title)
+
+    def test_dans_la_marge_un_segment_frais_ne_dit_rien(self):
+        marquer(self.dossier, "distant-pieces", self.maintenant - timedelta(hours=5))
+        marquer(self.dossier, "distant-base-physique", self.maintenant - timedelta(hours=5))
+        marquer(self.dossier, "distant-wal", self.maintenant - timedelta(hours=1))
+        self.segment("000000010000000000000009", self.maintenant - timedelta(minutes=5))
+
+        self.assertEqual(retards_de_copie(self.dossier), [])
+
+    def test_sans_aucune_copie_de_la_base_seule_son_absence_se_dit(self):
+        """Pas de distant configuré : « distant » manque, et c'est lui qui
+        le dit. Quatre notifications pour une cause n'apprendraient rien."""
+        (Path(self.dossier) / ".derniere-reussite-distant").unlink()
+        self.segment("000000010000000000000001", self.maintenant - timedelta(hours=3))
+
+        self.assertEqual(retards_de_copie(self.dossier), [])
+        self.verifier()
+        titres = list(Notification.objects.filter(recipient=self.doo).values_list("title", flat=True))
+        self.assertEqual(len(titres), 1)
+        self.assertIn("copie hors machine", titres[0])
+
+    def test_un_retard_qui_dure_se_rappelle_une_fois_par_jour(self):
+        marquer(self.dossier, "distant-base-physique", self.maintenant - timedelta(hours=5))
+
+        self.verifier()
+        self.verifier()
+
+        self.assertEqual(Notification.objects.filter(recipient=self.doo).count(), 1)
+
+
+class EspaceDisqueTests(ExpenseTestCase):
+    """Le disque que remplit un archivage cassé est celui de la base.
+
+    L'alerte de Grafana vit dans un profil désactivé par défaut ; celle-ci
+    ne dépend de rien d'autre que du volume déjà monté dans l'ordonnanceur.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.dossier = self.temp.name
+        maintenant = timezone.now()
+        for quoi in FRAIS:
+            marquer(self.dossier, quoi, maintenant - timedelta(hours=6))
+
+    def verifier(self, **options):
+        sortie = StringIO()
+        with override_settings(SAUVEGARDES_MARQUEURS=self.dossier), \
+                self.captureOnCommitCallbacks(execute=True):
+            call_command("verifier_sauvegardes", stdout=sortie, **options)
+        return sortie.getvalue()
+
+    def usage(self, total, libre):
+        return mock.patch(
+            "reporting.management.commands.verifier_sauvegardes.shutil.disk_usage",
+            return_value=shutil._ntuple_diskusage(total, total - libre, libre),
+        )
+
+    def test_un_disque_a_l_aise_ne_dit_rien(self):
+        with self.usage(100 * 2**30, 40 * 2**30):
+            self.assertIsNone(disque_trop_plein(self.dossier, minimum_pourcent=15))
+            sortie = self.verifier()
+
+        self.assertIn("✔ Sauvegardes à jour", sortie)
+        self.assertFalse(Notification.objects.exists())
+
+    def test_sous_le_seuil_les_administrateurs_sont_prevenus(self):
+        with self.usage(100 * 2**30, 8 * 2**30):
+            etat = disque_trop_plein(self.dossier, minimum_pourcent=15)
+            self.assertIsNotNone(etat)
+            self.assertAlmostEqual(etat[0], 8.0)
+            sortie = self.verifier()
+
+        self.assertIn("✘ disque des sauvegardes", sortie)
+        notification = Notification.objects.get(recipient=self.doo)
+        self.assertIn("presque plein", notification.title)
+        self.assertIn("8 %", notification.body)
+        self.assertEqual(notification.level, Notification.Level.CRITICAL)
+        self.assertFalse(Notification.objects.filter(recipient=self.owner).exists())
+
+    def test_un_disque_illisible_ne_fait_pas_echouer_le_controle(self):
+        with mock.patch(
+            "reporting.management.commands.verifier_sauvegardes.shutil.disk_usage",
+            side_effect=OSError("volume absent"),
+        ):
+            self.assertIsNone(disque_trop_plein(self.dossier, minimum_pourcent=15))
+            self.verifier()
+
+        self.assertFalse(Notification.objects.exists())
+
+    def test_le_manque_se_rappelle_une_fois_par_jour(self):
+        with self.usage(100 * 2**30, 2 * 2**30):
+            self.verifier()
+            self.verifier()
+
+        self.assertEqual(Notification.objects.filter(recipient=self.doo).count(), 1)
 
 
 class RevocationDesSessionsTests(ExpenseTestCase):

@@ -1,0 +1,17 @@
+# Surcharge de la primaire quand une réplique la suit : elle publie sa base.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.primaire.yml up -d
+#   (et la même liste dans COMPOSE_FILE du .env, pour deploy.sh)
+#
+# Sans ce fichier, le port 5432 n'est publié nulle part : la base n'est
+# joignable que des conteneurs de la pile, et une seconde machine ne peut
+# rien suivre. Publier sur toutes les interfaces exposerait la base entière
+# — lignes, jetons de session, secrets TOTP — au monde, à un mot de passe
+# près, et Docker publie en contournant ufw. On ne publie donc que sur
+# l'adresse **privée** de cette machine (réseau privé de l'hébergeur, ou
+# extrémité d'un tunnel), et `pg_hba.conf` ne laisse entrer que l'adresse
+# de la réplique (README.md, « Réplique en attente chaude »).
+services:
+  db:
+    ports:
+      - "${ADRESSE_PRIVEE:?ADRESSE_PRIVEE manquante}:5432:5432"

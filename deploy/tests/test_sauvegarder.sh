@@ -289,6 +289,45 @@ lancer distant
 verifier "la rotation d'ici ne se fait que si on la demande" \
   "$(compte '^delete' "$JOURNAL_RCLONE")" "1"
 
+# La reprise à un instant donné ne survit à la perte du serveur que si les
+# segments et les sauvegardes physiques partent aussi. Ils partaient avant
+# dans les promesses, pas dans le script : la boucle ne connaissait que la
+# base et les pièces.
+decor distant-segments-et-physique
+export SAUVEGARDE_DISTANT_ENDPOINT="https://exemple.invalid"
+export SAUVEGARDE_DISTANT_BUCKET="seau" SAUVEGARDE_DISTANT_CLE="cle"
+export SAUVEGARDE_DISTANT_SECRET="secret" SAUVEGARDE_CHIFFREMENT_CLE="phrase-longue"
+mkdir -p "$DESTINATION/base/wal" "$DESTINATION/base/physique/2026-09-19T020000Z" "$DESTINATION/pieces"
+printf 'segment' > "$DESTINATION/base/wal/000000010000000000000001"
+printf 'en cours' > "$DESTINATION/base/wal/000000010000000000000002.partiel"
+printf 'base' > "$DESTINATION/base/physique/2026-09-19T020000Z/base.tar.gz"
+printf 'piece' > "$DESTINATION/pieces/recu.pdf"
+lancer distant
+verifier "segments et sauvegardes physiques partent avec le reste" "$CODE" "0"
+verifier "  … les segments vers wal/" "$(compte '^copy .*/base/wal coffre:/wal' "$JOURNAL_RCLONE")" "1"
+verifier "  … sans le segment en cours d'écriture, à la copie comme à la vérification" "$(compte 'wal coffre:/wal .*--exclude \*\.partiel' "$JOURNAL_RCLONE")" "2"
+verifier "  … les sauvegardes physiques vers physique/" "$(compte '^copy .*/base/physique coffre:/physique' "$JOURNAL_RCLONE")" "1"
+verifier "  … et chaque famille pose son marqueur : segments" "$(marqueur distant-wal)" "oui"
+verifier "  … sauvegarde physique" "$(marqueur distant-base-physique)" "oui"
+verifier "  … pièces" "$(marqueur distant-pieces)" "oui"
+verifier "  … base" "$(marqueur distant)" "oui"
+
+# Le service, lui, ne copie que ce qui est demandé : une demande de
+# segments est consommée quand la copie a réussi, et pas avant.
+decor distant-demande-de-segments
+export SAUVEGARDE_DISTANT_ENDPOINT="https://exemple.invalid"
+export SAUVEGARDE_DISTANT_BUCKET="seau" SAUVEGARDE_DISTANT_CLE="cle"
+export SAUVEGARDE_DISTANT_SECRET="secret" SAUVEGARDE_CHIFFREMENT_CLE="phrase-longue"
+mkdir -p "$DESTINATION/base/wal" "$DESTINATION/.distant"
+printf 'segment' > "$DESTINATION/base/wal/000000010000000000000001"
+: > "$DESTINATION/.distant/demande-wal"
+verifier_au_moins_une_fois "une demande de segments est reconnue par la boucle du service" \
+  "$(compte 'for d in \$FAMILLES' "$SCRIPT")"
+verifier_au_moins_une_fois "  … et FAMILLES nomme les segments et les sauvegardes physiques" \
+  "$(compte '^FAMILLES=.*base-physique.*wal' "$SCRIPT")"
+CODE_RCLONE=1 lancer distant
+verifier "  … une copie de segments interrompue ne pose pas son marqueur" "$(marqueur distant-wal)" "non"
+
 echo
 if [ "$echecs" -eq 0 ]; then
   echo "✔ $reussis contrôles passés."

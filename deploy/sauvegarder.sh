@@ -111,6 +111,9 @@ DESTINATION="${SAUVEGARDE_DESTINATION:-/sauvegardes}"
 HEURE="${SAUVEGARDE_HEURE:-02:00}"
 RETENTION_JOURS="${SAUVEGARDE_RETENTION_JOURS:-30}"
 DEMANDES="$DESTINATION/.distant"
+#: Ce qui part hors machine, dans l'ordre où l'on veut que ça parte : la
+#: base d'abord, puis ce qui permet de la rejouer, puis les pièces.
+FAMILLES="base base-physique wal pieces"
 DISTANT_ENDPOINT="${SAUVEGARDE_DISTANT_ENDPOINT:-}"
 DISTANT_ROTATION="${SAUVEGARDE_DISTANT_ROTATION:-0}"
 DISTANT_EN_CLAIR="${SAUVEGARDE_DISTANT_EN_CLAIR:-0}"
@@ -367,7 +370,8 @@ purger_les_wal() {
   suffixe=""
   [ -n "$CLE_PUBLIQUE" ] && suffixe="-x $SUFFIXE_CHIFFRE"
   avant_purge="$(find "$archive" -type f | wc -l)"
-  # shellcheck disable=SC2086 — $suffixe est vide ou « -x .enc », voulu non cité
+  # $suffixe est vide ou « -x .enc », voulu non cité.
+  # shellcheck disable=SC2086
   if pg_archivecleanup $suffixe "$archive" "$(basename "$etiquette")" 2>&1; then
     apres_purge="$(find "$archive" -type f | wc -l)"
     retires=$((avant_purge - apres_purge))
@@ -579,6 +583,82 @@ copier_pieces_distant() {
   return 0
 }
 
+# Les segments archivés : sans eux hors machine, la reprise à un instant
+# donné ne survit pas à la perte du serveur — le RPO retombe à la nuit
+# précédente, pendant que la documentation promet quelques minutes. Chaque
+# segment est un fichier immuable, nommé par Postgres ; `--checksum` le
+# revérifie, `.partiel` est ce qu'archiver_wal.sh est en train d'écrire.
+# Rien ne s'efface d'ici : comme pour les dumps, c'est une règle de cycle de
+# vie sur le bucket qui borne le préfixe wal/ (ou la rotation d'ici, si on
+# la demande) ; localement, purger_les_wal ne garde que ce dont les
+# sauvegardes physiques conservées ont besoin.
+copier_wal_distant() {
+  distant_preparer || return 1
+  archive="$(repertoire_wal)"
+  segments=$(find "$archive" -maxdepth 1 -type f ! -name '*.partiel' 2>/dev/null | wc -l)
+  if [ "$segments" -eq 0 ]; then
+    journal "copie distante (segments) : aucun segment archivé à copier"
+    return 0
+  fi
+  if ! copier_et_verifier "$archive" "$CIBLE/wal" --checksum --exclude '*.partiel'; then
+    echec "copie distante (segments) : les segments ne sont pas tous vérifiés sur $CIBLE/wal"
+    return 1
+  fi
+  journal "✔ copie distante (segments) : $segments segment(s) présents et vérifiés sur $CIBLE/wal"
+  if [ "$DISTANT_ROTATION" = "1" ]; then
+    if ! rclone delete "$CIBLE/wal" --min-age "${RETENTION_JOURS}d"; then
+      journal "⚠ rotation distante non faite sur $CIBLE/wal : sera retentée à la prochaine copie"
+    fi
+  fi
+  return 0
+}
+
+# Les sauvegardes physiques, point de départ de la reprise : un segment sans
+# elles ne se rejoue sur rien. Chacune est un répertoire horodaté ;
+# `.partiel` est celle que pg_basebackup est en train d'écrire.
+copier_base_physique_distant() {
+  distant_preparer || return 1
+  racine="$(repertoire_physique)"
+  physiques=$(ls -1d "$racine"/*/ 2>/dev/null | grep -vc '\.partiel/$' || true)
+  if [ "$physiques" -eq 0 ]; then
+    journal "copie distante (sauvegarde physique) : aucune sauvegarde physique à copier"
+    return 0
+  fi
+  if ! copier_et_verifier "$racine" "$CIBLE/physique" --checksum --exclude '*.partiel/**'; then
+    echec "copie distante (sauvegarde physique) : les sauvegardes physiques ne sont pas toutes vérifiées sur $CIBLE/physique"
+    return 1
+  fi
+  journal "✔ copie distante (sauvegarde physique) : $physiques sauvegarde(s) présentes et vérifiées sur $CIBLE/physique"
+  if [ "$DISTANT_ROTATION" = "1" ]; then
+    if ! rclone delete "$CIBLE/physique" --min-age "${RETENTION_JOURS}d" --rmdirs; then
+      journal "⚠ rotation distante non faite sur $CIBLE/physique : sera retentée à la prochaine copie"
+    fi
+  fi
+  return 0
+}
+
+# Ce que chaque demande fait copier, et le marqueur qu'elle pose. Les
+# noms de fonction ne peuvent pas porter de tiret en sh, d'où la table.
+copie_de() {
+  case "$1" in
+    base) echo copier_base_distant ;;
+    pieces) echo copier_pieces_distant ;;
+    wal) echo copier_wal_distant ;;
+    base-physique) echo copier_base_physique_distant ;;
+    *) return 1 ;;
+  esac
+}
+# Le marqueur de la base garde son nom historique, `distant` : c'est lui que
+# verifier_sauvegardes lisait déjà. Les trois autres disent chacun ce qui
+# est parti — un miroir de pièces jamais copié se voyait auparavant dans
+# aucun marqueur.
+marqueur_distant_de() {
+  case "$1" in
+    base) echo distant ;;
+    *) echo "distant-$1" ;;
+  esac
+}
+
 # Une demande à la fois ; consommée si la copie a réussi, laissée en place
 # sinon pour être retentée. Sans distant configuré, la demande est consommée
 # avec un ✘ : la prochaine copie réussie reprendra de toute façon tout ce
@@ -590,11 +670,9 @@ traiter_demande() {
     journal "✘ copie distante non faite ($d) : SAUVEGARDE_DISTANT_ENDPOINT vide — la sauvegarde reste sur cette machine seulement" >&2
     return 0
   fi
-  if "copier_${d}_distant"; then
+  if "$(copie_de "$d")"; then
     rm -f "$DEMANDES/demande-$d"
-    # Le marqueur du distant ne se pose que sur la copie de la base : c'est
-    # elle qui compte pour la fraîcheur, les pièces suivent.
-    [ "$d" = "base" ] && marquer_reussite distant
+    marquer_reussite "$(marqueur_distant_de "$d")"
     return 0
   fi
   return 1
@@ -603,12 +681,14 @@ traiter_demande() {
 copier_tout_distant() {
   distant_configure || { echec "copie distante non faite : SAUVEGARDE_DISTANT_ENDPOINT vide"; return 1; }
   resultat=0
-  copier_base_distant || resultat=1
-  copier_pieces_distant || resultat=1
-  if [ "$resultat" -eq 0 ]; then
-    rm -f "$DEMANDES"/demande-base "$DEMANDES"/demande-pieces
-    marquer_reussite distant
-  fi
+  for d in $FAMILLES; do
+    if "$(copie_de "$d")"; then
+      rm -f "$DEMANDES/demande-$d"
+      marquer_reussite "$(marqueur_distant_de "$d")"
+    else
+      resultat=1
+    fi
+  done
   return $resultat
 }
 
@@ -624,6 +704,10 @@ lister_distant() {
   rclone lsl "$CIBLE/mensuel" 2>/dev/null | grep . || echo "(aucune)"
   echo "Pièces sur $CIBLE/pieces :"
   rclone size "$CIBLE/pieces" 2>/dev/null || echo "(aucune)"
+  echo "Sauvegardes physiques sur $CIBLE/physique (reprise à un instant donné) :"
+  rclone lsd "$CIBLE/physique" 2>/dev/null | grep . || echo "(aucune)"
+  echo "Segments archivés sur $CIBLE/wal :"
+  rclone size "$CIBLE/wal" 2>/dev/null || echo "(aucun)"
   return 0
 }
 
@@ -715,7 +799,7 @@ if [ "$quoi" = "distant" ]; then
   mkdir -p "$DEMANDES"
   while true; do
     attente=60
-    for d in base pieces; do
+    for d in $FAMILLES; do
       if [ -f "$DEMANDES/demande-$d" ]; then
         if ! traiter_demande "$d"; then
           journal "✘ la copie distante ($d) a échoué, voir ci-dessus ; nouvel essai dans $((REESSAI_SECONDES / 60)) min" >&2

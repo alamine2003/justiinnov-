@@ -58,6 +58,15 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    Les humains entrent en **root**, avec la clé que l'hébergeur y a posée ;
    toute l'exploitation (`docker compose`, `restaurer.sh`, `.env`) se fait
    en root, dans `/home/deploy/justi-innov`.
+
+   > **Docker publie ses ports en contournant ufw.** La règle « 22, 80,
+   > 443 » tient parce que seul Caddy publie un port dans
+   > `docker-compose.prod.yml`. Une ligne `ports:` ajoutée dans une
+   > surcharge locale — pour « regarder la base » ou Grafana — expose le
+   > service au monde entier sans que ufw le voie. Publiez sur
+   > `127.0.0.1:` ou sur l'adresse privée (`ADRESSE_PRIVEE`), jamais sur
+   > toutes les interfaces ; c'est ce que font `docker-compose.primaire.yml`
+   > et `docker-compose.derriere-balanceur.yml`.
 3. Le fichier `.env` dans `/home/deploy/justi-innov/`, d'après `.env.example`,
    `root:root` et `chmod 600`. Quatre secrets s'y génèrent, avec
    `python3 -c "import secrets; print(secrets.token_urlsafe(32))"` :
@@ -119,7 +128,7 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 
    Sur le dépôt (Settings › Branches), une **règle de protection de
    `main`** : *Require a pull request before merging*, *Require status
-   checks to pass* avec les cinq travaux d'`Intégration continue`, *Do not
+   checks to pass* avec les sept travaux d'`Intégration continue`, *Do not
    allow bypassing the above settings*. Sans elle, une poussée directe sur
    `main` part en préproduction sans relecture ; avec elle, rien n'entre
    dans `main` qu'une pull request verte.
@@ -532,10 +541,16 @@ mise en service) ou si le retour échoue lui aussi, le script le dit et
 laisse la main.
 
 **À la main** : chaque déploiement écrit l'étiquette livrée dans
-`.deployed`. Pour revenir à la précédente, relancez `deploy.sh` avec elle —
-l'image est encore sur le serveur et sur le registre :
+`.deployed`. Pour revenir à la précédente, relancez `deploy.sh` avec elle.
+Le serveur ne garde que **deux** étiquettes par image — celle en ligne et
+celle d'avant, `deploy.sh` retire les autres à chaque livraison réussie,
+sinon elles s'accumulaient sur le disque que partagent la base et les
+sauvegardes. Au-delà, l'image est sur le registre, qui est privé : donnez
+un jeton GitHub en lecture (`read:packages`) sur l'entrée standard, comme
+la livraison continue le fait, sinon `pull` répond « denied ».
 
 ```bash
+echo '<jeton read:packages>' | GHCR_USER=<compte GitHub> \
 IMAGE_TAG=sha-… BACKEND_IMAGE=ghcr.io/<org>/<dépôt>-backend \
 FRONTEND_IMAGE=ghcr.io/<org>/<dépôt>-frontend ./deploy.sh
 ```
@@ -698,7 +713,7 @@ docker compose -f docker-compose.prod.yml run --rm sauvegarde-distante --une-foi
 
 | | Objectif | Ce qui le tient |
 |---|---|---|
-| Perte de données maximale (RPO) | **24 h** : ce qui a été saisi depuis la sauvegarde de 02:00 est perdu si le serveur l'est | une sauvegarde par nuit ; à resserrer à 6 h (`SAUVEGARDE_HEURE` ne prend qu'une heure : dupliquer le service dans une surcharge locale) quand les pays saisissent tous les jours |
+| Perte de données maximale (RPO) | **5 minutes** de saisie si le serveur est perdu (`POSTGRES_ARCHIVE_TIMEOUT`, 300 s), **à condition que les segments soient partis hors machine** — `verifier_sauvegardes` prévient dès qu'un segment archivé n'est pas copié dans les deux heures. Si la copie des segments est en défaut et que personne n'a lu l'alerte : **24 h**, le dump de 02:00. Perte d'un disque seulement, serveur intact : 5 minutes dans tous les cas | archivage continu (décision 74) et copie des segments (décision 78). **C'est ici, et ici seulement, que le RPO est écrit** ; `docs/infra-base-de-donnees.md` et `docs/model-de-donnees.md` y renvoient |
 | Délai de reprise (RTO) | **4 h** : serveur neuf, pile en ligne, base et pièces restaurées depuis le distant | `preparer_serveur.sh` (~15 min), `deploy.sh` (~10 min), `restaurer.sh --depuis-distant` (le temps de rapatrier, quelques minutes par giga-octet), « Après une restauration » |
 | Sauvegarde vérifiée | chaque matin | `manage.py verifier_sauvegardes` (ordonnanceur, 8 h 30) lit les marqueurs `.derniere-reussite-*` que `sauvegarder.sh` écrit après chaque réussite, et notifie les administrateurs — in-app et par e-mail — de ce qui manque ou date de plus de 26 h |
 | Restauration prouvée | une fois avant l'ouverture, puis chaque trimestre | « Restauration dans un environnement isolé », avec `manage.py verifier_restauration` et un compte rendu daté |
@@ -746,7 +761,7 @@ l'état exact.
 
 | Ce qui existe | Chiffré ? | Contre quoi cela protège |
 |---|---|---|
-| Volume `sauvegardes` du serveur (`base/`, `base/mensuel/`, `pieces/`) | **Non** par défaut — **oui** avec `SAUVEGARDE_CLE_PUBLIQUE` (dumps seulement) | rien, par défaut : qui lit ce volume lit les dumps, donc les jetons de session et les secrets TOTP |
+| Volume `sauvegardes` du serveur (`base/`, `base/mensuel/`, `base/wal/`, `base/physique/`, `pieces/`) | **Non** par défaut — **oui** avec `SAUVEGARDE_CLE_PUBLIQUE` (dumps et segments ; les sauvegardes physiques et les pièces restent en clair) | rien, par défaut : qui lit ce volume lit les dumps, donc les jetons de session et les secrets TOTP |
 | Copie distante (`quotidien/`, `mensuel/`, `pieces/`) | **Oui** (rclone `crypt`, XSalsa20-Poly1305) | le tiers qui héberge le bucket, et quiconque obtient ses clés d'accès |
 | Noms de fichiers sur le distant | **Non**, volontairement (`filename_encryption=off`) | — : c'est ce qui permet `--lister` et `--rapatrier` |
 | Dump rapatrié par `--rapatrier` | **Non** : déchiffré à l'arrivée | — : `pg_restore` attend un dump lisible |
@@ -1075,7 +1090,7 @@ Trois pièces, et il faut les trois :
 |---|---|---|
 | segments de journal | Postgres, via `archiver_wal.sh` (`archive_command`) | rejouer ce qui s'est passé |
 | sauvegarde physique | `sauvegarder.sh base`, une fois par semaine | le point de départ. **Un `pg_dump` ne peut pas en tenir lieu** |
-| copie hors machine | `sauvegarde-distante`, comme pour les dumps | survivre à la perte du serveur |
+| copie hors machine | `sauvegarde-distante`, comme pour les dumps : `wal/` et `physique/` sur le distant, marqueurs `distant-wal` et `distant-base-physique` | survivre à la perte du serveur. **Sans elle, la reprise ne survit qu'à la perte d'un disque** ; `verifier_sauvegardes` prévient dès qu'un segment archivé n'est pas parti dans les deux heures |
 
 ### Ce qu'il faut savoir avant d'y toucher
 
@@ -1094,38 +1109,59 @@ reviendrait à n'être plus lu.
 ### Répéter la reprise — à faire tous les trimestres
 
 Le mode par défaut ne touche à rien : il déplie une copie dans un répertoire
-jetable et ouvre une base temporaire à côté.
+jetable, ouvre une base temporaire **dans son conteneur**, dit où elle s'est
+arrêtée et ce qu'elle contient, puis la jette. La reprise a son service,
+`reprise` : c'est le seul, avec la base, qui voie le répertoire de données,
+il tourne sous `postgres` (le seul compte que `pg_ctl` accepte), et `up` ne
+le lance jamais — seul `run` le fait, le temps de la commande.
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm \
-  --entrypoint /restaurer_a_la_date.sh sauvegarde \
-  --a '2026-09-19 14:31:00+00'
+docker compose -f docker-compose.prod.yml run --rm reprise \
+  --a '2026-09-19 14:31:00+00' \
+  --requete "select count(*) from expenses_expense where updated_at > '2026-09-19 14:00+00'"
 ```
 
-Il dit alors comment l'interroger, puis comment la jeter. La pile continue
-de servir pendant ce temps.
+`--requete` est facultatif : c'est votre question à la base telle qu'elle
+était à cet instant. Sans lui, le script compte les tables qui font la
+valeur de la plateforme. La pile continue de servir pendant ce temps.
 
 **Une reprise jamais répétée n'est pas un plan.** Notez la durée à chaque
-répétition : c'est votre RTO réel, et il grandit avec la base.
+répétition : c'est votre RTO réel, et il grandit avec la base. La chaîne
+complète — archivage par la base, sauvegarde physique par le service,
+reprise dans son conteneur — est rejouée par l'intégration continue à
+chaque changement (`ci.yml`, travail « Pile de production ») : ce n'est pas
+une raison de ne pas la répéter ici, c'est la garantie que ce que vous
+répétez est ce qui est livré.
 
 ### Le jour où il faut vraiment
 
 ```bash
 docker compose -f docker-compose.prod.yml stop backend scheduler db
-docker compose -f docker-compose.prod.yml run --rm \
-  --entrypoint /restaurer_a_la_date.sh sauvegarde \
+docker compose -f docker-compose.prod.yml run --rm reprise \
   --a '2026-09-19 14:31:00+00' --en-production
 docker compose -f docker-compose.prod.yml up -d
 ```
 
 Le script demande une confirmation tapée à la main, et **met l'ancien
-répertoire de côté au lieu de l'effacer** : si la reprise tourne mal, il
+répertoire de côté au lieu de l'effacer** — dans le volume des sauvegardes,
+`base/avant-reprise-<horodatage>/`, parce que le répertoire de données est
+un point de montage qui ne se renomme pas. Si la reprise tourne mal, il
 reste la seule chose qui contienne encore les données. Vérifiez les données
-avant de l'effacer.
+avant de l'effacer, et comptez-le dans l'espace disque tant qu'il est là.
 
-Si les segments sont chiffrés (`SAUVEGARDE_CLE_PUBLIQUE`), apportez la clé
-privée du coffre et renseignez `SAUVEGARDE_CLE_PRIVEE` le temps de
-l'opération. Elle n'a pas sa place sur le serveur le reste du temps.
+Si les segments sont chiffrés (`SAUVEGARDE_CLE_PUBLIQUE`), la clé privée
+n'est pas sur le serveur et n'y a pas sa place : apportez-la du coffre le
+temps de l'opération, et donnez-la au conteneur sur la ligne de commande —
+pas dans `.env`, qui la garderait.
+
+```bash
+scp cle-privee.pem <serveur>:/root/cle-privee.pem
+docker compose -f docker-compose.prod.yml run --rm \
+  -v /root/cle-privee.pem:/run/secrets/sauvegarde_cle_privee:ro \
+  -e SAUVEGARDE_CLE_PRIVEE=/run/secrets/sauvegarde_cle_privee \
+  reprise --a '2026-09-19 14:31:00+00'
+shred -u /root/cle-privee.pem
+```
 
 ### Ce qui a été mesuré
 
@@ -1185,13 +1221,37 @@ docker compose -f docker-compose.prod.yml exec -T db \
 > privé entre les deux machines, ou tunnel. C'est la première fois que les
 > données de cette plateforme sortent d'une machine ; traitez-le comme tel.
 
-Sur la **seconde machine** : le dépôt, le `.env` de la primaire (mêmes
-secrets), puis
+Toujours sur la primaire, sa base doit être joignable de la seconde machine,
+et d'elle seule. Le port 5432 n'est publié nulle part par défaut ;
+`docker-compose.primaire.yml` le publie sur l'adresse **privée** de la
+machine (`ADRESSE_PRIVEE` dans `.env` : réseau privé de l'hébergeur ou
+extrémité d'un tunnel), jamais sur l'Internet — Docker publie en
+contournant ufw, une adresse publique ici serait une porte ouverte sur la
+base entière.
 
 ```bash
-PGPASSWORD='<le mot de passe du rôle>' ./preparer_replique.sh --primaire <ip-primaire>
+# 3. publier la base sur l'adresse privée, et le garder pour deploy.sh
+echo 'COMPOSE_FILE=docker-compose.prod.yml:docker-compose.primaire.yml' >> .env
+docker compose -f docker-compose.prod.yml -f docker-compose.primaire.yml up -d
+```
+
+Sur la **seconde machine** : le dépôt, le `.env` de la primaire (mêmes
+secrets, sans sa ligne `COMPOSE_FILE`), puis la copie initiale, **dans un
+conteneur de l'image de la base** — c'est là que vivent `pg_basebackup` et
+`pg_isready`, et c'est le volume `pgdata` de la pile qui reçoit la copie,
+pas un répertoire de l'hôte :
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml \
+  run --rm -e PGPASSWORD='<le mot de passe du rôle>' \
+  --entrypoint /preparer_replique.sh db --primaire <ip-privée-primaire>
+echo 'COMPOSE_FILE=docker-compose.prod.yml:docker-compose.replique.yml' >> .env
 docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml up -d
 ```
+
+`preparer_replique.sh` est monté dans la base par `docker-compose.replique.yml`.
+Lancé en root par `run`, il donne le volume à `postgres` et se relance sous
+ce compte, le seul que Postgres accepte.
 
 Seules la base et le cache démarrent : l'application, l'ordonnanceur et
 **les sauvegardes** attendent dans le profil `bascule`. Deux machines qui
@@ -1236,8 +1296,10 @@ s'arrête jamais de soi-même.
 
 Le script **refuse de promouvoir si la primaire répond encore** : deux bases
 qui acceptent des écritures produisent deux histoires que rien ne
-réconcilie. Il promeut, démarre l'application et les sauvegardes ici, puis
-rappelle les deux gestes qu'aucun script ne fait :
+réconcilie. Il promeut par `select pg_promote(true, 60)` dans la base
+elle-même — `pg_ctl promote` refuserait, `docker compose exec` entre en
+root —, démarre l'application et les sauvegardes ici, puis rappelle les
+deux gestes qu'aucun script ne fait :
 
 1. **le domaine pointe encore sur l'ancienne machine.** Tant qu'il n'est pas
    changé, personne n'arrive. C'est là que passe l'essentiel du temps

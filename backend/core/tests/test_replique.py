@@ -34,6 +34,7 @@ from django.test import SimpleTestCase
 RACINE = Path(__file__).resolve().parents[3]
 PRIMAIRE = RACINE / "deploy" / "docker-compose.prod.yml"
 REPLIQUE = RACINE / "deploy" / "docker-compose.replique.yml"
+PUBLICATION = RACINE / "deploy" / "docker-compose.primaire.yml"
 PREPARATION = RACINE / "deploy" / "preparer_replique.sh"
 PROMOTION = RACINE / "deploy" / "promouvoir_replique.sh"
 CHRONOMETRE = RACINE / "deploy" / "chronometrer_bascule.sh"
@@ -93,13 +94,52 @@ class RepliqueEnAttenteChaudeTests(SimpleTestCase):
     def test_la_replique_ne_redefinit_pas_les_services(self):
         """Une seconde définition de l'application dériverait de la première
         sans que rien ne le dise. La surcharge ne décide que de ce qui
-        tourne."""
+        tourne — et monte le script de préparation dans la base, rien
+        d'autre."""
         for nom, service in self.replique.items():
             with self.subTest(service=nom):
+                if nom == "db":
+                    self.assertEqual(
+                        service, {"volumes": ["./preparer_replique.sh:/preparer_replique.sh:ro"]},
+                        "la base de la réplique n'ajoute que le script de préparation",
+                    )
+                    continue
                 self.assertEqual(
                     set(service.keys()), {"profiles"},
                     f"{nom} redéfinit autre chose que son profil",
                 )
+
+    def test_la_base_n_est_publiee_que_sur_l_adresse_privee_et_seulement_si_on_le_demande(self):
+        """Le port 5432 n'était publié nulle part : la seconde machine ne
+        pouvait rien suivre. Le publier sur toutes les interfaces exposerait
+        la base entière ; Docker contourne ufw."""
+        self.assertNotIn("ports", self.primaire["db"], "la pile seule ne publie pas la base")
+        publication = yaml.safe_load(PUBLICATION.read_text())["services"]["db"]
+
+        self.assertEqual(publication["ports"], ["${ADRESSE_PRIVEE:?ADRESSE_PRIVEE manquante}:5432:5432"])
+
+    def test_la_promotion_ne_passe_pas_par_pg_ctl(self):
+        """`docker compose exec` entre en root, et `pg_ctl` refuse root : la
+        promotion échouait le jour où l'on ne peut pas la déboguer.
+        `pg_promote()` s'exécute dans le serveur, sous son propre compte."""
+        source = PROMOTION.read_text()
+
+        self.assertIn("pg_promote(true, 60)", source)
+        self.assertNotIn("pg_ctl promote", source)
+        # `pg_isready` vit dans l'image, pas sur l'hôte.
+        self.assertIn("compose exec -T db pg_isready", source)
+
+    def test_la_preparation_tourne_dans_la_base_et_se_relance_sous_postgres(self):
+        """`pg_basebackup` n'est pas sur l'hôte, et le volume de la pile
+        n'est pas un répertoire de l'hôte. Lancée par `run`, elle entre en
+        root : le volume est donné à `postgres`, puis le script se relance."""
+        source = PREPARATION.read_text()
+
+        self.assertIn("su-exec postgres", source)
+        self.assertIn('chown postgres:postgres "$REPERTOIRE"', source)
+        readme = README.read_text()
+        self.assertIn("--entrypoint /preparer_replique.sh db", readme)
+        self.assertNotIn("./preparer_replique.sh --primaire", readme)
 
     def test_la_promotion_refuse_une_primaire_vivante(self):
         """Deux primaires produisent deux histoires que rien ne réconcilie."""

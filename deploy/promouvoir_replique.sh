@@ -54,8 +54,10 @@ compose() { docker compose -f docker-compose.prod.yml -f docker-compose.replique
 # C'est la vérification la plus importante du script. Deux bases qui
 # acceptent des écritures produisent deux histoires, et rien ne les
 # réconcilie : il faudra en jeter une, avec ce qu'elle contient.
+# `pg_isready` vit dans l'image de la base, pas sur l'hôte : on l'y appelle.
+# La réplique tourne déjà, c'est ce qu'elle est.
 journal "la primaire $PRIMAIRE répond-elle encore ?"
-if pg_isready -h "$PRIMAIRE" -p "$PORT_PRIMAIRE" -t 5 >/dev/null 2>&1; then
+if compose exec -T db pg_isready -h "$PRIMAIRE" -p "$PORT_PRIMAIRE" -t 5 >/dev/null 2>&1; then
   echo "" >&2
   echo "  ⚠ $PRIMAIRE RÉPOND ENCORE." >&2
   echo "    Promouvoir maintenant donnerait deux bases qui acceptent des" >&2
@@ -75,8 +77,14 @@ else
   # --- 2. Promotion -----------------------------------------------------------
   journal "promotion de la base…"
   debut="$(date +%s)"
-  compose exec -T db pg_ctl promote -D "${PGDATA:-/var/lib/postgresql/data}" -w \
-    || echec "la promotion a échoué : regardez « docker compose logs db »"
+  # `pg_promote()` plutôt que la promotion par pg_ctl : `exec` entre dans le
+  # conteneur en root, et `pg_ctl` refuse root. La fonction SQL, elle,
+  # s'exécute dans le serveur, attend (60 s au plus) que la bascule soit
+  # faite, et rend `t` — ou `f`, qui est un échec, pas une attente.
+  promue="$(compose exec -T db psql -qtAX -U "${POSTGRES_USER:-justi}" \
+              -d "${POSTGRES_DB:-justi_innov}" -c 'select pg_promote(true, 60)' 2>&1 | tr -d ' ')"
+  [ "$promue" = "t" ] \
+    || echec "la promotion a échoué (pg_promote → ${promue:-rien}) : regardez « docker compose logs db »"
   # Postgres rend la main dès que la bascule est faite ; on vérifie qu'elle
   # accepte vraiment les écritures plutôt que de le supposer.
   attente=0
@@ -139,8 +147,9 @@ cat <<FIN
      éteinte. Si elle peut redémarrer seule (redémarrage de l'hôte,
      « restart: unless-stopped »), empêchez-la avant qu'elle ne le fasse :
        ssh $PRIMAIRE 'cd ~/justi-innov && docker compose -f docker-compose.prod.yml down'
-     puis, quand vous êtes prêt à la remettre en service :
-       ./preparer_replique.sh --primaire <cette machine>
+     puis, quand vous êtes prêt à la remettre en service, sur elle :
+       docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml \\
+         run --rm -e PGPASSWORD='…' --entrypoint /preparer_replique.sh db --primaire <cette machine>
 
   Et vérifiez ce qui tourne :
      docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml ps
