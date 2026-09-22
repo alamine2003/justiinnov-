@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MatriceDesDroits } from "./permissions-section"
@@ -26,10 +27,10 @@ vi.mock("@/lib/accounts", () => ({
 function matrice(overrides: Partial<PermissionMatrix> = {}): PermissionMatrix {
   return {
     roles: [
-      { value: "super_admin", label: "Super administrateur", siege: true, always_global: true },
-      { value: "admin", label: "Administrateur (RH)", siege: true, always_global: true },
-      { value: "dm", label: "DM", siege: true, always_global: false },
-      { value: "manager", label: "Manager (pays)", siege: false, always_global: false },
+      { value: "super_admin", label: "Super administrateur", siege: true, always_global: true, assignable: false },
+      { value: "admin", label: "Administrateur (RH)", siege: true, always_global: true, assignable: true },
+      { value: "dm", label: "DM", siege: true, always_global: false, assignable: true },
+      { value: "manager", label: "Manager (pays)", siege: false, always_global: false, assignable: true },
     ],
     capabilities: [
       {
@@ -58,6 +59,20 @@ function matrice(overrides: Partial<PermissionMatrix> = {}): PermissionMatrix {
     note: "Les administrateurs gardent tout.",
     ...overrides,
   }
+}
+
+/** Comme la page : la matrice rendue par le serveur remplace celle affichée. */
+function Hote({ initiale, onSaved }: { initiale: PermissionMatrix; onSaved: (m: PermissionMatrix) => void }) {
+  const [matrix, setMatrix] = useState(initiale)
+  return (
+    <MatriceDesDroits
+      matrix={matrix}
+      onSaved={(suivante) => {
+        setMatrix(suivante)
+        onSaved(suivante)
+      }}
+    />
+  )
 }
 
 describe("MatriceDesDroits", () => {
@@ -90,8 +105,16 @@ describe("MatriceDesDroits", () => {
 
   it("n'envoie que les capacités modifiées, puis rafraîchit le profil", async () => {
     const onSaved = vi.fn()
-    updatePermissionMatrix.mockResolvedValue(matrice())
-    render(<MatriceDesDroits matrix={matrice()} onSaved={onSaved} />)
+    const base = matrice()
+    updatePermissionMatrix.mockResolvedValue(
+      matrice({
+        capabilities: [
+          { ...base.capabilities[0], roles: ["admin", "super_admin", "dm"] },
+          base.capabilities[1],
+        ],
+      }),
+    )
+    render(<Hote initiale={base} onSaved={onSaved} />)
 
     fireEvent.click(screen.getByRole("switch", { name: "Exporter pour DM" }))
     expect(screen.getByText("1 modification non enregistrée")).toBeInTheDocument()
@@ -102,6 +125,13 @@ describe("MatriceDesDroits", () => {
       "data.export": ["admin", "super_admin", "dm"],
     })
     expect(refreshProfile).toHaveBeenCalled()
+    // La confirmation s'affiche une fois le profil relu, et y reste. Que la
+    // relecture ne démonte pas l'écran — donc n'efface pas cette confirmation
+    // — se vérifie avec le vrai `AuthProvider`, dans `context/auth.test.tsx`.
+    expect(
+      screen.getByText("Droits enregistrés : ils s'appliquent dès maintenant."),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Enregistrer" })).toBeDisabled()
   })
 
   it("tient l'enregistrement pour acquis même si le profil ne se relit pas", async () => {

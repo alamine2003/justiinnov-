@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Jauge, Legende, RailEnveloppe } from "@/components/ui/charts"
-import { STATUS_TONES } from "@/lib/status-styles"
+import { EXECUTION_LEVEL_TEXT, STATUS_TONES } from "@/lib/status-styles"
 import type { Budget, CountryBudgetRow } from "@/lib/types"
 import { cn, formatAmount, formatRate } from "@/lib/utils"
 
@@ -23,7 +23,7 @@ export function EnveloppeDuPays({
   row: CountryBudgetRow
   /** L'enveloppe de portée « pays » de l'exercice, quand elle existe. */
   budget: Budget | undefined
-  /** Seuils d'alerte en pourcentage ; sans configuration lisible, le seul plafond. */
+  /** Seuils d'alerte en pourcentage, ceux du profil (`me.alert_thresholds`), plus le plafond. */
   thresholds: number[]
   symbol: string
   onEdit?: (budget: Budget) => void
@@ -149,7 +149,6 @@ export function EnveloppeDuPays({
 export function SousEnveloppes({
   budgets,
   row,
-  warningRate,
   canCreate,
   canEdit,
   onCreate,
@@ -157,7 +156,6 @@ export function SousEnveloppes({
 }: {
   budgets: Budget[]
   row: CountryBudgetRow
-  warningRate: number
   canCreate: boolean
   canEdit: boolean
   onCreate: () => void
@@ -178,7 +176,9 @@ export function SousEnveloppes({
       </h3>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {budgets.map((budget) => {
-          const taux = Number(budget.figures.execution_rate ?? 0)
+          // Le niveau vient du serveur, qui a comparé le taux aux seuils
+          // d'alerte : la jauge et le solde suivent, sans recalcul.
+          const niveau = budget.figures.execution_level
           return (
             <Card key={budget.id} className="border-border/60 shadow-sm">
               <CardContent className="pt-6">
@@ -211,8 +211,8 @@ export function SousEnveloppes({
                   <Jauge
                     rate={budget.figures.execution_rate}
                     label={formatRate(budget.figures.execution_rate)}
-                    over={taux > 1}
-                    near={taux >= warningRate}
+                    over={niveau === "exceeded"}
+                    near={niveau === "warning"}
                     title={t("budgets.sous.jauge_aria", {
                       enveloppe: budget.scope_label ?? budget.country_name,
                       taux: formatRate(budget.figures.execution_rate),
@@ -229,16 +229,7 @@ export function SousEnveloppes({
                       <dt className="text-xs text-muted-foreground">
                         {t("budgets.colonnes.disponible")}
                       </dt>
-                      <dd
-                        className={cn(
-                          "text-sm font-semibold",
-                          Number(budget.figures.remaining) < 0
-                            ? "text-destructive"
-                            : taux >= warningRate
-                              ? "text-statut-attente"
-                              : "text-marque-fort",
-                        )}
-                      >
+                      <dd className={cn("text-sm font-semibold", EXECUTION_LEVEL_TEXT[niveau])}>
                         {formatAmount(budget.figures.remaining)}
                       </dd>
                     </div>

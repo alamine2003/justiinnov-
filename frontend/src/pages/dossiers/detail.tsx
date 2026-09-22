@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageHeader } from "@/components/ui/page-header"
+import { RefreshIndicator } from "@/components/ui/refresh-indicator"
 import { StatCard } from "@/components/ui/stat-card"
 import { BarreEcart } from "@/components/ui/charts"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
@@ -18,6 +19,7 @@ import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
 import { FriseDuCircuit } from "@/components/expenses/workflow-frieze"
 import { useAuth } from "@/context/use-auth"
+import { estBrouillon, estCloture } from "@/lib/circuit"
 import {
   createExpense,
   deleteExpenseDraft,
@@ -47,10 +49,12 @@ export function DossierDetailPage() {
   const dossierId = Number(id)
   const { me } = useAuth()
 
+  // Le dossier est celui de l'URL : en passant du 12 au 13, rien du 12 ne
+  // reste à l'écran sous la nouvelle adresse (`keepPreviousData: false`).
   const query = useQuery(
     `dossier:${dossierId}`,
     (signal) => fetchDossier(dossierId, signal),
-    { fallback: t("dossiers.detail.chargement_impossible") },
+    { fallback: t("dossiers.detail.chargement_impossible"), keepPreviousData: false },
   )
   const dossier = query.data
   const countryId = dossier?.country
@@ -61,6 +65,7 @@ export function DossierDetailPage() {
   const rectifications = useQuery(
     `rectifications:${dossierId}`,
     (signal) => fetchRectifications({ expense__dossier: dossierId, page_size: 100 }, signal),
+    { keepPreviousData: false },
   )
 
   // Le référentiel du pays vient de sa fiche, mise en cache : une transition
@@ -198,7 +203,7 @@ export function DossierDetailPage() {
   const canUpload = dossier.allowed_actions.includes("upload")
   // Un libellé, pas une règle : le panneau des pièces explique pourquoi le
   // dépôt est fermé ; le droit de déposer, lui, vient de `allowed_actions`.
-  const closed = dossier.status === "closed"
+  const closed = estCloture(dossier.status)
   const currencySymbol = country.data?.currency_symbol || dossier.currency
   // Un manager rattaché à des équipes ne saisit que pour elles ; l'équipe du
   // dossier, elle, figure toujours, puisque chaque ligne la porte.
@@ -258,7 +263,7 @@ export function DossierDetailPage() {
       )}
       {/* Rouvert par le siège : le motif reste affiché tant que le dossier
           n'a pas été soumis à nouveau. */}
-      {dossier.reopen_note && dossier.status === "draft" && (
+      {dossier.reopen_note && estBrouillon(dossier.status) && (
         <Alert>
           <RotateCcw className="h-4 w-4" />
           <AlertTitle>{t("dossiers.reouverture.bandeau_titre")}</AlertTitle>
@@ -283,10 +288,7 @@ export function DossierDetailPage() {
             {dossier.created_by &&
               ` · ${t("dossiers.detail.cree_par", { nom: dossier.created_by })}`}
             {query.refreshing && (
-              <Loader2
-                className="ml-2 inline h-3.5 w-3.5 animate-spin align-middle"
-                aria-label={t("dossiers.detail.actualisation")}
-              />
+              <RefreshIndicator className="ml-2" label={t("dossiers.detail.actualisation")} />
             )}
             {dossier.note && (
               <span className="mt-1 block italic">

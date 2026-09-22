@@ -14,6 +14,7 @@ import {
 import { echelleCommune } from "@/lib/echelle"
 import { NativeSelect } from "@/components/ui/native-select"
 import { PageHeader } from "@/components/ui/page-header"
+import { RefreshIndicator } from "@/components/ui/refresh-indicator"
 import { EmptyRow } from "@/components/ui/table-states"
 import {
   Table,
@@ -27,13 +28,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
-import { fetchConfiguration } from "@/lib/accounts"
 import { isCancelled } from "@/lib/api"
 import { fetchCountries } from "@/lib/countries"
 import { MONTHS } from "@/lib/months"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import { executionWarningRate, fetchBreakdown, fetchDashboard } from "@/lib/reporting"
+import { fetchBreakdown, fetchDashboard } from "@/lib/reporting"
 import { alertLevelLabel, notificationKindIcon } from "@/lib/labels"
+import { EXECUTION_LEVEL_TEXT } from "@/lib/status-styles"
 import type {
   BreakdownRow,
   Dashboard,
@@ -41,13 +42,10 @@ import type {
   DashboardCountryRow,
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
-import { cn, formatAmount, formatRate } from "@/lib/utils"
+import { cn, currentYear, formatAmount, formatRate, yearChoices } from "@/lib/utils"
 
 /** Alertes montrées d'emblée ; le reste est signalé par un compte. */
 const VISIBLE_ALERTS = 12
-
-const CURRENT_YEAR = new Date().getFullYear()
-const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2]
 
 /**
  * Les douze mois de l'exercice, dans l'ordre, à partir des seuls mois que le
@@ -68,8 +66,11 @@ function serieMensuelle(rows: BreakdownRow[]): PointMensuel[] {
 
 export function DashboardPage() {
   const { t } = useTranslation()
-  const { me, can } = useAuth()
-  const [year, setYear] = useState(CURRENT_YEAR)
+  const { me } = useAuth()
+  // Lus au rendu, jamais figés dans le module : une application restée
+  // ouverte au passage de l'an proposait encore l'ancien exercice.
+  const [year, setYear] = useState(currentYear)
+  const years = yearChoices({ before: 2, after: 1 }).reverse()
   const [countryId, setCountryId] = useState<number | "">("")
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -78,12 +79,6 @@ export function DashboardPage() {
     () => fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
     { enabled: Boolean(me?.has_global_scope) },
   )
-  // Les seuils d'alerte de la configuration colorent la barre d'exécution ;
-  // la configuration n'est lisible que par les administrateurs.
-  const configuration = useReferentiel("configuration", fetchConfiguration, {
-    enabled: can("configuration.manage"),
-  })
-  const warningRate = executionWarningRate(configuration.data?.alertes.seuils)
   // Les pays que ce compte peut nommer : le référentiel au siège, son
   // périmètre sinon. Un compte restreint à plusieurs pays a besoin du
   // sélecteur, sans quoi il ne peut pas obtenir sa répartition.
@@ -155,7 +150,7 @@ export function DashboardPage() {
             aria-label={t("commun.annee")}
             className="w-28"
           >
-            {YEARS.map((value) => (
+            {years.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -179,9 +174,7 @@ export function DashboardPage() {
               ))}
             </NativeSelect>
           )}
-          {query.refreshing && (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label={t("pilotage.actualisation")} />
-          )}
+          {query.refreshing && <RefreshIndicator label={t("pilotage.actualisation")} />}
           {/* Le menu reprend l'exercice et le pays des filtres ci-dessus ; il
               n'ajoute que le mois. */}
           <ExportMenu year={year} country={countryId} onError={setExportError} />
@@ -264,11 +257,7 @@ export function DashboardPage() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
-        <ParPays
-          rows={data?.countries ?? []}
-          symbolOf={symbolOf}
-          warningRate={warningRate}
-        />
+        <ParPays rows={data?.countries ?? []} symbolOf={symbolOf} />
         <Alertes
           alerts={data?.alerts ?? []}
           total={data?.alerts_total ?? 0}
@@ -473,11 +462,9 @@ function Charge({
 function ParPays({
   rows,
   symbolOf,
-  warningRate,
 }: {
   rows: DashboardCountryRow[]
   symbolOf: (id: number, fallback: string) => string
-  warningRate: number
 }) {
   const { t } = useTranslation()
   const echelle = echelleCommune(rows)
@@ -518,7 +505,6 @@ function ParPays({
               // le faisait diverger d'`execution_rate`, qui compte l'engagé :
               // 120 % s'affichait en corail sans aucun montant en regard.
               const depassement = -Number(row.remaining)
-              const taux = Number(row.execution_rate ?? 0)
               return (
                 <li key={row.country}>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -537,15 +523,11 @@ function ParPays({
                           })}
                         </span>
                       )}
+                      {/* Le serveur a comparé le taux aux seuils d'alerte
+                          (`execution_level`) : un DF et un administrateur
+                          lisent la même teinte, sans lire la configuration. */}
                       <span
-                        className={cn(
-                          "font-semibold",
-                          taux > 1
-                            ? "text-destructive"
-                            : taux >= warningRate
-                              ? "text-statut-attente"
-                              : "text-marque-fort",
-                        )}
+                        className={cn("font-semibold", EXECUTION_LEVEL_TEXT[row.execution_level])}
                       >
                         {formatRate(row.execution_rate)}
                       </span>

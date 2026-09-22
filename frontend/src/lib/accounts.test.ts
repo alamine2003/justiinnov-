@@ -20,6 +20,7 @@ function profil(overrides: Partial<Me>): Me {
     totp_confirmed: true,
     language: "fr",
     supervision: false,
+    alert_thresholds: [],
     permissions: {
       ...PERMISSIONS_DU_PAYS,
     },

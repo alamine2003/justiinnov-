@@ -60,6 +60,8 @@
     --color-banniere-muted: var(--banniere-muted);
     --color-banniere-accent: var(--banniere-accent);
     --color-banniere-bordure: var(--banniere-bordure);
+    --color-overlay: var(--overlay);
+    --color-ombre: var(--ombre);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -138,6 +140,12 @@
     --banniere-muted: oklch(0.704 0.028 231.8);
     --banniere-accent: oklch(0.798 0.094 232.6);
     --banniere-bordure: oklch(0.399 0.025 232.9);
+
+    /* Voile derrière un dialogue ou un panneau, et teinte d'une ombre : dix
+       pour cent de noir écrits en dur disparaissaient sur le fond sombre, où
+       le voile doit au contraire s'épaissir pour détacher le dialogue. */
+    --overlay: oklch(0 0 0 / 10%);
+    --ombre: oklch(0 0 0 / 5%);
 }
 
 .dark {
@@ -196,6 +204,8 @@
     --banniere-muted: oklch(0.680 0.028 231.8);
     --banniere-accent: oklch(0.798 0.094 232.6);
     --banniere-bordure: oklch(0.360 0.025 232.9);
+    --overlay: oklch(0 0 0 / 45%);
+    --ombre: oklch(0 0 0 / 30%);
 }
 
 @layer base {

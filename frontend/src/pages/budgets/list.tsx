@@ -23,32 +23,31 @@ import {
 } from "@/lib/budgets"
 import { fetchCountries, fetchProjects, fetchTeams } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import { executionWarningRate } from "@/lib/reporting"
 import type { Budget, CountryBudgetRow } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
-import { cn, formatAmount } from "@/lib/utils"
-
-const CURRENT_YEAR = new Date().getFullYear()
-const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2]
+import { cn, currentYear, formatAmount, yearChoices } from "@/lib/utils"
 
 /**
  * Le plafond est toujours gradué : c'est l'enveloppe elle-même, pas un
- * réglage. Les seuils d'alerte, eux, viennent de la configuration, que seuls
- * les administrateurs lisent — sans elle, le rail ne montre que le plafond.
+ * réglage. Les seuils d'alerte, eux, viennent du profil
+ * (`me.alert_thresholds`), que le serveur rend à tous les rôles : un DF lit
+ * le même rail qu'un administrateur.
  */
 const PLAFOND = 100
 
 export function BudgetsPage() {
   const { t } = useTranslation()
-  const { can } = useAuth()
+  const { me, can } = useAuth()
   // Attribuer, modifier, arbitrer : trois droits, à la direction par défaut.
   const canCreate = can("budgets.create")
   const canEdit = can("budgets.update")
   const canRequest = can("reallocations.request")
   const canManage = canCreate || canEdit
   // Un seul exercice pour le résumé par pays et la liste des enveloppes :
-  // les deux vues parlent des mêmes chiffres.
-  const [year, setYear] = useState(CURRENT_YEAR)
+  // les deux vues parlent des mêmes chiffres. L'année se lit au rendu, pas
+  // au chargement du module : l'application reste ouverte au passage de l'an.
+  const [year, setYear] = useState(currentYear)
+  const years = yearChoices({ before: 2, after: 1 }).reverse()
   // Le pays choisi ouvre son enveloppe et ses sous-enveloppes ; sans pays,
   // tous se comparent en barres.
   const [countryId, setCountryId] = useState<number | "">("")
@@ -82,12 +81,13 @@ export function BudgetsPage() {
     () => fetchTeams({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
     { enabled: canManage },
   )
+  // La configuration ne sert plus qu'à proposer la politique de dépassement
+  // par défaut dans le formulaire ; elle reste réservée aux administrateurs.
   const configuration = useReferentiel("configuration", fetchConfiguration, {
     enabled: can("configuration.manage"),
   })
-  const seuils = configuration.data?.alertes.seuils ?? []
+  const seuils = me?.alert_thresholds ?? []
   const thresholds = [...new Set([...seuils.filter((s) => s > 0), PLAFOND])].sort((a, b) => a - b)
-  const warningRate = executionWarningRate(configuration.data?.alertes.seuils)
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
@@ -156,7 +156,7 @@ export function BudgetsPage() {
             aria-label={t("commun.annee")}
             className="w-28"
           >
-            {YEARS.map((value) => (
+            {years.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -238,7 +238,6 @@ export function BudgetsPage() {
           <SousEnveloppes
             budgets={sousEnveloppes}
             row={selected}
-            warningRate={warningRate}
             canCreate={canCreate}
             canEdit={canEdit}
             onCreate={() => ouvrirFormulaire(null)}

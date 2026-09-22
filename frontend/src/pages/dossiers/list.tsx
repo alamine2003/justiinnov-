@@ -365,9 +365,15 @@ function DossierForm({
               }}
               required
             >
-              {countries.length === 0 && (
-                <option value="">{t("dossiers.formulaire.aucun_pays")}</option>
-              )}
+              {/* Toujours une première option vide : quand la liste arrive
+                  après l'ouverture du formulaire, le choix reste à faire —
+                  sans elle, le navigateur montrait le premier pays comme
+                  choisi alors que rien ne l'était. */}
+              <option value="">
+                {countries.length === 0
+                  ? t("dossiers.formulaire.aucun_pays")
+                  : t("dossiers.formulaire.choisir_pays_option")}
+              </option>
               {countries.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.country_ref ? `${c.country_ref} — ` : ""}

@@ -120,3 +120,24 @@ describe("connexion avec double authentification", () => {
     expect(login).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * Un compte dont le serveur refuse le profil (403 sur `/api/me/`, sans
+ * profil rattaché par exemple) : `login` rejette avec le motif du serveur,
+ * et l'écran de connexion l'affiche. Que `refreshProfile` relance bien ce
+ * refus au lieu de vider la session en silence se vérifie avec le vrai
+ * `AuthProvider`, dans `context/auth.test.tsx`.
+ */
+describe("connexion refusée par le profil", () => {
+  it("affiche le motif du serveur dans l'erreur du formulaire", async () => {
+    login.mockRejectedValueOnce(new ApiError(403, "Aucun profil n'est rattaché à ce compte."))
+    afficher()
+
+    saisirIdentifiants()
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Aucun profil n'est rattaché à ce compte.",
+    )
+    expect(screen.getByLabelText("Identifiant")).toHaveValue("togo.innov")
+  })
+})

@@ -62,12 +62,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await i18next.changeLanguage(profile.language)
       }
     } catch (e) {
-      // Seule une session refusée (jeton périmé ou révoqué) justifie de
-      // repartir de zéro. Une panne réseau ou un 502 se signale, sans
-      // déconnecter : l'utilisateur retrouverait sa session au retour du
-      // serveur.
-      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+      // Seule une session refusée (jeton périmé ou révoqué, 401) justifie de
+      // repartir de zéro. Un refus (403) est une réponse du serveur sur ce
+      // compte — sans profil, par exemple — et se relit tel quel, avec son
+      // motif : effacer la session le renvoyait à l'écran de connexion sans
+      // un mot. Une panne réseau ou un 502 se signale, sans déconnecter :
+      // l'utilisateur retrouverait sa session au retour du serveur.
+      if (e instanceof ApiError && e.status === 401) {
         clearSession()
+      } else if (e instanceof ApiError && e.status === 403) {
+        setProfileError(e.message)
+        throw e
       } else {
         const message = e instanceof Error ? e.message : i18next.t("erreurs.profil_indisponible")
         setProfileError(message)
@@ -90,9 +95,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       setToken(newToken)
       setTokenState(newToken)
-      await refreshProfile()
+      // Une connexion sans profil lisible n'est pas une connexion : le jeton
+      // repart, et l'écran de connexion affiche le motif. Le garder aurait
+      // mené à une page d'erreur sans issue, puisque le menu du compte —
+      // et sa déconnexion — ne se rend qu'avec un profil.
+      try {
+        await refreshProfile()
+      } catch (e) {
+        clearSession()
+        throw e
+      }
     },
-    [refreshProfile],
+    [clearSession, refreshProfile],
   )
 
   const replaceToken = useCallback((newToken: string) => {

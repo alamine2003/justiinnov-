@@ -333,7 +333,8 @@
       "libelle_placeholder": "Sales mission in Lomé",
       "aucun_pays": "No country available",
       "manager_responsable": "Responsible manager",
-      "equipe_requise": "Choose one of your teams."
+      "equipe_requise": "Choose one of your teams.",
+      "choisir_pays_option": "Choose a country…"
     },
     "detail": {
       "chargement_impossible": "Unable to load the file",
@@ -668,7 +669,9 @@
       "refus_description": "A rejection must state a reason: the reason is kept in the history.",
       "motif_refus": "Reason for rejection",
       "motif_requis": "A rejection must state a reason.",
-      "disponibles": "{{montant}} available"
+      "disponibles": "{{montant}} available",
+      "choisir_enveloppe": "Choose an envelope…",
+      "enveloppes_requises": "Choose the source envelope and the target envelope."
     },
     "tous_pays": "All countries",
     "choisir_pays": "Pick a country to open its envelope, its thresholds and its sub-envelopes.",

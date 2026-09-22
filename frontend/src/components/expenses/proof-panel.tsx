@@ -18,6 +18,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { ProofPreview } from "@/components/expenses/proof-preview"
 import { ProofStatusBadge } from "@/components/expenses/status-badge"
+import { estRemplacable } from "@/lib/circuit"
 import { useAuth } from "@/context/use-auth"
 import { fetchConfiguration } from "@/lib/accounts"
 import {
@@ -280,7 +281,7 @@ function UploadDialog({
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState<number | null>(null)
 
-  const replaceable = proofs.filter((p) => p.status !== "archived")
+  const replaceable = proofs.filter((p) => estRemplacable(p.status))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()

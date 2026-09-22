@@ -36,6 +36,8 @@ un fond, un texte ou une bordure.
 | Fond discret, survol | `bg-muted`, `hover:bg-accent` |
 | Erreur, danger | `text-destructive`, `bg-destructive/10`, `border-destructive/20` |
 | Anneau de focus | `focus-visible:ring-ring` |
+| Voile derrière un dialogue ou un panneau | `bg-overlay` (10 % clair, 45 % sombre : un voile noir sur fond sombre est invisible) |
+| Ombre portée d'une carte | `shadow-ombre` (jamais `shadow-black/…`) |
 
 ### Couleurs de la marque — liste close
 
@@ -94,7 +96,17 @@ Les teintes sont centralisées dans `lib/status-styles.ts`, les badges dans
 `ProjectStatusBadge`, libellé serveur `*_display` prioritaire) et les tables
 `*_LABELS` dans `lib/labels.ts`, traduites dans les deux langues. Un nouveau statut s'ajoute **là**, jamais dans
 la page qui l'affiche. Le test `status-badge.test.tsx` parcourt `src/` et
-échoue sur toute classe `text-<teinte>-NNN` ou `text-white`.
+échoue sur toute classe `text-<teinte>-NNN`, et sur `(bg|text|border|fill|
+stroke|shadow)-(white|black)`.
+
+Les **prédicats** de statut — brouillon, déclarée, constat manquant, clôturée,
+pièce remplaçable — vivent dans `lib/circuit.ts`, pendant côté client de
+`backend/core/statuts.py` ; les **teintes de carte** (ligne de dépense,
+réallocation, flux) dans `status-styles.ts`. Un composant ne compare jamais
+`x.status === "…"` lui-même : le même test échoue sur toute comparaison de ce
+genre hors de `src/lib/`. Le niveau d'exécution d'une enveloppe (`ok`,
+`warning`, `exceeded`) vient du serveur (`execution_level`) et se teinte par
+`EXECUTION_LEVEL_TEXT` ; le client ne compare aucun taux à aucun seuil.
 
 ---
 
@@ -238,9 +250,18 @@ sept valeurs, revenez au `NativeSelect`.
 | Avertissement métier | `<Alert>` neutre |
 | Indicateur chiffré | `<StatCard label value hint />` (`components/ui/stat-card.tsx`) ; `tone="danger"` pour un écart, `children` pour une barre sous le chiffre |
 | Liste plafonnée par le serveur | `<TruncatedNotice page={…} noun={…} />` ; le composant se tait tant que la page n'est pas tronquée |
+| Actualisation en arrière-plan | `<RefreshIndicator />` (`components/ui/refresh-indicator.tsx`) : `<output>`, icône `aria-hidden`, libellé `sr-only` — jamais un `aria-label` posé sur un `<svg>` sans rôle, que les lecteurs d'écran n'annoncent pas |
 
 Le chargement des données passe par `useQuery(clé, fetcher)` (annulation de la
 requête précédente, `loading` distinct de `refreshing`) et, pour les
+pages de **détail** identifiées par l'URL, avec `keepPreviousData: false` :
+sans elle, l'entité précédente restait affichée sous la nouvelle URL le temps
+de la requête, et un clic créait une ligne dans le mauvais dossier. Une liste
+filtrée garde au contraire ce qui est affiché. Un 503 ou un 429 porte
+`ApiError.retryAfter` ; `useQuery` rejoue une fois, seul, après ce délai
+(borné à 60 s). Le rafraîchissement du profil (`refreshProfile`) ne démonte
+rien : `Protected` n'affiche le chargeur plein écran que tant qu'aucun profil
+n'est connu. Pour les
 référentiels, par `useReferentiel(clé, fetcher)` (cache mémoire cinq minutes,
 `invalidateReferentiel` après une écriture). Les recherches sont différées par
 `useDebouncedValue` (`lib/use-debounced.ts`). La remise à la première page se fait dans le gestionnaire du

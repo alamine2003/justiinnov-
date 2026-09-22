@@ -9,6 +9,7 @@ import {
   onUnauthorized,
   readErrorMessage,
   readFieldErrors,
+  readRetryAfter,
   setApiLanguage,
   setToken,
 } from "./api"
@@ -85,9 +86,9 @@ describe("ApiError", () => {
  * Remplace l'adaptateur HTTP d'axios par une réponse fixe : le test exerce
  * l'intercepteur sans réseau ni serveur.
  */
-function repondre(status: number, data: unknown) {
+function repondre(status: number, data: unknown, headers: Record<string, string> = {}) {
   const adapter: AxiosAdapter = async (config: InternalAxiosRequestConfig) => {
-    const response = { status, statusText: "", headers: {}, config, data }
+    const response = { status, statusText: "", headers, config, data }
     if (status >= 400) {
       throw new AxiosError("Request failed", "ERR_BAD_REQUEST", config, {}, response)
     }
@@ -173,6 +174,24 @@ describe("intercepteur de réponse", () => {
     })
   })
 
+  it("porte le délai Retry-After d'un 503 pour que l'appelant sache quand revenir", async () => {
+    repondre(503, { detail: "Service en maintenance." }, { "retry-after": "3" })
+
+    await expect(apiGet("/dashboard/")).rejects.toMatchObject({
+      status: 503,
+      message: "Service en maintenance.",
+      retryAfter: 3,
+    })
+  })
+
+  it("ignore Retry-After hors d'un 503 ou d'un 429", async () => {
+    repondre(500, { detail: "Erreur." }, { "retry-after": "3" })
+
+    const erreur = await apiGet("/dashboard/").catch((e: unknown) => e)
+    expect(erreur).toBeInstanceOf(ApiError)
+    expect((erreur as ApiError).retryAfter).toBeUndefined()
+  })
+
   it("dit que le serveur est injoignable plutôt que « Network Error »", async () => {
     couperLeReseau()
 
@@ -204,5 +223,26 @@ describe("langue des requêtes", () => {
     await apiGet("/me/")
 
     expect(recu).toBe("en")
+  })
+})
+
+describe("readRetryAfter", () => {
+  it("lit des secondes", () => {
+    expect(readRetryAfter({ "retry-after": "120" }, 429)).toBe(120)
+    expect(readRetryAfter({ "Retry-After": 5 }, 503)).toBe(5)
+  })
+
+  it("lit une date HTTP, en secondes à partir de maintenant, jamais négative", () => {
+    const dans30s = new Date(Date.now() + 30_000).toUTCString()
+    const seconds = readRetryAfter({ "retry-after": dans30s }, 503)
+    expect(seconds).toBeGreaterThanOrEqual(29)
+    expect(seconds).toBeLessThanOrEqual(31)
+    expect(readRetryAfter({ "retry-after": new Date(0).toUTCString() }, 503)).toBe(0)
+  })
+
+  it("ne renvoie rien sans en-tête lisible", () => {
+    expect(readRetryAfter({}, 503)).toBeUndefined()
+    expect(readRetryAfter({ "retry-after": "bientôt" }, 503)).toBeUndefined()
+    expect(readRetryAfter(null, 503)).toBeUndefined()
   })
 })

@@ -310,3 +310,27 @@ export function normalizeDecimal(input: string): string | null {
 export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return `${numberFormat({}).format(count)} ${count > 1 ? plural : singular}`
 }
+
+/**
+ * Année civile du poste, lue à l'appel. Figée dans une constante de module,
+ * elle survivait au passage de l'an dans une application restée ouverte —
+ * la PWA de bureau l'est des semaines — et proposait encore l'exercice
+ * précédent comme exercice courant.
+ */
+export function currentYear(): number {
+  return new Date().getFullYear()
+}
+
+/**
+ * Exercices proposés dans un sélecteur, autour de l'année courante :
+ * `before` années en arrière, `after` en avant, dans l'ordre croissant.
+ * À appeler au rendu, pour la même raison que `currentYear`.
+ */
+export function yearChoices({ before, after }: { before: number; after: number }): number[] {
+  const courante = currentYear()
+  const annees: number[] = []
+  for (let annee = courante - before; annee <= courante + after; annee += 1) {
+    annees.push(annee)
+  }
+  return annees
+}

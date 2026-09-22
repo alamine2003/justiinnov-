@@ -1,5 +1,6 @@
 import { Check, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { estConstatManquant } from "@/lib/circuit"
 import { CIRCUIT, circuitStep, workflowLabel } from "@/lib/labels"
 import type { WorkflowStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils"
 export function FriseDuCircuit({ status }: { status: WorkflowStatus }) {
   const { t } = useTranslation()
   const courante = circuitStep(status)
-  const constatManque = status === "unjustified"
+  const constatManque = estConstatManquant(status)
 
   return (
     <ol className="flex items-start" aria-label={t("dossiers.circuit.titre")}>

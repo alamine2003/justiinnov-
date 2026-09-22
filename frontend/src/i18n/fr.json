@@ -333,7 +333,8 @@
       "libelle_placeholder": "Mission commerciale Lomé",
       "aucun_pays": "Aucun pays disponible",
       "manager_responsable": "Manager responsable",
-      "equipe_requise": "Choisissez une de vos équipes."
+      "equipe_requise": "Choisissez une de vos équipes.",
+      "choisir_pays_option": "Choisissez un pays…"
     },
     "detail": {
       "chargement_impossible": "Impossible de charger le dossier",
@@ -668,7 +669,9 @@
       "refus_description": "Un refus doit être motivé : le motif est conservé dans l'historique.",
       "motif_refus": "Motif du refus",
       "motif_requis": "Un refus doit être motivé.",
-      "disponibles": "{{montant}} disponibles"
+      "disponibles": "{{montant}} disponibles",
+      "choisir_enveloppe": "Choisissez une enveloppe…",
+      "enveloppes_requises": "Choisissez l'enveloppe source et l'enveloppe destinataire."
     },
     "tous_pays": "Tous les pays",
     "choisir_pays": "Choisissez un pays pour ouvrir son enveloppe, ses seuils et ses sous-enveloppes.",

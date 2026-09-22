@@ -24,7 +24,7 @@ import type {
   Project,
   Team,
 } from "@/lib/types"
-import { normalizeDecimal } from "@/lib/utils"
+import { currentYear, normalizeDecimal, yearChoices } from "@/lib/utils"
 
 export interface BudgetFormValues {
   country: number
@@ -56,8 +56,6 @@ interface BudgetFormProps {
   defaultYear?: number
 }
 
-const CURRENT_YEAR = new Date().getFullYear()
-const YEARS = [CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1, CURRENT_YEAR + 2]
 
 export function BudgetForm({ open, onOpenChange, editing, ...rest }: BudgetFormProps) {
   return (
@@ -84,9 +82,11 @@ function BudgetFormBody({
   teams,
   editing,
   defaultPolicy = "block",
-  defaultYear = CURRENT_YEAR,
+  defaultYear = currentYear(),
 }: Omit<BudgetFormProps, "open">) {
   const { t } = useTranslation()
+  // Lus au rendu : le formulaire vit dans une application qui reste ouverte.
+  const years = yearChoices({ before: 2, after: 2 })
   const [country, setCountry] = useState<number | "">(editing?.country ?? countries[0]?.id ?? "")
   const [year, setYear] = useState(editing?.year ?? defaultYear)
   const [scope, setScope] = useState<Scope>(editing?.scope_kind ?? "country")
@@ -184,7 +184,7 @@ function BudgetFormBody({
               onChange={(e) => setYear(Number(e.target.value))}
               disabled={Boolean(editing)}
             >
-              {YEARS.map((y) => (
+              {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>

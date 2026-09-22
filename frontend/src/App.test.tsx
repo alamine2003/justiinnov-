@@ -25,6 +25,7 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
     language: "fr",
     supervision: false,
     workflow: { require_review_step: false },
+    alert_thresholds: [],
     ...overrides,
     permissions: {
       ...PERMISSIONS_DU_PAYS,

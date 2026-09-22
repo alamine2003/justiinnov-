@@ -400,14 +400,11 @@ function UserForm({
   onSaved: () => Promise<void>
 }) {
   const { t } = useTranslation()
-  const { me } = useAuth()
-  // La matrice ne dit pas qui peut conférer un rôle : seul un super
-  // administrateur en nomme un autre, et le serveur le vérifie. Le proposer
-  // à un administrateur ne mènerait qu'à un refus.
-  const roles = (matrix?.roles ?? []).filter(
-    (r) =>
-      r.value !== "super_admin" || me?.role === "super_admin" || editing?.role === "super_admin",
-  )
+  // Qui peut conférer quel rôle, c'est la matrice qui le dit (`assignable`,
+  // calculé par le serveur pour le compte courant) : proposer un rôle qu'on
+  // ne peut pas donner ne mènerait qu'à un refus. Le rôle déjà porté par le
+  // compte modifié reste affiché, pour ne pas le changer à son insu.
+  const roles = (matrix?.roles ?? []).filter((r) => r.assignable || editing?.role === r.value)
   const [username, setUsername] = useState(editing?.username ?? "")
   const [firstName, setFirstName] = useState(editing?.first_name ?? "")
   const [lastName, setLastName] = useState(editing?.last_name ?? "")
@@ -648,13 +645,11 @@ function UserForm({
                         : t("configuration.utilisateurs.form.role_pays", { role: r.label })}
                     </option>
                   ))
-                : ROLES.filter((value) => value !== "super_admin" || me?.role === "super_admin").map(
-                    (value) => (
-                      <option key={value} value={value}>
-                        {roleLabel(t, value)}
-                      </option>
-                    ),
-                  )}
+                : ROLES.map((value) => (
+                    <option key={value} value={value}>
+                      {roleLabel(t, value)}
+                    </option>
+                  ))}
             </NativeSelect>
             <p className="text-xs text-muted-foreground">
               {t("configuration.utilisateurs.form.role_aide")}

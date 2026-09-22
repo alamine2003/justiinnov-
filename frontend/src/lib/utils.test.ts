@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import i18n from "@/i18n"
 
 import {
+  currentYear,
   formatAmount,
   formatDate,
   formatDateIn,
@@ -12,6 +13,7 @@ import {
   parseLocalDate,
   pluralize,
   toCountryLocalInput,
+  yearChoices,
 } from "./utils"
 
 /**
@@ -201,5 +203,28 @@ describe("pluralize", () => {
     expect(pluralize(0, "dossier")).toBe("0 dossier")
     expect(pluralize(2, "dossier")).toBe("2 dossiers")
     expect(pluralize(3, "pays", "pays")).toBe("3 pays")
+  })
+})
+
+/**
+ * Régression : l'année courante était figée dans une constante de module
+ * (`const CURRENT_YEAR = new Date().getFullYear()`) sur quatre écrans. Une
+ * application de bureau restée ouverte au passage de l'an proposait encore
+ * l'ancien exercice comme exercice courant. Elle se lit à l'appel.
+ */
+describe("currentYear et yearChoices", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("lisent l'année au moment de l'appel", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2031-12-31T23:00:00"))
+    expect(currentYear()).toBe(2031)
+    expect(yearChoices({ before: 2, after: 1 })).toEqual([2029, 2030, 2031, 2032])
+
+    vi.setSystemTime(new Date("2032-01-01T01:00:00"))
+    expect(currentYear()).toBe(2032)
+    expect(yearChoices({ before: 2, after: 1 })).toEqual([2030, 2031, 2032, 2033])
   })
 })

@@ -1,6 +1,14 @@
 import axios, { type AxiosRequestConfig } from "axios"
 import i18next from "i18next"
 
+// Le jeton de session vit dans `localStorage` : un choix, pas un défaut.
+// L'application s'installe comme application de bureau (PWA) et doit
+// retrouver sa session d'un lancement à l'autre ; `sessionStorage` meurt avec
+// la fenêtre. Un cookie `HttpOnly` aurait exigé du serveur une session et une
+// protection CSRF que l'API par jeton (DRF `TokenAuthentication`) n'a pas. Le
+// prix : un script injecté lirait le jeton — c'est la politique de sécurité
+// de contenu (`nginx.conf`, `script-src 'self'`) qui ferme cette porte, et
+// c'est pour cela qu'elle n'est pas négociable.
 const TOKEN_KEY = "justi_token"
 
 /** Erreurs de validation, par champ. Les champs imbriqués sont aplatis (« figures.amount »). */
@@ -11,13 +19,44 @@ export class ApiError extends Error {
   fields: FieldErrors
   /** Corps brut de la réponse, pour les indicateurs qui ne sont pas des champs (`totp_required`). */
   data: unknown
-  constructor(status: number, message: string, fields: FieldErrors = {}, data: unknown = null) {
+  /**
+   * Délai demandé par le serveur avant de réessayer, en secondes (en-tête
+   * `Retry-After` d'un 503 ou d'un 429). Absent quand le serveur n'en dit rien.
+   */
+  retryAfter?: number
+  constructor(
+    status: number,
+    message: string,
+    fields: FieldErrors = {},
+    data: unknown = null,
+    retryAfter?: number,
+  ) {
     super(message)
     this.status = status
     this.fields = fields
     this.data = data
+    this.retryAfter = retryAfter
     this.name = "ApiError"
   }
+}
+
+/** Réponses où `Retry-After` a un sens : surcharge ou indisponibilité passagère. */
+const RETRY_AFTER_STATUSES = new Set([429, 503])
+
+/**
+ * Lit l'en-tête `Retry-After` en secondes. Il s'écrit en secondes ou en date
+ * HTTP ; une valeur illisible vaut « rien ».
+ */
+export function readRetryAfter(headers: unknown, status: number): number | undefined {
+  if (!RETRY_AFTER_STATUSES.has(status) || !headers || typeof headers !== "object") return undefined
+  const table = headers as Record<string, unknown>
+  const brut = table["retry-after"] ?? table["Retry-After"]
+  if (typeof brut !== "string" && typeof brut !== "number") return undefined
+  const texte = String(brut).trim()
+  if (/^\d+$/.test(texte)) return Number(texte)
+  const date = Date.parse(texte)
+  if (Number.isNaN(date)) return undefined
+  return Math.max(0, Math.ceil((date - Date.now()) / 1000))
 }
 
 /** Vrai quand la réponse porte un indicateur booléen donné (`{"totp_required": true}`). */
@@ -236,7 +275,13 @@ api.interceptors.response.use(
       error.message ||
       i18next.t("erreurs.generique")
     return Promise.reject(
-      new ApiError(response.status, message, readFieldErrors(response.data), response.data),
+      new ApiError(
+        response.status,
+        message,
+        readFieldErrors(response.data),
+        response.data,
+        readRetryAfter(response.headers, response.status),
+      ),
     )
   },
 )
