@@ -8,6 +8,7 @@ répondre sans compte, sans jeton, et dire vrai sur la base.
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.core.cache import cache
 from django.db import OperationalError
 from django.test import override_settings
@@ -23,7 +24,9 @@ class HealthTests(APITestCase):
         response = self.client.get("/api/health/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.json(), {"status": "ok", "database": "ok"})
+        self.assertEqual(
+            response.json(), {"status": "ok", "database": "ok", "writable": True}
+        )
 
     def test_signale_une_base_injoignable(self):
         with patch("core.views.connection") as connection:
@@ -37,7 +40,75 @@ class HealthTests(APITestCase):
         response = self.client.get("/api/health/")
 
         self.assertNotIn("Set-Cookie", response)
-        self.assertEqual(set(response.json()), {"status", "database"})
+        self.assertEqual(set(response.json()), {"status", "database", "writable"})
+
+    def test_une_replique_se_declare_indisponible(self):
+        """Une base en lecture seule répond parfaitement au ``SELECT 1``.
+
+        C'est ce qui rend ce contrôle nécessaire : sans lui, le répartiteur
+        enverrait des gens sur une réplique où ils ne pourraient plus rien
+        enregistrer — et, une fois l'ancienne primaire redémarrée après une
+        bascule, il lui rendrait le trafic alors qu'elle sert une base
+        **périmée**, arrêtée à l'instant de sa perte.
+        """
+        with patch("core.views.connection") as connection:
+            curseur = connection.cursor.return_value.__enter__.return_value
+            curseur.fetchone.return_value = (True,)
+            response = self.client.get("/api/health/")
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.json()["status"], "replique")
+        self.assertFalse(response.json()["writable"])
+        # La base va bien : c'est la machine qui n'est pas la bonne.
+        self.assertEqual(response.json()["database"], "ok")
+
+    def test_une_primaire_se_declare_disponible(self):
+        with patch("core.views.connection") as connection:
+            curseur = connection.cursor.return_value.__enter__.return_value
+            curseur.fetchone.return_value = (False,)
+            response = self.client.get("/api/health/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.json()["writable"])
+
+    def test_une_base_injoignable_n_est_pas_dite_inscriptible(self):
+        """Le répartiteur lit ce champ : il ne doit jamais valoir vrai quand
+        on ne sait pas."""
+        with patch("core.views.connection") as connection:
+            connection.cursor.side_effect = OperationalError("connexion refusée")
+            response = self.client.get("/api/health/")
+
+        self.assertFalse(response.json()["writable"])
+
+    def test_sans_nom_la_machine_ne_se_presente_pas(self):
+        """Le défaut ne révèle rien de plus qu'avant : le champ est absent,
+        pas vide."""
+        with self.settings(SERVEUR_NOM=""):
+            response = self.client.get("/api/health/")
+
+        self.assertNotIn("machine", response.json())
+
+    def test_avec_un_nom_la_machine_dit_qui_repond(self):
+        """Derrière un aiguillage, deux machines rendent le même corps pour
+        le même nom de domaine. Pendant une bascule, savoir laquelle a servi
+        est la seule question — et c'est ainsi qu'on voit une ancienne
+        primaire rallumée reprendre le trafic (audit de résilience §9)."""
+        with self.settings(SERVEUR_NOM="2"):
+            response = self.client.get("/api/health/")
+
+        self.assertEqual(response.json()["machine"], "2")
+
+    def test_une_replique_se_presente_aussi(self):
+        """La machine qui refuse le trafic doit pouvoir dire que c'est elle :
+        sinon le chronomètre ne distingue pas « 2 en réplique » de « 2 en
+        panne »."""
+        with self.settings(SERVEUR_NOM="2"), patch.object(connection, "cursor") as cursor:
+            cursor.return_value.__enter__.return_value.fetchone.return_value = (True,)
+            response = self.client.get("/api/health/")
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.json()["status"], "replique")
+        self.assertEqual(response.json()["machine"], "2")
 
     def test_reste_joignable_avec_un_mot_de_passe_provisoire(self):
         # Le verrou du mot de passe provisoire ferme toute l'API ; la santé de

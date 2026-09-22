@@ -17,9 +17,10 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
+from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
+from core.debit import ComptageSansPerte
 from core.journal import tracer
 from core.mixins import NoDestroyModelViewSet
 from core.models import ChangeLog, WorkflowConfiguration
@@ -54,7 +55,7 @@ from .serializers import (
 )
 
 
-class LoginRateThrottle(SimpleRateThrottle):
+class LoginRateThrottle(ComptageSansPerte, SimpleRateThrottle):
     """Limite les tentatives d'authentification par adresse IP.
 
     Dérivait d'``AnonRateThrottle``, dont la clé est nulle — donc « laisse
@@ -79,7 +80,7 @@ class LoginRateThrottle(SimpleRateThrottle):
         }
 
 
-class LoginUsernameThrottle(SimpleRateThrottle):
+class LoginUsernameThrottle(ComptageSansPerte, SimpleRateThrottle):
     """Limite les tentatives d'authentification par nom de compte.
 
     La limite par adresse ne protège pas un compte visé depuis plusieurs
@@ -97,6 +98,24 @@ class LoginUsernameThrottle(SimpleRateThrottle):
             "scope": self.scope,
             "ident": str(username).strip().lower()[:150],
         }
+
+
+class PasswordRateThrottle(ComptageSansPerte, SimpleRateThrottle):
+    """Limite les vérifications du mot de passe courant, par compte.
+
+    ``ScopedRateThrottle`` tenait ce rôle ; il ne servait qu'à lire
+    ``throttle_scope`` sur la vue, et l'échelle connue d'avance se déclare
+    aussi bien ici — où l'on voit, comme pour ses deux sœurs, sur quoi la
+    limite compte.
+    """
+
+    scope = "password"
+
+    def get_cache_key(self, request, view):
+        # La vue exige un compte authentifié ; sans lui, rien à compter.
+        if not request.user or not request.user.is_authenticated:
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": request.user.pk}
 
 
 class ThrottledObtainAuthToken(ObtainAuthToken):
@@ -350,10 +369,9 @@ class ChangePasswordView(APIView):
     survivre au nouveau. Le client reçoit le jeton de remplacement.
     """
 
-    # Le mot de passe courant s\'y vérifie : une limite dédiée empêche le
-    # porteur d\'un jeton volé de le deviner à la volée.
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "password"
+    # Le mot de passe courant s'y vérifie : une limite dédiée empêche le
+    # porteur d'un jeton volé de le deviner à la volée.
+    throttle_classes = [PasswordRateThrottle]
 
     @extend_schema(request=ChangePasswordSerializer, responses=TokenSerializer)
     @transaction.atomic

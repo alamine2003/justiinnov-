@@ -308,6 +308,43 @@ class TelechargementTests(StockageTestCase):
         self.assertEqual(response.data["detail"].code, "stockage_indisponible")
         self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.DOWNLOADED).exists())
 
+    def test_un_stockage_en_panne_au_depot_invite_a_reessayer(self):
+        """La même panne devait donner la même réponse des deux côtés.
+
+        Le téléchargement traduisait déjà une panne du stockage en 503 ;
+        le dépôt rendait un 500 « Erreur interne du serveur » pour la même
+        cause. Le déposant ne pouvait donc pas distinguer un fichier refusé
+        d'un stockage absent, et rien n'invitait à réessayer — alors que
+        tout est encore là. Mesuré sur un banc à quatre étages avec un
+        stockage objet bridé : 500 au bout de 17,7 s
+        (docs/audit-resilience.md §9)."""
+        from botocore.exceptions import EndpointConnectionError
+
+        self.login(self.owner)
+        panne = EndpointConnectionError(endpoint_url="http://minio:9000")
+
+        with mock.patch.object(
+            default_storage, "_save", side_effect=panne
+        ), self.assertLogs("expenses.views", level="ERROR"):
+            response = self.client.post(
+                "/api/proofs/",
+                {
+                    "dossier": self.dossier.pk,
+                    "file": SimpleUploadedFile(
+                        "panne.pdf", PDF, content_type="application/pdf"
+                    ),
+                },
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data["detail"].code, "stockage_indisponible")
+        # Rien n'est resté derrière : ni fiche, ni trace d'audit.
+        self.assertFalse(Proof.objects.filter(dossier=self.dossier).exists())
+        self.assertFalse(
+            AuditLog.objects.filter(action=AuditLog.Action.PROOF_UPLOADED).exists()
+        )
+
     def test_un_fichier_servi_est_trace(self):
         piece = self.deposer()
         self.login(self.controller)

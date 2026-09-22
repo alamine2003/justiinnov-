@@ -14,12 +14,16 @@ révoquer : la qualification se règle dans le tableau de bord du détecteur,
 pas en réécrivant le test.
 """
 
+import threading
+import time
 from unittest import mock
 
 from django.core.cache import cache
+from django.db import connection
+from django.test import TransactionTestCase
 from rest_framework import status
 from rest_framework.authtoken.models import Token
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 from rest_framework.throttling import SimpleRateThrottle
 
 from accounts import totp
@@ -43,6 +47,11 @@ def cadences(**taux):
         SimpleRateThrottle, "THROTTLE_RATES",
         {"user": "2000/hour", "password": "10/min", "health": "60/min", **taux},
     )
+
+
+#: Ce qu'un essai voué à l'échec présente : n'importe quoi, pourvu que ce
+#: ne soit pas le bon.
+ESSAI_RATE = "essai-voue-a-l-echec"
 
 
 @cadences(login="2/min", login_user="50/min")
@@ -139,3 +148,84 @@ class CodeTotpMalFormeTests(APITestCase):
 
         code = pyotp.TOTP(self.SECRET).now()
         self.assertIsNotNone(totp.compteur_du_code(self.SECRET, code))
+
+
+@cadences(login="50/min", login_user="2/min")
+class CourseSurLaLimiteTests(TransactionTestCase):
+    """Deux tentatives simultanées ne doivent pas en valoir une.
+
+    Trouvé par l'audit de résilience. ``SimpleRateThrottle`` lit
+    l'historique, y ajoute l'instant courant, réécrit le tout — sans
+    verrou. Deux requêtes lancées ensemble lisent le même historique et la
+    dernière écriture efface l'autre : une tentative comptée pour deux.
+    Mesuré sur le banc, limite de cinq par compte : cinq essais passaient
+    en séquentiel, **treize** lancés ensemble sur seize fils. La fuite suit
+    le parallélisme du serveur — relever ``GUNICORN_THREADS`` affaiblissait
+    la protection contre le bourrage d'identifiants.
+
+    **La course est forcée, pas espérée.** Attendre que les fils
+    s'entrelacent d'eux-mêmes donnerait un test qui passe parfois sur du
+    code fautif — le pire des tests. On allonge donc la fenêtre entre la
+    lecture et l'écriture du compteur : sans le correctif, les fils la
+    traversent tous ensemble ; avec lui, le verrou consultatif les fait
+    passer l'un après l'autre.
+    """
+
+    #: Assez long pour que tous les fils soient dans la fenêtre, assez
+    #: court pour que le test reste court même sérialisé.
+    FENETRE = 0.15
+    FILS = 6
+
+    def setUp(self):
+        cache.clear()
+        make_user("dg.innov", Role.SUPER_ADMIN)
+
+    @staticmethod
+    def _ecriture_retardee(original, delai):
+        """``throttle_success`` écrit le compteur : on retarde son écriture,
+        pas sa lecture — c'est l'intervalle entre les deux qui est le
+        défaut."""
+
+        def remplacant(self):
+            time.sleep(delai)
+            return original(self)
+
+        return remplacant
+
+    def test_des_tentatives_simultanees_ne_depassent_pas_la_limite(self):
+        codes, verrou = [], threading.Lock()
+        depart = threading.Barrier(self.FILS)
+
+        def tenter():
+            try:
+                depart.wait()
+                reponse = APIClient().post(
+                    "/api/token-auth/",
+                    # Un essai qui doit échouer : la valeur n'a aucune
+                    # importance, seule la course compte. Une constante sans
+                    # mot-clé, parce qu'un détecteur de secrets se déclenche
+                    # sur tout littéral affecté à « password ».
+                    {"username": "dg.innov", "password": ESSAI_RATE},
+                )
+                with verrou:
+                    codes.append(reponse.status_code)
+            finally:
+                connection.close()
+
+        retardee = self._ecriture_retardee(
+            SimpleRateThrottle.throttle_success, self.FENETRE
+        )
+        with mock.patch.object(SimpleRateThrottle, "throttle_success", retardee):
+            fils = [threading.Thread(target=tenter) for _ in range(self.FILS)]
+            for fil in fils:
+                fil.start()
+            for fil in fils:
+                fil.join(timeout=30)
+
+        self.assertEqual(len(codes), self.FILS, "un fil n'a pas abouti")
+        passees = [code for code in codes if code != status.HTTP_429_TOO_MANY_REQUESTS]
+        self.assertEqual(
+            len(passees), 2,
+            f"la limite annonce 2 essais par compte, {len(passees)} sont passés : "
+            "le compteur perd des tentatives sous concurrence",
+        )

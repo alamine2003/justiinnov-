@@ -272,7 +272,8 @@ class Dossier(TimeStampedModel):
 
 #: Relations chargées avec chaque ligne : tout ce que le sérialiseur affiche.
 #: Sans elles, chaque ligne d'une liste — ou relue après une transition —
-#: rouvrirait une requête par relation.
+#: rouvrirait une requête par relation. Elles se chargent par préchargement,
+#: pas par jointure : voir ``ExpenseQuerySet.avec_les_relations``.
 EXPENSE_RELATIONS = (
     "dossier", "country", "team", "owner", "project",
     "expense_title", "marketing_category", "beneficiary",
@@ -281,6 +282,53 @@ EXPENSE_RELATIONS = (
 
 
 class ExpenseQuerySet(models.QuerySet):
+    def avec_les_relations(self):
+        """Charge ce que le sérialiseur affiche — par préchargement, jamais
+        par jointure.
+
+        Un ``select_related`` sur ces douze relations produit une requête à
+        **quatorze tables**, que Postgres replanifie à chaque appel : Django
+        ne prépare aucune requête (``prepare_threshold`` vaut ``None``), donc
+        rien ne s'amortit. Mesuré pendant l'audit de résilience, sur 6 009
+        lignes : **91 ms de planification pour 43 ms d'exécution**, à chaque
+        requête, et autant pour lire une seule ligne. La planification suit
+        le nombre de relations, pas le nombre de lignes — 0,6 ms à trois
+        relations, 60 ms à neuf, 91 ms à quatorze.
+
+        Le préchargement pose une requête par relation, triviale à planifier
+        et à exécuter, et leur nombre ne dépend pas de la page : dix-neuf
+        requêtes pour vingt-cinq lignes comme pour deux cents. Le SQL cumulé
+        d'une page passe de 140 ms à 9 ms, le corps de la réponse est
+        identique. Les neuf allers-retours supplémentaires coûtent 0,8 ms.
+
+        Ce n'est pas un N+1 : le nombre de requêtes est constant. C'est
+        l'inverse — on échange une jointure coûteuse à planifier contre des
+        requêtes que Postgres traite sans réfléchir.
+
+        **Cet échange a un point de bascule**, mesuré depuis : la
+        planification ne dépend pas du réseau, les allers-retours si. La
+        jointure paie 91 ms fixes, le préchargement neuf allers-retours de
+        plus — les deux se valent donc autour de **10 ms d'aller-retour**,
+        et au-delà la jointure reprend l'avantage :
+
+        ==================  =============  =============
+        aller-retour        préchargé      joint
+        ==================  =============  =============
+        0,6 ms                     58 ms         207 ms
+        8,0 ms                    192 ms         289 ms
+        11,8 ms                   266 ms         287 ms
+        21,4 ms                   445 ms         380 ms
+        51,6 ms                  1016 ms         680 ms
+        ==================  =============  =============
+
+        La pile livrée est très loin de ce point : la base est un conteneur
+        voisin, l'aller-retour vaut 0,09 ms. Mais une base hébergée
+        ailleurs (``DATABASE_URL``, voir ``deploy/.env.example``) peut
+        dépasser les 10 ms — auquel cas ce choix se rediscute, mesure à
+        l'appui.
+        """
+        return self.prefetch_related(*EXPENSE_RELATIONS)
+
     def with_rectification(self):
         """Annote la ligne de son histoire de rectification, pour
         ``allowed_actions`` sans une requête par ligne :
@@ -467,7 +515,18 @@ class Expense(TimeStampedModel):
             models.Index(
                 fields=["country", "status", "date"], name="depense_pays_statut_date"
             ),
-            models.Index(fields=["date"], name="depense_date"),
+            # Exactement le tri de ``ordering`` ci-dessus, dans le même sens :
+            # Postgres lit alors les vingt-cinq lignes d'une page dans
+            # l'index, sans rien trier. Sans lui, il parcourait les 6 009
+            # lignes et les triait pour en garder vingt-cinq — mesuré à
+            # 3,06 ms contre **0,03 ms**, et 3,56 → 0,24 ms à la
+            # quarantième page. Il remplace un index sur ``date`` seul,
+            # devenu redondant : Postgres le parcourt à l'envers pour un
+            # tri croissant et s'en sert pour les filtres de période, si
+            # bien que l'ancien n'était plus jamais choisi.
+            models.Index(
+                fields=["-date", "-created_at", "-id"], name="depense_tri_liste"
+            ),
         ]
 
     def __str__(self):

@@ -67,8 +67,13 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    la supervision, mais Compose interpole toute la pile avant d'appliquer
    les profils : `GRAFANA_ADMIN_PASSWORD` doit être renseigné même
    supervision désactivée (« Supervision », plus bas) — générez-le tout de
-   suite, il servira le jour de l'activation. `ACME_EMAIL` est obligatoire : vide,
-   Caddy refuse sa configuration et rien ne démarre. `EMAIL_HOST` l'est
+   suite, il servira le jour de l'activation. `ACME_EMAIL` est obligatoire, et c'est
+   Compose qui l'exige (`:?`), sur les deux machines — même derrière un
+   aiguillage, où la machine ne termine plus TLS et où l'adresse ne sert
+   donc à rien : Compose interpole le fichier de base avant toute
+   surcharge. Le Caddyfile, lui, survit à une valeur vide (le placeholder
+   est entre guillemets) ; il démarrerait alors sans contact ACME, donc
+   sans personne à prévenir avant l'expiration d'un certificat. `EMAIL_HOST` l'est
    aussi : hors mode debug, le backend refuse de démarrer sans serveur SMTP,
    parce que les alertes budgétaires et les rapports partiraient dans les
    journaux sans que personne ne le voie ; une préproduction sans SMTP
@@ -249,6 +254,33 @@ vérification et son retour arrière :
    alors `deploy/` comme avant). L'un sans l'autre ne marche pas : l'ancien
    `cd.yml` a besoin d'un `deploy` qui écrit dans le répertoire, le nouveau
    d'une commande forcée.
+
+### Lire les journaux après un incident
+
+```bash
+docker compose -f docker-compose.prod.yml logs --since 30m backend
+```
+
+Tout part sur la sortie standard, en `clé=valeur` :
+
+```
+2026-09-17T22:44:54+0000 ERROR django.request requete=c01b52ab7689 compte=anonyme \
+    ip=10.0.0.9 Internal Server Error: /api/dossiers/
+Traceback (most recent call last): …
+```
+
+Chaque réponse porte son identifiant dans l'en-tête **`X-Requete-Id`**. Un
+utilisateur qui signale une erreur peut donc le citer, et une seule commande
+retrouve tout ce que cette requête a écrit :
+
+```bash
+docker compose -f docker-compose.prod.yml logs backend | grep requete=c01b52ab7689
+```
+
+Seules les erreurs 500 passent par là ; les 4xx sont dans le journal d'accès
+de gunicorn et de nginx, sur la même sortie. `DJANGO_LOG_REQUESTS=WARNING`
+les ramène le temps d'une enquête, `DJANGO_LOG_LEVEL=DEBUG` ouvre tout —
+jamais le SQL, qui reste muet par construction.
 
 ## Commandes d'exploitation
 
@@ -1028,6 +1060,420 @@ de 2 à 4, sortie complète de `verifier_restauration`, écarts constatés,
 limites restantes. Un écart inexpliqué est un incident, pas une note de
 bas de page.
 
+## Reprise à un instant donné
+
+Le dump de 02:00 dit où l'on était cette nuit-là. **Les segments de journal
+disent tout ce qui s'est passé depuis.** Sans eux, une panne de disque à
+01:59 perdrait toute la journée : les dépenses saisies, les pièces
+rattachées, les décisions du siège. Avec eux, on perd quelques minutes — et
+l'on peut aussi revenir à 14:31 pour défaire un effacement de 14:32, ce
+qu'aucun dump quotidien ne permet.
+
+Trois pièces, et il faut les trois :
+
+| pièce | qui la produit | à quoi elle sert |
+|---|---|---|
+| segments de journal | Postgres, via `archiver_wal.sh` (`archive_command`) | rejouer ce qui s'est passé |
+| sauvegarde physique | `sauvegarder.sh base`, une fois par semaine | le point de départ. **Un `pg_dump` ne peut pas en tenir lieu** |
+| copie hors machine | `sauvegarde-distante`, comme pour les dumps | survivre à la perte du serveur |
+
+### Ce qu'il faut savoir avant d'y toucher
+
+> **Tant que l'archivage échoue, Postgres conserve ses segments.** Ils
+> s'accumulent dans `pg_wal`, et un archivage cassé assez longtemps remplit
+> le disque de la base — donc l'arrête. C'est délibéré de la part de
+> Postgres : il préfère s'arrêter que perdre. C'est pourquoi
+> `manage.py verifier_sauvegardes` surveille `pg_stat_archiver` et prévient
+> les administrateurs dès qu'un échec est **postérieur** au dernier succès.
+> Ne coupez pas cette surveillance.
+
+L'alerte ne se déclenche pas sur l'ancienneté du dernier segment : une nuit
+sans écriture n'en produit aucun, et crier au loup tous les week-ends
+reviendrait à n'être plus lu.
+
+### Répéter la reprise — à faire tous les trimestres
+
+Le mode par défaut ne touche à rien : il déplie une copie dans un répertoire
+jetable et ouvre une base temporaire à côté.
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm \
+  --entrypoint /restaurer_a_la_date.sh sauvegarde \
+  --a '2026-09-19 14:31:00+00'
+```
+
+Il dit alors comment l'interroger, puis comment la jeter. La pile continue
+de servir pendant ce temps.
+
+**Une reprise jamais répétée n'est pas un plan.** Notez la durée à chaque
+répétition : c'est votre RTO réel, et il grandit avec la base.
+
+### Le jour où il faut vraiment
+
+```bash
+docker compose -f docker-compose.prod.yml stop backend scheduler db
+docker compose -f docker-compose.prod.yml run --rm \
+  --entrypoint /restaurer_a_la_date.sh sauvegarde \
+  --a '2026-09-19 14:31:00+00' --en-production
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Le script demande une confirmation tapée à la main, et **met l'ancien
+répertoire de côté au lieu de l'effacer** : si la reprise tourne mal, il
+reste la seule chose qui contienne encore les données. Vérifiez les données
+avant de l'effacer.
+
+Si les segments sont chiffrés (`SAUVEGARDE_CLE_PUBLIQUE`), apportez la clé
+privée du coffre et renseignez `SAUVEGARDE_CLE_PRIVEE` le temps de
+l'opération. Elle n'a pas sa place sur le serveur le reste du temps.
+
+### Ce qui a été mesuré
+
+Sur un banc de 72 Mo, pendant l'audit de résilience :
+
+| étape | durée |
+|---|---|
+| sauvegarde physique (`pg_basebackup`) | 3,0 s |
+| reprise à un instant précis, base ouverte | 0,6 s |
+
+Et le résultat : les 3 000 lignes effacées par erreur retrouvées, l'erreur
+elle-même absente, la pile d'origine intacte. **Ces durées sont celles d'un
+banc**, sans rapatriement depuis la copie distante — qui domine le temps
+réel quand le serveur est perdu. Mesurez les vôtres à la prochaine
+répétition.
+
+## Réplique en attente chaude
+
+Une seconde machine qui rejoue le flux de la première en continu, et prend
+le relais quand elle est perdue. Elle se laisse interroger en lecture —
+c'est ce que veut dire « attente chaude », et c'est ce qui permet de
+**vérifier** qu'elle suit au lieu de l'espérer.
+
+> **Une réplique n'est pas une sauvegarde.** Un `DELETE` malheureux se
+> réplique en moins d'une milliseconde. La réplique protège de la perte
+> d'une **machine** ; l'archivage des journaux protège de l'**erreur
+> humaine**. Gardez les deux, ils ne se remplacent pas.
+
+La réplication est **asynchrone** : une transaction validée sur la primaire
+qui meurt avant d'avoir envoyé son journal est perdue. C'est un choix
+assumé. En synchrone, chaque écriture attendrait la seconde machine, et une
+réplique absente **bloquerait toute la plateforme** — un remède pire que le
+mal quand il n'y a qu'une réplique.
+
+### Mettre en place
+
+Sur la **primaire**, une fois :
+
+```bash
+# 1. le rôle de réplication
+docker compose -f docker-compose.prod.yml exec -T db \
+  psql -v ON_ERROR_STOP=1 -v role_replication=replicateur \
+       -v mot_de_passe="'<un mot de passe long>'" \
+       -U "$POSTGRES_MIGRATION_USER" -d "$POSTGRES_DB" -f - \
+  < creer_role_replication.sql
+
+# 2. son adresse, et elle seule, dans pg_hba.conf
+docker compose -f docker-compose.prod.yml exec -T db sh -c \
+  'echo "host replication replicateur <ip-seconde-machine>/32 scram-sha-256" \
+   >> "$PGDATA/pg_hba.conf"'
+docker compose -f docker-compose.prod.yml exec -T db \
+  psql -U "$POSTGRES_MIGRATION_USER" -d "$POSTGRES_DB" -c 'select pg_reload_conf()'
+```
+
+> **Le flux de réplication, c'est la base entière** — lignes, jetons de
+> session, secrets TOTP. Il ne traverse pas l'Internet en clair : réseau
+> privé entre les deux machines, ou tunnel. C'est la première fois que les
+> données de cette plateforme sortent d'une machine ; traitez-le comme tel.
+
+Sur la **seconde machine** : le dépôt, le `.env` de la primaire (mêmes
+secrets), puis
+
+```bash
+PGPASSWORD='<le mot de passe du rôle>' ./preparer_replique.sh --primaire <ip-primaire>
+docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml up -d
+```
+
+Seules la base et le cache démarrent : l'application, l'ordonnanceur et
+**les sauvegardes** attendent dans le profil `bascule`. Deux machines qui
+sauvegardent vers le même coffre distant s'écraseraient l'une l'autre.
+
+### Vérifier qu'elle suit — depuis la primaire
+
+```bash
+docker compose -f docker-compose.prod.yml exec db \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "select application_name, state, sync_state, replay_lag from pg_stat_replication"
+```
+
+`state = streaming` veut dire qu'elle suit. **Tant que cette ligne
+n'apparaît pas, il n'y a pas de réplique** — seulement une copie qui
+vieillit.
+
+`manage.py verifier_sauvegardes` surveille désormais aussi les emplacements
+de réplication et prévient les administrateurs quand l'un est **inactif**
+(la seconde machine ne se connecte plus) ou **perdu** (elle a trop de retard
+pour rattraper : il faut la refaire). Sans cette alerte, on croit avoir une
+réplique jusqu'au jour de la bascule.
+
+### Ce que la primaire risque, et ce qui l'en protège
+
+Un emplacement de réplication demande à la primaire de **garder** tout ce
+que la réplique n'a pas encore lu. Si la seconde machine s'absente, cela ne
+s'arrête jamais de soi-même.
+
+> Mesuré : sans borne, `pg_wal` grandit jusqu'à remplir le disque — et la
+> base s'arrête. Avec `POSTGRES_SLOT_WAL_MAX`, l'emplacement passe à
+> `lost` au-delà de la marge, **la primaire continue de servir**, et c'est
+> la réplique qu'on refait. Perdre la réplique vaut mieux que perdre la
+> base.
+
+### Basculer
+
+```bash
+# sur la seconde machine
+./promouvoir_replique.sh --primaire-perdue <ip-primaire>
+```
+
+Le script **refuse de promouvoir si la primaire répond encore** : deux bases
+qui acceptent des écritures produisent deux histoires que rien ne
+réconcilie. Il promeut, démarre l'application et les sauvegardes ici, puis
+rappelle les deux gestes qu'aucun script ne fait :
+
+1. **le domaine pointe encore sur l'ancienne machine.** Tant qu'il n'est pas
+   changé, personne n'arrive. C'est là que passe l'essentiel du temps
+   d'indisponibilité réel — le TTL du DNS, pas la base ;
+2. **l'ancienne machine ne redémarre jamais en primaire.** Quand elle
+   revient, elle devient réplique de la nouvelle.
+
+### Répéter — tous les trimestres
+
+```bash
+./promouvoir_replique.sh --primaire-perdue <ip-primaire> --repetition
+```
+
+Tout sauf la promotion. On vérifie que la commande est la bonne, que les
+profils démarrent, que le garde-fou fonctionne — pendant que les mains ne
+tremblent pas.
+
+### Ce qui a été mesuré, et ce qui ne l'a pas été
+
+Sur un banc, deux grappes locales sans latence réseau :
+
+| | mesure |
+|---|---|
+| retard de réplication | **0 octet, 0,69 ms** |
+| copie initiale (base de 15 Mo) | 0,5 s |
+| promotion, base en écriture | **0,11 s** |
+| perte après SIGKILL de la primaire | **aucune** — l'écriture d'avant la mort était là |
+| réplique absente, primaire | **continue de servir**, emplacement passé à `lost` |
+| reconstruction après invalidation | 0,5 s |
+
+**Ce qui n'a pas été éprouvé** : deux machines réelles, un vrai réseau
+(latence, pertes, tunnel), et la bascule du domaine. Le retard suivra
+l'aller-retour du réseau, et le temps réel d'indisponibilité sera dominé par
+le DNS. C'est la première répétition sur les vraies machines qui le dira —
+faites-la avant d'en avoir besoin.
+
+## Répéter la bascule sur les deux vraies machines
+
+Le banc a mesuré la bascule sur une seule machine, avec deux bases et deux
+applications (`docs/audit-resilience.md` §9). Il ne peut pas la jouer sur
+deux machines réelles : cela se fait ici, et cela se **mesure** — sinon on
+saura seulement que « ça a marché », pas en combien de temps, ni ce qui
+s'est passé quand l'ancienne primaire est revenue.
+
+**Avant** : sur chaque machine, `SERVEUR_NOM=1` (primaire) et `SERVEUR_NOM=2`
+(seconde) dans `.env`, puis `up -d backend scheduler`. Dès lors,
+`/api/health/` dit quelle machine répond. Sans ce nom, le champ est absent et
+seul le code d'état renseigne.
+
+**Pendant**, depuis un poste qui n'est aucune des deux machines :
+
+```bash
+./chronometrer_bascule.sh https://<le domaine> --duree 900
+```
+
+Il n'écrit une ligne que quand quelque chose change, et donne à la fin les
+durées. Puis, sur la seconde machine, la répétition ordinaire :
+
+```bash
+./promouvoir_replique.sh --primaire-perdue <ip-primaire> --repetition   # rien d'irréversible
+./promouvoir_replique.sh --primaire-perdue <ip-primaire>                # la vraie
+```
+
+**Les trois lignes à lire dans le chronomètre**, et ce que le banc a donné :
+
+| moment | banc | ce qui compte |
+|---|---|---|
+| perte de « 1 » → première erreur | immédiate | la seule chose qu'on ne peut pas raccourcir |
+| promotion de « 2 » → premier 200 avec `machine: 2` | 4,8 s | un intervalle de contrôle de l'aiguillage ; **des minutes** sans aiguillage (TTL du DNS) |
+| rallumage de « 1 » telle quelle → `machine: 1` revient | **5,1 s** | **la panne que rien n'empêche** : « 1 » sert une base périmée |
+
+La troisième ligne est celle qu'il faut avoir vue une fois de ses yeux. Le
+chronomètre la signale en toutes lettres. Ne jouez ce troisième temps
+qu'en répétition, avec une base jetable — puis coupez « 1 » et refaites-la en
+réplique (`preparer_replique.sh`), comme le dit `promouvoir_replique.sh`.
+
+**Après** : reportez les trois durées ici, dans `docs/audit-resilience.md`
+§9, à côté de celles du banc. Ce sont vos vrais chiffres ; ceux du banc ne
+sont qu'une borne.
+
+## Répartiteur : un seul nom pour deux machines
+
+**Ce n'est pas une répartition de charge, et le mot trompe.** Les deux
+machines ne sont pas interchangeables : la seconde porte une base en
+**lecture seule** et son application est à l'arrêt. Partager le trafic
+reviendrait à refuser la moitié des enregistrements.
+
+C'est un **aiguillage** : tout va à la machine qui se déclare primaire, et à
+elle seule.
+
+### Ce que cela apporte — et c'est précis
+
+Sans lui, une bascule oblige à changer l'enregistrement DNS, et c'est le TTL
+du cache qui décide du retour du service : des minutes, parfois des heures,
+pendant lesquelles la base a déjà basculé depuis longtemps. **C'est là que
+passe l'essentiel de l'indisponibilité réelle**, pas dans la promotion, qui
+prend 0,11 s.
+
+Avec lui, le nom de domaine ne bouge jamais. L'aiguillage interroge
+`/api/health/` toutes les cinq secondes et suit la primaire.
+
+### Ce qui le rend sûr — et ce qu'il ne couvre pas
+
+`/api/health/` ne répond **200 que si la base accepte les écritures**. Ce
+n'est pas une précaution de confort : une réplique répond parfaitement au
+`SELECT 1`, et sans ce contrôle l'aiguillage y enverrait du monde. Bascule
+jouée sur un banc à deux machines : pendant les 17 s où la primaire était
+perdue et la réplique pas encore promue, **aucune requête** n'est partie vers
+la réplique ; une fois l'application démarrée sur la nouvelle primaire, le
+service est revenu en **4,8 s**, sans toucher au DNS.
+
+> **Ce contrôle ne protège PAS du retour d'une ancienne primaire, et c'est le
+> seul point du dispositif qu'aucun programme ne tient.**
+>
+> Redémarrée telle quelle après une bascule, elle n'est pas en récupération :
+> elle accepte les écritures, `/api/health/` y répond 200 en toute
+> sincérité, et l'aiguillage — qui préfère toujours la première machine — lui
+> rend le trafic. Mesuré : **5,1 s** après son retour, puis 22 des 24
+> requêtes suivantes servies par une base arrêtée à l'instant de sa perte,
+> pendant que la vraie primaire poursuivait la sienne.
+>
+> L'aiguillage **aggrave** ce cas : sans lui, il faut qu'une personne
+> rebascule le DNS ; avec lui, le retour est automatique.
+>
+> La consigne, donc : **une machine perdue ne redémarre jamais telle
+> quelle.** Elle reste éteinte jusqu'à être refaite en réplique
+> (`preparer_replique.sh`). Si elle peut se rallumer seule — redémarrage de
+> l'hôte, `restart: unless-stopped` —, coupez-la avant :
+> `ssh <machine perdue> 'cd ~/justi-innov && docker compose -f docker-compose.prod.yml down'`.
+
+### Ce qu'il faut de liaison pour déposer une pièce
+
+Une pièce peut peser 20 Mo, et nginx ne répond qu'une fois le dépôt
+entièrement reçu : le temps de téléversement tombe donc dans le
+`read_timeout` de l'aiguillage, qui est un délai **total**. À 900 s, un
+dépôt de 20 Mo passe jusqu'à environ **23 Ko/s (185 kbit/s)** ; en dessous,
+il est coupé en route et perdu. Mesuré à travers les quatre étages :
+
+| débit | 20 Mo |
+|---|---|
+| 200 Ko/s | 201 Créé en 102 s |
+| 60 Ko/s | 201 Créé en 341 s |
+| moins de ~23 Ko/s | coupé, dépôt perdu |
+
+Si une filiale se plaint de dépôts qui échouent après plusieurs minutes,
+c'est ici qu'il faut regarder avant de soupçonner l'application — et c'est
+`read_timeout`, dans `balanceur/Caddyfile`, qu'il faut relever.
+
+Pourquoi pas mieux : départager deux bases qui se disent toutes deux
+primaires demande un arbitre extérieur — Patroni, repmgr, etcd —, donc un
+quorum et une machine de plus à tenir, pour un dispositif qui bascule à la
+main. Le détail de la mesure et le raisonnement sont dans
+`docs/audit-resilience.md` §9.
+
+### Où il tourne — et où il ne doit pas
+
+> **Pas sur l'une des deux machines.** Posé sur la primaire, il meurt avec
+> elle : le jour de la panne, il n'aiguille plus rien.
+
+Par ordre de simplicité :
+
+1. **Une IP flottante chez l'hébergeur**, qu'on réattache à la seconde
+   machine d'une commande. Rien à tenir, rien à surveiller — et
+   `docker-compose.balanceur.yml` devient inutile. **Si c'est proposé,
+   prenez-le.**
+2. **Un répartiteur managé** de l'hébergeur, configuré avec le même contrôle
+   de santé.
+3. **Une troisième petite machine**, avec le fichier fourni. Caddy tient
+   dans 64 Mo et ne fait que relayer.
+
+### Mettre en place
+
+Sur la troisième machine :
+
+```bash
+# .env : APP_DOMAIN, ACME_EMAIL, MACHINE_PRIMAIRE, MACHINE_SECONDE
+docker compose -f docker-compose.balanceur.yml up -d
+```
+
+Sur **chacune** des deux machines, en ajoutant la surcharge :
+
+```bash
+# .env : ADRESSE_PRIVEE (celle de cette machine), BALANCEUR_RESEAU
+docker compose -f docker-compose.prod.yml \
+               -f docker-compose.derriere-balanceur.yml up -d
+```
+
+Puis faites pointer le DNS sur la troisième machine, et **une seule fois**.
+
+### Trois réglages qui doivent être vrais ensemble
+
+La surcharge s'en charge, mais il faut savoir pourquoi — deux d'entre eux
+cassent quelque chose **en silence** :
+
+| réglage | ce qui arrive sans lui |
+|---|---|
+| `DJANGO_NUM_PROXIES=3` | `client_ip` lit l'adresse de l'aiguillage **pour tout le monde**. La limite anti-bourrage devient un seul compteur commun — cinq essais par minute pour la plateforme entière — et le journal d'audit note la même adresse pour chaque action. **Une protection qui compte faux ne protège pas.** |
+| `MANDATAIRES_DE_CONFIANCE` | Caddy réécrit `X-Forwarded-Proto` en « http ». Django se croit en clair, redirige vers HTTPS, donc vers l'aiguillage, qui revient ici : **une boucle**, c'est-à-dire une panne franche |
+| `ADRESSE_PRIVEE` | la machine publie encore 80 et 443 sur l'Internet : deux portes d'entrée là où l'on en veut une, et la seconde sans TLS |
+
+### Vérifier, avant d'en avoir besoin
+
+```bash
+# depuis l'extérieur : le nom public répond
+curl -sS https://<le domaine>/api/health/
+
+# depuis l'aiguillage : chaque machine dit-elle la vérité ?
+curl -sS http://<primaire>:80/api/health/    # {"status":"ok","writable":true}
+curl -sS http://<seconde>:80/api/health/     # connexion refusée (appli arrêtée)
+```
+
+Après une promotion, la seconde doit répondre `writable: true` et
+l'aiguillage basculer en quelques secondes — sans que personne n'ait touché
+au DNS. **C'est la seule chose à vérifier lors de la répétition
+trimestrielle** ; tout le reste est déjà couvert par
+`promouvoir_replique.sh --repetition`.
+
+### Ce qui n'a pas été éprouvé
+
+Caddy n'était pas disponible sur le banc : **la configuration de
+l'aiguillage n'a pas été exécutée**, seulement écrite et relue. Le contrôle
+de santé sur lequel tout repose, lui, est testé
+(`core/tests/test_health.py`). Validez le fichier avant de le déployer :
+
+```bash
+docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
+    -e MACHINE_PRIMAIRE=10.0.0.1 -e MACHINE_SECONDE=10.0.0.2 \
+    -v "$PWD/balanceur/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+    caddy validate --config /etc/caddy/Caddyfile
+```
+
+**Et il reste un point de défaillance unique** : l'aiguillage lui-même. Le
+doubler demanderait un troisième niveau, ce qui ne se justifie pas ici ; une
+IP flottante chez l'hébergeur, elle, n'a pas ce défaut. C'est une raison de
+plus de la préférer.
+
 ## Après une fuite
 
 Une sauvegarde lue par un tiers, un `.env` copié, un poste d'exploitation
@@ -1043,6 +1489,127 @@ choses n'ouvrent pas les mêmes portes :
 
 Une restauration ancienne **réactive** des accès révoqués depuis : voir
 « Après une restauration ».
+
+## Avant le premier certificat : `./verifier_tls.sh`
+
+L'émission ne se répète pas à volonté. Let's Encrypt compte **cinq
+validations échouées par heure et par nom**, et **cinq certificats identiques
+par semaine**. Un DNS qui pointe ailleurs, un enregistrement CAA oublié, un
+port 80 fermé par le pare-feu de l'hébergeur — et les essais sont brûlés
+avant qu'on ait compris ce qui se passait.
+
+```bash
+cd deploy && ./verifier_tls.sh          # lit APP_DOMAIN dans .env
+./verifier_tls.sh --domaine autre.nom   # pour un autre nom
+```
+
+Il vérifie, dans l'ordre, ce qui est vérifiable depuis la machine :
+
+1. **le nom pointe-t-il ici** — et il ne crie pas si l'adresse est ailleurs :
+   c'est normal derrière un aiguillage, une IP flottante ou un NAT ;
+2. **un CAA interdit-il Let's Encrypt** — un enregistrement posé un jour sur
+   le domaine parent fait échouer l'émission sans qu'aucun journal local ne
+   l'explique ;
+3. **qui écoute sur le port 80** — et surtout si c'est bien Caddy : un autre
+   serveur qui répondrait à sa place ferait échouer la validation ;
+4. **la machine joint-elle l'ACME** — un pare-feu sortant donne le même
+   silence qu'un CAA ;
+5. **quel certificat est servi aujourd'hui** — émetteur et échéance.
+
+> **Le point 5 attrape la panne qu'on ne voit pas de l'intérieur.** Quand
+> l'ACME échoue, Caddy ne s'arrête pas : il signe lui-même, avec son autorité
+> interne. Le site répond en TLS, les journaux du serveur sont calmes, et
+> **tous les navigateurs refusent**. Depuis le serveur, tout va bien.
+
+### Ce qu'aucun script ne peut vérifier d'ici
+
+Qu'Internet atteint la machine sur le port 80 : c'est Let's Encrypt qui ouvre
+la connexion, depuis l'extérieur. Faites-le vérifier depuis un autre réseau :
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  http://<le domaine>/.well-known/acme-challenge/essai
+# 404 ou 308 : le port est ouvert et Caddy répond.
+# « connection refused » ou un délai : il est fermé.
+```
+
+### Répéter sans brûler ses essais
+
+L'environnement d'essai de Let's Encrypt ne consomme aucun quota. Ajoutez
+`acme_ca https://acme-staging-v02.api.letsencrypt.org/directory` dans le bloc
+global de `Caddyfile` **le temps de la répétition**, relancez Caddy, et
+attendez « certificate obtained » dans ses journaux. Puis retirez la ligne,
+supprimez le certificat d'essai et relancez — le script donne les commandes
+exactes. Un certificat d'essai laissé en place est refusé par les
+navigateurs, exactement comme l'autorité interne.
+
+> Ce chemin n'a **pas** pu être joué depuis l'environnement de développement :
+> la politique de sortie y refuse les deux points d'entrée ACME de Let's
+> Encrypt, et la machine n'a aucune adresse routable — donc aucune validation
+> entrante possible. Ce qui a été éprouvé, c'est le circuit ACME complet
+> contre une autorité locale (`docs/audit-resilience.md` §9). Le reste se
+> vérifie sur le serveur, avec ce script.
+
+## Surveillance des erreurs (Sentry, facultatif)
+
+Prometheus et Grafana disent **que** la plateforme va mal : un taux d'erreur
+qui monte, une file qui s'allonge. Ils ne disent pas **pourquoi**. Il faut
+alors retrouver la requête dans les journaux du conteneur — et une trace
+d'exception y est déjà partie à la rotation. Sentry garde la trace, la pile,
+la version du code et le chemin de la requête, et regroupe les occurrences
+d'une même cause.
+
+**Il est éteint par défaut.** Sans `SENTRY_DSN`, rien ne s'installe, aucune
+requête ne sort, aucune dépendance réseau n'apparaît. Le renseigner est une
+décision : une donnée de la plateforme part alors chez un tiers.
+
+```bash
+# .env
+SENTRY_DSN=https://…@….ingest.sentry.io/…
+SENTRY_ENVIRONMENT=production
+docker compose -f docker-compose.prod.yml up -d backend scheduler
+```
+
+### Ce qui part, et ce qui ne part pas
+
+Ce qui part : le type et le message de l'exception, sa pile avec le code
+source, le chemin et la méthode de la requête, la version et l'environnement,
+et l'identifiant de requête (`X-Requete-Id`) que l'utilisateur cite quand il
+signale un incident. De quoi corriger, pas de quoi reconstituer un dossier.
+
+Ce qui ne part pas, et c'est **réglé, pas promis**
+(`backend/config/surveillance.py`) :
+
+| retenu | par quoi |
+|---|---|
+| nom de compte, témoins, valeur de `Authorization` | `send_default_pii=False` |
+| corps des requêtes — montants, bénéficiaires, jusqu'à 20 Mo de pièce | `max_request_body_size="never"` |
+| variables locales de chaque cadre de pile | `include_local_variables=False` |
+| adresse du client (`X-Forwarded-For`, `X-Real-Ip`) | `before_send` |
+| compte et adresse joints à chaque ligne de journal | `before_send` |
+| arguments de la ligne de commande | `before_send` |
+
+> **Les trois dernières lignes ont été ajoutées après mesure, pas par
+> précaution.** Un événement réel capté sur un banc, avec les deux premiers
+> réglages déjà en place, portait encore `uploaded_by='manager.banc'` dans
+> les variables locales, `extra.compte`, et l'adresse du client dans les
+> en-têtes. Si vous modifiez cette configuration, **relisez un événement
+> réel** : c'est la seule vérification qui vaille (`docs/audit-resilience.md`
+> §9).
+
+La mesure des performances (`SENTRY_TRACES_SAMPLE_RATE`) est à zéro : c'est
+un second flux, plus volumineux que les erreurs, pour une mesure que
+Prometheus fait déjà sans rien faire sortir de la machine.
+
+### Pourquoi l'interface n'est pas surveillée
+
+La politique de sécurité du contenu n'autorise les requêtes que vers
+l'origine (`connect-src 'self'`, `frontend/nginx.conf`). Un client Sentry
+dans le navigateur ne pourrait rien envoyer sans ouvrir cette politique à un
+domaine tiers — ou sans un relais servi par la plateforme elle-même. Les deux
+se décident : ouvrir la politique affaiblit la protection qui empêche une
+page compromise d'exfiltrer, et un relais est un composant de plus à tenir.
+Tant que personne n'a tranché, l'interface reste hors surveillance.
 
 ## Supervision (Prometheus et Grafana)
 

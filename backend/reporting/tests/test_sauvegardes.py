@@ -6,6 +6,7 @@ dans une sauvegarde doit pouvoir être révoqué, et cela se relit.
 """
 
 from datetime import timedelta
+from unittest import mock
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -22,7 +23,11 @@ from core.management.commands.run_scheduler import JOBS
 from core.models import ChangeLog
 from expenses.tests.base import ExpenseTestCase
 from notifications.models import Notification
-from reporting.management.commands.verifier_sauvegardes import anomalies
+from reporting.management.commands.verifier_sauvegardes import (
+    anomalies,
+    archivage_en_panne,
+    replication_en_panne,
+)
 
 
 def marquer(dossier, quoi, quand):
@@ -45,9 +50,9 @@ class FraicheurTests(ExpenseTestCase):
             call_command("verifier_sauvegardes", stdout=sortie, **options)
         return sortie.getvalue()
 
-    def test_trois_marqueurs_frais_ne_notifient_personne(self):
+    def test_des_marqueurs_frais_ne_notifient_personne(self):
         maintenant = timezone.now()
-        for quoi in ("base", "pieces", "distant"):
+        for quoi in ("base", "pieces", "distant", "base-physique"):
             marquer(self.dossier_marqueurs, quoi, maintenant - timedelta(hours=6))
 
         sortie = self.verifier()
@@ -59,6 +64,7 @@ class FraicheurTests(ExpenseTestCase):
         maintenant = timezone.now()
         marquer(self.dossier_marqueurs, "base", maintenant - timedelta(hours=6))
         marquer(self.dossier_marqueurs, "pieces", maintenant - timedelta(hours=6))
+        marquer(self.dossier_marqueurs, "base-physique", maintenant - timedelta(hours=6))
 
         sortie = self.verifier()
 
@@ -77,6 +83,7 @@ class FraicheurTests(ExpenseTestCase):
         marquer(self.dossier_marqueurs, "base", maintenant - timedelta(hours=40))
         marquer(self.dossier_marqueurs, "pieces", maintenant - timedelta(hours=6))
         marquer(self.dossier_marqueurs, "distant", maintenant - timedelta(hours=6))
+        marquer(self.dossier_marqueurs, "base-physique", maintenant - timedelta(hours=6))
 
         self.verifier()
 
@@ -88,7 +95,7 @@ class FraicheurTests(ExpenseTestCase):
         self.verifier()
         self.verifier()
 
-        self.assertEqual(Notification.objects.filter(recipient=self.doo).count(), 3)
+        self.assertEqual(Notification.objects.filter(recipient=self.doo).count(), 4)
 
     def test_avant_le_premier_marqueur_le_dump_le_plus_recent_fait_foi(self):
         """Les dumps existaient avant les marqueurs : le matin de la mise à
@@ -99,7 +106,33 @@ class FraicheurTests(ExpenseTestCase):
 
         trouvees = anomalies(self.dossier_marqueurs, age_max=timedelta(hours=26))
 
-        self.assertEqual([quoi for quoi, _ in trouvees], ["pieces", "distant"])
+        self.assertEqual(
+            [quoi for quoi, _ in trouvees], ["pieces", "distant", "base-physique"]
+        )
+
+    def test_la_sauvegarde_physique_a_son_propre_seuil(self):
+        """Elle est hebdomadaire : au seuil quotidien, elle serait déclarée
+        en retard six jours sur sept, et l'alerte cesserait d'être lue."""
+        maintenant = timezone.now()
+        for quoi in ("base", "pieces", "distant"):
+            marquer(self.dossier_marqueurs, quoi, maintenant - timedelta(hours=6))
+        marquer(self.dossier_marqueurs, "base-physique", maintenant - timedelta(days=3))
+
+        trouvees = anomalies(self.dossier_marqueurs, age_max=timedelta(hours=26))
+
+        self.assertEqual(trouvees, [], "trois jours, c'est frais pour une hebdomadaire")
+
+    def test_une_sauvegarde_physique_vieille_de_dix_jours_est_en_defaut(self):
+        """Sans elle, les segments archivés ne servent à rien : une reprise
+        à un instant donné part d'une sauvegarde physique, jamais d'un dump."""
+        maintenant = timezone.now()
+        for quoi in ("base", "pieces", "distant"):
+            marquer(self.dossier_marqueurs, quoi, maintenant - timedelta(hours=6))
+        marquer(self.dossier_marqueurs, "base-physique", maintenant - timedelta(days=10))
+
+        trouvees = anomalies(self.dossier_marqueurs, age_max=timedelta(hours=26))
+
+        self.assertEqual([quoi for quoi, _ in trouvees], ["base-physique"])
 
     def test_sans_dossier_de_marqueurs_rien_n_est_verifie(self):
         sortie = StringIO()
@@ -154,3 +187,119 @@ class RevocationDesSessionsTests(ExpenseTestCase):
         call_command("revoquer_sessions", tous=True, motif="essai", dry_run=True, verbosity=0)
 
         self.assertEqual(Token.objects.count(), 2)
+
+
+class ArchivageDesSegmentsTests(ExpenseTestCase):
+    """Un archivage cassé doit se dire — et un archivage au repos, non.
+
+    L'archivage des segments (``deploy/archiver_wal.sh``) est ce qui rend
+    possible la reprise à un instant donné. Quand il échoue, deux choses se
+    passent : la reprise s'arrête à la dernière réussite, et Postgres
+    **conserve** ses segments dans ``pg_wal``, où ils s'accumulent jusqu'à
+    remplir le disque de la base.
+
+    Le signal juste n'est pas l'ancienneté du dernier segment archivé : une
+    nuit sans écriture n'en produit aucun, et alerter là-dessus crierait au
+    loup tous les week-ends. C'est la comparaison des deux horodatages.
+    """
+
+    @staticmethod
+    def _postgres_repond(mode, dernier_echec, dernier_succes, segment="0000000100000000000000AA"):
+        """Fait parler ``pg_stat_archiver`` sans dépendre de l'état réel de
+        la base de test, où l'archivage n'est pas activé."""
+        curseur = mock.MagicMock()
+        curseur.__enter__.return_value = curseur
+        reponses = iter([(mode,), (segment, dernier_echec, dernier_succes)])
+        curseur.fetchone.side_effect = lambda: next(reponses)
+        return mock.patch(
+            "reporting.management.commands.verifier_sauvegardes.connection.cursor",
+            return_value=curseur,
+        )
+
+    def test_un_archivage_desactive_ne_declenche_rien(self):
+        """En développement et en intégration continue, l'archivage est
+        éteint : ce n'est pas une panne."""
+        with self._postgres_repond("off", None, None):
+            self.assertIsNone(archivage_en_panne())
+
+    def test_sans_echec_rien_ne_se_dit(self):
+        with self._postgres_repond("on", None, timezone.now()):
+            self.assertIsNone(archivage_en_panne())
+
+    def test_un_echec_plus_ancien_que_le_dernier_succes_est_oublie(self):
+        """L'archivage a trébuché puis s'est repris : le compteur d'échecs
+        de Postgres ne redescend jamais, mais il n'y a plus rien à signaler."""
+        maintenant = timezone.now()
+        with self._postgres_repond("on", maintenant - timedelta(hours=3), maintenant):
+            self.assertIsNone(archivage_en_panne())
+
+    def test_un_echec_posterieur_au_dernier_succes_se_dit(self):
+        maintenant = timezone.now()
+        with self._postgres_repond("on", maintenant, maintenant - timedelta(hours=3)):
+            panne = archivage_en_panne()
+
+        self.assertIsNotNone(panne)
+        self.assertEqual(panne[0], "0000000100000000000000AA")
+
+    def test_un_archivage_qui_n_a_jamais_abouti_se_dit(self):
+        """Le cas de la mise en service : l'archivage est activé, il échoue
+        depuis le début, et aucun segment n'est jamais parti."""
+        with self._postgres_repond("on", timezone.now(), None):
+            self.assertIsNotNone(archivage_en_panne())
+
+
+class RepliqueTests(ExpenseTestCase):
+    """Une réplique qu'on croit avoir et qu'on n'a plus.
+
+    C'est le défaut le plus désagréable d'une attente chaude : la plateforme
+    tourne parfaitement, personne ne voit rien, et l'on découvre le jour de
+    la bascule qu'il n'y avait pas de réplique. Deux états le disent, et
+    aucun ne se remarque autrement.
+
+    ``pg_replication_slots`` est une vue **de la grappe**, pas de la base :
+    ce contrôle voit les emplacements de tout le serveur, ce qui est voulu —
+    il n'y a qu'une grappe en production.
+    """
+
+    @staticmethod
+    def _emplacements(lignes):
+        curseur = mock.MagicMock()
+        curseur.__enter__.return_value = curseur
+        curseur.fetchall.return_value = lignes
+        return mock.patch(
+            "reporting.management.commands.verifier_sauvegardes.connection.cursor",
+            return_value=curseur,
+        )
+
+    def test_sans_replique_il_n_y_a_rien_a_dire(self):
+        """Tant qu'il n'y a qu'une machine, ce contrôle doit se taire."""
+        with self._emplacements([]):
+            self.assertEqual(replication_en_panne(), [])
+
+    def test_une_replique_qui_suit_ne_declenche_rien(self):
+        with self._emplacements([("replique", True, "reserved")]):
+            self.assertEqual(replication_en_panne(), [])
+
+    def test_un_emplacement_perdu_se_dit(self):
+        """La borne ``max_slot_wal_keep_size`` a joué — elle a protégé le
+        disque de la primaire, et c'est bien. Mais la réplique est
+        inutilisable : elle doit être refaite, pas attendue."""
+        with self._emplacements([("replique", False, "lost")]):
+            self.assertEqual(replication_en_panne(), [("replique", "perdu")])
+
+    def test_une_replique_debranchee_se_dit_avant_d_etre_perdue(self):
+        """Prévenir pendant que la réplique peut encore rattraper vaut mieux
+        que prévenir quand il faut tout refaire."""
+        with self._emplacements([("replique", False, "reserved")]):
+            self.assertEqual(replication_en_panne(), [("replique", "inactif")])
+
+    def test_plusieurs_repliques_sont_toutes_signalees(self):
+        with self._emplacements([
+            ("replique_a", True, "reserved"),
+            ("replique_b", False, "lost"),
+            ("replique_c", False, "reserved"),
+        ]):
+            self.assertEqual(
+                replication_en_panne(),
+                [("replique_b", "perdu"), ("replique_c", "inactif")],
+            )

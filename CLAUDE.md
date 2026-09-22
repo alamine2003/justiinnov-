@@ -249,6 +249,8 @@ l'application.
 | Calculs budgétaires | `backend/budget/aggregates.py` |
 | Interface | `DESIGN.md` |
 | Serveur, supervision Grafana, sauvegardes | `deploy/README.md` |
+| Comportement sous panne : ce qui a cédé, ce qui tient, ce qui reste | `docs/audit-resilience.md` |
+| Infrastructure de la base : dimensionnement, sauvegardes, reprise | `docs/infra-base-de-donnees.md` |
 
 ## Conventions
 

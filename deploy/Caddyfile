@@ -13,7 +13,26 @@
 #       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
 #       caddy validate --config /etc/caddy/Caddyfile
 {
-	email {$ACME_EMAIL}
+	# Entre guillemets, et ce n'est pas une question de style. Un placeholder
+	# nu qui s'expanse en chaîne vide donne « email » sans argument : Caddy
+	# refuse de démarrer, et l'erreur ne nomme que « email ». Le défaut
+	# `{$VAR:…}` ne rattrape pas ce cas — il ne joue que si la variable est
+	# **absente**, pas si elle est posée vide (mesuré, Caddy 2.8.4). Entre
+	# guillemets, l'argument existe, vide ; renseigné, il part à ACME à
+	# l'identique, et vide le compte ACME n'a simplement pas de contact.
+	email "{$ACME_EMAIL}"
+
+	# Mandataires de confiance devant Caddy. Sans cette liste, Caddy
+	# **réécrit** `X-Forwarded-Proto` avec le protocole qu'il a reçu : derrière
+	# un répartiteur qui termine TLS et parle HTTP ici, Django lirait « http »,
+	# se croirait en clair et redirigerait vers HTTPS — donc vers le
+	# répartiteur, qui reviendrait ici. Une boucle, c'est-à-dire une panne.
+	#
+	# Par défaut, seule la boucle locale : sans répartiteur, rien ne change.
+	# Avec, on y met son adresse (voir docker-compose.derriere-balanceur.yml).
+	servers {
+		trusted_proxies static {$MANDATAIRES_DE_CONFIANCE:127.0.0.1/32}
+	}
 }
 
 {$APP_DOMAIN} {

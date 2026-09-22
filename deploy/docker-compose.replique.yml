@@ -1,0 +1,73 @@
+# Surcharge de la seconde machine : la base suit la primaire, le reste attend.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml up -d
+#
+# Ce fichier ne redéfinit aucun service de l'application : il reprend
+# `docker-compose.prod.yml` — une seule source de vérité — et se contente de
+# décider **ce qui tourne** sur cette machine tant qu'elle n'est pas la
+# primaire.
+#
+# CE QUI TOURNE ICI
+#   db      la base, en attente chaude : elle rejoue le flux de la primaire
+#           et se laisse interroger en lecture. C'est tout l'intérêt de
+#           l'« attente chaude » — on peut vérifier qu'elle suit, au lieu de
+#           l'espérer.
+#   redis   le cache, vide, prêt. Il ne se réplique pas et n'a pas à l'être :
+#           ce qu'il contient se reconstruit (décision 73).
+#
+# CE QUI ATTEND (profil `bascule`)
+#   backend, scheduler, frontend, caddy
+#           l'application. Démarrée ici pendant que la primaire vit, elle
+#           écrirait dans une base en lecture seule — donc des erreurs —, et
+#           l'ordonnanceur enverrait des notifications en double.
+#   sauvegarde, sauvegarde-pieces, sauvegarde-distante
+#           les sauvegardes. **C'est le point le plus important de ce
+#           fichier** : deux machines qui sauvegardent vers le même coffre
+#           distant écriraient l'une par-dessus l'autre. Tant que cette
+#           machine est la réplique, c'est la primaire qui sauvegarde.
+#   prometheus, grafana, les exportateurs
+#           la supervision, qui suit l'application.
+#
+# `promouvoir_replique.sh` démarre le profil `bascule` après la promotion.
+
+# LA BASE N'EST PAS SURCHARGÉE ICI, ET CE N'EST PAS UN OUBLI.
+#
+# Son répertoire de données est préparé par `preparer_replique.sh`
+# (pg_basebackup depuis la primaire) : il contient déjà `standby.signal` et
+# `primary_conninfo`. Postgres y lit qu'il doit démarrer en attente.
+#
+# `archive_mode=on` reste donc en place, et c'est exactement ce qu'il faut :
+# Postgres **n'archive pas** quand il est en attente — il faudrait `always`
+# pour cela. Les deux machines n'écrivent donc jamais ensemble dans le
+# coffre, ce qui y mélangerait deux lignées temporelles et rendrait
+# l'archive inutilisable. À la promotion, l'archivage démarre de lui-même,
+# sans qu'on ait rien à y penser le jour où l'on pense déjà à trop de choses.
+
+services:
+  # --- L'application : présente, à l'arrêt -----------------------------------
+  backend:
+    profiles: ["bascule"]
+  scheduler:
+    profiles: ["bascule"]
+  frontend:
+    profiles: ["bascule"]
+  caddy:
+    profiles: ["bascule"]
+
+  # --- Les sauvegardes : à la primaire, et à elle seule ----------------------
+  sauvegarde:
+    profiles: ["bascule"]
+  sauvegarde-pieces:
+    profiles: ["bascule"]
+  sauvegarde-distante:
+    profiles: ["bascule"]
+
+  # --- La supervision suit l'application -------------------------------------
+  prometheus:
+    profiles: ["bascule"]
+  postgres-exporter:
+    profiles: ["bascule"]
+  node-exporter:
+    profiles: ["bascule"]
+  grafana:
+    profiles: ["bascule"]

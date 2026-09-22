@@ -18,6 +18,8 @@ from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.translation import gettext as _
 from rest_framework.exceptions import AuthenticationFailed
 
+from core.exceptions import PANNES_DE_BASE, reponse_indisponible
+
 from .authentication import ATTRIBUT_MEMO, JetonAuthentication
 
 #: Vues joignables sans profil et malgré un mot de passe provisoire.
@@ -69,6 +71,18 @@ class ProvisionalPasswordMiddleware:
         return self.get_response(request)
 
     def process_view(self, request, view_func, view_args, view_kwargs):
+        # Ce verrou interroge la base avant que DRF n'entre en scène, et
+        # Django transforme l'exception d'un ``process_view`` en réponse 500
+        # avant qu'aucun middleware supérieur ne puisse la voir. Sans ce
+        # filet, une base injoignable rendait 500 sur toute route
+        # authentifiée quand ``/api/health/`` rendait déjà 503 : deux codes
+        # pour une même panne (audit de résilience).
+        try:
+            return self._examiner(request)
+        except PANNES_DE_BASE as panne:
+            return reponse_indisponible(panne, ou="verrou d'accès")
+
+    def _examiner(self, request):
         # ``process_view`` s'exécute une fois l'URL résolue, ce qui donne accès
         # au nom de la route ; l'authentification par jeton, elle, n'a pas
         # encore eu lieu. Elle est faite ici, et son résultat est laissé sur la

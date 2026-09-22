@@ -27,3 +27,10 @@ drf-spectacular==0.30.0
 # Sérialise les traces d'exception entre processus : sans lui, un test en
 # échec sous ``manage.py test --parallel`` fait avorter tout le run.
 tblib==3.2.2
+# Surveillance des erreurs (config/surveillance.py). Sans SENTRY_DSN, la
+# bibliothèque est présente mais rien ne s'installe et rien ne sort.
+sentry-sdk==2.69.2
+# Cache principal (config/settings.py, core/cache.py). Le client seul :
+# le serveur est un conteneur de la pile. Sans REDIS_URL, rien ne s'en sert
+# et la base de données reprend le rôle.
+redis==8.1.0

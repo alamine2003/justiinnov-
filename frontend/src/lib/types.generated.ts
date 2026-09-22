@@ -889,12 +889,42 @@ export interface paths {
             cookie?: never
         }
         /**
-         * @description État de la plateforme, pour Docker et la livraison continue.
+         * @description État de la plateforme, pour Docker, la livraison et le répartiteur.
          *
          *     Ni compte, ni jeton : le contrôle de santé du conteneur l'interroge
-         *     toutes les trente secondes, et un déploiement n'est déclaré réussi que
-         *     lorsqu'il répond. Il ne dit que deux choses — le serveur répond, la base
-         *     est joignable — et rien sur ce qu'elle contient.
+         *     toutes les trente secondes, un déploiement n'est déclaré réussi que
+         *     lorsqu'il répond, et le répartiteur de charge s'en sert pour choisir
+         *     **vers quelle machine envoyer les gens**. Il ne dit rien du contenu de
+         *     la base.
+         *
+         *     Il dit trois choses, et la troisième a été ajoutée pour le répartiteur :
+         *
+         *     1. le serveur répond 
+         *     2. la base est joignable 
+         *     3. **elle accepte les écritures**.
+         *
+         *     Le troisième point n'est pas un détail. Une réplique en attente chaude
+         *     (décision 75) répond parfaitement au ``SELECT 1`` : sa base est vivante,
+         *     simplement en lecture seule. Sans ce contrôle, un répartiteur y enverrait
+         *     des gens qui ne pourraient plus rien enregistrer. Mesuré sur un banc à
+         *     deux machines : pendant les dix-sept secondes séparant la perte de la
+         *     primaire de sa promotion, la réplique n'a reçu aucune requête.
+         *
+         *     **Ce contrôle ne dit pas qui est la primaire d'aujourd'hui.** Il dit
+         *     « puis-je écrire ? », et une ancienne primaire redémarrée après une
+         *     bascule répond oui, sincèrement : elle n'est pas en récupération, elle
+         *     accepte les écritures — dans une histoire qui s'est arrêtée à l'instant
+         *     de sa perte. Mesuré sur le même banc : le répartiteur lui a rendu le
+         *     trafic **5,1 s après son retour**, et 22 des 24 requêtes suivantes y
+         *     sont allées. Distinguer les deux demanderait de savoir ce que fait
+         *     l'autre machine ; rien ici ne le sait. Ce qui protège est une consigne
+         *     d'exploitation — une machine perdue ne redémarre jamais telle quelle —
+         *     et non ce point de santé (``deploy/promouvoir_replique.sh``,
+         *     ``docs/audit-resilience.md`` §9).
+         *
+         *     ``pg_is_in_recovery()`` est vrai sur une réplique, et pendant une
+         *     reprise à un instant donné (décision 74) tant que la base n'est pas
+         *     ouverte : dans les deux cas, envoyer du monde ici serait une erreur.
          */
         get: operations["health_retrieve"]
         put?: never
@@ -3076,13 +3106,16 @@ export interface components {
         Health: {
             readonly status: components["schemas"]["HealthStatusEnum"]
             readonly database: components["schemas"]["DatabaseEnum"]
+            readonly writable: boolean
+            readonly machine: string
         }
         /**
          * @description * `ok` - ok
          *     * `indisponible` - indisponible
+         *     * `replique` - replique
          * @enum {string}
          */
-        HealthStatusEnum: "ok" | "indisponible"
+        HealthStatusEnum: "ok" | "indisponible" | "replique"
         ImportError: {
             readonly ligne: number
             readonly motif: string

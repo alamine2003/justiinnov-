@@ -1,0 +1,69 @@
+# Ce qui change sur les DEUX machines quand un aiguillage passe devant.
+#
+#   # sur la primaire
+#   docker compose -f docker-compose.prod.yml \
+#                  -f docker-compose.derriere-balanceur.yml up -d
+#
+#   # sur la seconde, avec la surcharge de réplique
+#   docker compose -f docker-compose.prod.yml \
+#                  -f docker-compose.replique.yml \
+#                  -f docker-compose.derriere-balanceur.yml up -d
+#
+# Trois changements, et chacun corrige quelque chose qui casserait sans lui.
+#
+# 1. CADDY NE TERMINE PLUS TLS ICI.
+#    C'est l'aiguillage qui porte le nom de domaine et le certificat. La
+#    machine ne sert plus qu'en clair, sur son réseau privé. `APP_DOMAIN`
+#    en forme `http://:80` est le mode déjà employé par l'intégration
+#    continue (docker-compose.ci.yml) : le Caddyfile n'a pas une ligne à
+#    changer.
+#
+# 2. IL Y A UN MANDATAIRE DE PLUS.
+#    `DJANGO_NUM_PROXIES` passe de 2 à 3 — aiguillage, Caddy, nginx. **Ce
+#    n'est pas un détail de confort.** `core.requetes.client_ip` prend le
+#    n-ième élément de `X-Forwarded-For` en partant de la fin ; laissé à 2,
+#    il lirait l'adresse de l'aiguillage pour **tout le monde**. La limite
+#    anti-bourrage, qui compte par adresse (décision 68), deviendrait un
+#    seul compteur commun : cinq essais par minute pour la plateforme
+#    entière, et le journal d'audit noterait la même adresse pour chaque
+#    action. Une protection qui compte faux ne protège pas.
+#
+# 3. CADDY FAIT CONFIANCE À L'AIGUILLAGE.
+#    `MANDATAIRES_DE_CONFIANCE` lui dit de conserver le
+#    `X-Forwarded-Proto: https` posé en amont. Sans cela il le réécrit en
+#    « http », Django se croit en clair et redirige vers HTTPS — donc vers
+#    l'aiguillage, qui revient ici. Une boucle, c'est-à-dire une panne.
+#
+# Ce qui ne change pas : l'application, la base, les sauvegardes. Et
+# `APP_BASE_URL` reste l'adresse **publique** — c'est elle qui part dans les
+# e-mails, pas celle du réseau privé.
+
+services:
+  caddy:
+    # Uniquement sur l'adresse privée de cette machine : elle ne publie plus
+    # rien sur l'Internet, c'est l'aiguillage qui y est exposé. Publier sur
+    # toutes les interfaces laisserait une seconde porte d'entrée, sans TLS,
+    # là où l'on en veut une seule.
+    ports: !override
+      - "${ADRESSE_PRIVEE:?ADRESSE_PRIVEE manquante}:80:80"
+    environment:
+      # Le mode « sans TLS » du Caddyfile, celui de l'intégration continue.
+      APP_DOMAIN: "http://:80"
+      # ACME_EMAIL n'est pas repris ici, et c'est volontaire. Cette machine
+      # ne termine plus TLS : l'adresse n'y sert à rien. Mais
+      # docker-compose.prod.yml l'exige (`:?`), et l'exigence vaut pour la
+      # pile entière — la poser vide ici ne la relâcherait pas, Compose
+      # refuserait d'abord sur le fichier de base. Une ligne qui laisserait
+      # croire le contraire serait un piège : le jour où l'on relâcherait
+      # `prod.yml` en s'y fiant, Caddy ne démarrerait plus. Renseignez donc
+      # ACME_EMAIL sur les deux machines ; seul l'aiguillage s'en sert.
+      SUPERVISION: ${SUPERVISION:-0}
+      MANDATAIRES_DE_CONFIANCE: ${BALANCEUR_RESEAU:?BALANCEUR_RESEAU manquant}
+
+  backend:
+    environment:
+      DJANGO_NUM_PROXIES: "3"
+
+  scheduler:
+    environment:
+      DJANGO_NUM_PROXIES: "3"

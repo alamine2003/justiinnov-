@@ -32,7 +32,6 @@ from . import stockage, transitions
 from .audit import record
 from .mixins import DraftDeletableViewSet
 from .models import (
-    EXPENSE_RELATIONS,
     AuditLog,
     Beneficiary,
     Dossier,
@@ -71,6 +70,23 @@ class FichierIntrouvable(APIException):
         "l'anomalie est journalisée, prévenez l'administrateur."
     )
     default_code = "fichier_introuvable"
+
+
+#: Pannes du stockage objet au dépôt : botocore lève tout sous ces deux
+#: familles, et elles ne peuvent venir que d'un appel au stockage.
+#:
+#: ``OSError`` en est volontairement absente, bien qu'elle couvre le disque
+#: plein du stockage local : elle est trop large pour signifier « stockage ».
+#: Une trace d'audit impossible en lève une, et elle doit **remonter** —
+#: la transaction s'annule, la fiche et le fichier disparaissent, et
+#: personne ne reçoit un « réessayez » qui laisserait croire qu'il ne s'est
+#: rien passé (``test_une_trace_impossible_n_emporte_ni_la_fiche_ni_le_fichier``).
+try:  # pragma: no cover - dépend de l'installation
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    PANNES_DE_STOCKAGE = (BotoCoreError, ClientError)
+except ImportError:  # stockage local seul, sans client S3
+    PANNES_DE_STOCKAGE = ()
 
 
 class StockageIndisponible(APIException):
@@ -226,7 +242,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         prefetch : la règle n'est pas récrite ici.
         """
         return filtrer(
-            Expense.objects.select_related(*EXPENSE_RELATIONS).with_rectification(),
+            Expense.objects.avec_les_relations().with_rectification(),
             get_access(self.request.user),
             pays=ExpenseViewSet.country_lookup,
             equipe=ExpenseViewSet.team_lookup,
@@ -300,7 +316,7 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
 
     # ``with_rectification`` : ``allowed_actions`` dit si une rectification
     # peut être demandée sans une requête par ligne.
-    queryset = Expense.objects.select_related(*EXPENSE_RELATIONS).with_rectification()
+    queryset = Expense.objects.avec_les_relations().with_rectification()
     serializer_class = ExpenseSerializer
     transition_serializer_class = ExpenseTransitionSerializer
     permission_classes = [RolePermission]
@@ -450,9 +466,19 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         with stockage.suivre_les_depots() as deposes:
             try:
                 return super().create(request, *args, **kwargs)
-            except Exception:
+            except Exception as exc:
                 for nom in deposes:
                     stockage.effacer_nom_sans_bruit(nom)
+                # Le téléchargement traduit déjà une panne du stockage en 503
+                # (``download``, plus bas) ; le dépôt rendait un 500 pour la
+                # même panne. Le déposant ne pouvait donc pas distinguer
+                # « votre fichier ne va pas » d'un « réessayez », et le 500
+                # n'invite à aucune reprise. Mesuré sur un banc à quatre
+                # étages, stockage objet bridé : 500 « Erreur interne du
+                # serveur » au bout de 17,7 s.
+                if isinstance(exc, PANNES_DE_STOCKAGE):
+                    logger.exception("Stockage des justificatifs injoignable (dépôt)")
+                    raise StockageIndisponible() from exc
                 raise
 
     @transaction.atomic

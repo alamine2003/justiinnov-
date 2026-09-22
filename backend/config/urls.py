@@ -7,6 +7,15 @@ from django.urls import include, path
 from .metriques import metriques
 from .schema import SchemaUiView, SchemaView
 
+# Ce qui échappe à DRF — une URL inconnue, un hôte refusé, une exception
+# levée hors d'une vue — rendait une page HTML à un client qui attend du
+# JSON. Ces quatre gestionnaires la rendent en JSON sous ``/api/`` et pour
+# qui la demande ; l'admin Django, monté en développement, garde ses pages.
+handler400 = "core.exceptions.erreur_400"
+handler403 = "core.exceptions.erreur_403"
+handler404 = "core.exceptions.erreur_404"
+handler500 = "core.exceptions.erreur_500"
+
 urlpatterns = [
     *([path("admin/", admin.site.urls)] if settings.ADMIN_ENABLED else []),
     # Supervision (Prometheus → Grafana), sous jeton : voir config/metriques.py.

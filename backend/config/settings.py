@@ -115,12 +115,60 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Cache partagé entre les workers gunicorn. Indispensable pour la limitation
 # de débit : un cache local à chaque processus multiplierait la limite par le
 # nombre de workers.
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "django_cache",
-    }
+#: Nombre d'entrées au-delà duquel Django purge la table du cache. Son
+#: défaut — 300 — n'avait jamais été choisi, et **la purge supprime par
+#: ordre alphabétique de clé, pas par ancienneté** (``_cull``,
+#: ``cache_key_culling_sql``). Or les compteurs anti-bourrage s'appellent
+#: ``throttle_login_<adresse>`` : ils se classent parmi les plus bas, donc
+#: partent les premiers. Mesuré pendant l'audit de résilience : à 250
+#: comptes actifs dans l'heure le compteur survit, à **400 il est effacé** —
+#: sans attaquant, par la seule croissance de l'application, puisque chaque
+#: compte actif laisse une clé pendant une heure. Deux mille laisse la place
+#: à bien plus de comptes que le groupe n'en aura, en bornant la table à
+#: quelques mégaoctets. Cela ferme le cas accidentel ; cela ne rend pas la
+#: limite insensible à un remplissage délibéré venu de nombreuses adresses,
+#: chaque nom de compte essayé créant une clé.
+CACHE_MAX_ENTRIES = int(os.environ.get("DJANGO_CACHE_MAX_ENTRIES", "2000"))
+
+#: Cache principal. Sans ``REDIS_URL``, la base de données le porte comme
+#: avant : la pile reste démarrable sans Redis, et un poste de
+#: développement n'a rien de plus à installer.
+REDIS_URL = os.environ.get("REDIS_URL", "")
+
+#: Un cache doit renoncer vite : s'il hésite, on perd plus de temps qu'il
+#: n'en fait gagner. Une seconde suffit — le secours, lui, répond en
+#: millisecondes. (Les délais de la base, eux, sont plus longs : on ne peut
+#: pas se passer d'elle. Ici, si.)
+_DELAIS_REDIS = {
+    "socket_connect_timeout": float(os.environ.get("REDIS_CONNECT_TIMEOUT", "1")),
+    "socket_timeout": float(os.environ.get("REDIS_TIMEOUT", "1")),
+    # Une connexion du pool restée ouverte vers un Redis redémarré est
+    # détectée à l'usage plutôt qu'au bout d'un délai réseau.
+    "health_check_interval": 30,
+    # Pas de seconde tentative : on bascule sur le secours, c'est plus
+    # rapide et cela ne masque pas la panne.
+    "retry_on_timeout": False,
 }
+
+_CACHE_BASE = {
+    "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+    "LOCATION": "django_cache",
+    "OPTIONS": {"MAX_ENTRIES": CACHE_MAX_ENTRIES},
+}
+
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "core.cache.CacheAvecSecours",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {"SECOURS": "secours", **_DELAIS_REDIS},
+        },
+        # La table reste créée (`entrypoint.sh`) et reste le filet : une
+        # panne de Redis doit ralentir la plateforme, jamais la fermer.
+        "secours": _CACHE_BASE,
+    }
+else:
+    CACHES = {"default": _CACHE_BASE}
 
 
 
@@ -157,6 +205,70 @@ def parse_database_url(url):
     return config
 
 
+# ---------------------------------------------------------------------------
+# Délais de la base
+# ---------------------------------------------------------------------------
+# Rien ne bornait le temps passé à attendre la base : `statement_timeout`,
+# `lock_timeout` et `idle_in_transaction_session_timeout` valaient tous zéro,
+# c'est-à-dire l'infini, et aucun délai n'était posé côté client. L'audit de
+# résilience l'a mesuré — une base qui accepte la connexion sans jamais
+# répondre (un pare-feu qui avale les paquets, pas un service arrêté) faisait
+# **pendre toute l'API au-delà de quatre-vingt-dix secondes**, `/api/health/`
+# compris. C'est la panne du stockage (décision 60) à l'identique, sur la
+# base cette fois.
+#
+# Deux familles, deux rôles, et on a besoin des deux :
+#
+# - **côté serveur** (`options`) : la base est vivante mais quelque chose s'y
+#   éternise — une requête qui n'en finit pas, un verrou tenu par une
+#   transaction voisine, une transaction laissée ouverte par un client parti.
+#   Postgres tranche lui-même ;
+# - **côté client** (`connect_timeout`, `keepalives`) : la base **ne répond
+#   pas**. Aucun réglage du serveur ne peut alors s'appliquer, puisque c'est
+#   le serveur qui manque. Seul le client peut renoncer.
+#
+# Chaque dépassement devient une 503 avec `Retry-After` (décision 62), pas
+# une attente sans fin : le fil est rendu, les autres écrans répondent.
+#
+# Les valeurs laissent une marge large sur le mesuré : la requête la plus
+# lourde de l'application tient en 127 ms de SQL et le verrou d'une
+# transition est tenu 8,5 ms.
+DELAIS_POSTGRES = {
+    # Ouverture de connexion (secondes, libpq).
+    "connect_timeout": int(os.environ.get("POSTGRES_CONNECT_TIMEOUT", "3")),
+    # Détection d'une base devenue muette sur une connexion déjà ouverte :
+    # sonde après 5 s de silence, toutes les 2 s, trois échecs — la panne se
+    # découvre en une dizaine de secondes au lieu de jamais.
+    "keepalives": 1,
+    "keepalives_idle": int(os.environ.get("POSTGRES_KEEPALIVE_IDLE", "5")),
+    "keepalives_interval": 2,
+    "keepalives_count": 3,
+    "options": " ".join(
+        f"-c {nom}={os.environ.get(variable, defaut)}"
+        for nom, variable, defaut in (
+            # Une requête qui dépasse : quinze secondes, cent fois la plus
+            # lourde mesurée. Le délai vaut par instruction, pas par requête
+            # HTTP : un export enchaîne des requêtes courtes, il n'est pas
+            # menacé.
+            ("statement_timeout", "POSTGRES_STATEMENT_TIMEOUT", "15000"),
+            # Attendre un verrou : dix secondes. Deux personnes qui
+            # soumettent le même dossier s'attendent quelques
+            # millisecondes ; au-delà, quelque chose est bloqué et la
+            # seconde doit l'apprendre plutôt que d'attendre.
+            ("lock_timeout", "POSTGRES_LOCK_TIMEOUT", "10000"),
+            # Une transaction ouverte puis abandonnée tient ses verrous.
+            # Cinq minutes : au-delà de toute transition, et assez large
+            # pour une migration de données qui réfléchit entre deux
+            # instructions — elle n'est « inactive » que là.
+            (
+                "idle_in_transaction_session_timeout",
+                "POSTGRES_IDLE_TX_TIMEOUT",
+                "300000",
+            ),
+        )
+    ),
+}
+
 # Connexions réutilisées entre requêtes, et vérifiées avant usage : sans
 # contrôle, une connexion coupée par Postgres ou le réseau ne se découvre
 # qu'à la première requête qui échoue.
@@ -167,7 +279,12 @@ _DATABASE_COMMON = {"CONN_MAX_AGE": 60, "CONN_HEALTH_CHECKS": True}
 # Docker. Voir deploy/.env.example.
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 if DATABASE_URL:
-    DATABASES = {"default": {**parse_database_url(DATABASE_URL), **_DATABASE_COMMON}}
+    _hebergee = parse_database_url(DATABASE_URL)
+    # Les délais d'abord, ce que l'URL dit ensuite : un réglage écrit à la
+    # main dans l'URL l'emporte sur nos défauts. La fonction, elle, reste
+    # pure — elle traduit l'URL, elle n'y ajoute rien.
+    _hebergee["OPTIONS"] = {**DELAIS_POSTGRES, **_hebergee.get("OPTIONS", {})}
+    DATABASES = {"default": {**_hebergee, **_DATABASE_COMMON}}
 else:
     POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "")
     if not POSTGRES_PASSWORD:
@@ -187,6 +304,7 @@ else:
             "PASSWORD": POSTGRES_PASSWORD,
             "HOST": os.environ.get("POSTGRES_HOST", "db"),
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "OPTIONS": DELAIS_POSTGRES,
             **_DATABASE_COMMON,
         }
     }
@@ -219,6 +337,9 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
+    # Une panne d'infrastructure devient 503 avec ``Retry-After`` ; le reste
+    # garde le comportement de DRF. Voir ``core.exceptions``.
+    "EXCEPTION_HANDLER": "core.exceptions.gestionnaire_d_exception",
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
     "PAGE_SIZE": 25,
     "SEARCH_PARAM": "search",
@@ -384,10 +505,33 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL", "")
 
+# Délais du client S3, bornés et réglables. Sans eux, botocore attend
+# soixante secondes par tentative et recommence jusqu'à cinq fois : un
+# stockage qui accepte la connexion sans jamais répondre — la panne la plus
+# vicieuse, et la plus banale derrière un pare-feu — immobilise le thread qui
+# le sert. Le `--timeout` de gunicorn ne rattrape rien : en mode `gthread`,
+# il surveille la boucle du worker, pas ses threads de requête, qui restent
+# donc bloqués sans limite. Huit threads ainsi pris, et toute l'API est
+# muette, y compris ce qui ne touche aucun fichier (audit de résilience,
+# scénario 10 : coupure totale et définitive, sans une ligne de journal).
+# Ici, le pire cas est borné à connexion + lecture × tentatives.
+AWS_S3_CONNECT_TIMEOUT = int(os.environ.get("AWS_S3_CONNECT_TIMEOUT", "3"))
+AWS_S3_READ_TIMEOUT = int(os.environ.get("AWS_S3_READ_TIMEOUT", "10"))
+#: Tentatives au total, première comprise : 2 laisse une seconde chance à un
+#: incident passager sans transformer une panne durable en attente longue.
+AWS_S3_MAX_ATTEMPTS = int(os.environ.get("AWS_S3_MAX_ATTEMPTS", "2"))
+
 if AWS_S3_ENDPOINT_URL:
+    from botocore.config import Config as _ConfigurationS3
+
     _default_storage = {
         "BACKEND": "storages.backends.s3.S3Storage",
         "OPTIONS": {
+            "client_config": _ConfigurationS3(
+                connect_timeout=AWS_S3_CONNECT_TIMEOUT,
+                read_timeout=AWS_S3_READ_TIMEOUT,
+                retries={"max_attempts": AWS_S3_MAX_ATTEMPTS, "mode": "standard"},
+            ),
             "endpoint_url": AWS_S3_ENDPOINT_URL,
             "access_key": os.environ.get("AWS_ACCESS_KEY_ID", ""),
             "secret_key": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
@@ -580,6 +724,78 @@ if PROMETHEUS_MULTIPROC_DIR:
 # - les mots de passe sont hachés en MD5 : PBKDF2, avec ses centaines de
 #   milliers d'itérations, rendait la création de chaque compte de test plus
 #   longue que le test lui-même. Aucun test ne porte sur l'algorithme.
+# ---------------------------------------------------------------------------
+# Journalisation
+# ---------------------------------------------------------------------------
+# Django n'a pas de configuration par défaut utilisable en production : son
+# gestionnaire console porte le filtre ``RequireDebugTrue``, et celui par
+# courriel n'écrit nulle part sans ``ADMINS``. Résultat mesuré par l'audit de
+# résilience : pendant une coupure de la base, six mille erreurs 500 n'ont
+# produit **aucune ligne** de journal. Restait le code d'état dans le journal
+# d'accès de gunicorn, et rien pour dire pourquoi.
+#
+# Une seule sortie, la sortie standard : c'est là que Docker, `docker compose
+# logs` et n'importe quel collecteur vont chercher. Pas de fichier, pas de
+# rotation à tenir.
+#
+# Le format est en ``clé=valeur`` : lisible à l'œil dans un terminal, et
+# filtrable au `grep` sur `requete=`, `compte=` ou `ip=`. Du JSON serait plus
+# commode pour un agrégateur — il n'y en a pas ici, et `docker compose logs`
+# en JSON ne se lit pas.
+DJANGO_LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO").upper()
+
+#: Les 4xx sont déjà dans le journal d'accès de nginx et de gunicorn ; les
+#: reprendre ici noierait les 5xx, qui sont la raison d'être de ce réglage.
+#: ``WARNING`` les fait réapparaître, le temps d'une enquête.
+DJANGO_LOG_REQUESTS = os.environ.get("DJANGO_LOG_REQUESTS", "ERROR").upper()
+
+LOGGING = {
+    "version": 1,
+    # Les journaux des bibliothèques restent en place : on ajoute une sortie,
+    # on ne coupe la parole à personne.
+    "disable_existing_loggers": False,
+    "filters": {
+        "contexte": {"()": "core.journalisation.FiltreContexte"},
+        # Django ajoute une ligne par réponse 5xx ; pour les 503, elle répète
+        # ce que ``core.exceptions`` a déjà dit, sans contexte et sans borne.
+        "sans_degradation_repetee": {
+            "()": "core.journalisation.SansDegradationRepetee"
+        },
+    },
+    "formatters": {
+        "standard": {
+            "format": (
+                "%(asctime)s %(levelname)s %(name)s "
+                "requete=%(requete)s compte=%(compte)s ip=%(ip)s %(message)s"
+            ),
+            "datefmt": "%Y-%m-%dT%H:%M:%S%z",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            # Chaîne plutôt qu'un objet : ``sys`` n'est importé que plus bas,
+            # et dictConfig sait résoudre ``ext://``.
+            "stream": "ext://sys.stdout",
+            "formatter": "standard",
+            "filters": ["sans_degradation_repetee", "contexte"],
+        },
+    },
+    "root": {"handlers": ["console"], "level": DJANGO_LOG_LEVEL},
+    "loggers": {
+        # ``django.request`` porte la trace complète des 500 : c'est la ligne
+        # qui manquait.
+        "django.request": {"level": DJANGO_LOG_REQUESTS, "propagate": True},
+        # Tentatives d'intrusion, hôtes non autorisés, requêtes suspectes.
+        "django.security": {"level": "WARNING", "propagate": True},
+        # Jamais le SQL : en DEBUG, ce logger écrit chaque requête.
+        "django.db.backends": {"level": "WARNING", "propagate": True},
+        # Les serveurs de développement seulement ; gunicorn a son propre
+        # journal d'accès.
+        "django.utils.autoreload": {"level": "WARNING", "propagate": True},
+    },
+}
+
 import sys  # noqa: E402 — réservé à ce bloc
 
 EN_TEST = os.environ.get("DJANGO_TEST") == "1" or sys.argv[1:2] == ["test"]
@@ -589,4 +805,27 @@ if EN_TEST:
         "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
     }
     PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+    # Les journaux se taisent pendant les tests : c'est le *gestionnaire*
+    # qu'on baisse, pas les niveaux — un enregistrement propagé depuis
+    # ``django.request`` atteint les gestionnaires de la racine quel que soit
+    # le niveau de celle-ci, et la trace d'un test qui lève exprès polluait
+    # la sortie. ``assertLogs`` pose ses propres gestionnaires : les tests
+    # qui vérifient les journaux fonctionnent quand même.
+    LOGGING["handlers"]["console"]["level"] = "CRITICAL"
     TEST_RUNNER = "core.tests.runner.LanceurDeTests"
+
+# Nom que cette machine donne d'elle-même dans ``/api/health/`` (``machine``).
+# Vide, le champ n'apparaît pas : le point de santé ne révèle rien de plus
+# qu'aujourd'hui. Renseigné (« 1 », « 2 », « dakar »…), il dit **qui répond**
+# derrière un nom de domaine partagé — la seule façon, pendant une bascule,
+# de voir l'aiguillage changer de machine, et de constater qu'une ancienne
+# primaire redémarrée reprend le trafic (docs/audit-resilience.md §9).
+SERVEUR_NOM = os.environ.get("SERVEUR_NOM", "").strip()
+
+# Surveillance des erreurs : muette sans ``SENTRY_DSN``, et jamais installée
+# pendant les tests — une suite qui lève exprès n'a pas à remplir un tableau
+# de bord. Ce qu'elle laisse sortir, et ce qu'elle retient, est réglé dans le
+# module ; tout y est expliqué.
+from config.surveillance import configurer_la_surveillance  # noqa: E402
+
+SURVEILLANCE = configurer_la_surveillance(en_test=EN_TEST)

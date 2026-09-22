@@ -5,6 +5,7 @@ L'API du référentiel, l'authentification et le back-office vivent dans
 (décision 40). Ne reste ici que ce qui ne demande aucun compte.
 """
 
+from django.conf import settings
 from django.db import OperationalError, connection
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -37,12 +38,42 @@ class HealthRateThrottle(SimpleRateThrottle):
 
 
 class HealthView(APIView):
-    """État de la plateforme, pour Docker et la livraison continue.
+    """État de la plateforme, pour Docker, la livraison et le répartiteur.
 
     Ni compte, ni jeton : le contrôle de santé du conteneur l'interroge
-    toutes les trente secondes, et un déploiement n'est déclaré réussi que
-    lorsqu'il répond. Il ne dit que deux choses — le serveur répond, la base
-    est joignable — et rien sur ce qu'elle contient.
+    toutes les trente secondes, un déploiement n'est déclaré réussi que
+    lorsqu'il répond, et le répartiteur de charge s'en sert pour choisir
+    **vers quelle machine envoyer les gens**. Il ne dit rien du contenu de
+    la base.
+
+    Il dit trois choses, et la troisième a été ajoutée pour le répartiteur :
+
+    1. le serveur répond ;
+    2. la base est joignable ;
+    3. **elle accepte les écritures**.
+
+    Le troisième point n'est pas un détail. Une réplique en attente chaude
+    (décision 75) répond parfaitement au ``SELECT 1`` : sa base est vivante,
+    simplement en lecture seule. Sans ce contrôle, un répartiteur y enverrait
+    des gens qui ne pourraient plus rien enregistrer. Mesuré sur un banc à
+    deux machines : pendant les dix-sept secondes séparant la perte de la
+    primaire de sa promotion, la réplique n'a reçu aucune requête.
+
+    **Ce contrôle ne dit pas qui est la primaire d'aujourd'hui.** Il dit
+    « puis-je écrire ? », et une ancienne primaire redémarrée après une
+    bascule répond oui, sincèrement : elle n'est pas en récupération, elle
+    accepte les écritures — dans une histoire qui s'est arrêtée à l'instant
+    de sa perte. Mesuré sur le même banc : le répartiteur lui a rendu le
+    trafic **5,1 s après son retour**, et 22 des 24 requêtes suivantes y
+    sont allées. Distinguer les deux demanderait de savoir ce que fait
+    l'autre machine ; rien ici ne le sait. Ce qui protège est une consigne
+    d'exploitation — une machine perdue ne redémarre jamais telle quelle —
+    et non ce point de santé (``deploy/promouvoir_replique.sh``,
+    ``docs/audit-resilience.md`` §9).
+
+    ``pg_is_in_recovery()`` est vrai sur une réplique, et pendant une
+    reprise à un instant donné (décision 74) tant que la base n'est pas
+    ouverte : dans les deux cas, envoyer du monde ici serait une erreur.
     """
 
     authentication_classes = []
@@ -53,10 +84,31 @@ class HealthView(APIView):
     def get(self, request):
         try:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
+                cursor.execute("SELECT pg_is_in_recovery()")
+                en_reprise = cursor.fetchone()[0]
         except OperationalError:
             return Response(
-                {"status": "indisponible", "database": "ko"},
+                {"status": "indisponible", "database": "ko", "writable": False},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        return Response({"status": "ok", "database": "ok"})
+        if en_reprise:
+            return Response(
+                self._nommer({"status": "replique", "database": "ok", "writable": False}),
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(self._nommer({"status": "ok", "database": "ok", "writable": True}))
+
+    @staticmethod
+    def _nommer(corps):
+        """Ajoute le nom de la machine, seulement si elle en a un.
+
+        Derrière un aiguillage, deux machines répondent au même nom de
+        domaine et rendent le même corps : rien ne dit laquelle a servi.
+        Pendant une bascule, c'est pourtant la seule question — et c'est
+        ainsi que l'on constate, chiffres à l'appui, qu'une ancienne primaire
+        redémarrée reprend le trafic. Sans ``SERVEUR_NOM``, le champ est
+        absent : le point de santé ne révèle rien de plus qu'avant.
+        """
+        if settings.SERVEUR_NOM:
+            corps["machine"] = settings.SERVEUR_NOM
+        return corps

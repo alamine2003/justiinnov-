@@ -1,0 +1,133 @@
+# Point d'entrée unique devant les deux machines.
+#
+# CE QUE C'EST, ET CE QUE CE N'EST PAS
+#
+# Ce n'est pas une répartition de charge : les deux machines ne sont pas
+# interchangeables. La première porte la base en écriture, la seconde une
+# réplique **en lecture seule** dont l'application est à l'arrêt (décision
+# 75). Envoyer la moitié du trafic à la seconde reviendrait à refuser la
+# moitié des enregistrements.
+#
+# C'est un **aiguillage** : tout va à la machine qui se déclare primaire, et
+# à elle seule. `lb_policy first` prend toujours la première amont **en
+# bonne santé** ; la seconde n'est choisie que lorsque la première ne
+# répond plus.
+#
+# CE QUE CELA APPORTE, ET C'EST PRÉCIS
+#
+# Sans lui, une bascule oblige à changer l'enregistrement DNS, et c'est le
+# TTL du cache qui décide du retour du service — des minutes, parfois des
+# heures, pendant lesquelles la base a déjà basculé. Avec lui, le nom de
+# domaine ne bouge jamais : il pointe ici, et l'aiguillage suit la primaire
+# en quelques secondes.
+#
+# CE QUI REND CELA SÛR
+#
+# `/api/health/` ne répond 200 que si la base **accepte les écritures**
+# (core/views.py). Une réplique répond parfaitement au `SELECT 1` : sans ce
+# contrôle, l'aiguillage y enverrait du monde. Mesuré sur un banc à deux
+# machines : pendant les 17 s qui séparent la perte de la primaire de sa
+# promotion, la réplique n'a reçu aucune requête — elle se déclarait 503.
+# C'est bien ce que ce contrôle apporte, et c'est réel.
+#
+# CE QU'IL N'APPORTE PAS, ET IL FAUT LE SAVOIR
+#
+# Il ne protège **pas** du retour d'une ancienne primaire. Mesuré sur le même
+# banc : redémarrée telle quelle après la bascule, elle n'est pas en
+# récupération, elle accepte donc les écritures, elle répond 200 — et
+# `lb_policy first` la remet **en tête**. Le trafic y est revenu **5,1 s
+# après son retour**, sur une base arrêtée à l'instant de sa perte : 22 des
+# 24 requêtes suivantes y sont allées, pendant que la vraie primaire
+# poursuivait la sienne. Deux histoires, et rien pour les réunir.
+#
+# Aucun réglage de ce fichier n'y change quoi que ce soit : la question que
+# pose le contrôle est « puis-je écrire ? », pas « suis-je la primaire
+# d'aujourd'hui ? », et une base déposée répond oui, sincèrement. Ce qui
+# protège est ailleurs, et c'est une consigne d'exploitation :
+# **une machine perdue ne redémarre jamais telle quelle** — elle se refait en
+# réplique (`preparer_replique.sh`), ou elle reste éteinte. Voir
+# `promouvoir_replique.sh` et README.md, « Répartiteur ».
+#
+# OÙ CE FICHIER TOURNE
+#
+# **Pas sur l'une des deux machines.** Un aiguillage posé sur la première
+# meurt avec elle, et l'on n'a rien gagné. Trois possibilités, par ordre de
+# simplicité : le répartiteur de l'hébergeur (ou une IP flottante, qui rend
+# ce fichier inutile — c'est bien) ; une troisième petite machine ; à
+# défaut, rien, et l'on garde le DNS. Voir README.md, « Répartiteur ».
+#
+# Vérification, sans rien déployer :
+#   docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
+#       -e MACHINE_PRIMAIRE=10.0.0.1 -e MACHINE_SECONDE=10.0.0.2 \
+#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+#       caddy validate --config /etc/caddy/Caddyfile
+{
+	# Entre guillemets : vide, un placeholder nu donnerait « email » sans
+	# argument et Caddy refuserait de démarrer (voir ../Caddyfile).
+	email "{$ACME_EMAIL}"
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Les justificatifs peuvent peser jusqu'à 20 Mo (MAX_PROOF_SIZE) ; un peu
+	# de marge pour l'enveloppe multipart. La même borne qu'en aval : la
+	# refuser ici évite de traverser le réseau privé pour rien.
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy {$MACHINE_PRIMAIRE}:80 {$MACHINE_SECONDE}:80 {
+		# Toujours la première en bonne santé. Jamais les deux à la fois :
+		# deux machines qui écriraient chacune dans leur base donneraient
+		# deux histoires qu'on ne réunirait pas.
+		lb_policy first
+
+		# Le contrôle actif, et c'est lui qui fait tout le travail. Il
+		# n'interroge pas « le serveur répond-il ? » mais « cette machine
+		# est-elle la primaire ? » : 200 seulement si la base accepte les
+		# écritures.
+		health_uri /api/health/
+		health_interval 5s
+		health_timeout 3s
+		health_status 200
+
+		# Une amont qui vient d'échouer n'est pas rappelée aussitôt : sans
+		# cela, une machine à demi vivante recevrait une requête sur deux.
+		fail_duration 30s
+		max_fails 2
+
+		# Ces trois délais ne mesurent pas la même chose, et c'est
+		# `read_timeout` qui décide du sort d'un gros dépôt.
+		#
+		# nginx, en aval, met le corps de la requête en fichier temporaire et
+		# **ne répond qu'une fois le dépôt entièrement reçu**. Le temps de
+		# téléversement tombe donc dans `read_timeout`, qui est un délai
+		# *total* : il borne, de fait, la durée d'un dépôt — donc le débit
+		# minimal d'une liaison.
+		#
+		# Mesuré sur un banc à quatre étages, avec une pièce de 20 Mo :
+		#   200 Ko/s → 102 s → 201 Créé
+		#    60 Ko/s → coupé à 301,8 s après 18,5 Mo → 502, dépôt perdu
+		#
+		# 300 s excluaient donc toute liaison sous ~70 Ko/s, alors que les
+		# filiales sont précisément celles qui en ont de mauvaises. À 900 s,
+		# une pièce de 20 Mo passe jusqu'à ~23 Ko/s (185 kbit/s). Ce que cela
+		# coûte, et c'est assumé : une connexion enlisée tient jusqu'à quinze
+		# minutes, Caddy n'offrant pas de délai « par lecture » comme nginx.
+		#
+		# `response_header_timeout` ne court qu'une fois la requête écrite :
+		# il mesure le travail de Django, et 120 s est la valeur de
+		# GUNICORN_TIMEOUT. Il n'a pas à couvrir le téléversement.
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 120s
+			read_timeout 900s
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
