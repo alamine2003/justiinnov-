@@ -84,9 +84,11 @@ class DelaiDeGraceTests(DashboardTestCase):
         with CaptureQueriesContext(connection) as captured:
             alert_rules.proof_alerts(dossiers)
 
+        # La lecture des dossiers eux-mêmes — pas celle des pays dont le
+        # fuseau fixe la date du jour, qui les précède.
         requete = next(
             q["sql"] for q in captured.captured_queries
-            if 'FROM "expenses_dossier"' in q["sql"]
+            if q["sql"].startswith('SELECT "expenses_dossier"')
         )
         self.assertIn('"expenses_dossier"."date" <=', requete)
 

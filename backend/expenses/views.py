@@ -29,7 +29,7 @@ from core.mixins import NoDestroyModelViewSet
 from core.regles import traduire_les_regles
 
 from . import stockage, transitions
-from .audit import record
+from .audit import champs_journalises, journaliser_la_modification, photographier, record
 from .mixins import DraftDeletableViewSet
 from .models import (
     AuditLog,
@@ -53,6 +53,7 @@ from .serializers import (
     RectificationSerializer,
     TransitionSerializer,
     TransitionWarningMixin,
+    exiger_un_dossier_de_piece_modifiable,
 )
 from .workflow import ACTION_CAPACITES
 
@@ -295,8 +296,14 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
             transitions.exiger_l_auteur_du_brouillon(
                 serializer.instance, get_access(self.request.user)
             )
+        # Rejugé sous verrou : une ligne ajoutée entre la validation et
+        # l'écriture — dans une autre équipe, ou avec une pièce — ferait du
+        # déplacement validé un déplacement qui laisse du contenu derrière.
+        serializer._verifier_le_deplacement(serializer.validated_data)
+        champs = champs_journalises(serializer)
+        avant = photographier(serializer.instance, champs)
         super().perform_update(serializer)
-        record(self.request, AuditLog.Action.UPDATED, serializer.instance)
+        journaliser_la_modification(self.request, serializer.instance, avant, champs)
 
 
 @extend_schema_view(
@@ -406,22 +413,12 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
                 serializer.instance, get_access(self.request.user)
             )
             transitions.exiger_un_dossier_ouvert(dossier_vise)
-        stored = serializer.instance
-        previous = {
-            "amount": str(stored.amount),
-            "justified_amount": str(stored.justified_amount),
-        }
+        # Le taux figé et le montant justifié ne s'écrivent pas par la charge
+        # utile, mais la modification les fait bouger : ils sont de la trace.
+        champs = champs_journalises(serializer, "original_rate", "justified_amount")
+        avant = photographier(serializer.instance, champs)
         serializer.save()
-        record(
-            self.request,
-            AuditLog.Action.UPDATED,
-            serializer.instance,
-            before=previous,
-            after={
-                "amount": str(serializer.instance.amount),
-                "justified_amount": str(serializer.instance.justified_amount),
-            },
-        )
+        journaliser_la_modification(self.request, serializer.instance, avant, champs)
 
 
 @extend_schema_view(
@@ -540,8 +537,14 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
             version=proof.version,
         )
 
+    @transaction.atomic
     def perform_update(self, serializer):
         self._check_country_scope(serializer)
+        # Le dossier sous verrou : une soumission au même instant est relue
+        # avant d'écrire, et le type de la pièce reste ce que le siège a vu.
+        with traduire_les_regles():
+            dossier = transitions.verrouiller_le_dossier_vise(None, serializer.instance)
+        exiger_un_dossier_de_piece_modifiable(dossier)
         avant = {"kind": serializer.instance.kind}
         serializer.save()
         record(

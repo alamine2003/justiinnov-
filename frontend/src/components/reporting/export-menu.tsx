@@ -20,9 +20,7 @@ import {
   type ExportKind,
   type TabularFormat,
 } from "@/lib/reporting"
-
-const CURRENT_YEAR = new Date().getFullYear()
-const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2]
+import { currentYear, yearChoices } from "@/lib/utils"
 
 interface ExportMenuProps {
   /** Exercice repris des filtres de l'écran ; absent, le menu propose le sien. */
@@ -44,7 +42,9 @@ interface ExportMenuProps {
 export function ExportMenu({ year, country, onError }: ExportMenuProps) {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const [ownYear, setOwnYear] = useState(CURRENT_YEAR)
+  // L'exercice se lit au rendu, pas au chargement du module.
+  const [ownYear, setOwnYear] = useState(currentYear)
+  const years = yearChoices({ before: 2, after: 1 }).reverse()
   const [month, setMonth] = useState<MonthValue>("")
   const [exporting, setExporting] = useState<ExportKind | null>(null)
 
@@ -73,7 +73,7 @@ export function ExportMenu({ year, country, onError }: ExportMenuProps) {
           aria-label={t("commun.annee")}
           className="w-28"
         >
-          {YEARS.map((value) => (
+          {years.map((value) => (
             <option key={value} value={value}>
               {value}
             </option>

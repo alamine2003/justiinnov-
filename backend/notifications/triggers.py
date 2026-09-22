@@ -19,6 +19,7 @@ from django.db import transaction
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
+from accounts.perimetre import PAYS_ENTIER
 from accounts.permissions import COUNTRY_ROLES, roles_pour
 
 from .models import Notification
@@ -194,7 +195,24 @@ def audience_roles(alert_kind):
     return controleurs() | PROVIDERS
 
 
-def audience_for(alert_kind, country, team=None):
+#: Alertes qui se lisent par pays entier : l'enveloppe n'a pas d'équipe,
+#: et tout manager du pays doit savoir où elle en est.
+ALERTES_DE_PAYS = frozenset({"budget_overrun", "budget_threshold"})
+
+
+def equipe_de_l_alerte(alert):
+    """L'équipe qui cloisonne les destinataires d'une alerte.
+
+    Celle du dossier ou de la ligne — ``None`` s'ils n'en ont pas, et les
+    managers rattachés à des équipes n'en sont alors pas prévenus, comme ils
+    ne le verraient pas — ; le pays entier pour une alerte d'enveloppe.
+    """
+    if alert["kind"] in ALERTES_DE_PAYS:
+        return PAYS_ENTIER
+    return alert.get("team")
+
+
+def audience_for(alert_kind, country, team=PAYS_ENTIER):
     """Destinataires d'un type d'alerte pour un pays et, s'il y a lieu, une équipe.
 
     Exposé pour que l'appelant puisse résoudre une fois et réutiliser : cent
@@ -222,7 +240,7 @@ def alert_raised(alert, country, recipients=None):
     destinataires = (
         recipients
         if recipients is not None
-        else audience_for(alert["kind"], country, alert.get("team"))
+        else audience_for(alert["kind"], country, equipe_de_l_alerte(alert))
     )
     return _safe(
         lambda: notify(

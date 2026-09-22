@@ -609,7 +609,9 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         le dossier « 1 » ouvert à la main."""
         self.dossier.number = "1"
         self.dossier.save()
-        lignes = [[1.0, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Carburant", 15000, 15000, 0, "Reçu"]]
+        # L'équipe du dossier ouvert à la main : une ligne d'une autre
+        # équipe n'y entrerait pas.
+        lignes = [[1.0, datetime(self.year, 1, 6), "Équipe Lomé", "Owner Un", "Carburant", 15000, 15000, 0, "Reçu"]]
 
         response = self._importer(self._classeur(lignes), country=self.togo.pk)
 
@@ -627,11 +629,15 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertEqual(Team.objects.filter(name="Équipe A").count(), 1)
 
     def test_les_lignes_importees_se_soumettent_ensuite(self):
-        """L'import fournit équipe et manager : le dossier peut partir."""
+        """L'import fournit équipe et manager : le dossier peut partir.
+
+        Par qui l'a importé, ou par le siège : le dossier importé porte
+        l'auteur de l'import, et un brouillon ne part que par son auteur ou
+        par le siège (décision 46) — comme il ne se corrige que par eux."""
         self._importer(self._classeur(), country=self.togo.pk)
         premier = Dossier.objects.get(country=self.togo, number="1")
 
-        response = self.submit_dossier(premier)
+        response = self.submit_dossier(premier, user=self.doo)
 
         self.assertEqual(response.status_code, 200, response.data)
 
@@ -755,3 +761,56 @@ class ReimportDUnExportTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["lignes_creees"], 0, response.data)
         self.assertEqual(self.dossier.expenses.count(), 1)
+
+
+class PrevisualisationSansTraceTests(ImportTests):
+    def test_la_previsualisation_ne_laisse_pas_de_trace_importe(self):
+        """Une simulation ne verse rien : une entrée « importé » ferait croire
+        le contraire à qui relit le journal."""
+        response = self._importer(self._classeur([self._ligne()]), dry_run="true")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertTrue(response.data["dry_run"])
+        self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.IMPORTED).exists())
+
+    def test_l_import_reel_laisse_la_trace(self):
+        self._importer(self._classeur([self._ligne()]))
+
+        self.assertTrue(AuditLog.objects.filter(action=AuditLog.Action.IMPORTED).exists())
+
+
+class EquipeDuDossierExistantTests(ImportTests):
+    """Une ligne importée porte l'équipe du dossier qu'elle rejoint, comme
+    une ligne saisie (``ExpenseSerializer``)."""
+
+    def test_une_autre_equipe_est_refusee(self):
+        Team.objects.create(country=self.togo, name="Équipe Kara")
+        self.dossier.number = "N-IMPORT-01"
+        self.dossier.save()
+
+        response = self._importer(self._classeur([self._ligne(TEAM="Équipe Kara")]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(len(response.data["erreurs"]), 1)
+        self.assertIn("Équipe Lomé", response.data["erreurs"][0]["motif"])
+        self.assertEqual(self.dossier.expenses.count(), 0)
+
+    def test_la_meme_equipe_passe(self):
+        self.dossier.number = "N-IMPORT-01"
+        self.dossier.save()
+
+        response = self._importer(self._classeur([self._ligne(TEAM="Équipe Lomé")]))
+
+        self.assertFalse(response.data["erreurs"], response.data)
+        self.assertEqual(self.dossier.expenses.count(), 1)
+
+    def test_une_equipe_inconnue_est_aussi_refusee(self):
+        """Créer une équipe pour la mettre dans un dossier d'une autre serait
+        pire : la ligne serait invisible à la sienne."""
+        self.dossier.number = "N-IMPORT-01"
+        self.dossier.save()
+
+        response = self._importer(self._classeur([self._ligne(TEAM="Équipe Nouvelle")]))
+
+        self.assertEqual(len(response.data["erreurs"]), 1)
+        self.assertFalse(Team.objects.filter(name="Équipe Nouvelle").exists())

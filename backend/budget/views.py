@@ -79,6 +79,10 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         year = request.query_params.get("year") or timezone.now().year
         if "year" not in request.query_params:
             budgets = budgets.filter(year=year)
+        if "is_active" not in request.query_params:
+            # Une enveloppe désactivée est retirée du suivi, comme sur le
+            # tableau de bord (``reporting.scope``) : deux écrans, un chiffre.
+            budgets = budgets.filter(is_active=True)
 
         # Aux taux en vigueur à la date de référence de l'exercice : un
         # exercice clos se lit au 31 décembre, pas au taux du jour.

@@ -130,9 +130,13 @@ export function ProofPreview({
                 className="mx-auto max-h-[70vh] object-contain"
               />
             ) : (
+              // Une pièce est un document reçu d'un tiers : le cadre qui
+              // l'affiche n'a ni script, ni formulaire, ni origine — `sandbox`
+              // vide. Le lecteur PDF du navigateur n'en a pas besoin.
               <iframe
                 src={current.url}
                 title={proof.original_name}
+                sandbox=""
                 className="h-[70vh] w-full border-0"
               />
             ))}

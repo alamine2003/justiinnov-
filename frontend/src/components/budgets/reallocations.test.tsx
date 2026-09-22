@@ -1,15 +1,32 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Reallocations } from "./reallocations"
-import type { Reallocation } from "@/lib/types"
+import type { Budget, Reallocation } from "@/lib/types"
 
 const fetchReallocations = vi.fn()
+const createReallocation = vi.fn()
 vi.mock("@/lib/budgets", () => ({
   fetchReallocations: (...args: unknown[]) => fetchReallocations(...args),
   approveReallocation: vi.fn(),
   rejectReallocation: vi.fn(),
-  createReallocation: vi.fn(),
+  createReallocation: (...args: unknown[]) => createReallocation(...args),
 }))
+
+/** Une enveloppe telle que la page des budgets la passe au formulaire. */
+function enveloppe(id: number, country_name: string): Budget {
+  return {
+    id,
+    country: id,
+    country_name,
+    year: 2026,
+    scope_kind: "country",
+    scope_label: null,
+    currency: "XOF",
+    amount: "1000.00",
+    figures: { remaining: "800.00", execution_rate: "0.2", execution_level: "ok" },
+    is_active: true,
+  } as unknown as Budget
+}
 
 /**
  * Une demande telle que le serveur la rend : `can_decide` y tient compte de
@@ -88,5 +105,56 @@ describe("Reallocations — demander", () => {
 
     expect(await screen.findByText("Aucune réallocation")).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Demander" })).toBeNull()
+  })
+})
+
+/**
+ * Régression : le formulaire pré-remplissait source et cible avec les deux
+ * premières enveloppes *au montage*. Ouvert avant que la liste n'arrive, il
+ * gardait une cible vide que le navigateur masquait — la première option
+ * s'affichait comme choisie — et `target: ""` partait au serveur.
+ */
+describe("Reallocations — formulaire ouvert avant les enveloppes", () => {
+  beforeEach(() => {
+    createReallocation.mockReset()
+  })
+
+  it("laisse le choix vide quand la liste arrive, et n'envoie pas une cible vide", async () => {
+    fetchReallocations.mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+    const { rerender } = render(
+      <Reallocations budgets={[]} canRequest onChanged={vi.fn()} />,
+    )
+    fireEvent.click(await screen.findByRole("button", { name: "Demander" }))
+    await screen.findByLabelText("Enveloppe source")
+
+    rerender(
+      <Reallocations
+        budgets={[enveloppe(1, "Togo"), enveloppe(2, "Benin")]}
+        canRequest
+        onChanged={vi.fn()}
+      />,
+    )
+
+    const source = screen.getByLabelText("Enveloppe source") as HTMLSelectElement
+    const cible = screen.getByLabelText("Enveloppe destinataire") as HTMLSelectElement
+    // Une option vide, explicite, est bien celle qui s'affiche.
+    expect(cible.value).toBe("")
+    expect(cible.selectedOptions[0]?.textContent).toBe("Choisissez une enveloppe…")
+
+    fireEvent.change(source, { target: { value: "1" } })
+    fireEvent.change(screen.getByLabelText("Montant"), { target: { value: "100" } })
+    fireEvent.change(screen.getByLabelText("Justification"), { target: { value: "Renfort" } })
+    fireEvent.click(screen.getByRole("button", { name: "Envoyer" }))
+
+    expect(
+      await screen.findByText("Choisissez l'enveloppe source et l'enveloppe destinataire."),
+    ).toBeInTheDocument()
+    expect(createReallocation).not.toHaveBeenCalled()
+
+    fireEvent.change(cible, { target: { value: "2" } })
+    fireEvent.click(screen.getByRole("button", { name: "Envoyer" }))
+
+    await waitFor(() => expect(createReallocation).toHaveBeenCalledOnce())
+    expect(createReallocation.mock.calls[0][0]).toMatchObject({ source: 1, target: 2 })
   })
 })

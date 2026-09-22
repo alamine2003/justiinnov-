@@ -221,9 +221,25 @@ if [ -n "${GHCR_USER:-}" ]; then
   docker logout ghcr.io >/dev/null 2>&1 || true
 fi
 
-# Les images des versions précédentes restent pour un retour arrière rapide ;
-# seules les couches orphelines partent.
-docker image prune -f >/dev/null
+# Les images de la version précédente restent pour un retour arrière rapide ;
+# les autres partent. `image prune` ne retire que les couches orphelines :
+# chaque livraison ajoutait deux images étiquetées que rien n'enlevait, sur
+# le disque que partagent la base, ses segments et les sauvegardes. On garde
+# l'étiquette en ligne et celle d'avant, c'est ce que le retour arrière
+# ci-dessus sait rétablir ; le reste est sur le registre (README.md,
+# « Revenir en arrière »).
+menage_des_images() {
+  for image in "$BACKEND_IMAGE" "$FRONTEND_IMAGE"; do
+    docker image ls --format '{{.Tag}}' "$image" 2>/dev/null \
+      | grep -vxF -e "$IMAGE_TAG" -e "${precedente:-<aucune>}" -e '<none>' \
+      | while read -r etiquette; do
+          docker image rm "$image:$etiquette" >/dev/null 2>&1 \
+            && echo "→ image retirée : $image:$etiquette"
+        done
+  done
+  docker image prune -f >/dev/null
+}
+menage_des_images || echo "⚠ ménage des images incomplet : « docker image ls » sur le serveur" >&2
 
 echo "✔ ${IMAGE_TAG} en ligne."
 compose ps

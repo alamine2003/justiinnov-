@@ -2025,6 +2025,14 @@ export interface components {
             readonly remaining: string
             /** Format: decimal */
             readonly execution_rate: string | null
+            /**
+             * @description « exceeded » au-delà de 100 %, « warning » dès le dernier seuil d'alerte sous 100, « ok » sinon.
+             *
+             *     * `ok` - ok
+             *     * `warning` - warning
+             *     * `exceeded` - exceeded
+             */
+            readonly execution_level: components["schemas"]["ExecutionLevelEnum"]
             /** Format: decimal */
             readonly justification_rate: string | null
             /** Format: decimal */
@@ -2476,6 +2484,14 @@ export interface components {
             readonly remaining: string
             /** Format: decimal */
             readonly execution_rate: string | null
+            /**
+             * @description « exceeded » au-delà de 100 %, « warning » dès le dernier seuil d'alerte sous 100, « ok » sinon.
+             *
+             *     * `ok` - ok
+             *     * `warning` - warning
+             *     * `exceeded` - exceeded
+             */
+            readonly execution_level: components["schemas"]["ExecutionLevelEnum"]
             /** Format: decimal */
             readonly justification_rate: string | null
             /** Format: decimal */
@@ -2501,6 +2517,14 @@ export interface components {
             readonly remaining: string
             /** Format: decimal */
             readonly execution_rate: string | null
+            /**
+             * @description « exceeded » au-delà de 100 %, « warning » dès le dernier seuil d'alerte sous 100, « ok » sinon.
+             *
+             *     * `ok` - ok
+             *     * `warning` - warning
+             *     * `exceeded` - exceeded
+             */
+            readonly execution_level: components["schemas"]["ExecutionLevelEnum"]
             /** Format: decimal */
             readonly justification_rate: string | null
             /** @description Devises sans taux connu, laissées hors des totaux. */
@@ -2691,6 +2715,7 @@ export interface components {
              * Format: date-time
              */
             readonly created_at: string
+            readonly is_current: boolean
         }
         ExchangeRateRequest: {
             /**
@@ -2710,6 +2735,13 @@ export interface components {
              */
             valid_from: string
         }
+        /**
+         * @description * `ok` - ok
+         *     * `warning` - warning
+         *     * `exceeded` - exceeded
+         * @enum {string}
+         */
+        ExecutionLevelEnum: "ok" | "warning" | "exceeded"
         Expense: {
             readonly id: number
             dossier: number
@@ -3265,6 +3297,7 @@ export interface components {
             readonly language: components["schemas"]["LanguageEnum"]
             readonly permissions: components["schemas"]["Permissions"]
             readonly workflow: components["schemas"]["MeWorkflow"]
+            readonly alert_thresholds: number[]
             readonly supervision: boolean
         }
         /** @description Politique du circuit que l'interface doit connaître. */
@@ -3837,6 +3870,14 @@ export interface components {
                 [key: string]: ("super_admin" | "admin" | "df" | "dm" | "manager")[]
             }
         }
+        /**
+         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         *
+         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
+         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
+         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
+         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         */
         PatchedProjectRequest: {
             /** Pays */
             country?: number
@@ -3861,6 +3902,14 @@ export interface components {
             kind?: components["schemas"]["ProofKindEnum"]
             replaces?: number | null
         }
+        /**
+         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         *
+         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
+         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
+         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
+         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         */
         PatchedTeamRequest: {
             /** Pays */
             country?: number
@@ -3966,6 +4015,7 @@ export interface components {
             readonly label: string
             readonly siege: boolean
             readonly always_global: boolean
+            readonly assignable: boolean
         }
         Permissions: {
             /** @description Consulter la liste des comptes, leurs rôles et leurs périmètres. */
@@ -4031,6 +4081,14 @@ export interface components {
             /** @description Charger un classeur de dépenses en brouillons. */
             readonly "data.import": boolean
         }
+        /**
+         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         *
+         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
+         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
+         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
+         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         */
         Project: {
             readonly id: number
             /** Pays */
@@ -4057,6 +4115,14 @@ export interface components {
              */
             readonly updated_at: string
         }
+        /**
+         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         *
+         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
+         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
+         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
+         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         */
         ProjectRequest: {
             /** Pays */
             country: number
@@ -4337,6 +4403,14 @@ export interface components {
             /** Pays */
             country: number
         }
+        /**
+         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         *
+         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
+         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
+         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
+         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         */
         Team: {
             readonly id: number
             /** Pays */
@@ -4358,6 +4432,14 @@ export interface components {
              */
             readonly updated_at: string
         }
+        /**
+         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         *
+         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
+         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
+         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
+         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         */
         TeamRequest: {
             /** Pays */
             country: number

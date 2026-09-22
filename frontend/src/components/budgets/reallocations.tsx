@@ -24,7 +24,11 @@ import {
   fetchReallocations,
   rejectReallocation,
 } from "@/lib/budgets"
-import { REALLOCATION_STYLE } from "@/lib/status-styles"
+import {
+  REALLOCATION_CARD_STYLE,
+  REALLOCATION_FLOW_STYLE,
+  REALLOCATION_STYLE,
+} from "@/lib/status-styles"
 import type { Budget, Reallocation } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatDate, normalizeDecimal } from "@/lib/utils"
@@ -110,104 +114,97 @@ export function Reallocations({ budgets, canRequest, onChanged }: ReallocationsP
         </div>
       ) : (
         <ul className="space-y-2">
-          {rows.map((row) => (
-            <li
-              key={row.id}
-              className={cn(
-                "rounded-lg border p-3",
-                row.status === "pending"
-                  ? "border-statut-attente/40 bg-statut-attente/5"
-                  : "border-border/60",
-              )}
-            >
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                <div className="flex flex-1 items-stretch gap-3">
-                  <Enveloppe
-                    role={t("champs.source")}
-                    label={row.source_label}
-                    disponible={disponibleDe(row.source)}
-                    pending={row.status === "pending"}
-                  />
-                  <div className="flex shrink-0 flex-col items-center justify-center gap-1">
-                    <span
-                      className={cn(
-                        "text-sm font-semibold",
-                        row.status === "pending" ? "text-marque" : "text-muted-foreground",
-                      )}
-                    >
-                      {formatAmount(row.amount)}
-                    </span>
-                    <ArrowRight
-                      className={cn(
-                        "h-4 w-8",
-                        row.status === "pending" ? "text-marque" : "text-muted-foreground",
-                      )}
-                      aria-label={t("budgets.realloc.vers")}
+          {rows.map((row) => {
+            // Les teintes viennent de `status-styles` : la carte s'allume tant
+            // que la demande attend, le flux s'éteint une fois tranchée.
+            const flux = REALLOCATION_FLOW_STYLE[row.status]
+            return (
+              <li
+                key={row.id}
+                className={cn("rounded-lg border p-3", REALLOCATION_CARD_STYLE[row.status])}
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                  <div className="flex flex-1 items-stretch gap-3">
+                    <Enveloppe
+                      role={t("champs.source")}
+                      label={row.source_label}
+                      disponible={disponibleDe(row.source)}
+                      tone={flux.enveloppe}
+                    />
+                    <div className="flex shrink-0 flex-col items-center justify-center gap-1">
+                      <span className={cn("text-sm font-semibold", flux.accent)}>
+                        {formatAmount(row.amount)}
+                      </span>
+                      {/* La flèche est un dessin : le sens du transfert est dit
+                          aux lecteurs d'écran en `sr-only`, un `aria-label` sur
+                          un `<svg>` sans rôle n'étant pas lu. */}
+                      <ArrowRight className={cn("h-4 w-8", flux.accent)} aria-hidden />
+                      <span className="sr-only">{t("budgets.realloc.vers")}</span>
+                    </div>
+                    <Enveloppe
+                      role={t("champs.target")}
+                      label={row.target_label}
+                      disponible={disponibleDe(row.target)}
+                      tone={flux.enveloppe}
                     />
                   </div>
-                  <Enveloppe
-                    role={t("champs.target")}
-                    label={row.target_label}
-                    disponible={disponibleDe(row.target)}
-                    pending={row.status === "pending"}
-                  />
-                </div>
 
-                <span aria-hidden className="hidden w-px self-stretch bg-border lg:block" />
+                  <span aria-hidden className="hidden w-px self-stretch bg-border lg:block" />
 
-                <div className="lg:w-64">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge className={REALLOCATION_STYLE[row.status]}>{row.status_display}</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {row.requested_by
-                        ? t("budgets.realloc.par", { auteur: row.requested_by })
-                        : null}
-                      {row.requested_by && " · "}
-                      {formatDate(row.created_at)}
-                    </span>
+                  <div className="lg:w-64">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={REALLOCATION_STYLE[row.status]}>{row.status_display}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {row.requested_by
+                          ? t("budgets.realloc.par", { auteur: row.requested_by })
+                          : null}
+                        {row.requested_by && " · "}
+                        {formatDate(row.created_at)}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs italic text-muted-foreground">{row.reason}</p>
+                    {row.decision_note && (
+                      <p className="mt-1 text-xs italic text-muted-foreground">
+                        {t("budgets.realloc.decision", { note: row.decision_note })}
+                      </p>
+                    )}
                   </div>
-                  <p className="mt-2 text-xs italic text-muted-foreground">{row.reason}</p>
-                  {row.decision_note && (
-                    <p className="mt-1 text-xs italic text-muted-foreground">
-                      {t("budgets.realloc.decision", { note: row.decision_note })}
-                    </p>
+
+                  {/* Le serveur dit qui tranche (`can_decide`) : demande encore
+                      en attente, rôle décideur, pas son auteur. */}
+                  {row.can_decide && (
+                    <div className="flex shrink-0 gap-2 lg:flex-col">
+                      <Button
+                        size="sm"
+                        disabled={busyId === row.id}
+                        onClick={() => void handleApprove(row)}
+                      >
+                        {busyId === row.id ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden />
+                        ) : (
+                          <Check className="mr-1 h-4 w-4" aria-hidden />
+                        )}
+                        {t("budgets.realloc.approuver")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        // Même garde que « Approuver » : ouvrir le refus
+                        // pendant que l'approbation part rapportait un refus
+                        // incompréhensible du serveur.
+                        disabled={busyId === row.id}
+                        onClick={() => setRejecting(row)}
+                      >
+                        <X className="mr-1 h-4 w-4" aria-hidden />
+                        {t("budgets.realloc.refuser")}
+                      </Button>
+                    </div>
                   )}
                 </div>
-
-                {/* Le serveur dit qui tranche (`can_decide`) : demande encore
-                    en attente, rôle décideur, pas son auteur. */}
-                {row.can_decide && (
-                  <div className="flex shrink-0 gap-2 lg:flex-col">
-                    <Button
-                      size="sm"
-                      disabled={busyId === row.id}
-                      onClick={() => void handleApprove(row)}
-                    >
-                      {busyId === row.id ? (
-                        <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden />
-                      ) : (
-                        <Check className="mr-1 h-4 w-4" aria-hidden />
-                      )}
-                      {t("budgets.realloc.approuver")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive hover:text-destructive"
-                      // Même garde que « Approuver » : ouvrir le refus
-                      // pendant que l'approbation part rapportait un refus
-                      // incompréhensible du serveur.
-                      disabled={busyId === row.id}
-                      onClick={() => setRejecting(row)}
-                    >
-                      <X className="mr-1 h-4 w-4" aria-hidden />
-                      {t("budgets.realloc.refuser")}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -242,21 +239,17 @@ function Enveloppe({
   role,
   label,
   disponible,
-  pending,
+  tone,
 }: {
   role: string
   label: string
   disponible: string | null
-  pending: boolean
+  /** Bordure et fond, selon l'état de la demande (`REALLOCATION_FLOW_STYLE`). */
+  tone: string
 }) {
   const { t } = useTranslation()
   return (
-    <div
-      className={cn(
-        "min-w-0 flex-1 rounded-lg border p-2.5",
-        pending ? "border-border/60 bg-card" : "border-border/40 bg-muted/30",
-      )}
-    >
+    <div className={cn("min-w-0 flex-1 rounded-lg border p-2.5", tone)}>
       <p className="text-xs text-muted-foreground">{role}</p>
       <p className="mt-1 truncate text-sm font-semibold">{label}</p>
       {disponible !== null && (
@@ -290,6 +283,13 @@ function ReallocationForm({
     const montant = normalizeDecimal(amount)
     if (montant === null) {
       setError(t("budgets.realloc.montant_requis"))
+      return
+    }
+    // Les enveloppes arrivent parfois après l'ouverture du formulaire : le
+    // choix reste vide tant qu'on n'en a pas nommé une, et un vide ne part
+    // pas au serveur.
+    if (source === "" || target === "") {
+      setError(t("budgets.realloc.enveloppes_requises"))
       return
     }
     if (source === target) {
@@ -326,8 +326,9 @@ function ReallocationForm({
             <NativeSelect
               id="realloc-source"
               value={source}
-              onChange={(e) => setSource(Number(e.target.value))}
+              onChange={(e) => setSource(e.target.value === "" ? "" : Number(e.target.value))}
             >
+              <option value="">{t("budgets.realloc.choisir_enveloppe")}</option>
               {budgets.map((b) => (
                 <option key={b.id} value={b.id}>
                   {t("budgets.realloc.option_source", {
@@ -343,8 +344,9 @@ function ReallocationForm({
             <NativeSelect
               id="realloc-target"
               value={target}
-              onChange={(e) => setTarget(Number(e.target.value))}
+              onChange={(e) => setTarget(e.target.value === "" ? "" : Number(e.target.value))}
             >
+              <option value="">{t("budgets.realloc.choisir_enveloppe")}</option>
               {budgets.map((b) => (
                 <option key={b.id} value={b.id}>
                   {libelle(b)}

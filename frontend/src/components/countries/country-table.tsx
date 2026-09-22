@@ -73,7 +73,7 @@ export function CountryTable({
           />
         </div>
         <div className="flex items-center gap-2">
-          <fieldset className="inline-flex rounded-lg border border-border/60 bg-muted/60 p-0.5 shadow-inner shadow-black/5">
+          <fieldset className="inline-flex rounded-lg border border-border/60 bg-muted/60 p-0.5 shadow-inner shadow-ombre">
             <legend className="sr-only">{t("pays.liste.filtrer_statut")}</legend>
             {STATUS_FILTERS.map((status) => (
               <Button

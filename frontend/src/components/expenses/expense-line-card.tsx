@@ -6,6 +6,8 @@ import { OriginalAmount } from "@/components/expenses/original-amount"
 import { RequestRectification } from "@/components/expenses/request-rectification"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
+import { estDeclaree } from "@/lib/circuit"
+import { WORKFLOW_CARD_STYLE } from "@/lib/status-styles"
 import type { Expense, ExpenseTransitionName } from "@/lib/types"
 import { cn, formatAmount, formatDateIn } from "@/lib/utils"
 
@@ -48,7 +50,7 @@ export function CarteDeLigne({
   // Un brouillon n'a pas encore de constat à montrer : une barre vide se
   // lirait « tout en écart », ce qui serait un contresens. Le montant, lui,
   // s'affiche — voir plus bas.
-  const declaree = expense.status !== "draft"
+  const declaree = estDeclaree(expense.status)
 
   const contexte = [
     formatDateIn(expense.date, expense.country_timezone),
@@ -66,16 +68,7 @@ export function CarteDeLigne({
     : expense.note
 
   return (
-    <li
-      className={cn(
-        "rounded-lg border p-3.5",
-        expense.status === "in_review"
-          ? "border-statut-attente/40 bg-statut-attente/5"
-          : expense.status === "unjustified"
-            ? "border-destructive/30 bg-destructive/5"
-            : "border-border/60",
-      )}
-    >
+    <li className={cn("rounded-lg border p-3.5", WORKFLOW_CARD_STYLE[expense.status])}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

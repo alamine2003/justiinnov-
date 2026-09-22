@@ -286,6 +286,21 @@ DOSSIER_ACTIONS = (
 )
 
 
+def agit_en_auteur(objet, role, username):
+    """Le compte peut-il agir sur ce brouillon comme son auteur ?
+
+    Vrai pour l'auteur, pour le siège — qui agit à découvert, chaque acte
+    journalisé — et sans auteur connu (import, compte disparu). Faux pour
+    un collègue du pays. Seul prédicat de la règle : le service qui refuse
+    (``transitions.exiger_l_auteur_du_brouillon``) et ``allowed_actions``
+    (:func:`peut_saisir`, :func:`dossier_allowed_actions`) le partagent,
+    pour ne jamais diverger.
+    """
+    if role not in COUNTRY_ROLES:
+        return True
+    return not objet.created_by or objet.created_by == username
+
+
 def peut_saisir(action, objet, *, role, username, configuration=None):
     """La saisie ``action`` (modifier, ajouter, déposer, supprimer) est-elle possible ?
 
@@ -309,8 +324,8 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
         )
     if action == "edit":
         # Le siège corrige à découvert ; un collègue du pays, non.
-        return objet.status not in LOCKED_STATUSES and (
-            auteur_ou_anonyme or role not in COUNTRY_ROLES
+        return objet.status not in LOCKED_STATUSES and agit_en_auteur(
+            objet, role, username
         )
     if action == "upload":
         return objet.status not in PROOF_LOCKED_STATUSES
@@ -398,12 +413,19 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
     (:meth:`Dossier.line_counts`), annotés par ``with_totals`` sur une
     liste pour ne pas coûter une requête par dossier.
 
+    Un brouillon de dossier ne se soumet que par son auteur ou par le
+    siège, comme il ne se modifie que par eux
+    (``transitions.exiger_l_auteur_du_brouillon``) : un collègue du pays ne
+    voit pas ``submit``.
+
     Une action proposée peut encore être refusée à l'exécution (400) par
     les règles que le service seul vérifie, parce qu'elles demandent des
     lectures que cette liste ne fait pas : ``submit`` exige une équipe et
-    un manager sur le dossier, et une enveloppe active pour chaque ligne à
-    imputer ; la politique de dépassement se juge au montant consommé. La
-    liste dit ce que le demandeur *peut tenter*, pas ce qui aboutira.
+    un manager sur **chaque ligne** en brouillon
+    (``transitions._exiger_equipe_et_owner``), et une enveloppe active
+    pour chaque ligne à imputer ; la politique de dépassement se juge au
+    montant engagé sur l'enveloppe. La liste dit ce que le demandeur *peut
+    tenter*, pas ce qui aboutira.
     """
     actions = []
     lines = None
@@ -417,6 +439,8 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
         if not can_transition(action, dossier.status, role=role, configuration=configuration):
             continue
         if breaks_four_eyes(action, dossier.created_by, username):
+            continue
+        if action == "submit" and not agit_en_auteur(dossier, role, username):
             continue
         if lines is None:
             lines = dossier.line_counts()

@@ -43,7 +43,9 @@ class TraceDesDepensesTests(ExpenseTestCase):
         expense = self.make_expense(title="Carburant")
         self.login(self.owner)
 
-        with mock.patch("expenses.views.record", side_effect=JOURNAL_INDISPONIBLE), \
+        # La trace d'une modification s'écrit par ``expenses.audit``
+        # (``journaliser_la_modification``), pas par la vue.
+        with mock.patch("expenses.audit.record", side_effect=JOURNAL_INDISPONIBLE), \
                 self.assertRaises(DatabaseError):
             self.client.patch(f"/api/expenses/{expense.pk}/", {"title": "Sans trace"})
 

@@ -82,11 +82,10 @@ class Command(BaseCommand):
                 self.stdout.write(f"  [{alerte['level']}] {alerte['title']}")
                 continue
 
-            cle = (alerte["kind"], country.pk, alerte.get("team"))
+            equipe = triggers.equipe_de_l_alerte(alerte)
+            cle = (alerte["kind"], country.pk, equipe)
             if cle not in destinataires:
-                destinataires[cle] = triggers.audience_for(
-                    alerte["kind"], country, alerte.get("team")
-                )
+                destinataires[cle] = triggers.audience_for(alerte["kind"], country, equipe)
             emises += len(
                 triggers.alert_raised(alerte, country, destinataires[cle])
             )

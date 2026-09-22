@@ -17,6 +17,7 @@ Sans ``SAUVEGARDES_MARQUEURS`` (développement, CI), la commande le dit et
 ne vérifie rien.
 """
 
+import shutil
 from datetime import datetime, timedelta, timezone as fuseaux
 from pathlib import Path
 
@@ -49,6 +50,27 @@ AGES_MAX_HEURES = {"base-physique": 24 * 8}
 SERVICES = {
     "base": "", "base-physique": "", "pieces": "-pieces", "distant": "-distante",
 }
+
+#: Copies hors machine confrontées à leur réussite locale. Le marqueur
+#: ``distant`` ne dit que la base : un miroir de pièces jamais parti, une
+#: sauvegarde physique jamais copiée, ne se voyaient dans aucun marqueur —
+#: et la reprise à un instant donné ne survit à la perte du serveur que si
+#: les segments partent aussi. Chaque famille a désormais le sien
+#: (``sauvegarder.sh``, ``marqueur_distant_de``).
+COPIES = {
+    "pieces": "distant-pieces",
+    "base-physique": "distant-base-physique",
+}
+#: Ce que chaque copie atteste, dans les notifications.
+COPIES_LIBELLES = {
+    "pieces": SAUVEGARDES["pieces"],
+    "base-physique": SAUVEGARDES["base-physique"],
+    "wal": _("les segments de journal archivés"),
+}
+#: Retard toléré entre une réussite locale et sa copie : le service distant
+#: consomme une demande dans la minute, réessaie au quart d'heure ; deux
+#: heures laissent passer une copie longue sans crier pour rien.
+MARGE_DE_COPIE = timedelta(hours=2)
 
 #: Qui est prévenu : ceux qui tiennent l'exploitation.
 DESTINATAIRES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
@@ -91,6 +113,78 @@ def anomalies(dossier, *, age_max, maintenant=None):
         if derniere is None or maintenant - derniere > seuil:
             trouvees.append((quoi, derniere))
     return trouvees
+
+
+def dernier_segment(dossier):
+    """Instant du segment archivé le plus récent, ou ``None`` sans archive.
+
+    C'est la « réussite locale » des segments : Postgres n'écrit pas de
+    marqueur, il dépose un fichier. Un ``.partiel`` est en cours d'écriture
+    et ne compte pas.
+    """
+    try:
+        segments = [
+            fichier for fichier in (Path(dossier) / "base" / "wal").iterdir()
+            if fichier.is_file() and not fichier.name.endswith(".partiel")
+        ]
+    except OSError:
+        return None
+    if not segments:
+        return None
+    plus_recent = max(fichier.stat().st_mtime for fichier in segments)
+    return datetime.fromtimestamp(plus_recent, tz=fuseaux.utc)
+
+
+def retards_de_copie(dossier, *, marge=MARGE_DE_COPIE):
+    """``[(quoi, réussite locale, dernière copie ou None)]`` pour ce qui a
+    réussi ici sans partir là-bas dans la marge.
+
+    Ne dit rien tant que la copie de la base n'a jamais réussi : le marqueur
+    ``distant`` manque alors, et c'est lui qui le signale — quatre
+    notifications pour une seule cause (pas de distant configuré) ne
+    diraient rien de plus.
+    """
+    if lire_marqueur(dossier, "distant") is None:
+        return []
+    trouves = []
+    for local, distant in COPIES.items():
+        ici = lire_marqueur(dossier, local)
+        if ici is None:
+            continue
+        la_bas = lire_marqueur(dossier, distant)
+        if la_bas is None or ici - la_bas > marge:
+            trouves.append((local, ici, la_bas))
+    segment = dernier_segment(dossier)
+    if segment is not None:
+        la_bas = lire_marqueur(dossier, "distant-wal")
+        if la_bas is None or segment - la_bas > marge:
+            trouves.append(("wal", segment, la_bas))
+    return trouves
+
+
+def espace_disque(dossier):
+    """``(libre en %, libre en octets)`` du disque qui porte le volume, ou
+    ``None`` s'il ne se lit pas.
+
+    C'est le disque de la base, de ses segments et des sauvegardes : celui
+    qu'un archivage cassé remplit, et le seul dont le manque arrête tout.
+    """
+    try:
+        usage = shutil.disk_usage(dossier)
+    except OSError:
+        return None
+    if usage.total == 0:
+        return None
+    return usage.free * 100 / usage.total, usage.free
+
+
+def disque_trop_plein(dossier, *, minimum_pourcent):
+    """``(libre en %, libre en octets)`` sous le seuil, sinon ``None``."""
+    etat = espace_disque(dossier)
+    if etat is None:
+        return None
+    pourcent, _ = etat
+    return etat if pourcent < minimum_pourcent else None
 
 
 def archivage_en_panne():
@@ -203,8 +297,28 @@ class Command(BaseCommand):
             if not options["dry_run"]:
                 self._prevenir_de_la_replique(nom, etat, maintenant)
 
+        plein = disque_trop_plein(dossier, minimum_pourcent=settings.SAUVEGARDES_DISQUE_MIN_POURCENT)
+        if plein is not None:
+            pourcent, octets = plein
+            self.stdout.write(self.style.ERROR(
+                f"✘ disque des sauvegardes : {pourcent:.0f} % libre "
+                f"({octets // (1024 * 1024)} Mo), sous {settings.SAUVEGARDES_DISQUE_MIN_POURCENT} %"
+            ))
+            if not options["dry_run"]:
+                self._prevenir_du_disque(pourcent, octets, maintenant)
+
+        retards = retards_de_copie(dossier)
+        for quoi, ici, la_bas in retards:
+            etat = la_bas.isoformat(timespec="minutes") if la_bas else "jamais"
+            self.stdout.write(self.style.ERROR(
+                f"✘ copie hors machine en retard — {quoi} : réussite locale "
+                f"{ici.isoformat(timespec='minutes')}, copiée {etat}"
+            ))
+            if not options["dry_run"]:
+                self._prevenir_du_retard_de_copie(quoi, ici, la_bas, maintenant)
+
         if not trouvees:
-            if panne is None and not replication:
+            if panne is None and not replication and not retards and plein is None:
                 self.stdout.write(self.style.SUCCESS("✔ Sauvegardes à jour."))
             return
 
@@ -238,6 +352,63 @@ class Command(BaseCommand):
                 dedup_key=f"sauvegardes:{jour}:{quoi}",
             )
         self.stdout.write(f"{len(trouvees)} notification(s) émise(s).")
+
+    def _prevenir_du_disque(self, pourcent, octets, maintenant):
+        """Le disque plein n'est pas une panne parmi d'autres : la base
+        s'arrête, et les sauvegardes avec elle."""
+        notify(
+            recipients_for(DESTINATAIRES),
+            kind=Notification.Kind.STORAGE_ERROR,
+            level=Notification.Level.CRITICAL,
+            title=_("Disque du serveur presque plein"),
+            body=format_lazy(
+                _(
+                    # « % d » ressemble à un format Python pour xgettext : sans
+                    # ce drapeau, msgfmt --check refuserait une traduction sans lui.
+                    # xgettext:no-python-format
+                    "Il reste {pourcent} % d'espace libre ({mo} Mo) sur le disque "
+                    "qui porte la base, ses journaux archivés et les sauvegardes. "
+                    "Plein, il arrête la base. Regardez d'abord « docker compose "
+                    "logs db » (un archivage qui échoue garde ses segments) et "
+                    "« docker system df » (deploy/README.md, « Reprise à un "
+                    "instant donné » et « Revenir en arrière »)."
+                ),
+                pourcent=f"{pourcent:.0f}",
+                mo=octets // (1024 * 1024),
+            ),
+            link="/configuration",
+            dedup_key=f"disque:{maintenant.date().isoformat()}",
+        )
+
+    def _prevenir_du_retard_de_copie(self, quoi, ici, la_bas, maintenant):
+        """Une sauvegarde réussie qui reste sur la machine n'en est pas une :
+        elle brûle avec le serveur. La copie de la base partait ; les autres
+        pouvaient échouer chaque nuit sans qu'aucun marqueur ne le dise."""
+        if la_bas is None:
+            detail = _("Aucune copie hors machine n'a jamais abouti pour cette famille.")
+        else:
+            detail = format_lazy(
+                _("Dernière copie hors machine le {quand}, antérieure à la dernière réussite locale."),
+                quand=timezone.localtime(la_bas).strftime("%d/%m/%Y %H:%M"),
+            )
+        notify(
+            recipients_for(DESTINATAIRES),
+            kind=Notification.Kind.STORAGE_ERROR,
+            level=Notification.Level.CRITICAL,
+            title=format_lazy(_("Copie hors machine en retard — {quoi}"), quoi=COPIES_LIBELLES[quoi]),
+            body=format_lazy(
+                _(
+                    "{detail} Réussite locale le {ici}. Tant que la copie ne "
+                    "suit pas, cette sauvegarde brûle avec le serveur. Vérifiez "
+                    "« docker compose logs sauvegarde-distante » (deploy/README.md, "
+                    "« Copie hors machine »)."
+                ),
+                detail=detail,
+                ici=timezone.localtime(ici).strftime("%d/%m/%Y %H:%M"),
+            ),
+            link="/configuration",
+            dedup_key=f"copie:{maintenant.date().isoformat()}:{quoi}",
+        )
 
     def _prevenir_de_l_archivage(self, segment, echoue_a, maintenant):
         """Un archivage cassé ne se contente pas d'interrompre la reprise :

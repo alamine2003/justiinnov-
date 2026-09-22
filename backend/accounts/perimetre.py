@@ -56,7 +56,16 @@ def filtrer(queryset, access, *, pays="country", equipe=None, distinct=False):
     return queryset.distinct() if distinct else queryset
 
 
-def comptes_couvrant(users, country, equipe=None):
+#: Valeur d'``equipe`` pour une ressource qui ne se cloisonne pas par
+#: équipe — une enveloppe, une alerte de pays — : tout manager du pays la
+#: voit. Distincte de ``None``, qui dit « la ressource se cloisonne, mais
+#: n'a pas d'équipe » : un dossier sans équipe échappe aux managers
+#: rattachés à des équipes (voir le module), qui ne doivent donc pas en
+#: être prévenus.
+PAYS_ENTIER = object()
+
+
+def comptes_couvrant(users, country, equipe=PAYS_ENTIER):
     """Les comptes de ``users`` dont le périmètre contient ``country``.
 
     La réciproque de :func:`filtrer`, lue depuis l'objet : rattaché au pays
@@ -64,15 +73,16 @@ def comptes_couvrant(users, country, equipe=None):
     porte une —, ou rôle du siège sans restriction, ou rôle toujours global.
     Les deux conditions sur ``teams`` tiennent dans le même ``filter`` :
     elles portent sur la même jointure, donc « aucune équipe » ou « cette
-    équipe », jamais « une autre équipe ».
+    équipe », jamais « une autre équipe ». Une ressource cloisonnée sans
+    équipe (``equipe=None``) n'atteint que les managers sans équipe : les
+    autres ne pourraient pas l'ouvrir.
     """
     dans_le_pays = Q(profile__countries=country)
-    if equipe is not None:
-        dans_le_pays &= (
-            ~Q(profile__role=Role.MANAGER)
-            | Q(profile__teams__isnull=True)
-            | Q(profile__teams=equipe)
-        )
+    if equipe is not PAYS_ENTIER:
+        cloisonne = ~Q(profile__role=Role.MANAGER) | Q(profile__teams__isnull=True)
+        if equipe is not None:
+            cloisonne |= Q(profile__teams=equipe)
+        dans_le_pays &= cloisonne
     return users.filter(
         dans_le_pays
         | Q(profile__role__in=HEADQUARTERS_ROLES, profile__countries__isnull=True)

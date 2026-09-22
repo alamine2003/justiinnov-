@@ -7,7 +7,8 @@ from budget.aggregates import budget_figures, convert
 from budget.models import ExchangeRate
 from rest_framework import status
 
-from expenses.models import Expense
+from core.models import Country
+from expenses.models import Dossier, Expense
 
 from .base import ExpenseTestCase
 
@@ -211,3 +212,72 @@ class DeviseDuDecaissementTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("amount", response.data)
+
+
+class JourDuTauxTests(ExpenseTestCase):
+    """Le taux est celui du jour de la dépense — le jour **du pays**, et
+    à nouveau figé quand la date change seule."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Djibouti : UTC+3. Compte en francs pour que la conversion depuis
+        # l'euro ne demande qu'un taux.
+        cls.djibouti = Country.objects.create(
+            name="Djibouti", code="DJ", country_ref="DJ-03",
+            currency="XOF", timezone="Africa/Djibouti",
+        )
+        cls.dossier_dj = Dossier.objects.create(
+            number="DJ-0001", label="Mission Djibouti", country=cls.djibouti,
+            date=date(cls.year, 6, 1), created_by=cls.doo.username,
+        )
+
+    def setUp(self):
+        super().setUp()
+        ExchangeRate.objects.create(
+            currency="EUR", rate_to_xof=Decimal("655.957000"), valid_from=date(self.year, 1, 1)
+        )
+        ExchangeRate.objects.create(
+            currency="EUR", rate_to_xof=Decimal("700.000000"), valid_from=date(self.year, 6, 1)
+        )
+        self.login(self.doo)
+
+    def test_le_taux_se_cherche_au_jour_du_pays(self):
+        """Le 31 mai à 22:00 UTC, il est déjà le 1er juin à Djibouti : c'est
+        le taux du 1er juin qui s'applique, comme à l'import."""
+        response = self.client.post(
+            "/api/expenses/",
+            {
+                "dossier": self.dossier_dj.pk, "country": self.djibouti.pk,
+                "date": f"{self.year}-05-31T22:00:00Z", "title": "Hôtel",
+                "original_currency": "EUR", "original_amount": "100.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["amount"], "70000.00")
+        self.assertEqual(response.data["original_rate"], "700.000000")
+
+    def test_un_patch_de_la_date_seule_recalcule_la_conversion(self):
+        ligne = self.client.post(
+            "/api/expenses/",
+            {
+                "dossier": self.dossier.pk, "country": self.togo.pk,
+                "date": f"{self.year}-03-15T10:00:00Z", "title": "Hôtel",
+                "original_currency": "EUR", "original_amount": "100.00",
+            },
+            format="json",
+        ).data
+        self.assertEqual(ligne["amount"], "65595.70")
+
+        response = self.client.patch(
+            f"/api/expenses/{ligne['id']}/", {"date": f"{self.year}-09-15T10:00:00Z"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["amount"], "70000.00")
+        self.assertEqual(response.data["original_rate"], "700.000000")
+        self.assertEqual(response.data["original_amount"], "100.00")
+        self.assertEqual(response.data["original_currency"], "EUR")

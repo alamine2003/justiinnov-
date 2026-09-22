@@ -35,7 +35,7 @@ function FullPageLoader() {
 
 function Protected({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
-  const { isAuthenticated, me, loadingProfile, profileError, refreshProfile } = useAuth()
+  const { isAuthenticated, me, loadingProfile, profileError, refreshProfile, logout } = useAuth()
   const location = useLocation()
 
   if (!isAuthenticated) {
@@ -46,19 +46,34 @@ function Protected({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen items-center justify-center p-6">
         <div role="alert" className="max-w-md space-y-3 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
           <p>{profileError}</p>
-          <button
-            type="button"
-            className="underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => void refreshProfile().catch(() => {})}
-          >
-            {t("commun.reessayer")}
-          </button>
+          <div className="flex flex-wrap gap-4">
+            <button
+              type="button"
+              className="underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => void refreshProfile().catch(() => {})}
+            >
+              {t("commun.reessayer")}
+            </button>
+            {/* Un refus du serveur sur le profil (403) ne vide plus la
+                session : il faut une porte de sortie, puisque le menu du
+                compte ne se rend qu'avec un profil. */}
+            <button
+              type="button"
+              className="underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => void logout()}
+            >
+              {t("nav.deconnexion")}
+            </button>
+          </div>
         </div>
       </div>
     )
   }
   // Attendre le profil évite d'afficher brièvement des actions interdites.
-  if (!me || loadingProfile) {
+  // Seule son absence ferme l'écran : une relecture en arrière-plan
+  // (`refreshProfile` après un réglage) ne démonte rien — elle emportait
+  // l'état des pages, et une confirmation « Enregistré » avec.
+  if (!me) {
     return <FullPageLoader />
   }
   // Un mot de passe provisoire ne mène qu'à l'écran qui le remplace : le

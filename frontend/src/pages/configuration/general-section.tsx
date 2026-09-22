@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
-import { useAuth } from "@/context/use-auth"
 import { fetchConfiguration, updateWorkflowConfiguration } from "@/lib/accounts"
 import { ApiError, type FieldErrors } from "@/lib/api"
 import { BRAND } from "@/lib/brand"
@@ -24,7 +23,6 @@ import { Chargement, Erreur } from "@/pages/configuration/section-states"
 
 export function GeneralSection() {
   const { t } = useTranslation()
-  const { refreshProfile } = useAuth()
   const query = useQuery("configuration:page", () => fetchConfiguration())
   const config = query.data
 
@@ -120,11 +118,10 @@ export function GeneralSection() {
         onSaved={async (workflow) => {
           query.setData((current) => (current ? { ...current, workflow } : current))
           // Les autres écrans (formulaire d'enveloppe, dépôt de pièce) lisent
-          // la configuration en cache.
+          // la configuration en cache. Le profil, lui, n'a pas à être relu :
+          // rien à l'écran ne lit `me.workflow`, et chaque action vient de
+          // `allowed_actions`, calculé par le serveur à la requête suivante.
           invalidateReferentiel("configuration")
-          // Le profil porte la politique du circuit (`me.workflow`) : les
-          // boutons d'action la lisent, elle doit suivre sans rechargement.
-          await refreshProfile()
         }}
       />
 

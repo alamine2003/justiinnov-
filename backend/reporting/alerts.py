@@ -19,10 +19,12 @@ from django.utils import timezone
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
-from budget.aggregates import budget_figures
+from budget.aggregates import budget_figures, seuil_d_alerte
+from core.models import Country, WorkflowConfiguration
 from expenses.models import Proof
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
-from core.models import WorkflowConfiguration
+
+from .scope import fuseau_de
 
 ZERO = Decimal("0.00")
 
@@ -59,11 +61,13 @@ def _pourcentage(part, total):
 
 def budget_alerts(budgets):
     """Seuils de consommation franchis et dépassements (§8)."""
-    thresholds = sorted(WorkflowConfiguration.charger().alert_thresholds, reverse=True)
+    configuration = WorkflowConfiguration.charger()
+    thresholds = sorted(configuration.alert_thresholds, reverse=True)
+    seuil = seuil_d_alerte(configuration)
     alerts = []
 
     for budget in budgets:
-        figures = budget_figures(budget)
+        figures = budget_figures(budget, seuil=seuil)
         used = figures["consumed"] + figures["engaged"]
         if not used and not budget.amount:
             continue
@@ -136,10 +140,15 @@ def proof_alerts(dossiers):
     if delay:
         # Le délai de grâce s'applique dans la requête : le tester en mémoire
         # obligeait à charger — et à annoter — tous les dossiers récents pour
-        # les écarter ensuite un à un.
-        pending = pending.filter(
-            date__lte=timezone.now().date() - timedelta(days=delay)
-        )
+        # les écarter ensuite un à un. Il se compte à la date **du pays** :
+        # un dossier de Djibouti daté d'hier ne l'est qu'à l'heure de
+        # Djibouti, pas à celle du serveur (``scope.fuseau_de``).
+        maintenant = timezone.now()
+        echus = Q()
+        for country in Country.objects.filter(pk__in=pending.values("country_id")):
+            aujourd_hui = maintenant.astimezone(fuseau_de(country)).date()
+            echus |= Q(country=country, date__lte=aujourd_hui - timedelta(days=delay))
+        pending = pending.filter(echus) if echus else pending.none()
     pending = pending.annotate(
         usable_proofs=Count(
             "proofs",

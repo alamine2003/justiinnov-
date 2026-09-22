@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { ApiError } from "@/lib/api"
 import {
   fetchNotifications,
   fetchUnreadCount,
@@ -55,13 +56,20 @@ export function NotificationBell() {
     // chacun. Le compteur se remet à jour au retour.
     let active = true
     let timer: number | null = null
+    // Le serveur a demandé un répit (`Retry-After` d'un 503 ou d'un 429) :
+    // les sondages qui tombent avant cette date sont sautés.
+    let repitJusqua = 0
     const poll = () => {
+      if (Date.now() < repitJusqua) return
       fetchUnreadCount()
         .then(({ unread: count }) => {
           if (active) setUnread(count)
         })
-        .catch(() => {
-          // Voir `refreshCount`.
+        .catch((e: unknown) => {
+          // Un compteur indisponible ne doit pas perturber la navigation.
+          if (e instanceof ApiError && e.retryAfter) {
+            repitJusqua = Date.now() + e.retryAfter * 1000
+          }
         })
     }
     const start = () => {
@@ -203,10 +211,13 @@ export function NotificationBell() {
                       <div className="min-w-0 flex-1">
                         <p className="flex items-center gap-1.5 text-sm font-medium">
                           {KindIcon && (
-                            <KindIcon
-                              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                              aria-label={notification.kind_display}
-                            />
+                            <>
+                              <KindIcon
+                                className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                aria-hidden
+                              />
+                              <span className="sr-only">{notification.kind_display}</span>
+                            </>
                           )}
                           {notification.title}
                         </p>

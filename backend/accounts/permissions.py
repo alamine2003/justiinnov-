@@ -106,6 +106,21 @@ def get_access(user):
 COUNTRY_ROLES = frozenset({Role.MANAGER})
 
 
+def peut_conferer_le_role(acteur, role):
+    """L'acteur peut-il donner ``role`` à un compte — ou agir sur un compte qui le porte ?
+
+    Le rôle de super administrateur ne se touche qu'entre pairs : un
+    administrateur qui pourrait créer, modifier ou réinitialiser un super
+    administrateur — ou s'attribuer le rôle — aurait de fait tous les
+    droits. Unique prédicat, partagé par la gestion des comptes (le refus)
+    et la matrice des droits (``assignable``, ce que l'interface propose).
+    Sans rôle visé (compte sans profil), rien ne s'oppose.
+    """
+    if acteur is None:
+        return False
+    return role != Role.SUPER_ADMIN or acteur.role == Role.SUPER_ADMIN
+
+
 # --- Matrice des capacités ---------------------------------------------------
 
 _ADMINISTRATEURS = frozenset({Role.SUPER_ADMIN, Role.ADMIN})

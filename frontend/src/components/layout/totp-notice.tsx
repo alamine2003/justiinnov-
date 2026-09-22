@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import i18next from "i18next"
 import { Check, Copy, Loader2, ShieldCheck } from "lucide-react"
@@ -43,14 +43,18 @@ export function TotpNotice() {
   const aEnroler = me?.totp_confirmed === false
   const imposee = totpEnrolmentRequired(me)
 
-  // Un seul enrôlement par écran : chaque appel régénère le secret, et un
+  // Un seul enrôlement par montage : chaque appel régénère le secret, et un
   // QR remplacé sous les yeux de la personne — à un changement de langue,
   // par exemple — n'aurait plus rien à voir avec ce que son application a
-  // scanné. `t` reste donc hors des dépendances.
+  // scanné. `t` reste donc hors des dépendances, et la demande vit dans une
+  // référence : `StrictMode` rejoue l'effet au montage, la seconde passe
+  // retrouve la même promesse au lieu d'en lancer une autre.
+  const demande = useRef<Promise<TotpEnrolment> | null>(null)
   useEffect(() => {
     if (!aEnroler) return
     let active = true
-    enrolTwoFactor()
+    demande.current ??= enrolTwoFactor()
+    demande.current
       .then((data) => {
         if (active) setEnrolment(data)
       })

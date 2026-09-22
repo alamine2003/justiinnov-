@@ -8088,6 +8088,15 @@
                         "readOnly": true,
                         "nullable": true
                     },
+                    "execution_level": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ExecutionLevelEnum"
+                            }
+                        ],
+                        "readOnly": true,
+                        "description": "« exceeded » au-delà de 100 %, « warning » dès le dernier seuil d'alerte sous 100, « ok » sinon.\n\n* `ok` - ok\n* `warning` - warning\n* `exceeded` - exceeded"
+                    },
                     "justification_rate": {
                         "type": "string",
                         "format": "decimal",
@@ -8117,6 +8126,7 @@
                     "gap",
                     "remaining",
                     "execution_rate",
+                    "execution_level",
                     "justification_rate",
                     "amount_xof",
                     "remaining_xof"
@@ -9358,6 +9368,15 @@
                         "readOnly": true,
                         "nullable": true
                     },
+                    "execution_level": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ExecutionLevelEnum"
+                            }
+                        ],
+                        "readOnly": true,
+                        "description": "« exceeded » au-delà de 100 %, « warning » dès le dernier seuil d'alerte sous 100, « ok » sinon.\n\n* `ok` - ok\n* `warning` - warning\n* `exceeded` - exceeded"
+                    },
                     "justification_rate": {
                         "type": "string",
                         "format": "decimal",
@@ -9386,6 +9405,7 @@
                     "gap",
                     "remaining",
                     "execution_rate",
+                    "execution_level",
                     "justification_rate",
                     "remaining_xof"
                 ]
@@ -9442,6 +9462,15 @@
                         "readOnly": true,
                         "nullable": true
                     },
+                    "execution_level": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ExecutionLevelEnum"
+                            }
+                        ],
+                        "readOnly": true,
+                        "description": "« exceeded » au-delà de 100 %, « warning » dès le dernier seuil d'alerte sous 100, « ok » sinon.\n\n* `ok` - ok\n* `warning` - warning\n* `exceeded` - exceeded"
+                    },
                     "justification_rate": {
                         "type": "string",
                         "format": "decimal",
@@ -9467,6 +9496,7 @@
                     "gap",
                     "remaining",
                     "execution_rate",
+                    "execution_level",
                     "justification_rate",
                     "unconverted_currencies"
                 ]
@@ -10064,6 +10094,10 @@
                         "format": "date-time",
                         "readOnly": true,
                         "title": "Créé le"
+                    },
+                    "is_current": {
+                        "type": "boolean",
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -10071,7 +10105,8 @@
                     "currency",
                     "rate_to_xof",
                     "valid_from",
-                    "created_at"
+                    "created_at",
+                    "is_current"
                 ]
             },
             "ExchangeRateRequest": {
@@ -10102,6 +10137,15 @@
                     "rate_to_xof",
                     "valid_from"
                 ]
+            },
+            "ExecutionLevelEnum": {
+                "enum": [
+                    "ok",
+                    "warning",
+                    "exceeded"
+                ],
+                "type": "string",
+                "description": "* `ok` - ok\n* `warning` - warning\n* `exceeded` - exceeded"
             },
             "Expense": {
                 "type": "object",
@@ -11572,6 +11616,13 @@
                         ],
                         "readOnly": true
                     },
+                    "alert_thresholds": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "readOnly": true
+                    },
                     "supervision": {
                         "type": "boolean",
                         "readOnly": true
@@ -11594,6 +11645,7 @@
                     "language",
                     "permissions",
                     "workflow",
+                    "alert_thresholds",
                     "supervision"
                 ]
             },
@@ -12818,6 +12870,7 @@
             },
             "PatchedProjectRequest": {
                 "type": "object",
+                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
                 "properties": {
                     "country": {
                         "type": "integer",
@@ -12880,6 +12933,7 @@
             },
             "PatchedTeamRequest": {
                 "type": "object",
+                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
                 "properties": {
                     "country": {
                         "type": "integer",
@@ -13120,13 +13174,18 @@
                     "always_global": {
                         "type": "boolean",
                         "readOnly": true
+                    },
+                    "assignable": {
+                        "type": "boolean",
+                        "readOnly": true
                     }
                 },
                 "required": [
                     "value",
                     "label",
                     "siege",
-                    "always_global"
+                    "always_global",
+                    "assignable"
                 ]
             },
             "Permissions": {
@@ -13324,6 +13383,7 @@
             },
             "Project": {
                 "type": "object",
+                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -13396,6 +13456,7 @@
             },
             "ProjectRequest": {
                 "type": "object",
+                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
                 "properties": {
                     "country": {
                         "type": "integer",
@@ -13985,6 +14046,7 @@
             },
             "Team": {
                 "type": "object",
+                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -14036,6 +14098,7 @@
             },
             "TeamRequest": {
                 "type": "object",
+                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
                 "properties": {
                     "country": {
                         "type": "integer",

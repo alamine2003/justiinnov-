@@ -134,3 +134,58 @@ class NotificationsTests(EquipeTestCase):
         budgets = querysets_pour(get_access(self.manager_lome), self.year)[0]
 
         self.assertEqual(budgets.get(pk=self.budget.pk).amount, Decimal("1000000.00"))
+
+
+class DossierSansEquipeTests(EquipeTestCase):
+    """Un dossier sans équipe échappe aux managers rattachés à des équipes :
+    ils n'en sont pas prévenus, puisqu'ils ne pourraient pas l'ouvrir."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.dossier_sans_equipe = Dossier.objects.create(
+            number="N-SANS", label="Sans équipe", country=cls.togo,
+            team=None, owner=cls.manager, date=date(cls.year, 5, 1),
+            status=Status.SUBMITTED, created_by=cls.owner.username,
+        )
+        cls.make_expense(
+            cls, dossier=cls.dossier_sans_equipe, team=None, amount="1000.00",
+            status=Status.SUBMITTED, budget=cls.budget,
+        )
+
+    def _liens(self, user):
+        return set(
+            Notification.objects.filter(recipient=user).values_list("link", flat=True)
+        )
+
+    def test_le_manager_cloisonne_n_est_pas_prevenu(self):
+        call_command("notify_alerts", year=self.year, verbosity=0)
+
+        self.assertNotIn(f"/dossiers/{self.dossier_sans_equipe.pk}", self._liens(self.manager_lome))
+        # L'alerte d'enveloppe, par pays, lui parvient toujours.
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.manager_lome, kind=Notification.Kind.BUDGET_OVERRUN
+            ).exists()
+        )
+
+    def test_le_manager_sans_equipe_et_le_siege_le_sont(self):
+        call_command("notify_alerts", year=self.year, verbosity=0)
+
+        self.assertIn(f"/dossiers/{self.dossier_sans_equipe.pk}", self._liens(self.owner))
+        self.assertIn(f"/dossiers/{self.dossier_sans_equipe.pk}", self._liens(self.controller))
+
+    def test_comptes_couvrant_distingue_sans_equipe_et_pays_entier(self):
+        from django.contrib.auth.models import User
+
+        from accounts.perimetre import PAYS_ENTIER, comptes_couvrant
+
+        managers = User.objects.filter(profile__role=Role.MANAGER)
+
+        pays_entier = set(comptes_couvrant(managers, self.togo))
+        pays_entier_explicite = set(comptes_couvrant(managers, self.togo, PAYS_ENTIER))
+        sans_equipe = set(comptes_couvrant(managers, self.togo, None))
+
+        self.assertEqual(pays_entier, {self.owner, self.manager_lome})
+        self.assertEqual(pays_entier_explicite, pays_entier)
+        self.assertEqual(sans_equipe, {self.owner})

@@ -27,7 +27,7 @@ from accounts.permissions import get_access
 from budget import transitions
 from budget.models import Budget, BudgetReallocation, ExchangeRate, OverrunPolicy
 from budget.serializers import BudgetReallocationSerializer, BudgetSerializer
-from core.models import Country, Manager, Project, Team
+from core.models import Country, Manager, Project, Team, WorkflowConfiguration
 from core.regles import HorsPerimetre
 from expenses.models import Dossier, Expense
 from expenses.workflow import Status
@@ -467,6 +467,10 @@ class ExchangeRateTests(BudgetTestCase):
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             return len(captured.captured_queries)
 
+        # La configuration (seuil d'alerte d'``execution_level``) se lit une
+        # fois par requête, depuis le cache : mise en cache d'abord, pour que
+        # la mesure ne compte que les taux.
+        WorkflowConfiguration.charger()
         peu = requetes()
 
         for nom in ("Salon Abidjan", "Congrès Yamoussoukro", "Tournée Bouaké"):
@@ -1074,7 +1078,9 @@ class SubEnvelopeTests(BudgetTestCase):
             "amount": "100000.00",
         }
         payload.update(dimension)
-        return self.client.post("/api/budgets/", payload)
+        # En JSON, comme l'interface : en formulaire, DRF lit un booléen
+        # absent (``is_active``) comme faux, et l'enveloppe naîtrait inactive.
+        return self.client.post("/api/budgets/", payload, format="json")
 
     def test_sous_enveloppe_par_equipe(self):
         response = self._creer(team=self.equipe.pk)

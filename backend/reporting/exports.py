@@ -37,7 +37,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from budget.aggregates import budget_figures
+from budget.aggregates import budget_figures, seuil_d_alerte
 from core.statuts import Status
 from expenses.models import Proof
 
@@ -240,8 +240,10 @@ def tableaux_rapprochement(budgets, dossiers):
     enveloppes = Tableau("Rapprochement budgets", RECONCILIATION_COLUMNS)
     totaux = {k: ZERO for k in ("amount", "engaged", "consumed", "justified", "gap", "remaining")}
     devises = set()
+    # Le seuil d'alerte se lit une fois par export, pas par enveloppe.
+    seuil = seuil_d_alerte()
     for budget in budgets:
-        figures = budget_figures(budget)
+        figures = budget_figures(budget, seuil=seuil)
         rate = figures["justification_rate"]
         devises.add(budget.country.currency)
         totaux["amount"] += budget.amount
@@ -459,8 +461,9 @@ def build_country_report_pdf(budgets, dossiers, expenses, periode):
         _("Pays"), _("Enveloppe"), _("Budget"), _("Engagé"), _("Consommé"),
         _("Justifié"), _("Disponible"),
     ]]
+    seuil = seuil_d_alerte()
     for budget in budgets:
-        figures = budget_figures(budget)
+        figures = budget_figures(budget, seuil=seuil)
         budget_rows.append([
             budget.country.name,
             budget.scope_label or _("Enveloppe du pays"),

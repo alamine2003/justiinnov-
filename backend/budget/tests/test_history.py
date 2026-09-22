@@ -51,12 +51,15 @@ class BudgetHistoryTests(BudgetTestCase):
         from core.models import Project
 
         projet = Project.objects.create(country=self.togo, name="Projet")
+        # En JSON, comme l'interface : en formulaire, DRF lit un booléen
+        # absent (``is_active``) comme faux, et l'enveloppe naîtrait inactive.
         cible = self.client.post(
             "/api/budgets/",
             {
                 "country": self.togo.pk, "year": self.budget_togo.year,
                 "project": projet.pk, "amount": "0.00",
             },
+            format="json",
         ).data["id"]
 
         self.client.post(
@@ -75,12 +78,15 @@ class BudgetHistoryTests(BudgetTestCase):
         from core.models import Project
 
         projet = Project.objects.create(country=self.togo, name="Projet")
+        # En JSON, comme l'interface : en formulaire, DRF lit un booléen
+        # absent (``is_active``) comme faux, et l'enveloppe naîtrait inactive.
         cible = self.client.post(
             "/api/budgets/",
             {
                 "country": self.togo.pk, "year": self.budget_togo.year,
                 "project": projet.pk, "amount": "0.00",
             },
+            format="json",
         ).data["id"]
         realloc = self.client.post(
             "/api/reallocations/",

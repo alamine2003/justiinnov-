@@ -40,6 +40,20 @@ EXEMPT_URL_NAMES = TOUJOURS_OUVERTES | {"me", "change-password"}
 TOTP_EXEMPT_URL_NAMES = EXEMPT_URL_NAMES | {"totp-enrol", "totp-confirm"}
 
 
+def totp_exige_pour(profile):
+    """La politique de la plateforme s'applique-t-elle à ce compte ?
+
+    Vrai pour tous quand ``DJANGO_TOTP_REQUIRED`` vaut 1 ; sinon pour les
+    seuls rôles de ``DJANGO_TOTP_REQUIRED_ROLES`` (décision 86). C'est la
+    politique, pas l'état du compte : ``totp_confirmed`` dit s'il l'a
+    satisfaite. Un seul endroit la calcule, pour le verrou, l'admin Django
+    et ``GET /api/me/`` — trois lectures qui divergeraient sinon.
+    """
+    if settings.TOTP_REQUIRED:
+        return True
+    return bool(profile) and profile.role in settings.TOTP_REQUIRED_ROLES
+
+
 class ProvisionalPasswordMiddleware:
     """Ferme la plateforme aux comptes sans profil, au mot de passe provisoire
     ou sans double authentification confirmée.
@@ -125,7 +139,7 @@ class ProvisionalPasswordMiddleware:
                 status=403,
             )
         if (
-            settings.TOTP_REQUIRED
+            totp_exige_pour(profile)
             and not profile.totp_confirmed
             and match.url_name not in TOTP_EXEMPT_URL_NAMES
         ):
@@ -162,7 +176,7 @@ class ProvisionalPasswordMiddleware:
         if profile is None:
             return None
         ferme = profile.must_change_password or (
-            settings.TOTP_REQUIRED and not profile.totp_confirmed
+            totp_exige_pour(profile) and not profile.totp_confirmed
         )
         if ferme:
             return HttpResponseRedirect(settings.APP_BASE_URL or "/")

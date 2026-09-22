@@ -21,9 +21,11 @@ from budget.aggregates import (
     convert,
     current_rates,
     date_de_reference,
+    niveau_d_execution,
+    seuil_d_alerte,
 )
 from budget.models import Budget, ExchangeRate
-from core.models import Country, Project
+from core.models import Country, Project, WorkflowConfiguration
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
 
@@ -308,3 +310,103 @@ class TauxCroiseTests(ExpenseTestCase):
         montant, taux = convert(Decimal("100.00"), "EUR", "XOF", aujourd_hui)
 
         self.assertEqual((montant, taux), (Decimal("65595.70"), Decimal("655.957000")))
+
+
+class NiveauDExecutionTests(ExpenseTestCase):
+    """``execution_level`` : le taux jugé côté serveur, contre les seuils
+    d'alerte de la configuration, pour que l'interface colore sans les
+    recopier."""
+
+    def _configurer(self, seuils):
+        configuration = WorkflowConfiguration.charger()
+        configuration.alert_thresholds = seuils
+        configuration.save()
+
+    def test_le_niveau_suit_le_dernier_seuil_sous_cent(self):
+        self._configurer([70, 90, 100])
+        seuil = seuil_d_alerte()
+
+        self.assertEqual(seuil, 90)
+        self.assertEqual(niveau_d_execution(Decimal("0.85"), seuil), "ok")
+        self.assertEqual(niveau_d_execution(Decimal("0.90"), seuil), "warning")
+        self.assertEqual(niveau_d_execution(Decimal("1.01"), seuil), "exceeded")
+        self.assertEqual(niveau_d_execution(None, seuil), "ok")
+
+    def test_sans_seuil_sous_cent_le_repli_est_quatre_vingts(self):
+        self._configurer([100, 120])
+
+        self.assertEqual(seuil_d_alerte(), 80)
+        self.assertEqual(niveau_d_execution(Decimal("0.79")), "ok")
+        self.assertEqual(niveau_d_execution(Decimal("0.80")), "warning")
+
+    def test_le_niveau_est_publie_partout_ou_le_taux_l_est(self):
+        """Enveloppe, ligne de pays du tableau de bord, totaux consolidés :
+        chacun porte ``execution_level`` à côté d'``execution_rate``."""
+        self._configurer([70, 90, 100])
+        # 950 000 consommés sur 1 000 000 : 95 %, au-dessus de 90.
+        self.make_expense(amount="950000.00", status=Status.JUSTIFIED, budget=self.budget)
+        self.login(self.doo)
+
+        enveloppe = self.client.get(f"/api/budgets/{self.budget.pk}/").data["figures"]
+        tableau = self.client.get("/api/dashboard/", {"year": self.year, "country": self.togo.pk}).data
+
+        self.assertEqual(enveloppe["execution_rate"], "0.9500")
+        self.assertEqual(enveloppe["execution_level"], "warning")
+        self.assertEqual(tableau["countries"][0]["execution_level"], "warning")
+        self.assertEqual(tableau["totals"]["execution_level"], "warning")
+
+
+class TauxCourantTests(ExpenseTestCase):
+    """``is_current`` : le taux applicable aujourd'hui, jamais un taux futur."""
+
+    def test_le_taux_du_jour_est_courant_et_le_futur_ne_l_est_pas(self):
+        aujourd_hui = timezone.localdate()
+        ancien = ExchangeRate.objects.create(
+            currency="EUR", rate_to_xof=Decimal("650.000000"),
+            valid_from=aujourd_hui - timedelta(days=30),
+        )
+        courant = ExchangeRate.objects.create(
+            currency="EUR", rate_to_xof=Decimal("655.957000"), valid_from=aujourd_hui
+        )
+        # L'API refuse une date future : le cas ne peut venir que de la base.
+        futur = ExchangeRate.objects.create(
+            currency="EUR", rate_to_xof=Decimal("700.000000"),
+            valid_from=aujourd_hui + timedelta(days=1),
+        )
+        self.login(self.doo)
+
+        response = self.client.get("/api/exchange-rates/", {"currency": "EUR"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        courants = {row["id"]: row["is_current"] for row in response.data["results"]}
+        self.assertEqual(courants, {ancien.pk: False, courant.pk: True, futur.pk: False})
+
+
+class EnveloppeInactiveHorsDesTotauxTests(ExpenseTestCase):
+    """Une enveloppe désactivée sort de la consolidation comme du tableau
+    de bord : deux écrans, un chiffre."""
+
+    def setUp(self):
+        super().setUp()
+        Budget.objects.filter(pk=self.budget_ivoire.pk).update(is_active=False)
+        self.login(self.doo)
+
+    def test_la_consolidation_et_le_tableau_de_bord_l_ignorent(self):
+        summary = self.client.get("/api/budgets/summary/", {"year": self.year})
+        dashboard = self.client.get("/api/dashboard/", {"year": self.year})
+
+        self.assertEqual([r["country_ref"] for r in summary.data["countries"]], ["TG-02"])
+        self.assertEqual([r["country_ref"] for r in dashboard.data["countries"]], ["TG-02"])
+        self.assertEqual(summary.data["total_remaining_xof"], "1000000.00")
+        self.assertEqual(dashboard.data["totals"]["allocated"], "1000000.00")
+        self.assertEqual(
+            summary.data["countries"][0]["remaining"],
+            dashboard.data["countries"][0]["remaining"],
+        )
+
+    def test_elle_reste_lisible_quand_on_la_demande(self):
+        summary = self.client.get(
+            "/api/budgets/summary/", {"year": self.year, "is_active": "false"}
+        )
+
+        self.assertEqual([r["country_ref"] for r in summary.data["countries"]], ["CT-01"])

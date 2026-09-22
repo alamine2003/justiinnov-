@@ -469,3 +469,46 @@ class LimiteDuMotDePasseTests(ScopingTestCase):
 
         self.assertEqual(codes[:10], [status.HTTP_400_BAD_REQUEST] * 10)
         self.assertEqual(codes[10], status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+class AdresseUniqueTests(ScopingTestCase):
+    """Deux comptes ne se partagent pas une adresse, quelle qu'en soit la casse."""
+
+    def setUp(self):
+        super().setUp()
+        self.login(self.siege)
+
+    def _creer(self, username, email):
+        return self.client.post(
+            "/api/users/",
+            {"username": username, "email": email, "password": MOT_DE_PASSE,
+             "role": Role.MANAGER, "countries": [self.togo.pk]},
+            format="json",
+        )
+
+    def test_la_meme_adresse_en_majuscules_est_refusee(self):
+        response = self._creer("kofi.togo", "Togo.Innov@InnovPharma.net")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("email", response.data)
+        self.assertFalse(User.objects.filter(username="kofi.togo").exists())
+
+    def test_une_adresse_libre_passe(self):
+        response = self._creer("kofi.togo", "kofi.togo@innovpharma.net")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_un_compte_garde_sa_propre_adresse(self):
+        response = self.client.patch(
+            f"/api/users/{self.rep_togo.pk}/", {"email": "TOGO.innov@innovpharma.net"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_un_compte_ne_prend_pas_l_adresse_d_un_autre(self):
+        response = self.client.patch(
+            f"/api/users/{self.rep_togo.pk}/", {"email": "DM.innov@innovpharma.net"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("email", response.data)

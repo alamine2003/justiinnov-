@@ -437,8 +437,150 @@ jobs:
             sh -n "$script" || { echo "::error::$script : syntaxe invalide"; exit 1; }
           done
 
+      - name: shellcheck
+        # `sh -n` ne voit qu'une syntaxe invalide. shellcheck voit une variable
+        # jamais définie, un `$?` lu après la mauvaise commande, un test
+        # toujours vrai — ce qu'un script de sauvegarde ne doit pas cacher
+        # jusqu'à la nuit où il sert. Au niveau `error` : les avertissements
+        # de style, dans 3 000 lignes de shell, noieraient les vrais.
+        run: shellcheck --severity=error deploy/*.sh deploy/justi-livrer deploy/tests/*.sh
+
       - name: Tests de sauvegarder.sh
         run: sh deploy/tests/test_sauvegarder.sh
+
+  pile:
+    name: Pile de production — archivage et reprise
+    runs-on: ubuntu-latest
+    # Le travail « Parcours complet » joue la pile de développement, jamais
+    # `deploy/docker-compose.prod.yml`. Trois défauts de la reprise à un
+    # instant donné ont vécu là, invisibles à tout test statique et à tout
+    # banc sans Docker : un volume que Postgres ne pouvait pas écrire (chaque
+    # archivage échouait, les segments s'accumulaient dans `pg_wal`), un
+    # script de reprise monté nulle part, un service qui tournait en root
+    # là où `pg_ctl` le refuse. Ce travail fait ce qu'un exploitant ferait
+    # un jour de sinistre, sur la pile livrée : archiver, sauvegarder,
+    # effacer par erreur, revenir à l'instant d'avant, et compter.
+    defaults:
+      run:
+        working-directory: deploy
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Configuration factice
+        # Ce que `.env.example` exige (`${X:?}`), avec des valeurs sans
+        # importance : rien ici ne sert de donnée réelle, et seuls la base,
+        # la sauvegarde et la reprise démarrent — les images de
+        # l'application ne sont jamais tirées. Les valeurs qui ressemblent à
+        # des secrets sont tirées au sort à chaque exécution : un littéral,
+        # même factice, déclenche le détecteur de secrets de GitGuardian.
+        run: |
+          cat > .env <<EOF
+          BACKEND_IMAGE=ghcr.io/ci/backend
+          FRONTEND_IMAGE=ghcr.io/ci/frontend
+          IMAGE_TAG=ci
+          APP_DOMAIN=ci.invalid
+          ACME_EMAIL=ci@ci.invalid
+          APP_BASE_URL=https://ci.invalid
+          CORS_ALLOWED_ORIGINS=https://ci.invalid
+          DJANGO_ALLOWED_HOSTS=ci.invalid
+          DJANGO_SECRET_KEY=$(openssl rand -hex 32)
+          DEFAULT_FROM_EMAIL=ci@ci.invalid
+          POSTGRES_PASSWORD=$(openssl rand -hex 16)
+          AWS_ACCESS_KEY_ID=ci-cle
+          AWS_SECRET_ACCESS_KEY=$(openssl rand -hex 16)
+          GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 8)
+          ADRESSE_PRIVEE=127.0.0.1
+          MACHINE_PRIMAIRE=10.0.0.1
+          MACHINE_SECONDE=10.0.0.2
+          BALANCEUR_RESEAU=10.0.0.0/24
+          POSTGRES_ARCHIVE_TIMEOUT=30
+          EOF
+
+      - name: La pile s'interpole, dans chacun de ses modes
+        run: |
+          for fichiers in \
+            "docker-compose.prod.yml" \
+            "docker-compose.prod.yml -f docker-compose.primaire.yml" \
+            "docker-compose.prod.yml -f docker-compose.replique.yml" \
+            "docker-compose.prod.yml -f docker-compose.derriere-balanceur.yml" \
+            "docker-compose.balanceur.yml"; do
+            # shellcheck disable=SC2086
+            docker compose -f $fichiers config -q || { echo "::error::$fichiers ne s'interpole pas"; exit 1; }
+            echo "✔ $fichiers"
+          done
+
+      - name: La base démarre, une fois le volume des sauvegardes préparé
+        run: |
+          docker compose -f docker-compose.prod.yml up -d db
+          for _ in $(seq 60); do
+            docker compose -f docker-compose.prod.yml exec -T db pg_isready -U justi -d justi_innov >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker compose -f docker-compose.prod.yml exec -T db pg_isready -U justi -d justi_innov
+          docker compose -f docker-compose.prod.yml ps -a
+
+      - name: Des lignes, puis un segment archivé par la base elle-même
+        # `pg_switch_wal` clôt le segment courant ; Postgres appelle alors
+        # archiver_wal.sh, sous `postgres`, dans le volume que
+        # sauvegardes-init vient de lui donner. C'est le défaut du volume en
+        # root qui se verrait ici : `failed_count` monterait, `archived_count`
+        # resterait à zéro, et le disque se remplirait en production.
+        run: |
+          psql() { docker compose -f docker-compose.prod.yml exec -T db psql -v ON_ERROR_STOP=1 -qtAX -U justi -d justi_innov "$@"; }
+          psql -c "create table reprise_ci(id int primary key, note text)"
+          psql -c "insert into reprise_ci select g, 'ligne ' || g from generate_series(1, 1000) g"
+          psql -c "select pg_switch_wal()" >/dev/null
+          for _ in $(seq 30); do
+            etat="$(psql -c "select archived_count || ' ' || failed_count from pg_stat_archiver")"
+            archives="${etat% *}"; echecs="${etat#* }"
+            [ "$echecs" -eq 0 ] || { echo "::error::l'archivage a échoué $echecs fois : le volume n'est pas inscriptible par Postgres"; docker compose -f docker-compose.prod.yml logs db; exit 1; }
+            [ "$archives" -ge 1 ] && break
+            sleep 2
+          done
+          [ "$archives" -ge 1 ] || { echo "::error::aucun segment archivé en 60 s"; docker compose -f docker-compose.prod.yml logs db; exit 1; }
+          echo "✔ $archives segment(s) archivé(s), $echecs échec(s)"
+          docker compose -f docker-compose.prod.yml run --rm -T --entrypoint sh sauvegarde -c 'ls -l /sauvegardes/base/wal'
+
+      - name: Sauvegarde physique par le service, sous postgres
+        run: |
+          # L'entrypoint du service porte déjà « base » : on ne passe que l'option.
+          docker compose -f docker-compose.prod.yml run --rm -T sauvegarde --une-fois
+          docker compose -f docker-compose.prod.yml run --rm -T --entrypoint sh sauvegarde -c '
+            ls -1d /sauvegardes/base/physique/*/ && ls -l /sauvegardes/base/physique/*/base.tar.gz
+            [ -f /sauvegardes/.derniere-reussite-base-physique ] || { echo "::error::pas de marqueur base-physique"; exit 1; }
+            [ -f /sauvegardes/.distant/demande-wal ] || { echo "::error::aucune demande de copie des segments"; exit 1; }
+            [ -f /sauvegardes/.distant/demande-base-physique ] || { echo "::error::aucune demande de copie de la sauvegarde physique"; exit 1; }
+          '
+
+      - name: Un effacement par erreur, et la reprise à l'instant d'avant
+        # Ce qu'un dump quotidien ne permet pas : revenir à 14:31 pour
+        # défaire 14:32. L'instant est pris entre les deux, la base d'essai
+        # est ouverte dans le conteneur `reprise`, et la requête compte les
+        # lignes telles qu'elles étaient.
+        run: |
+          psql() { docker compose -f docker-compose.prod.yml exec -T db psql -v ON_ERROR_STOP=1 -qtAX -U justi -d justi_innov "$@"; }
+          sleep 2
+          instant="$(psql -c "select clock_timestamp()")"
+          sleep 2
+          psql -c "delete from reprise_ci"
+          psql -c "select pg_switch_wal()" >/dev/null
+          sleep 5
+          echo "instant visé : $instant"
+          sortie="$(docker compose -f docker-compose.prod.yml run --rm -T reprise \
+            --a "$instant" --requete "select count(*) from reprise_ci" 2>&1)" || { echo "$sortie"; exit 1; }
+          echo "$sortie"
+          echo "$sortie" | grep -q 'arrêt : ' || { echo "::error::la reprise n'a pas dit où elle s'est arrêtée"; exit 1; }
+          echo "$sortie" | grep -qx ' *1000' || { echo "::error::la base rejouée ne contient pas les 1 000 lignes d'avant l'effacement"; exit 1; }
+          echo "✔ les 1 000 lignes effacées sont revenues, la pile n'a pas été touchée"
+
+      - name: Journaux de la pile
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs --no-color
+
+      - name: Arrêter la pile
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v --remove-orphans
 
   audit:
     name: Dépendances vulnérables

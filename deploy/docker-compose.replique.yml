@@ -44,6 +44,17 @@
 # sans qu'on ait rien à y penser le jour où l'on pense déjà à trop de choses.
 
 services:
+  # --- La base : le script de préparation, et rien d'autre -------------------
+  #
+  # La copie initiale se fait dans un conteneur de cette image
+  # (`run --rm --entrypoint /preparer_replique.sh db …`) : c'est elle qui a
+  # `pg_basebackup`, et c'est son volume qui reçoit la copie. Monter le
+  # script est la seule chose que la réplique ajoute à la base ; ses
+  # réglages restent ceux de docker-compose.prod.yml.
+  db:
+    volumes:
+      - ./preparer_replique.sh:/preparer_replique.sh:ro
+
   # --- L'application : présente, à l'arrêt -----------------------------------
   backend:
     profiles: ["bascule"]

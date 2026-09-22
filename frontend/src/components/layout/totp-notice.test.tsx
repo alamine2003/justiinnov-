@@ -1,3 +1,4 @@
+import { StrictMode } from "react"
 import { act, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -54,5 +55,21 @@ describe("TotpNotice — enrôlement", () => {
 
     expect(enrolTwoFactor).toHaveBeenCalledOnce()
     expect(screen.getByText("JBSWY3DPEHPK3PXP")).toBeInTheDocument()
+  })
+
+  it("ne demande le secret qu'une fois sous StrictMode, qui rejoue l'effet au montage", async () => {
+    // En développement, React monte, démonte et remonte l'effet : deux
+    // secrets étaient générés, le premier jeté. Une seule demande, et c'est
+    // bien elle qui s'affiche.
+    render(
+      <StrictMode>
+        <MemoryRouter>
+          <TotpNotice />
+        </MemoryRouter>
+      </StrictMode>,
+    )
+
+    expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeInTheDocument()
+    expect(enrolTwoFactor).toHaveBeenCalledOnce()
   })
 })

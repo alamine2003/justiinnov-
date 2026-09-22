@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { UsersSection } from "@/pages/configuration/users-section"
+import { invalidateReferentiel } from "@/lib/referentiel"
 import type { AccountUser } from "@/lib/types"
 
 const resetTwoFactor = vi.fn()
@@ -10,6 +11,13 @@ const updateUser = vi.fn()
 const logout = vi.fn()
 const fetchCountry = vi.fn()
 let monRole = "super_admin"
+/** Ce que le serveur dit pouvoir conférer au compte courant, rôle par rôle. */
+let conferables: Record<string, boolean> = {
+  super_admin: true,
+  admin: true,
+  dm: true,
+  manager: true,
+}
 
 function compte(overrides: Partial<AccountUser>): AccountUser {
   return {
@@ -44,7 +52,7 @@ vi.mock("@/lib/accounts", () => ({
         { value: "admin", label: "Administrateur", siege: true, always_global: true },
         { value: "dm", label: "DM", siege: true, always_global: false },
         { value: "manager", label: "Manager", siege: false, always_global: false },
-      ],
+      ].map((role) => ({ ...role, assignable: conferables[role.value] })),
       capabilities: [],
       note: "",
     }),
@@ -232,14 +240,29 @@ describe("UsersSection — rôles toujours globaux", () => {
     expect(createUser.mock.calls[0][0]).toMatchObject({ role: "admin", countries: [] })
   })
 
-  it("ne propose pas « super administrateur » à un administrateur qui ne l'est pas", async () => {
-    monRole = "admin"
+  it("ne propose que les rôles que le serveur dit conférables, quel que soit le rôle du compte", async () => {
+    // Qui peut nommer un super administrateur, c'est le serveur qui le dit
+    // (`assignable`) : l'écran ne compare plus le rôle du compte courant.
+    monRole = "super_admin"
+    conferables = { super_admin: false, admin: true, dm: true, manager: true }
+    invalidateReferentiel("permissions")
     render(<UsersSection />)
     fireEvent.click(await screen.findByRole("button", { name: "Créer un compte" }))
 
     const options = (await screen.findAllByRole("option")).map((o) => o.textContent)
     expect(options.some((o) => o?.includes("Super administrateur"))).toBe(false)
     expect(options.some((o) => o?.includes("Administrateur"))).toBe(true)
+  })
+
+  it("propose « super administrateur » dès que le serveur le rend conférable", async () => {
+    monRole = "admin"
+    conferables = { super_admin: true, admin: true, dm: true, manager: true }
+    invalidateReferentiel("permissions")
+    render(<UsersSection />)
+    fireEvent.click(await screen.findByRole("button", { name: "Créer un compte" }))
+
+    const options = (await screen.findAllByRole("option")).map((o) => o.textContent)
+    expect(options.some((o) => o?.includes("Super administrateur"))).toBe(true)
   })
 })
 

@@ -26,7 +26,14 @@ import type { ProofStatus, WorkflowStatus } from "@/lib/types"
  * passé. Les préfixes `fill-` et `stroke-` sont ajoutés pour les graphiques.
  */
 const TEINTE_BRUTE =
-  /\b(?:bg|text|border|fill|stroke|ring|from|via|to)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-\d{2,3}\b|\b(?:text|bg|border|fill|stroke)-white\b/
+  /\b(?:bg|text|border|fill|stroke|ring|from|via|to)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-\d{2,3}\b|\b(?:text|bg|border|fill|stroke|shadow)-(?:white|black)\b/
+
+/**
+ * Une comparaison de statut dans un composant ou une page : la teinte d'une
+ * carte, ou une règle du circuit, qui devrait vivre dans `lib/`
+ * (`status-styles.ts` pour la première, `circuit.ts` pour la seconde).
+ */
+const COMPARAISON_STATUT = /\.status\s*(?:===|!==)\s*["']/
 
 function fichiersSource(dossier: string): string[] {
   return readdirSync(dossier).flatMap((nom) => {
@@ -71,10 +78,25 @@ describe("StatusBadge", () => {
   it("aucune couleur en dur ne subsiste dans src/", () => {
     // Le texte d'un badge « rejeté » était blanc en dur, illisible sur le
     // rouge atténué du thème sombre ; une icône « approuver » était en
-    // `text-emerald-600`, hors palette. Un grep échoue désormais au test.
+    // `text-emerald-600`, hors palette ; le voile d'un dialogue était en
+    // `bg-black/10`, invisible sur le fond sombre. Un grep échoue désormais
+    // au test.
     const fautifs = fichiersSource(join(import.meta.dirname, "../../")).filter((chemin) =>
       TEINTE_BRUTE.test(readFileSync(chemin, "utf8")),
     )
+
+    expect(fautifs).toEqual([])
+  })
+
+  it("aucune comparaison de statut ne subsiste hors de lib/", () => {
+    // La carte d'une ligne en contrôle prenait sa teinte d'un
+    // `expense.status === "in_review"` écrit dans le composant, et celle
+    // d'une réallocation d'un `row.status === "pending"` dans un autre :
+    // deux endroits où ajouter un statut, en plus de `status-styles.ts`.
+    const racine = join(import.meta.dirname, "../../")
+    const fautifs = fichiersSource(racine)
+      .filter((chemin) => !chemin.startsWith(join(racine, "lib")))
+      .filter((chemin) => COMPARAISON_STATUT.test(readFileSync(chemin, "utf8")))
 
     expect(fautifs).toEqual([])
   })

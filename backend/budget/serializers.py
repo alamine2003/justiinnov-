@@ -13,9 +13,31 @@ from core.regles import RegleViolee
 from core.serializers import champ_montant, champ_taux
 from core.statuts import Status
 
-from .aggregates import budget_figures, current_rates, date_de_reference
+from .aggregates import (
+    NIVEAUX_D_EXECUTION,
+    budget_figures,
+    current_rates,
+    date_de_reference,
+    seuil_d_alerte,
+    taux_en_vigueur_ids,
+)
 from .models import Budget, BudgetReallocation, ExchangeRate
 from .transitions import exiger_le_disponible, peut_decider
+
+
+def champ_niveau_d_execution(**kwargs):
+    """``execution_level`` : le taux d'exécution jugé côté serveur
+    (``aggregates.niveau_d_execution``), pour que l'interface colore sans
+    recopier les seuils."""
+    return serializers.ChoiceField(
+        choices=[(niveau, niveau) for niveau in NIVEAUX_D_EXECUTION],
+        read_only=True,
+        help_text=gettext_lazy(
+            "« exceeded » au-delà de 100 %, « warning » dès le dernier seuil "
+            "d'alerte sous 100, « ok » sinon."
+        ),
+        **kwargs,
+    )
 
 
 class BudgetFiguresSerializer(serializers.Serializer):
@@ -31,6 +53,7 @@ class BudgetFiguresSerializer(serializers.Serializer):
     gap = champ_montant(help_text=gettext_lazy("Consommé sans preuve à l'appui."))
     remaining = champ_montant()
     execution_rate = champ_taux()
+    execution_level = champ_niveau_d_execution()
     justification_rate = champ_taux()
     amount_xof = champ_montant(allow_null=True)
     remaining_xof = champ_montant(allow_null=True)
@@ -139,26 +162,44 @@ class BudgetSerializer(serializers.ModelSerializer):
     @extend_schema_field(BudgetFiguresSerializer)
     def get_figures(self, budget):
         """Consommation, écart et disponible — calculés côté serveur."""
-        figures = budget_figures(budget, rates=self._rates(budget.year))
+        figures = budget_figures(
+            budget, rates=self._rates(budget.year), seuil=self._seuil()
+        )
         return {key: _as_str(value) for key, value in figures.items()}
+
+    def _memo(self, cle):
+        """Mémo partagé par toutes les enveloppes d'une réponse.
+
+        Le contexte de la vue le porte quand elle l'a prévu ; à défaut
+        (sérialiseur instancié seul), il est tenu sur l'instance — partagée
+        par toutes les enveloppes d'une liste.
+        """
+        memo = self.context.get(cle)
+        if memo is None:
+            memo = getattr(self, f"_{cle}", None)
+            if memo is None:
+                memo = {}
+                setattr(self, f"_{cle}", memo)
+        return memo
 
     def _rates(self, year):
         """Taux en vigueur à la date de référence de l'exercice de l'enveloppe.
 
-        Lus une fois par exercice et par requête : le contexte de la vue
-        porte le mémo (``rates_par_exercice``) ; à défaut (sérialiseur
-        instancié seul), il est tenu sur l'instance — partagée par toutes
-        les enveloppes d'une liste. Une enveloppe 2024 se lit au taux du
-        31 décembre 2024, pas à celui du jour.
+        Lus une fois par exercice et par requête (``rates_par_exercice``).
+        Une enveloppe 2024 se lit au taux du 31 décembre 2024, pas à celui
+        du jour.
         """
-        memo = self.context.get("rates_par_exercice")
-        if memo is None:
-            memo = getattr(self, "_rates_cache", None)
-            if memo is None:
-                memo = self._rates_cache = {}
+        memo = self._memo("rates_par_exercice")
         if year not in memo:
             memo[year] = current_rates(on_date=date_de_reference(year))
         return memo[year]
+
+    def _seuil(self):
+        """Seuil d'alerte de la configuration, lu une fois par réponse."""
+        memo = self._memo("seuil_d_alerte")
+        if "seuil" not in memo:
+            memo["seuil"] = seuil_d_alerte()
+        return memo["seuil"]
 
     def validate(self, attrs):
         self._check_figes(attrs)
@@ -376,9 +417,28 @@ class ReallocationDecisionSerializer(serializers.Serializer):
 
 
 class ExchangeRateSerializer(serializers.ModelSerializer):
+    is_current = serializers.SerializerMethodField()
+
     class Meta:
         model = ExchangeRate
-        fields = ["id", "currency", "rate_to_xof", "valid_from", "created_at"]
+        fields = ["id", "currency", "rate_to_xof", "valid_from", "created_at", "is_current"]
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_current(self, rate):
+        """Le taux applicable **aujourd'hui** à sa devise ?
+
+        Même règle que la consolidation (``aggregates.current_rates`` : le
+        dernier taux dont ``valid_from`` ne dépasse pas ce jour) ; un taux
+        daté du futur n'est jamais courant. Les identifiants sont lus une
+        fois par réponse, pas une fois par taux affiché.
+        """
+        courants = self.context.get("taux_en_vigueur")
+        if courants is None:
+            courants = getattr(self, "_taux_en_vigueur", None)
+            if courants is None:
+                courants = self._taux_en_vigueur = taux_en_vigueur_ids()
+            self.context["taux_en_vigueur"] = courants
+        return rate.pk in courants
 
     def validate_currency(self, value):
         # Un même code saisi en « mad » et « MAD » donnerait deux devises aux

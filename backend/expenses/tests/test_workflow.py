@@ -450,7 +450,7 @@ class OverrunPolicyTests(ExpenseTestCase):
 
     def test_politique_approbation_laisse_demander_mais_pas_valider(self):
         """Le manager doit pouvoir demander le dépassement ; seule sa
-        validation relève de la direction, super administratrice."""
+        validation relève d'un administrateur (décision 58)."""
         self.budget.overrun_policy = OverrunPolicy.APPROVAL
         self.budget.save()
         expense, submitted = self._submit("150000.00")
@@ -459,7 +459,8 @@ class OverrunPolicyTests(ExpenseTestCase):
         response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
 
         self.assertEqual(submitted.status_code, status.HTTP_200_OK)
-        self.assertIn("super administrateur", submitted.data["warning"])
+        self.assertIn("relèvera d'un administrateur", submitted.data["warning"])
+        self.assertNotIn("super administrateur", submitted.data["warning"])
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         expense.refresh_from_db()
         self.assertEqual(expense.status, Status.SUBMITTED)
@@ -645,7 +646,9 @@ class DossierWorkflowTests(ExpenseTestCase):
         self.dossier.save()
         self.make_expense()
         self._piece()
-        self.submit_dossier()
+        # Ouvert au siège, le brouillon ne part pas par le pays (décision
+        # 46, appliquée à la soumission) : c'est le siège qui le soumet.
+        self.submit_dossier(user=self.doo)
         self._justifier_les_lignes()
 
         refuse = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
@@ -662,7 +665,7 @@ class DossierWorkflowTests(ExpenseTestCase):
         self.dossier.save()
         self.make_expense()
         self._piece()
-        self.submit_dossier()
+        self.submit_dossier(user=self.doo)
 
         self.login(self.controller)
         review = self.client.post(f"/api/dossiers/{self.dossier.pk}/review/")

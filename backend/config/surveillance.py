@@ -42,6 +42,11 @@ hébergeur que personne n'a choisi pour cela.
     derrière deux mandataires, la vraie adresse du client est dans
     l'en-tête, et elle partait. Sur cette plateforme, elle est une donnée du
     journal d'audit (décision 68) : elle n'a pas à vivre ailleurs ;
+  - **la chaîne de requête** (``?search=…``, ``?dossier__number=…``) et
+    les témoins joints à la requête. Sentry garde ``query_string`` et
+    recopie les paramètres dans ``url`` : une recherche par nom de
+    bénéficiaire ou par N°ORDRE partait avec l'événement. Ne reste que le
+    chemin, qui dit quelle vue a échoué ;
   - **le compte et l'adresse joints à chaque ligne de journal** par
     ``core.journalisation``. Ce contexte est voulu — c'est lui qui rend un
     incident lisible en local —, mais Sentry recopie les attributs d'un
@@ -122,6 +127,14 @@ def _retirer_ce_qui_identifie(evenement, indice):
             for nom, valeur in entetes.items()
             if nom.lower() not in EN_TETES_RETIRES
         }
+    # La chaîne de requête porte ce que l'on cherche — un bénéficiaire, un
+    # N°ORDRE — et l'URL de Sentry la recopie : seul le chemin reste.
+    if "query_string" in requete:
+        requete["query_string"] = ""
+    url = requete.get("url")
+    if isinstance(url, str):
+        requete["url"] = url.split("?", 1)[0]
+    requete.pop("cookies", None)
     contexte = evenement.get("extra")
     if isinstance(contexte, dict):
         for champ in CHAMPS_RETIRES:

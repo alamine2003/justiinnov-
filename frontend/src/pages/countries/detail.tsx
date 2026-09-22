@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageHeader } from "@/components/ui/page-header"
+import { RefreshIndicator } from "@/components/ui/refresh-indicator"
 import { StatCard } from "@/components/ui/stat-card"
 import {
   Tabs,
@@ -60,10 +61,12 @@ export function CountryDetailPage() {
   const canManage = can("referentiel.create") && can("referentiel.update")
   const countryId = Number(id)
 
+  // Le pays est celui de l'URL : la fiche précédente ne reste pas affichée
+  // sous la nouvelle adresse (`keepPreviousData: false`).
   const query = useQuery(
     `country:detail:${countryId}`,
     (signal) => fetchCountry(countryId, signal),
-    { fallback: t("pays.fiche.chargement_impossible") },
+    { fallback: t("pays.fiche.chargement_impossible"), keepPreviousData: false },
   )
   const country = query.data
 
@@ -160,10 +163,7 @@ export function CountryDetailPage() {
               </span>
               {country.currency_symbol} {country.currency} · {country.timezone}
               {query.refreshing && (
-                <Loader2
-                  className="ml-2 inline h-3.5 w-3.5 animate-spin align-middle"
-                  aria-label={t("pays.fiche.actualisation")}
-                />
+                <RefreshIndicator className="ml-2" label={t("pays.fiche.actualisation")} />
               )}
             </>
           }

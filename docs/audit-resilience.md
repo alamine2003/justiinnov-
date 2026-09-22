@@ -977,3 +977,38 @@ garantie écrite n'en est pas une** — cinq fois, la mesure a contredit le
 dépôt, et trois de ces cinq affirmations avaient été écrites pendant l'audit
 lui-même. La seule protection contre cela est celle qui a été appliquée à
 chaque fois : jouer la panne, lire ce qui sort, et ne corriger qu'ensuite.
+
+---
+
+## 13. Relecture après l'audit : ce que le banc n'avait pas pu jouer
+
+Une fois les deux séries fusionnées, une relecture du dépôt — pas une
+mesure, une lecture — a confronté ce que l'audit affirmait à ce que la pile
+livrée faisait. Elle a trouvé, précisément dans ce que le banc n'avait pas
+exécuté (§10.5 : pas de Docker, §10.9 : pas de seconde machine), une
+troisième famille d'affirmations fausses : celles qu'aucune mesure n'avait
+touchées parce qu'aucune mesure ne pouvait les atteindre.
+
+| affirmation du dépôt | ce que la pile faisait | correction | décision |
+|---|---|---|---|
+| « la reprise à un instant donné se lance par le service `sauvegarde` » | le script n'était monté dans aucun conteneur ; le service ne voyait pas `pgdata` et tournait en root, que `pg_ctl` refuse | service `reprise` sous `postgres`, seul à voir les données, mode essai autonome, mise de côté compatible avec un point de montage | 79 |
+| « les segments et les sauvegardes physiques partent hors machine comme les dumps » | la boucle de copie ne connaissait que `base` et `pieces` ; `demande-wal` n'était jamais lue | familles `base base-physique wal pieces`, un marqueur par famille, retard de copie surveillé | 78 |
+| « la clé privée se donne par `SAUVEGARDE_CLE_PRIVEE=/run/secrets/…` » | aucun secret de ce nom dans la pile | la clé s'apporte sur la ligne de commande le jour venu, jamais dans `.env` | 79 |
+| « Postgres archive dans le volume des sauvegardes » | le volume était créé en root ; l'archivage sous `postgres` ne pouvait pas y créer `base/wal` | `sauvegardes-init` donne le volume avant que la base ne démarre ; la CI le vérifie (`failed_count = 0`) | 79 |
+| « une sauvegarde physique par semaine » | `pg_basebackup` depuis le service `sauvegarde` était refusé par `pg_hba.conf` (connexion de réplication, autorisée seulement depuis la machine) — trouvé par la première exécution du travail CI | entrée `host replication … samenet` à l'initialisation, commande unique pour un cluster existant, remède imprimé par le script | 79 |
+| « la seconde machine suit la première » | le port 5432 n'était publié nulle part ; `pg_basebackup` attendu sur l'hôte ; promotion par `pg_ctl` en root | `docker-compose.primaire.yml` sur l'adresse privée, préparation dans le conteneur, `pg_promote()` | 80 |
+| « une matrice modifiée s'applique à la requête suivante » | vrai sauf si Redis manquait à l'instant de l'enregistrement : l'ancienne matrice lui survivait sans expiration | expiration à 60 s et invalidation des deux caches | 81 |
+| RPO « 24 h » ici, « quelques minutes » là | les deux étaient faux tant que les segments restaient sur la machine | un seul endroit, `deploy/README.md` | 82 |
+
+**Ce qui n'a pas été mesuré, et reste à l'être** : l'espace disque réel
+que consomment les segments sur le serveur (§10 ; borne écrite dans
+`docs/infra-base-de-donnees.md` §3.A), et la bascule sur deux machines
+réelles (§10.9), toujours pas répétée. La CI joue désormais la chaîne
+archivage → sauvegarde physique → reprise sur la pile livrée à chaque
+changement ; elle ne remplace pas la répétition trimestrielle sur le
+serveur, elle garantit que ce qu'on y répète est ce qui est livré.
+
+La leçon rejoint celle du §12, et la précise : une garantie écrite n'en est
+pas une, **et une garantie mesurée sur un banc ne vaut que pour ce que le
+banc a exécuté**. Ce qui n'est joué ni par une mesure ni par la CI doit
+être lu comme une promesse, et dit comme tel.

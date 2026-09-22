@@ -8,6 +8,7 @@ ces réponses pour ``manage.py spectacular``, donc pour les types du frontend.
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+from budget.serializers import champ_niveau_d_execution
 from core.serializers import champ_montant, champ_taux
 from notifications.models import Notification
 
@@ -23,6 +24,7 @@ class DashboardTotalsSerializer(serializers.Serializer):
     gap = champ_montant(help_text=_("Dépensé sans preuve à l'appui."))
     remaining = champ_montant()
     execution_rate = champ_taux()
+    execution_level = champ_niveau_d_execution()
     justification_rate = champ_taux()
     unconverted_currencies = serializers.ListField(
         child=serializers.CharField(), read_only=True,
@@ -43,6 +45,7 @@ class DashboardCountryRowSerializer(serializers.Serializer):
     gap = champ_montant()
     remaining = champ_montant()
     execution_rate = champ_taux()
+    execution_level = champ_niveau_d_execution()
     justification_rate = champ_taux()
     remaining_xof = champ_montant(allow_null=True)
 

@@ -32,14 +32,18 @@ RACINE = Path(__file__).resolve().parents[3]
 PILE = RACINE / "deploy" / "docker-compose.prod.yml"
 ARCHIVEUR = RACINE / "deploy" / "archiver_wal.sh"
 REPRISE = RACINE / "deploy" / "restaurer_a_la_date.sh"
+SAUVEGARDEUR = RACINE / "deploy" / "sauvegarder.sh"
+INITDB = RACINE / "deploy" / "initdb" / "10-sauvegarde-physique.sh"
 EXEMPLE = RACINE / "deploy" / ".env.example"
+README = RACINE / "deploy" / "README.md"
 
 
 class ArchivageDesJournauxTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.db = yaml.safe_load(PILE.read_text())["services"]["db"]
+        cls.services = yaml.safe_load(PILE.read_text())["services"]
+        cls.db = cls.services["db"]
 
     def _commande(self):
         """La commande de la base, en une chaîne.
@@ -129,3 +133,110 @@ class ArchivageDesJournauxTests(SimpleTestCase):
         self.assertIn('MODE="essai"', source)
         self.assertIn("--en-production", source)
         self.assertIn("La pile n'a pas été touchée", source)
+
+
+class LaRepriseEstCableeTests(SimpleTestCase):
+    """Ce que l'audit avait documenté comme prêt, et qui ne l'était pas.
+
+    Le banc n'avait pas Docker. Trois choses ne se voyaient donc qu'en
+    lisant la pile, et personne ne l'avait fait : le script de reprise
+    n'était monté dans aucun conteneur ; le service qui devait le lancer ne
+    voyait pas le répertoire de données et tournait en root, que `pg_ctl`
+    refuse ; et le volume des sauvegardes, créé par Docker en root, n'était
+    pas inscriptible par Postgres — chaque archivage échouait, et les
+    segments s'accumulaient dans `pg_wal`. Ce test relit la pile pour que
+    cela ne se reproduise pas ; la CI, elle, la joue.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.services = yaml.safe_load(PILE.read_text())["services"]
+
+    def test_le_volume_des_sauvegardes_est_donne_a_postgres_avant_la_base(self):
+        """Docker crée un volume vide en root ; Postgres archive sous
+        `postgres`. Sans ce passage, `mkdir base/wal` échoue au premier
+        segment, et le disque se remplit en silence."""
+        init = self.services["sauvegardes-init"]
+        commande = " ".join(init["command"])
+
+        self.assertIn("chown", commande)
+        self.assertIn("postgres:postgres", commande)
+        self.assertIn("/sauvegardes/base", commande)
+        self.assertIn("/sauvegardes/.distant", commande)
+        self.assertIn("sauvegardes:/sauvegardes", init["volumes"])
+        self.assertEqual(
+            self.services["db"]["depends_on"]["sauvegardes-init"]["condition"],
+            "service_completed_successfully",
+        )
+
+    def test_la_sauvegarde_ecrit_sous_le_meme_compte_que_l_archivage(self):
+        self.assertEqual(self.services["sauvegarde"].get("user"), "postgres")
+
+    def test_la_reprise_a_son_service_et_lui_seul_voit_les_donnees(self):
+        """`--en-production` remplace le répertoire de données : il faut
+        le voir. Mais un service de sauvegarde qui le verrait en permanence
+        pourrait, sur un bug, y écrire ; seul `reprise` l'a, et `up` ne le
+        lance jamais."""
+        reprise = self.services["reprise"]
+
+        self.assertEqual(reprise["profiles"], ["reprise"])
+        self.assertEqual(reprise["user"], "postgres")
+        self.assertEqual(reprise["entrypoint"], ["/restaurer_a_la_date.sh"])
+        self.assertIn("./restaurer_a_la_date.sh:/restaurer_a_la_date.sh:ro", reprise["volumes"])
+        self.assertIn("sauvegardes:/sauvegardes", reprise["volumes"])
+        self.assertIn("pgdata:/var/lib/postgresql/data", reprise["volumes"])
+        for nom, service in self.services.items():
+            if nom in ("db", "reprise"):
+                continue
+            with self.subTest(service=nom):
+                self.assertFalse(
+                    any(v.startswith("pgdata:") for v in service.get("volumes", [])),
+                    f"{nom} voit le répertoire de données de la base",
+                )
+
+    def test_la_reprise_refuse_root_et_sait_que_les_donnees_sont_un_point_de_montage(self):
+        source = REPRISE.read_text()
+
+        self.assertIn('[ "$(id -u)" -ne 0 ]', source)
+        # Un point de montage ne se renomme pas : le contenu est mis de côté,
+        # élément par élément, dans le volume des sauvegardes.
+        self.assertIn("avant-reprise-", source)
+        self.assertNotIn('mv "$cible" "$sauvegarde_du_repertoire"', source)
+        # L'essai se suffit à lui-même : le conteneur disparaît avec la
+        # commande, il n'y aurait personne pour « regarder » après.
+        self.assertIn("--requete", source)
+        self.assertIn("recovery stopping", source)
+
+    def test_le_readme_lance_la_reprise_par_son_service(self):
+        readme = README.read_text()
+
+        self.assertIn("run --rm reprise", readme)
+        self.assertNotIn("--entrypoint /restaurer_a_la_date.sh sauvegarde", readme)
+
+    def test_les_segments_et_les_sauvegardes_physiques_partent_hors_machine(self):
+        """Sans eux là-bas, la reprise à un instant donné ne survit qu'à la
+        perte d'un disque, pas à celle du serveur — et trois documents
+        disaient le contraire."""
+        source = SAUVEGARDEUR.read_text()
+
+        self.assertIn("copier_wal_distant()", source)
+        self.assertIn("copier_base_physique_distant()", source)
+        self.assertIn("for d in $FAMILLES", source)
+        self.assertRegex(source, r'(?m)^FAMILLES=".*base-physique.*wal.*"', "les familles copiées")
+        # Chaque famille pose son marqueur : c'est ce que verifier_sauvegardes lit.
+        self.assertIn('marquer_reussite "$(marqueur_distant_de "$d")"', source)
+
+    def test_la_base_laisse_le_service_de_sauvegarde_ouvrir_une_connexion_de_replication(self):
+        """pg_basebackup n'ouvre pas une connexion ordinaire : le pg_hba.conf
+        de l'image n'autorise la réplication que depuis la machine elle-même,
+        et la sauvegarde physique échouait chaque semaine depuis le service
+        `sauvegarde`. Trouvé par la CI la première fois qu'elle a joué la
+        pile livrée. Un cluster neuf reçoit la ligne à l'initialisation ; un
+        ancien la reçoit à la main, et le script dit comment."""
+        self.assertIn("./initdb:/docker-entrypoint-initdb.d:ro", self.services["db"]["volumes"])
+        self.assertTrue(os.stat(INITDB).st_mode & stat.S_IXUSR, "le script d'initialisation n'est pas exécutable")
+        self.assertIn('host replication ${POSTGRES_USER} samenet scram-sha-256', INITDB.read_text())
+        self.assertIn("host replication", README.read_text().split("### Répéter la reprise")[0])
+        self.assertIn("*pg_hba.conf*)", SAUVEGARDEUR.read_text())
+

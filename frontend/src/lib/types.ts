@@ -64,6 +64,11 @@ export type TotpEnrolment = Schema<"TotpEnrolment">
 // ---------------------------------------------------------------------------
 
 export type OverrunPolicy = Schema<"OverrunPolicyEnum">
+/**
+ * Niveau d'exécution d'une enveloppe, tranché par le serveur contre les
+ * seuils d'alerte : l'interface le teinte, elle ne compare aucun taux.
+ */
+export type ExecutionLevel = Schema<"ExecutionLevelEnum">
 export type Budget = Schema<"Budget">
 export type BudgetSummary = Schema<"BudgetSummary">
 export type CountryBudgetRow = Schema<"CountryBudgetRow">

@@ -5,10 +5,12 @@ répond exactement comme un identifiant inconnu : sans cela, un manager
 énumérait le référentiel des autres filiales par leurs numéros.
 """
 
+from datetime import date
+
 from rest_framework import status
 
 from core.models import ExpenseTitle, Manager, MarketingCategory, Project
-from expenses.models import Beneficiary
+from expenses.models import Beneficiary, Dossier
 
 from .base import ExpenseTestCase
 
@@ -66,3 +68,67 @@ class CloisonnementDuReferentielTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("project", response.data)
+
+
+class ChangementDePaysTests(ExpenseTestCase):
+    """Un brouillon qui change de pays ne garde rien de l'ancien.
+
+    Les relations déjà portées par la ligne ou le dossier — équipe,
+    projet, bénéficiaire, manager — sont rejugées contre le nouveau pays,
+    pas seulement celles de la charge utile.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.dossier_ivoire = Dossier.objects.create(
+            number="N-CI-1", label="Mission Abidjan", country=cls.ivoire,
+            date=date(cls.year, 3, 1), created_by=cls.doo.username,
+        )
+        cls.projet_togo = Project.objects.create(country=cls.togo, name="Projet TG")
+
+    def setUp(self):
+        super().setUp()
+        self.login(self.doo)
+
+    def test_la_ligne_ne_garde_ni_equipe_ni_projet_ni_manager_de_l_ancien_pays(self):
+        ligne = self.make_expense(project=self.projet_togo)
+
+        for retirer in ({}, {"team": None}, {"team": None, "project": None}):
+            with self.subTest(retirer=retirer):
+                response = self.client.patch(
+                    f"/api/expenses/{ligne.pk}/",
+                    {"country": self.ivoire.pk, "dossier": self.dossier_ivoire.pk, **retirer},
+                    format="json",
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        ligne.refresh_from_db()
+        self.assertEqual(ligne.country, self.togo)
+
+    def test_la_ligne_change_de_pays_une_fois_ses_relations_retirees(self):
+        ligne = self.make_expense(project=self.projet_togo)
+
+        response = self.client.patch(
+            f"/api/expenses/{ligne.pk}/",
+            {
+                "country": self.ivoire.pk, "dossier": self.dossier_ivoire.pk,
+                "team": None, "project": None, "owner": None,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_le_dossier_ne_garde_pas_le_manager_de_l_ancien_pays(self):
+        dossier = Dossier.objects.create(
+            number="N-0002", label="Sans équipe", country=self.togo, owner=self.manager,
+            date=date(self.year, 3, 1), created_by=self.doo.username,
+        )
+
+        response = self.client.patch(
+            f"/api/dossiers/{dossier.pk}/", {"country": self.ivoire.pk}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("owner", response.data)

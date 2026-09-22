@@ -540,3 +540,38 @@ class ProofDownloadTests(ExpenseTestCase):
         response = self.client.get(f"/api/proofs/{self.proof_id}/download/")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+@in_memory_storage
+class TypeFigeAvecLeDossierTests(ExpenseTestCase):
+    """Le type d'une pièce se fige avec la déclaration de son dossier :
+    requalifier un reçu en facture après coup changerait ce que le siège a
+    eu sous les yeux."""
+
+    def setUp(self):
+        super().setUp()
+        self.login(self.owner)
+        self.proof_id = self.client.post(
+            "/api/proofs/",
+            {"dossier": self.dossier.pk, "kind": "receipt", "file": pdf()},
+            format="multipart",
+        ).data["id"]
+        self.make_expense()
+
+    def test_avant_la_declaration_le_type_se_modifie(self):
+        response = self.client.patch(f"/api/proofs/{self.proof_id}/", {"kind": "invoice"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_declare_le_dossier_fige_le_type(self):
+        self.submit_dossier()
+
+        for user in (self.owner, self.doo):
+            with self.subTest(compte=user.username):
+                self.login(user)
+                response = self.client.patch(f"/api/proofs/{self.proof_id}/", {"kind": "invoice"})
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+                self.assertIn("kind", response.data)
+        self.assertEqual(Proof.objects.get(pk=self.proof_id).kind, "receipt")
+        self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.UPDATED).exists())

@@ -1,18 +1,25 @@
 #!/bin/sh
 # Prépare la seconde machine : copie initiale de la base, puis attente chaude.
 #
-#   ./preparer_replique.sh --primaire <hôte> [--emplacement <nom>]
+#   docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml \
+#     run --rm -e PGPASSWORD='<mot de passe du rôle de réplication>' \
+#     --entrypoint /preparer_replique.sh db --primaire <hôte> [--emplacement <nom>]
 #
-# À lancer **sur la seconde machine**, une fois. Elle en ressort réplique :
-# elle rejoue le flux de la primaire en continu et se laisse interroger en
-# lecture — c'est ce que veut dire « attente chaude », et c'est ce qui
-# permet de vérifier qu'elle suit au lieu de l'espérer.
+# À lancer **sur la seconde machine**, une fois, dans un conteneur de l'image
+# de la base : c'est là que vivent `pg_basebackup` et `pg_isready`, et c'est
+# le volume `pgdata` de la pile — pas un répertoire de l'hôte — qui reçoit
+# la copie. Lancé en root par `run`, le script donne le volume à `postgres`
+# puis se relance sous ce compte, le seul que Postgres accepte. La machine
+# en ressort réplique : elle rejoue le flux de la primaire en continu et se
+# laisse interroger en lecture — c'est ce que veut dire « attente chaude »,
+# et c'est ce qui permet de vérifier qu'elle suit au lieu de l'espérer.
 #
 # AVANT DE LANCER, SUR LA PRIMAIRE :
 #   1. le rôle de réplication existe (creer_role_replication.sql) ;
 #   2. `pg_hba.conf` accepte son adresse — et **seulement** la sienne ;
-#   3. le port 5432 de la primaire est joignable depuis ici, par un réseau
-#      privé ou un tunnel. **Jamais par l'Internet en clair** : un flux de
+#   3. le port 5432 de la primaire est publié sur son adresse privée
+#      (docker-compose.primaire.yml) et joignable d'ici, par un réseau privé
+#      ou un tunnel. **Jamais par l'Internet en clair** : un flux de
 #      réplication, c'est la base entière, jetons de session et secrets TOTP
 #      compris.
 #
@@ -45,6 +52,9 @@ REPERTOIRE="${PGDATA:-/var/lib/postgresql/data}"
 journal() { echo "$(date -u +%FT%TZ) réplique $*"; }
 echec() { echo "$(date -u +%FT%TZ) réplique ✘ $*" >&2; exit 1; }
 
+# Les arguments tels que reçus, pour se relancer sous `postgres` plus bas.
+ARGUMENTS_RECUS="$*"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --primaire) PRIMAIRE="${2:?hôte attendu après --primaire}"; shift 2 ;;
@@ -57,6 +67,22 @@ done
 
 [ -n "$PRIMAIRE" ] || echec "il faut dire qui suivre : --primaire <hôte>"
 [ -n "${PGPASSWORD:-}" ] || echec "PGPASSWORD (mot de passe du rôle de réplication) est vide"
+
+# `docker compose run` avec un entrypoint remplacé entre en root. Le volume
+# fraîchement créé lui appartient ; Postgres, lui, ne démarre que sur un
+# répertoire à `postgres`. On donne, puis on se relance sous le bon compte —
+# `su-exec` est celui de l'image Alpine, `gosu` celui de l'image Debian.
+if [ "$(id -u)" -eq 0 ]; then
+  chown postgres:postgres "$REPERTOIRE" || echec "impossible de donner $REPERTOIRE à postgres"
+  if command -v su-exec >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    exec su-exec postgres "$0" $ARGUMENTS_RECUS
+  elif command -v gosu >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    exec gosu postgres "$0" $ARGUMENTS_RECUS
+  fi
+  echec "ni su-exec ni gosu : lancez avec « run --user postgres » après avoir donné $REPERTOIRE à postgres"
+fi
 
 # Un répertoire déjà peuplé serait écrasé : on refuse plutôt que de détruire
 # ce qui pourrait être la seule copie restante.
@@ -97,6 +123,7 @@ cat <<'FIN'
   La base est prête à suivre. Démarrez la pile de cette machine :
 
     docker compose -f docker-compose.prod.yml -f docker-compose.replique.yml up -d
+  (les mêmes fichiers dans COMPOSE_FILE du .env, pour que deploy.sh les voie aussi)
 
   Puis vérifiez, DEPUIS LA PRIMAIRE, qu'elle suit vraiment :
 

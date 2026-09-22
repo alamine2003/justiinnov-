@@ -167,14 +167,13 @@ def check_budget_capacity(
             raise RegleViolee(
                 "amount",
                 _(
-                    "{message} La validation d'un dépassement relève de "
-                    "la direction (super administrateur)."
+                    "{message} La validation d'un dépassement relève d'un "
+                    "administrateur."
                 ).format(message=message),
             )
         if not at_approval:
             return _(
-                "{message} Sa validation relèvera de la direction "
-                "(super administrateur)."
+                "{message} Sa validation relèvera d'un administrateur."
             ).format(message=message)
 
     return message

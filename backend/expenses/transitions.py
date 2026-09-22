@@ -37,7 +37,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 
-from accounts.permissions import COUNTRY_ROLES, exiger_la_capacite, roles_pour
+from accounts.permissions import exiger_la_capacite, roles_pour
 from budget.models import Budget
 from core.models import WorkflowConfiguration
 from core.regles import HorsPerimetre, PermissionRefusee, RegleViolee
@@ -72,6 +72,7 @@ from .workflow import (
     REOPEN_BLOCKING_STATUSES,
     Status,
     a_ete_rectifiee,
+    agit_en_auteur,
     breaks_four_eyes,
     next_proof_status,
     next_status,
@@ -130,19 +131,20 @@ class Resultat:
 # --- Prédicats partagés -----------------------------------------------------
 
 
-def exiger_l_auteur_du_brouillon(objet, acteur):
-    """Un brouillon ne se modifie que par qui l'a saisi, ou par le siège.
+def exiger_l_auteur_du_brouillon(objet, acteur, message=None):
+    """Un brouillon ne se modifie — ni ne se soumet — que par qui l'a saisi, ou par le siège.
 
     Un collègue du même pays qui changerait le montant laisserait l'auteur
-    soumettre une ligne qu'il n'a pas écrite, sous son nom. Le siège, lui,
-    corrige à découvert : chaque modification est journalisée avec avant
-    et après. Sans auteur connu — import, compte disparu — la correction
-    reste ouverte.
+    soumettre une ligne qu'il n'a pas écrite, sous son nom ; un collègue qui
+    soumettrait le dossier d'un autre déclarerait au nom de l'auteur ce que
+    celui-ci n'a pas fini de saisir. Le siège, lui, corrige à découvert :
+    chaque modification est journalisée avec avant et après. Sans auteur
+    connu — import, compte disparu — la correction reste ouverte.
     """
-    if acteur.role not in COUNTRY_ROLES:
-        return
-    if objet.created_by and objet.created_by != acteur.username:
-        raise PermissionRefusee(_("Seul l'auteur d'un brouillon peut le modifier."))
+    if not agit_en_auteur(objet, acteur.role, acteur.username):
+        raise PermissionRefusee(
+            message or _("Seul l'auteur d'un brouillon peut le modifier.")
+        )
 
 
 #: Ce que dit un refus de modifier une ligne ou un dossier déclaré — les
@@ -489,6 +491,11 @@ def _rouvrir_les_lignes(dossier, motif, trace, resultat):
 def _avant_sur_le_dossier(dossier, action, acteur, note, donnees, trace, resultat):
     """Contrôles propres au dossier. Renvoie un avertissement ou ``None``."""
     if action == "submit":
+        # Un brouillon part par son auteur, ou par le siège : un collègue du
+        # pays ne déclare pas à la place de qui saisit encore.
+        exiger_l_auteur_du_brouillon(
+            dossier, acteur, _("Seul l'auteur d'un brouillon peut le soumettre.")
+        )
         return _soumettre_les_lignes(dossier, acteur, trace, resultat)
 
     if action == "reopen":

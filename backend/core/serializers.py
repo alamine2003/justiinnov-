@@ -96,8 +96,42 @@ class ManagerSerializer(serializers.ModelSerializer):
         ]
 
 
-class TeamSerializer(serializers.ModelSerializer):
+class PaysFigeMixin:
+    """Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+
+    Les lignes, les dossiers, les enveloppes et les profils qui la portent
+    sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
+    derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
+    corrige ce qui la porte d'abord, ou l'on en crée une autre.
+    """
+
+    #: Relations inverses qui retiennent l'entité dans son pays.
+    RELATIONS_QUI_RETIENNENT = ()
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        instance = self.instance
+        country = attrs.get("country")
+        if instance is None or country is None or country.pk == instance.country_id:
+            return attrs
+        if any(
+            getattr(instance, relation).exists()
+            for relation in self.RELATIONS_QUI_RETIENNENT
+        ):
+            raise serializers.ValidationError(
+                {
+                    "country": _(
+                        "Des lignes, dossiers, enveloppes ou comptes s'y réfèrent : "
+                        "cette entité ne change plus de pays."
+                    )
+                }
+            )
+        return attrs
+
+
+class TeamSerializer(PaysFigeMixin, serializers.ModelSerializer):
     country_name = serializers.CharField(source="country.name", read_only=True)
+    RELATIONS_QUI_RETIENNENT = ("expenses", "dossiers", "budgets", "profiles")
 
     class Meta:
         model = Team
@@ -127,9 +161,10 @@ class CostCenterSerializer(serializers.ModelSerializer):
         ]
 
 
-class ProjectSerializer(serializers.ModelSerializer):
+class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
     country_name = serializers.CharField(source="country.name", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    RELATIONS_QUI_RETIENNENT = ("expenses", "budgets")
 
     class Meta:
         model = Project
@@ -219,6 +254,13 @@ class CountryWriteSerializer(serializers.ModelSerializer):
             "timezone", "is_active",
         ]
 
+    #: Champs qui deviennent intangibles dès que le pays porte de l'argent :
+    #: les montants sont stockés dans la devise du pays, et le code le nomme
+    #: dans les traces et les exports. Changer l'un ou l'autre ferait lire
+    #: 1 000 000 de francs comme 1 000 000 de dirhams, ou attribuerait à un
+    #: autre pays ce qui a été déclaré dans celui-ci.
+    CHAMPS_FIGES = ("code", "currency")
+
     def validate_code(self, value):
         """Normalise le code avant de l'enregistrer.
 
@@ -226,6 +268,30 @@ class CountryWriteSerializer(serializers.ModelSerializer):
         d'unicité laisserait passer un doublon de casse.
         """
         return value.strip().upper()
+
+    def validate(self, attrs):
+        self._verifier_les_champs_figes(attrs)
+        return attrs
+
+    def _verifier_les_champs_figes(self, attrs):
+        if self.instance is None:
+            return
+        modifies = [
+            name for name in self.CHAMPS_FIGES
+            if name in attrs and attrs[name] != getattr(self.instance, name)
+        ]
+        if not modifies:
+            return
+        if self.instance.expenses.exists() or self.instance.budgets.exists():
+            raise serializers.ValidationError(
+                {
+                    name: _(
+                        "Ce pays porte des dépenses ou des enveloppes : son code "
+                        "et sa devise ne se modifient plus."
+                    )
+                    for name in modifies
+                }
+            )
 
 
 class ChangeLogSerializer(serializers.ModelSerializer):

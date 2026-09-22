@@ -215,3 +215,49 @@ class MatriceDesDroitsTests(ScopingTestCase):
 
 def matrice_de(cle):
     return sorted(roles_pour(cle))
+
+
+class ContratDeLaMatriceTests(ScopingTestCase):
+    """Ce que la matrice et le profil disent à l'interface, en plus des droits."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.rh = make_user("rh.admin", Role.ADMIN)
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
+    def _roles(self, user):
+        self.login(user)
+        response = self.client.get("/api/permissions/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return {r["value"]: r for r in response.data["roles"]}
+
+    def test_un_administrateur_ne_confere_pas_le_role_de_super_administrateur(self):
+        """La même règle que ``UserViewSet`` : la matrice la dit d'avance,
+        pour que l'interface ne propose pas un rôle que le serveur refusera."""
+        roles = self._roles(self.rh)
+
+        self.assertFalse(roles[Role.SUPER_ADMIN]["assignable"])
+        self.assertTrue(roles[Role.ADMIN]["assignable"])
+        self.assertTrue(roles[Role.MANAGER]["assignable"])
+
+    def test_un_super_administrateur_confere_tous_les_roles(self):
+        roles = self._roles(self.siege)
+
+        self.assertTrue(all(role["assignable"] for role in roles.values()))
+
+    def test_le_profil_expose_les_seuils_d_alerte_a_tous_les_roles(self):
+        configuration = WorkflowConfiguration.charger()
+        configuration.alert_thresholds = [70, 90, 100]
+        configuration.save()
+
+        for user in (self.rep_togo, self.dm, self.controleur, self.rh, self.siege):
+            with self.subTest(compte=user.username):
+                self.login(user)
+                response = self.client.get("/api/me/")
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.data["alert_thresholds"], [70, 90, 100])

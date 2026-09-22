@@ -129,7 +129,7 @@ l'application.
   exception : la réouverture** (`reopen`, capacité `dossiers.reopen` :
   `admin`, `super_admin` par défaut, jamais le pays), motivée (`note`, gardée dans `Dossier.reopen_note`),
   tracée (`AuditLog` `reopened` sur le dossier et chaque ligne) et notifiée
-  aux `dm` et `manager` du pays — elle sert à demander des comptes, jamais
+  aux `manager` du pays, pas au `dm` (décision 20) — elle sert à demander des comptes, jamais
   à corriger en silence. Les lignes reviennent en brouillon sans
   imputation. Un dossier dont une ligne est justifiée ou clôturée ne se
   rouvre pas : le siège a constaté. **La seconde exception, la
@@ -217,7 +217,8 @@ l'application.
   pour les environnements jetables. Recommandation, hors politique : imposer
   la double authentification aux comptes privilégiés (`admin`,
   `super_admin`) avant l'ouverture aux filiales — c'est un réglage de
-  déploiement, pas une règle du code.
+  déploiement, pas une règle du code : `DJANGO_TOTP_REQUIRED_ROLES=admin,super_admin`
+  (décision 86).
 - **L'interface est bilingue**, français et anglais : les textes passent par
   `gettext` côté serveur (un seul catalogue, `backend/locale/en`,
   `Accept-Language`, préférence `language` sur le profil ; notifications et

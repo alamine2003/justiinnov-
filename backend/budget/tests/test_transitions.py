@@ -245,3 +245,38 @@ class ServicesDeReallocationTests(TestCase):
         self.assertEqual(entree.user, "do.innov")
         self.assertEqual(entree.ip_address, ADRESSE)
         self.assertEqual(entree.user_agent, "Test")
+
+
+class DestinationRejugeeSousVerrouTests(ServicesDeReallocationTests):
+    """Entre la demande et la décision, la destination a pu changer."""
+
+    def test_une_destination_desactivee_ne_recoit_plus(self):
+        demande = self.demander("1000000.00").instance
+        Budget.objects.filter(pk=self.cible.pk).update(is_active=False)
+
+        with self.assertRaises(RegleViolee) as refus:
+            transitions.approuver(demande, get_access(self.doo), "", trace(self.doo))
+
+        self.assertEqual(refus.exception.champ, "target")
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.amount, Decimal("10000000.00"))
+        demande.refresh_from_db()
+        self.assertEqual(demande.status, BudgetReallocation.Status.PENDING)
+
+    def test_une_devise_qui_a_change_bloque_le_transfert(self):
+        """La devise d'un pays ne change plus dès qu'il porte une enveloppe
+        (``CountryWriteSerializer``) ; le service se protège quand même,
+        sous verrou, contre ce qu'un autre chemin d'écriture ferait."""
+        demande = self.demander("1000000.00").instance
+        ailleurs = Country.objects.create(
+            name="Sénégal", code="SN", country_ref="SN-01", currency="EUR",
+            timezone="Africa/Dakar",
+        )
+        Budget.objects.filter(pk=self.cible.pk).update(country=ailleurs)
+
+        with self.assertRaises(RegleViolee) as refus:
+            transitions.approuver(demande, get_access(self.doo), "", trace(self.doo))
+
+        self.assertEqual(refus.exception.champ, "target")
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.amount, Decimal("10000000.00"))

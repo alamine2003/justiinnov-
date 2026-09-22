@@ -12,20 +12,29 @@
 #   - un effacement par erreur à 14:32 se répare en repartant de 14:31,
 #     ce qu'aucun dump quotidien ne permet.
 #
-#   docker compose -f docker-compose.prod.yml run --rm --entrypoint \
-#     /restaurer_a_la_date.sh sauvegarde --a '2026-09-19 14:31:00+00'
+# Il tourne dans le service `reprise` de docker-compose.prod.yml — le seul,
+# avec la base, qui voie le répertoire de données — et sous l'utilisateur
+# `postgres`, le seul que `pg_ctl` accepte :
+#
+#   docker compose -f docker-compose.prod.yml run --rm reprise \
+#     --a '2026-09-19 14:31:00+00'
 #
 #   --a <instant>      instant visé, lu par Postgres (recovery_target_time).
 #                      Tout format qu'il accepte : « 2026-09-19 14:31:00+00 ».
-#   --essai            (défaut) restaure dans un répertoire jetable et
-#                      démarre une base temporaire sur --port : on regarde,
-#                      on compare, on jette. **La production n'est pas
-#                      touchée.** C'est ce mode qu'on répète tous les
-#                      trimestres, et c'est le seul qui soit sans risque.
-#   --en-production    remplace le répertoire de données de la pile. Destructif,
-#                      demande une confirmation tapée à la main, et exige que
-#                      la base soit arrêtée (`docker compose stop db backend
-#                      scheduler`).
+#   --essai            (défaut) restaure dans un répertoire jetable, ouvre
+#                      une base temporaire dans ce conteneur, dit où elle
+#                      s'est arrêtée, compte ce qu'elle contient, exécute
+#                      --requete s'il y en a une, puis la jette.
+#                      **La production n'est pas touchée.** C'est ce mode
+#                      qu'on répète tous les trimestres, et c'est le seul
+#                      qui soit sans risque.
+#   --requete <sql>    en --essai : une requête à exécuter sur la base
+#                      rejouée avant de la jeter, par exemple
+#                      "select count(*) from expenses_expense".
+#   --en-production    remplace le répertoire de données de la pile.
+#                      Destructif, demande une confirmation tapée à la main,
+#                      et exige que la base soit arrêtée
+#                      (`docker compose stop db backend scheduler`).
 #   --port <n>         port de la base d'essai (5499 par défaut).
 #   --depuis <horodatage>
 #                      nomme la sauvegarde physique de départ, quand le
@@ -35,8 +44,12 @@
 # rejoués, arrêt à l'instant voulu — a été mesuré sur un banc de 72 Mo
 # pendant l'audit de résilience : 3,0 s pour la sauvegarde physique, 0,6 s
 # pour la reprise, les lignes effacées par erreur retrouvées et la bêtise
-# absente. Le mode --en-production, lui, touche la pile réelle : il se
-# répète d'abord en --essai, sur ce serveur, avant d'être cru.
+# absente. La chaîne complète dans la pile livrée — archivage par la base,
+# sauvegarde physique par le service, reprise par ce script dans son
+# conteneur — est rejouée par l'intégration continue (travail « Pile de
+# production ») à chaque changement. Le mode --en-production, lui, touche
+# la pile réelle : il se répète d'abord en --essai, sur ce serveur, avant
+# d'être cru.
 
 set -eu
 
@@ -44,6 +57,7 @@ INSTANT=""
 DEPUIS=""
 MODE="essai"
 PORT="5499"
+REQUETE=""
 DESTINATION="${SAUVEGARDE_DESTINATION:-/sauvegardes}"
 CLE_PRIVEE="${SAUVEGARDE_CLE_PRIVEE:-}"
 SUFFIXE_CHIFFRE=".enc"
@@ -58,13 +72,19 @@ while [ $# -gt 0 ]; do
     --essai) MODE="essai"; shift ;;
     --en-production) MODE="production"; shift ;;
     --port) PORT="${2:?port attendu après --port}"; shift 2 ;;
+    --requete) REQUETE="${2:?requête attendue après --requete}"; shift 2 ;;
     --depuis) DEPUIS="${2:?horodatage attendu après --depuis}"; shift 2 ;;
-    -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,50p' "$0"; exit 0 ;;
     *) echec "option inconnue : $1 (voir --help)" ;;
   esac
 done
 
 [ -n "$INSTANT" ] || echec "il faut dire jusqu'où rejouer : --a '2026-09-19 14:31:00+00'"
+
+# `pg_ctl` refuse root, et un répertoire de données créé par root ne serait
+# pas lisible par la base. Le service `reprise` tourne sous `postgres` ;
+# lancé autrement, on le dit plutôt que d'échouer plus loin.
+[ "$(id -u)" -ne 0 ] || echec "ne pas lancer en root : « docker compose run --rm reprise … » tourne sous postgres"
 
 PHYSIQUES="$DESTINATION/base/physique"
 ARCHIVE="$DESTINATION/base/wal"
@@ -76,27 +96,40 @@ ARCHIVE="$DESTINATION/base/wal"
 # d'une plus récente que la cible rendrait la reprise impossible — Postgres
 # refuse de remonter le temps, et le dirait par une erreur obscure.
 #
-# `date -d` est une extension GNU ; le BusyBox de l'image Alpine ne la
-# comprend pas toujours. Plutôt que de deviner et de choisir mal, on
-# demande alors à l'exploitant de nommer le point de départ.
+# Sans `date -d` : c'est une extension GNU que le BusyBox de l'image Alpine
+# n'a pas, et la CI l'a vu à sa première exécution — le script demandait
+# --depuis à chaque fois. On compare des chaînes : le nom d'une sauvegarde
+# est « 2026-09-19T020000Z », l'instant est ramené à la même forme compacte
+# « 20260919020000 » dès qu'il est écrit en UTC (suffixe +00, +0000,
+# +00:00, Z, ou sans décalage — Postgres lit alors l'heure du serveur, qui
+# est UTC dans la pile). Un instant dans un autre fuseau n'est pas deviné :
+# l'exploitant nomme le point de départ.
+compact_utc() {
+  # "2026-09-19 14:31:00.123+00" → "20260919143100" ; vide si pas en UTC.
+  printf '%s' "$1" | sed -n -E \
+    's/^([0-9]{4})-([0-9]{2})-([0-9]{2})[T ]([0-9]{2}):([0-9]{2})(:([0-9]{2}))?(\.[0-9]+)?[[:space:]]*(Z|\+00(:?00)?|UTC)?$/\1\2\3\4\5\7/p' \
+    | sed -E 's/^([0-9]{12})$/\100/'
+}
+
 choisir_le_point_de_depart() {
   if [ -n "$DEPUIS" ]; then
     [ -d "$PHYSIQUES/$DEPUIS" ] || echec "sauvegarde physique inconnue : $DEPUIS (voir $PHYSIQUES)"
     echo "$PHYSIQUES/$DEPUIS/"
     return 0
   fi
-  instant_epoch="$(date -u -d "$INSTANT" +%s 2>/dev/null || echo "")"
-  if [ -z "$instant_epoch" ]; then
+  instant_compact="$(compact_utc "$INSTANT")"
+  if [ -z "$instant_compact" ]; then
     echo "" ; return 0
   fi
   trouvee=""
   for candidate in "$PHYSIQUES"/*/; do
     [ -d "$candidate" ] || continue
-    # L'horodatage est dans le nom : 2026-09-19T020000Z
     nom="$(basename "$candidate")"
-    quand="$(echo "$nom" | sed 's/T\([0-9][0-9]\)\([0-9][0-9]\)\([0-9][0-9]\)Z/ \1:\2:\3+00/')"
-    quand_epoch="$(date -u -d "$quand" +%s 2>/dev/null || echo 0)"
-    if [ "$quand_epoch" -ne 0 ] && [ "$quand_epoch" -le "$instant_epoch" ]; then
+    # 2026-09-19T020000Z → 20260919020000 ; un nom d'une autre forme est ignoré.
+    quand="$(printf '%s' "$nom" | sed -n -E 's/^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{6})Z$/\1\2\3\4/p')"
+    [ -n "$quand" ] || continue
+    # Deux nombres de quatorze chiffres : la comparaison numérique est POSIX.
+    if [ "$quand" -le "$instant_compact" ]; then
       trouvee="$candidate"
     fi
   done
@@ -107,7 +140,7 @@ choisie="$(choisir_le_point_de_depart)"
 if [ -z "$choisie" ]; then
   echo "Sauvegardes physiques disponibles :" >&2
   ls -1 "$PHYSIQUES" >&2 2>/dev/null || true
-  echec "impossible de choisir seul le point de départ (date illisible, ou aucune sauvegarde antérieure à $INSTANT). Nommez-le : --depuis <horodatage>"
+  echec "impossible de choisir seul le point de départ (instant hors UTC ou illisible, ou aucune sauvegarde antérieure à $INSTANT). Nommez-le : --depuis <horodatage>"
 fi
 journal "point de départ : $choisie"
 
@@ -135,12 +168,19 @@ if [ "$MODE" = "production" ]; then
   read -r reponse
   [ "$reponse" = "remplacer" ] || echec "annulé — rien n'a été touché"
   # Le répertoire actuel est mis de côté, pas effacé : si la reprise tourne
-  # mal, il reste la seule chose qui contienne encore les données.
-  sauvegarde_du_repertoire="$cible.avant-reprise-$(date -u +%Y%m%dT%H%M%SZ)"
-  mv "$cible" "$sauvegarde_du_repertoire" \
-    || echec "impossible de mettre l'ancien répertoire de côté"
+  # mal, il reste la seule chose qui contienne encore les données. Il ne
+  # peut pas être renommé : c'est un point de montage (le volume `pgdata`),
+  # et le noyau refuse. Son contenu part donc, élément par élément, dans le
+  # volume des sauvegardes — le même disque, un déplacement, pas une copie.
+  sauvegarde_du_repertoire="$DESTINATION/base/avant-reprise-$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$sauvegarde_du_repertoire" && chmod 700 "$sauvegarde_du_repertoire" \
+    || echec "impossible de créer $sauvegarde_du_repertoire"
+  for element in "$cible"/* "$cible"/.[!.]*; do
+    [ -e "$element" ] || continue
+    mv "$element" "$sauvegarde_du_repertoire"/ \
+      || echec "impossible de mettre $element de côté : le répertoire de données est dans un état mixte, ne relancez pas la pile avant d'avoir compris"
+  done
   journal "ancien répertoire conservé : $sauvegarde_du_repertoire (à effacer une fois la reprise vérifiée)"
-  mkdir -p "$cible"
 else
   cible="${SAUVEGARDE_REPRISE_ESSAI:-/tmp/reprise-essai}"
   rm -rf "$cible"
@@ -167,14 +207,40 @@ touch "$cible/recovery.signal"
 
 if [ "$MODE" = "essai" ]; then
   journal "démarrage de la base d'essai sur le port $PORT…"
-  pg_ctl -D "$cible" -o "-p $PORT" -l "$cible/reprise.log" -w start \
+  pg_ctl -D "$cible" -o "-p $PORT -c listen_addresses=localhost" -l "$cible/reprise.log" -w start \
     || { tail -20 "$cible/reprise.log" >&2; echec "la base d'essai n'a pas démarré"; }
+  base="${PGDATABASE:-justi_innov}"
+  requete() { psql -h localhost -p "$PORT" -d "$base" -v ON_ERROR_STOP=1 -qtAX -c "$1"; }
   echo ""
-  journal "✔ base d'essai ouverte sur le port $PORT, à l'instant $INSTANT"
-  echo "    Regardez-la :   psql -p $PORT -d ${PGDATABASE:-justi_innov} -c 'select count(*) from expenses_expense'"
-  echo "    Jetez-la :      pg_ctl -D $cible -m immediate stop && rm -rf $cible"
+  journal "✔ base d'essai ouverte, à l'instant $INSTANT"
+  # Là où Postgres s'est arrêté : la ligne du journal qui le dit, mot pour
+  # mot. « recovery stopping before commit of transaction … time … » est
+  # l'instant exact ; s'il est absent, la reprise a rejoué tout ce qu'il y
+  # avait, ce qui veut dire que l'instant demandé est postérieur au dernier
+  # segment archivé.
+  arret="$(grep -E 'recovery stopping (before|after|at)' "$cible/reprise.log" | tail -1 || true)"
+  if [ -n "$arret" ]; then
+    echo "    arrêt : ${arret#*LOG:  }"
+  else
+    echo "    ⚠ aucun arrêt sur l'instant visé : tout ce qui était archivé a été rejoué. L'archive s'arrête AVANT $INSTANT."
+  fi
+  echo "    en écriture : $(requete 'select not pg_is_in_recovery()')"
+  # Ce que la base contient, pour comparer avec la production sans
+  # deviner : les tables qui font la valeur de la plateforme.
+  for table in expenses_dossier expenses_expense expenses_proof budget_budget accounts_profile; do
+    if compte="$(requete "select count(*) from $table" 2>/dev/null)"; then
+      echo "    $table : $compte ligne(s)"
+    fi
+  done
+  if [ -n "$REQUETE" ]; then
+    echo ""
+    echo "    résultat de --requete :"
+    requete "$REQUETE" | sed 's/^/      /' || echec "la requête a échoué"
+  fi
   echo ""
-  echo "    La pile n'a pas été touchée."
+  pg_ctl -D "$cible" -m fast -w stop >/dev/null 2>&1 || true
+  rm -rf "$cible"
+  journal "✔ base d'essai jetée. La pile n'a pas été touchée."
 else
   journal "✔ répertoire de données remplacé. Relancez la pile :"
   echo "    docker compose -f docker-compose.prod.yml up -d"

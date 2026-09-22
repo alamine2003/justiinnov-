@@ -50,16 +50,9 @@ export function RatesSection() {
   const rates = query.data?.results ?? []
   const [open, setOpen] = useState(false)
 
-  // Les taux arrivent triés par devise puis date décroissante : le premier de
-  // chaque devise est donc celui qui s'applique aujourd'hui.
-  const enVigueur = new Set<string>()
-  const courants = new Set<number>()
-  for (const rate of rates) {
-    if (!enVigueur.has(rate.currency)) {
-      enVigueur.add(rate.currency)
-      courants.add(rate.id)
-    }
-  }
+  // Quel taux s'applique aujourd'hui, c'est le serveur qui le dit
+  // (`is_current`) : déduit du tri, le premier de chaque devise était
+  // « en vigueur » même daté du mois prochain.
 
   return (
     <Card className="border-border/60 shadow-sm">
@@ -124,7 +117,7 @@ export function RatesSection() {
                     </TableCell>
                     <TableCell>{formatDay(rate.valid_from)}</TableCell>
                     <TableCell className="text-right">
-                      {courants.has(rate.id) ? (
+                      {rate.is_current ? (
                         <Badge className={STATUS_TONES.SUCCES}>
                           {t("configuration.taux.en_vigueur")}
                         </Badge>

@@ -157,6 +157,32 @@ x-backend: &backend
   logging: *journal
 
 services:
+  # Le volume `sauvegardes` est partagé par des processus qui n'ont pas le
+  # même utilisateur : Postgres archive ses segments sous `postgres`
+  # (archiver_wal.sh, appelé par la base elle-même), les services de
+  # sauvegarde des pièces et de copie distante écrivent en root. Docker crée
+  # un volume vide en root, 755 : Postgres ne pouvait pas y créer
+  # `base/wal`, chaque archivage échouait, et les segments s'accumulaient
+  # dans `pg_wal` jusqu'à remplir le disque — sans que rien ne le dise avant
+  # le contrôle du lendemain matin. Ce service tourne une fois à chaque
+  # `up`, avant la base, et donne à `postgres` ce qui lui revient : la racine
+  # (pour ses marqueurs), `base/` et `.distant/`. Les pièces restent en root,
+  # personne d'autre n'y écrit.
+  sauvegardes-init:
+    image: postgres:16.4-alpine
+    user: root
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        mkdir -p /sauvegardes/base/wal /sauvegardes/base/physique /sauvegardes/.distant
+        chown postgres:postgres /sauvegardes /sauvegardes/.distant
+        chown -R postgres:postgres /sauvegardes/base
+        chmod 700 /sauvegardes/base/wal
+    volumes:
+      - sauvegardes:/sauvegardes
+    restart: "no"
+    logging: *journal
+
   db:
     image: postgres:16.4-alpine
     # L'image officielle arrête Postgres en mode « fast » : les connexions
@@ -241,6 +267,12 @@ services:
       SAUVEGARDE_DESTINATION: /sauvegardes
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # À la première initialisation seulement : l'entrée de pg_hba.conf
+      # qui laisse le service `sauvegarde` prendre la sauvegarde physique
+      # (pg_basebackup ouvre une connexion de réplication, que l'image
+      # n'autorise pas d'un autre conteneur). Un cluster déjà en service
+      # reçoit la ligne à la main, une fois (README.md).
+      - ./initdb:/docker-entrypoint-initdb.d:ro
       # L'archivage écrit dans le volume des sauvegardes : c'est Postgres
       # lui-même qui appelle le script, il faut donc que la base y accède.
       # En lecture seule pour le script, en écriture pour l'archive.
@@ -251,6 +283,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    depends_on:
+      sauvegardes-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     logging: *journal
 
@@ -408,6 +443,12 @@ services:
   sauvegarde:
     image: postgres:16.4-alpine
     mem_limit: 128m
+    # Sous `postgres`, comme l'archivage : les dumps, les sauvegardes
+    # physiques et la purge des segments se font alors dans des répertoires
+    # qui appartiennent au même utilisateur que celui qui y archive. C'est
+    # aussi l'utilisateur qu'exige `pg_ctl`, dont la reprise (service
+    # `reprise`, plus bas) a besoin ; root, il refuse.
+    user: postgres
     entrypoint: ["/sauvegarder.sh", "base"]
     environment:
       <<: *proprietaire
@@ -427,6 +468,33 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging: *journal
+
+  # Reprise à un instant donné (restaurer_a_la_date.sh). C'est le seul
+  # service, avec la base, qui voit le répertoire de données : le mode
+  # --en-production le remplace. Il n'est jamais lancé par `up` — le profil
+  # `reprise` n'est activé que par `docker compose run --rm reprise …`, et le
+  # conteneur disparaît avec la commande. La base d'essai du mode --essai
+  # démarre à l'intérieur, sous `postgres`, avec ce qu'un Postgres a besoin
+  # de mémoire ; 128 Mo ne lui suffiraient pas.
+  reprise:
+    image: postgres:16.4-alpine
+    profiles: ["reprise"]
+    user: postgres
+    mem_limit: 512m
+    shm_size: 256m
+    entrypoint: ["/restaurer_a_la_date.sh"]
+    environment:
+      <<: *proprietaire
+      SAUVEGARDE_DESTINATION: /sauvegardes
+      # La clé privée n'est pas sur le serveur : le jour d'une reprise de
+      # segments chiffrés, elle est apportée sur la ligne de commande
+      # (README.md, « Reprise à un instant donné »).
+      SAUVEGARDE_CLE_PRIVEE: ${SAUVEGARDE_CLE_PRIVEE:-}
+    volumes:
+      - ./restaurer_a_la_date.sh:/restaurer_a_la_date.sh:ro
+      - sauvegardes:/sauvegardes
+      - pgdata:/var/lib/postgresql/data
     logging: *journal
 
   sauvegarde-pieces:
