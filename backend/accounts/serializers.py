@@ -267,13 +267,18 @@ class MeSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.BooleanField())
     def get_totp_required(self, user):
-        """La politique de la plateforme, pas l'état du compte.
+        """La politique de la plateforme **pour ce compte**, pas son état.
 
         Vrai : un compte non enrôlé est cantonné à l'enrôlement, et
         l'interface doit l'y conduire. Faux : l'enrôlement reste proposé,
         jamais imposé — et ``totp_confirmed`` dit si ce compte-ci l'a fait.
+        Depuis la décision 86, elle peut ne valoir que pour certains rôles :
+        c'est ``accounts.middleware.totp_exige_pour`` qui tranche, comme
+        pour le verrou.
         """
-        return bool(settings.TOTP_REQUIRED)
+        from accounts.middleware import totp_exige_pour
+
+        return totp_exige_pour(getattr(user, "profile", None))
 
     @extend_schema_field(serializers.BooleanField())
     def get_totp_confirmed(self, user):

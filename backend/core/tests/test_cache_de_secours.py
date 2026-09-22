@@ -241,3 +241,55 @@ class CacheDeLaPileTests(TransactionTestCase):
 
         self.assertLessEqual(options["socket_connect_timeout"], 2)
         self.assertLessEqual(options["socket_timeout"], 2)
+
+
+class ConfigurationSousPanneDeRedisTests(TransactionTestCase):
+    """Une matrice des droits modifiée pendant une micro-coupure de Redis.
+
+    ``charger()`` mettait la configuration en cache **sans expiration** et
+    l'invalidait par un seul ``delete``. Redis injoignable à l'instant du
+    ``PATCH /api/permissions/`` : le ``delete`` tombait sur le secours,
+    l'ancienne matrice restait dans Redis, et à son retour un DF gardait
+    un droit qu'on venait de lui retirer — jusqu'au redémarrage du serveur,
+    sur le serveur **et** sur l'ordonnanceur, pendant que le journal
+    disait le droit retiré. Deux bornes désormais : l'entrée expire
+    (``CACHE_TTL``), et ``oublier()`` efface les deux caches.
+    """
+
+    def test_l_entree_expire(self):
+        from django.core.cache import cache
+
+        from core.models import WorkflowConfiguration
+
+        WorkflowConfiguration.oublier()
+        with mock.patch.object(cache, "set", wraps=cache.set) as pose:
+            WorkflowConfiguration.charger()
+
+        pose.assert_called_once()
+        delai = pose.call_args.args[2]
+        self.assertIsNotNone(delai, "l'entrée est de nouveau sans expiration")
+        self.assertLessEqual(delai, 60, "un droit retiré peut survivre plus d'une minute")
+
+    def test_l_invalidation_efface_aussi_le_secours(self):
+        """Le cache livré est ``CacheAvecSecours`` : le ``delete`` va à
+        Redis, ou au secours s'il tombe — jamais aux deux. ``oublier()``
+        efface l'un puis l'autre, explicitement."""
+        from core.models import WorkflowConfiguration
+
+        principal = mock.MagicMock()
+        principal.secours = mock.MagicMock()
+        with mock.patch("core.models.cache", principal):
+            WorkflowConfiguration.oublier()
+
+        principal.delete.assert_called_once_with(WorkflowConfiguration.CACHE_KEY)
+        principal.secours.delete.assert_called_once_with(WorkflowConfiguration.CACHE_KEY)
+
+    def test_enregistrer_la_configuration_oublie_les_deux_caches(self):
+        from core.models import WorkflowConfiguration
+
+        configuration = WorkflowConfiguration.charger()
+        with mock.patch.object(WorkflowConfiguration, "oublier") as oublier:
+            configuration.save()
+
+        oublier.assert_called_once()
+

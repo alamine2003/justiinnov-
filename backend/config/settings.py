@@ -449,8 +449,30 @@ SPECTACULAR_SETTINGS = {
 # chaque sauvegarde a réussi pour la dernière fois. Vide hors production.
 SAUVEGARDES_MARQUEURS = os.environ.get("SAUVEGARDES_MARQUEURS", "")
 SAUVEGARDES_AGE_MAX_HEURES = int(os.environ.get("SAUVEGARDES_AGE_MAX_HEURES", "26"))
+# Espace libre minimal, en pourcentage, sur le disque qui porte le volume
+# des sauvegardes — le même que la base et ses segments. Un archivage cassé
+# remplit ce disque ; l'alerte de Grafana vit dans un profil désactivé par
+# défaut, celle-ci non (décision 84).
+SAUVEGARDES_DISQUE_MIN_POURCENT = int(os.environ.get("SAUVEGARDES_DISQUE_MIN_POURCENT", "15"))
 
 TOTP_REQUIRED = os.environ.get("DJANGO_TOTP_REQUIRED", "0") == "1"
+# L'obligation par rôle (décision 86) : DJANGO_TOTP_REQUIRED_ROLES=admin,
+# super_admin ferme la plateforme aux administrateurs non enrôlés et la
+# laisse proposée aux autres — ce que CLAUDE.md recommandait comme réglage
+# de déploiement, et qui n'existait pas : imposer aux administrateurs
+# imposait aux dix-sept filiales. DJANGO_TOTP_REQUIRED=1 vaut pour tous les
+# rôles, quelle que soit la liste. Un rôle inconnu est refusé au démarrage.
+TOTP_REQUIRED_ROLES = frozenset(
+    role.strip() for role in os.environ.get("DJANGO_TOTP_REQUIRED_ROLES", "").split(",")
+    if role.strip()
+)
+_ROLES_CONNUS = {"manager", "dm", "df", "admin", "super_admin"}
+if TOTP_REQUIRED_ROLES - _ROLES_CONNUS:
+    raise ImproperlyConfigured(
+        "DJANGO_TOTP_REQUIRED_ROLES contient un rôle inconnu : "
+        + ", ".join(sorted(TOTP_REQUIRED_ROLES - _ROLES_CONNUS))
+        + " (rôles : " + ", ".join(sorted(_ROLES_CONNUS)) + ")"
+    )
 # Nom affiché par l'application d'authentification à côté du compte.
 TOTP_ISSUER = "JUSTI INNOV"
 

@@ -302,6 +302,15 @@ class WorkflowConfiguration(models.Model):
     """
 
     CACHE_KEY = "justi_innov:workflow_configuration"
+    #: Durée de vie de l'entrée en cache. Elle était illimitée, et
+    #: l'invalidation se faisait par un seul ``delete`` : si Redis était
+    #: injoignable à l'instant où un administrateur enregistrait la matrice
+    #: des droits, le ``delete`` tombait sur le cache de secours, et
+    #: l'ancienne matrice restait dans Redis à son retour — jusqu'au
+    #: prochain redémarrage du serveur. Une minute borne ce que peut durer
+    #: un droit retiré (décision 81) ; une lecture par minute et par
+    #: processus ne se mesure pas.
+    CACHE_TTL = 60
     OVERRUN_POLICY_CHOICES = (
         ("block", _("Bloquer")),
         ("warn", _("Alerter")),
@@ -355,7 +364,21 @@ class WorkflowConfiguration(models.Model):
         # à modifier l'unique.
         kwargs.pop("force_insert", None)
         super().save(*args, **kwargs)
-        cache.delete(self.CACHE_KEY)
+        self.oublier()
+
+    @classmethod
+    def oublier(cls):
+        """Retire la configuration de **chaque** cache qui peut la servir.
+
+        Avec ``CacheAvecSecours`` (``core.cache``), un ``delete`` pendant
+        une panne de Redis tombe sur la base ; l'entrée de Redis, elle,
+        survit à son retour. On efface donc les deux, explicitement, et
+        ``CACHE_TTL`` couvre ce qui échapperait quand même.
+        """
+        cache.delete(cls.CACHE_KEY)
+        secours = getattr(cache, "secours", None)
+        if secours is not None:
+            secours.delete(cls.CACHE_KEY)
 
     def delete(self, *args, **kwargs):
         raise ProtectedError(
@@ -369,10 +392,12 @@ class WorkflowConfiguration(models.Model):
 
         Le cache est celui de la base (``DatabaseCache``) : l'objet en est
         dépicklé, donc jamais identique (``is``) à celui qui y a été posé.
+        L'entrée expire au bout de ``CACHE_TTL`` : c'est la borne haute de
+        ce qu'un droit retiré peut encore durer si l'invalidation a manqué.
         """
         configuration = cache.get(cls.CACHE_KEY)
         if configuration is not None:
             return configuration
         configuration, _ = cls.objects.get_or_create(pk=1)
-        cache.set(cls.CACHE_KEY, configuration, None)
+        cache.set(cls.CACHE_KEY, configuration, cls.CACHE_TTL)
         return configuration
