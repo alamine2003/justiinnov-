@@ -1106,6 +1106,27 @@ L'alerte ne se déclenche pas sur l'ancienneté du dernier segment : une nuit
 sans écriture n'en produit aucun, et crier au loup tous les week-ends
 reviendrait à n'être plus lu.
 
+### Pile mise en service avant cette version : une commande, une fois
+
+`pg_basebackup` ouvre une connexion de **réplication**, que le `pg_hba.conf`
+écrit par l'image n'autorise que depuis la machine elle-même. Un cluster
+initialisé avec cette pile reçoit la ligne qu'il faut à sa création
+(`deploy/initdb/`) ; un cluster plus ancien ne la reçoit pas tout seul, et sa
+sauvegarde physique échoue chaque semaine avec « no pg_hba.conf entry for
+replication connection ». Trouvé par la CI la première fois qu'elle a joué
+la pile livrée. Sur ce serveur, une fois :
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T db sh -c \
+  'echo "host replication $POSTGRES_USER samenet scram-sha-256" >> "$PGDATA/pg_hba.conf"'
+docker compose -f docker-compose.prod.yml exec -T db \
+  psql -U "$POSTGRES_MIGRATION_USER" -d "$POSTGRES_DB" -c 'select pg_reload_conf()'
+docker compose -f docker-compose.prod.yml run --rm sauvegarde --une-fois   # doit écrire « sauvegarde physique : … »
+```
+
+`samenet` désigne le réseau Compose de la pile, pas l'Internet ni le réseau
+privé de l'hébergeur ; le mot de passe reste exigé.
+
 ### Répéter la reprise — à faire tous les trimestres
 
 Le mode par défaut ne touche à rien : il déplie une copie dans un répertoire

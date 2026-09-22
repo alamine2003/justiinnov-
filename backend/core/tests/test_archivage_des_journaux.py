@@ -33,6 +33,7 @@ PILE = RACINE / "deploy" / "docker-compose.prod.yml"
 ARCHIVEUR = RACINE / "deploy" / "archiver_wal.sh"
 REPRISE = RACINE / "deploy" / "restaurer_a_la_date.sh"
 SAUVEGARDEUR = RACINE / "deploy" / "sauvegarder.sh"
+INITDB = RACINE / "deploy" / "initdb" / "10-sauvegarde-physique.sh"
 EXEMPLE = RACINE / "deploy" / ".env.example"
 README = RACINE / "deploy" / "README.md"
 
@@ -225,4 +226,17 @@ class LaRepriseEstCableeTests(SimpleTestCase):
         self.assertRegex(source, r'(?m)^FAMILLES=".*base-physique.*wal.*"', "les familles copiées")
         # Chaque famille pose son marqueur : c'est ce que verifier_sauvegardes lit.
         self.assertIn('marquer_reussite "$(marqueur_distant_de "$d")"', source)
+
+    def test_la_base_laisse_le_service_de_sauvegarde_ouvrir_une_connexion_de_replication(self):
+        """pg_basebackup n'ouvre pas une connexion ordinaire : le pg_hba.conf
+        de l'image n'autorise la réplication que depuis la machine elle-même,
+        et la sauvegarde physique échouait chaque semaine depuis le service
+        `sauvegarde`. Trouvé par la CI la première fois qu'elle a joué la
+        pile livrée. Un cluster neuf reçoit la ligne à l'initialisation ; un
+        ancien la reçoit à la main, et le script dit comment."""
+        self.assertIn("./initdb:/docker-entrypoint-initdb.d:ro", self.services["db"]["volumes"])
+        self.assertTrue(os.stat(INITDB).st_mode & stat.S_IXUSR, "le script d'initialisation n'est pas exécutable")
+        self.assertIn('host replication ${POSTGRES_USER} samenet scram-sha-256', INITDB.read_text())
+        self.assertIn("host replication", README.read_text().split("### Répéter la reprise")[0])
+        self.assertIn("*pg_hba.conf*)", SAUVEGARDEUR.read_text())
 

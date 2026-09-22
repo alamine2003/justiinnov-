@@ -312,11 +312,22 @@ sauvegarder_base_physique() {
   # les embarquer une seconde fois doublerait le volume pour rien.
   # `-c fast` : le point de reprise est forcé plutôt qu'attendu — on ne
   # veut pas qu'une sauvegarde nocturne traîne jusqu'au matin.
-  pg_basebackup --pgdata "$partiel" --format=tar --gzip --wal-method=none \
-    --checkpoint=fast --no-password
+  sortie_basebackup="$(pg_basebackup --pgdata "$partiel" --format=tar --gzip --wal-method=none \
+    --checkpoint=fast --no-password 2>&1)"
   resultat_basebackup=$?
+  [ -n "$sortie_basebackup" ] && printf '%s\n' "$sortie_basebackup"
   if [ "$resultat_basebackup" -ne 0 ] || [ ! -s "$partiel/base.tar.gz" ]; then
     rm -rf "$partiel"
+    # Le refus le plus probable, et le remède exact : pg_basebackup ouvre
+    # une connexion de réplication, que le pg_hba.conf de l'image n'autorise
+    # pas depuis un autre conteneur. Un cluster initialisé avec cette pile a
+    # la ligne (deploy/initdb) ; un cluster plus ancien la reçoit à la main.
+    case "$sortie_basebackup" in
+      *pg_hba.conf*)
+        journal "   → la base refuse la connexion de réplication du service de sauvegarde. Sur le serveur, une fois :" >&2
+        journal "     docker compose -f docker-compose.prod.yml exec -T db sh -c 'echo \"host replication \$POSTGRES_USER samenet scram-sha-256\" >> \"\$PGDATA/pg_hba.conf\"' && docker compose -f docker-compose.prod.yml exec -T db psql -U \"$PGUSER\" -d \"$PGDATABASE\" -c 'select pg_reload_conf()'" >&2
+        ;;
+    esac
     echec "sauvegarde physique impossible (pg_basebackup=$resultat_basebackup) : la reprise à un instant donné restera hors d'atteinte"
     return 1
   fi

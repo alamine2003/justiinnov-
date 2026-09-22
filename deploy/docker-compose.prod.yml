@@ -267,6 +267,12 @@ services:
       SAUVEGARDE_DESTINATION: /sauvegardes
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # À la première initialisation seulement : l'entrée de pg_hba.conf
+      # qui laisse le service `sauvegarde` prendre la sauvegarde physique
+      # (pg_basebackup ouvre une connexion de réplication, que l'image
+      # n'autorise pas d'un autre conteneur). Un cluster déjà en service
+      # reçoit la ligne à la main, une fois (README.md).
+      - ./initdb:/docker-entrypoint-initdb.d:ro
       # L'archivage écrit dans le volume des sauvegardes : c'est Postgres
       # lui-même qui appelle le script, il faut donc que la base y accède.
       # En lecture seule pour le script, en écriture pour l'archive.
