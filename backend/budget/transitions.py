@@ -200,12 +200,30 @@ def approuver(reallocation, acteur, note, trace):
     reallocation = verrouiller_pour_decision(reallocation, acteur)
     budgets = {
         budget.pk: budget
-        for budget in Budget.objects.select_for_update()
+        for budget in Budget.objects.select_for_update(of=("self",))
+        .select_related("country")
         .filter(pk__in=[reallocation.source_id, reallocation.target_id])
         .order_by("pk")
     }
     source = budgets[reallocation.source_id]
     target = budgets[reallocation.target_id]
+    # Rejugé sous verrou, comme le disponible : entre la demande et la
+    # décision, la destination a pu être désactivée, ou sa devise changée.
+    # De l'argent versé sur une enveloppe retirée du suivi disparaîtrait
+    # des totaux ; versé dans une autre devise, il changerait de valeur.
+    if not target.is_active:
+        raise RegleViolee(
+            "target",
+            _("L'enveloppe destinataire est désactivée : le transfert ne se fait plus."),
+        )
+    if source.country.currency != target.country.currency:
+        raise RegleViolee(
+            "target",
+            _(
+                "Les deux enveloppes doivent être dans la même devise "
+                "({source} → {target})."
+            ).format(source=source.country.currency, target=target.country.currency),
+        )
     if reallocation.amount > disponible(source):
         # L'argent déjà sorti ou engagé n'est plus transférable : la source
         # doit pouvoir couvrir ses dépenses après le transfert.

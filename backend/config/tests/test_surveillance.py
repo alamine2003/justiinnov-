@@ -218,3 +218,35 @@ class CeQuiEstUtileTests(SimpleTestCase):
 
         self.assertNotIn(ADRESSE, str(retenu))
         self.assertNotIn("cle-de-test", str(retenu))
+
+
+class ChaineDeRequeteTests(SimpleTestCase):
+    """La chaîne de requête porte ce que l'on cherche : elle ne part pas."""
+
+    def test_la_chaine_de_requete_et_les_temoins_sont_retires(self):
+        """``?search=…`` nomme un bénéficiaire ou un N°ORDRE, et Sentry la
+        recopie dans l'URL de l'événement : seul le chemin reste."""
+        evenement = {
+            "request": {
+                "url": "https://justi-innov.innovpharma.net/api/expenses/?search=Pharmacie%20Adjamé",
+                "query_string": "search=Pharmacie%20Adjamé",
+                "cookies": {"sessionid": "abc"},
+                "method": "GET",
+            }
+        }
+
+        rendu = surveillance._retirer_ce_qui_identifie(evenement, {})
+
+        requete = rendu["request"]
+        self.assertEqual(requete["url"], "https://justi-innov.innovpharma.net/api/expenses/")
+        self.assertEqual(requete["query_string"], "")
+        self.assertNotIn("cookies", requete)
+        self.assertEqual(requete["method"], "GET")
+        self.assertNotIn("Pharmacie", str(rendu))
+
+    def test_une_requete_sans_chaine_reste_intacte(self):
+        evenement = {"request": {"url": "https://justi-innov.innovpharma.net/api/me/"}}
+
+        rendu = surveillance._retirer_ce_qui_identifie(evenement, {})
+
+        self.assertEqual(rendu["request"]["url"], "https://justi-innov.innovpharma.net/api/me/")

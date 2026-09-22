@@ -17,7 +17,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, MultiPartParser
 
-from budget.aggregates import consolidation_par_pays, current_rates, date_de_reference, to_xof
+from budget.aggregates import (
+    consolidation_par_pays,
+    current_rates,
+    date_de_reference,
+    niveau_d_execution,
+    seuil_d_alerte,
+    to_xof,
+)
 from core.journal import tracer
 from core.models import Country
 from expenses.models import AuditLog
@@ -89,10 +96,14 @@ def _money(value):
     return str(value if value is not None else ZERO)
 
 
-def _ratio(numerator, denominator):
+def _taux(numerator, denominator):
     if not denominator:
         return None
-    return str((Decimal(numerator) / Decimal(denominator)).quantize(Decimal("0.0001")))
+    return (Decimal(numerator) / Decimal(denominator)).quantize(Decimal("0.0001"))
+
+
+def _ratio(numerator, denominator):
+    return _as_str(_taux(numerator, denominator))
 
 
 def _as_str(value):
@@ -161,12 +172,16 @@ class DashboardView(APIView):
                 totaux[key] += value
 
         used = totaux["consumed"] + totaux["engaged"]
+        execution_rate = _taux(used, totaux["allocated"])
         return {
             "currency": "XOF",
             **{key: _money(value) for key, value in totaux.items()},
             # Ce qui est sorti sans preuve à l'appui.
             "gap": _money(totaux["consumed"] - totaux["justified"]),
-            "execution_rate": _ratio(used, totaux["allocated"]),
+            "execution_rate": _as_str(execution_rate),
+            # Jugé par la même règle que chaque ligne de pays et chaque
+            # enveloppe (``budget.aggregates.niveau_d_execution``).
+            "execution_level": niveau_d_execution(execution_rate, seuil_d_alerte()),
             "justification_rate": _ratio(totaux["justified"], totaux["consumed"]),
             "unconverted_currencies": sorted(non_converties),
         }
@@ -200,6 +215,7 @@ class DashboardView(APIView):
                     "gap": _money(row["gap"]),
                     "remaining": _money(row["remaining"]),
                     "execution_rate": _as_str(row["execution_rate"]),
+                    "execution_level": row["execution_level"],
                     "justification_rate": _as_str(row["justification_rate"]),
                     "remaining_xof": _as_str(row["remaining_xof"]),
                 }
@@ -489,7 +505,10 @@ class ExpensesImportView(APIView):
             resultat = importer_depenses(
                 uploaded, request.user, dry_run=dry_run, country=country
             )
-            audit_import(request, resultat, country=country)
+            # Une prévisualisation ne verse rien : elle ne laisse pas une
+            # trace « importé » qui ferait croire le contraire.
+            if not dry_run:
+                audit_import(request, resultat, country=country)
         return Response(resultat)
 
     def _pays_de_l_import(self, request):

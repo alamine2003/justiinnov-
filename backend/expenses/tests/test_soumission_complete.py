@@ -9,6 +9,9 @@ restent facultatifs (décision consignée dans ``docs/model-de-donnees.md``).
 
 from rest_framework import status
 
+from accounts.models import Role
+from accounts.tests.test_scoping import make_user
+from expenses.models import Expense
 from expenses.workflow import Status
 
 from .base import ExpenseTestCase
@@ -76,3 +79,47 @@ class SoumissionCompleteTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertIsNone(response.data["team"])
         self.assertIsNone(response.data["owner"])
+
+
+class AuteurDeLaSoumissionTests(ExpenseTestCase):
+    """Un brouillon de dossier part par son auteur, ou par le siège.
+
+    Un collègue du même pays qui soumettrait le dossier d'un autre
+    déclarerait au nom de l'auteur ce que celui-ci n'a pas fini de saisir —
+    la même règle que pour la modification d'un brouillon (décision 46).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.make_expense()
+        self.collegue = make_user("collegue.togo", Role.MANAGER, [self.togo])
+
+    def _actions(self, user):
+        self.login(user)
+        return self.client.get(f"/api/dossiers/{self.dossier.pk}/").data["allowed_actions"]
+
+    def test_un_collegue_du_pays_ne_soumet_pas_le_brouillon_d_un_autre(self):
+        response = self.submit_dossier(user=self.collegue)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.DRAFT)
+        self.assertFalse(Expense.objects.filter(status=Status.SUBMITTED).exists())
+
+    def test_l_auteur_soumet(self):
+        response = self.submit_dossier(user=self.owner)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["status"], Status.SUBMITTED)
+
+    def test_le_siege_soumet_a_decouvert(self):
+        response = self.submit_dossier(user=self.doo)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["status"], Status.SUBMITTED)
+
+    def test_les_actions_proposees_disent_la_meme_chose(self):
+        """``submit`` n'est proposé qu'à qui le service laissera passer."""
+        self.assertIn("submit", self._actions(self.owner))
+        self.assertIn("submit", self._actions(self.doo))
+        self.assertNotIn("submit", self._actions(self.collegue))

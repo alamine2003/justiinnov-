@@ -1,10 +1,13 @@
 """Sérialiseurs des dossiers, dépenses et justificatifs."""
 
+import zipfile
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
 from django.db import IntegrityError
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 from drf_spectacular.utils import extend_schema_field
@@ -49,6 +52,11 @@ from .workflow import (
 #: que le serveur enregistre — jamais celui que le client déclare. Un
 #: fichier HTML nommé ``recu.pdf`` serait sinon rejoué tel quel dans
 #: l'aperçu du siège, dans l'origine de l'application.
+#:
+#: ``.doc`` et ``.xls`` ne sont reconnus qu'à leur en-tête OLE, commun à
+#: tout document Office binaire (Word, Excel, PowerPoint, Outlook…) : le
+#: format ne dit pas plus sans lire le répertoire du conteneur, et un
+#: classeur nommé ``.doc`` reste un document Office, pas un HTML déguisé.
 SIGNATURES = {
     ".pdf": ((b"%PDF",), "application/pdf"),
     ".jpg": ((b"\xff\xd8\xff",), "image/jpeg"),
@@ -65,24 +73,74 @@ SIGNATURES = {
 }
 _TEXTE = {".csv", ".txt"}
 _DEBUTS_HTML = (b"<!doctype", b"<html", b"<script", b"<svg")
+#: Répertoire qu'un document Office ouvert doit contenir : un ZIP quelconque
+#: renommé ``.docx`` n'en a pas.
+_REPERTOIRES_OFFICE = {".docx": "word/", ".xlsx": "xl/"}
+#: Marques HEIF acceptées après ``ftyp`` : les images HEIC et leurs
+#: conteneurs (``mif1``, ``msf1``) ; un MP4 porte aussi ``ftyp``, pas elles.
+_MARQUES_HEIC = {b"heic", b"heix", b"mif1", b"msf1"}
+
+
+def _repertoire_office(uploaded, repertoire):
+    """Le ZIP contient-il le répertoire du format (``word/``, ``xl/``) ?
+
+    Le premier membre ne suffit pas : ``[Content_Types].xml`` ouvre souvent
+    le fichier, et son ordre n'est pas garanti. C'est le répertoire du
+    conteneur qui dit ce qu'il est.
+    """
+    try:
+        with zipfile.ZipFile(uploaded) as archive:
+            noms = archive.namelist()
+    except (zipfile.BadZipFile, OSError, ValueError):
+        return False
+    finally:
+        uploaded.seek(0)
+    return any(nom.startswith(repertoire) for nom in noms)
 
 
 def type_verifie(uploaded, extension):
     """Type MIME d'une pièce dont les premiers octets confirment l'extension.
 
     ``None`` quand le contenu ne correspond pas : un HTML déguisé en PDF, un
-    texte qui commence par une balise, un binaire dans un ``.csv``.
+    texte vide ou qui commence par une balise, un binaire dans un ``.csv``,
+    un ZIP quelconque nommé ``.docx``, une vidéo nommée ``.heic``.
     """
     debuts, mime = SIGNATURES[extension]
     tete = uploaded.read(4096)
     uploaded.seek(0)
     if extension in _TEXTE:
-        return mime if b"\x00" not in tete and not tete.lstrip().lower().startswith(_DEBUTS_HTML) else None
+        contenu = tete.lstrip()
+        if not contenu or b"\x00" in tete:
+            return None
+        return None if contenu.lower().startswith(_DEBUTS_HTML) else mime
     if extension == ".webp":
         return mime if tete[:4] == b"RIFF" and tete[8:12] == b"WEBP" else None
     if extension == ".heic":
-        return mime if tete[4:8] == b"ftyp" else None
-    return mime if any(tete.startswith(debut) for debut in debuts) else None
+        return mime if tete[4:8] == b"ftyp" and tete[8:12] in _MARQUES_HEIC else None
+    if not any(tete.startswith(debut) for debut in debuts):
+        return None
+    if extension in _REPERTOIRES_OFFICE:
+        return mime if _repertoire_office(uploaded, _REPERTOIRES_OFFICE[extension]) else None
+    return mime
+
+
+def exiger_un_dossier_de_piece_modifiable(dossier):
+    """Le type d'une pièce se fige avec la déclaration de son dossier.
+
+    Déclaré, le dossier ne se modifie plus (``LOCKED_STATUSES``) ; requalifier
+    une pièce « reçu » en « facture » après coup changerait ce que le siège
+    a eu sous les yeux en contrôlant. Partagé par le sérialiseur (la
+    lecture) et la vue (sous verrou).
+    """
+    if dossier.status in LOCKED_STATUSES:
+        raise serializers.ValidationError(
+            {
+                "kind": _(
+                    "Le dossier est déclaré : le type de ses pièces ne se "
+                    "modifie plus."
+                )
+            }
+        )
 
 
 #: États d'une pièce après lesquels plus rien ne se modifie.
@@ -116,6 +174,24 @@ class DossierTotalsSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
     justified = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
     gap = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
+
+
+def _jour_local(date, country):
+    """Jour d'une dépense dans le fuseau de son pays, pour y chercher le taux.
+
+    La date est conservée en UTC ; un décaissement fait à Djibouti le 15
+    à 01:00 est encore le 14 en UTC, et le taux du 15 doit s'y appliquer —
+    la même lecture que l'import (``reporting.imports``) et que l'exercice
+    d'imputation (``services.exercice``). ``None`` sans date : le taux du
+    jour.
+    """
+    if date is None:
+        return None
+    try:
+        fuseau = ZoneInfo(country.timezone or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        fuseau = ZoneInfo("UTC")
+    return timezone.localtime(date, fuseau).date()
 
 
 def _verifier_le_manager(owner, country):
@@ -174,11 +250,17 @@ def _exiger_une_equipe_du_perimetre(serializer, team):
         )
 
 
+def _valeur_effective(serializer, attrs, field):
+    """Valeur d'une relation après écriture : celle de la charge utile,
+    sinon celle en place sur l'instance."""
+    if field in attrs:
+        return attrs[field]
+    return getattr(serializer.instance, field, None)
+
+
 def _equipe_effective(serializer, attrs):
     """Équipe après écriture : celle de la charge utile, sinon celle en place."""
-    if "team" in attrs:
-        return attrs["team"]
-    return getattr(serializer.instance, "team", None)
+    return _valeur_effective(serializer, attrs, "team")
 
 
 class BeneficiarySerializer(serializers.ModelSerializer):
@@ -348,6 +430,7 @@ class ProofSerializer(serializers.ModelSerializer):
 
     def _verifier_la_mise_a_jour(self):
         """Ce qui reste modifiable sur une pièce déposée : presque rien."""
+        exiger_un_dossier_de_piece_modifiable(self.instance.dossier)
         if self.instance.status in PROOF_FINAL_STATUSES:
             raise serializers.ValidationError(
                 _(
@@ -527,10 +610,13 @@ class ExpenseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"dossier": _("Le dossier appartient à un autre pays.")}
             )
+        # Les relations déjà portées par la ligne comptent autant que celles
+        # de la charge utile : un brouillon qui change de pays garderait
+        # sinon une équipe ou un bénéficiaire de l'ancien.
         for field in (
             "team", "project", "expense_title", "marketing_category", "beneficiary",
         ):
-            value = attrs.get(field)
+            value = _valeur_effective(self, attrs, field)
             if value is not None and country is not None and value.country_id != country.pk:
                 raise serializers.ValidationError(
                     {field: _("Cette entité appartient à un autre pays.")}
@@ -554,7 +640,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 }
             )
         _exiger_une_equipe_du_perimetre(self, team)
-        _verifier_le_manager(attrs.get("owner"), country)
+        _verifier_le_manager(_valeur_effective(self, attrs, "owner"), country)
 
         self._resoudre_la_devise(attrs, country)
         return attrs
@@ -578,7 +664,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
         ):
             # Une modification qui ne touche pas au décaissement d'origine le
             # laisse intact : un PATCH du libellé effaçait la devise.
-            if getattr(self.instance, "original_currency", "") and "amount" in attrs:
+            en_devise = bool(getattr(self.instance, "original_currency", ""))
+            if en_devise and "amount" in attrs:
                 raise serializers.ValidationError(
                     {
                         "amount": _(
@@ -588,7 +675,10 @@ class ExpenseSerializer(serializers.ModelSerializer):
                         ).format(currency=self.instance.original_currency)
                     }
                 )
-            return
+            # Le taux est celui du jour de la dépense : une date qui change
+            # seule fige la conversion à nouveau, sur le taux de ce jour-là.
+            if not (en_devise and "date" in attrs):
+                return
 
         # En modification partielle, le champ absent garde sa valeur : ne
         # corriger que le montant décaissé ne doit pas faire perdre la devise.
@@ -640,7 +730,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
         date = attrs.get("date") or getattr(self.instance, "date", None)
         converti, taux = convert(
-            montant, devise, country.currency, date.date() if date else None
+            montant, devise, country.currency, _jour_local(date, country)
         )
         if converti is None:
             raise serializers.ValidationError(
@@ -806,7 +896,9 @@ class DossierSerializer(serializers.ModelSerializer):
         if self.instance is not None:
             self._verifier_le_deplacement(attrs)
         _exiger_une_equipe_du_perimetre(self, team)
-        _verifier_le_manager(attrs.get("owner"), country)
+        # Le manager déjà en place compte aussi : un brouillon qui change de
+        # pays ne garde pas un manager de l'ancien.
+        _verifier_le_manager(_valeur_effective(self, attrs, "owner"), country)
         return attrs
 
     def _verifier_le_deplacement(self, attrs):

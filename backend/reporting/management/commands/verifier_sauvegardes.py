@@ -363,6 +363,9 @@ class Command(BaseCommand):
             title=_("Disque du serveur presque plein"),
             body=format_lazy(
                 _(
+                    # « % d » ressemble à un format Python pour xgettext : sans
+                    # ce drapeau, msgfmt --check refuserait une traduction sans lui.
+                    # xgettext:no-python-format
                     "Il reste {pourcent} % d'espace libre ({mo} Mo) sur le disque "
                     "qui porte la base, ses journaux archivés et les sauvegardes. "
                     "Plein, il arrête la base. Regardez d'abord « docker compose "

@@ -37,6 +37,7 @@ from .permissions import (
     RolePermission,
     get_access,
     matrice_effective,
+    peut_conferer_le_role,
     roles_pour,
 )
 from .serializers import (
@@ -519,14 +520,16 @@ class UserViewSet(NoDestroyModelViewSet):
         Un administrateur qui pourrait créer, modifier, réinitialiser le mot
         de passe ou la double authentification d'un super administrateur —
         ou s'attribuer le rôle — aurait de fait tous les droits. Seul un
-        super administrateur agit sur un compte de ce niveau ou le confère.
+        super administrateur agit sur un compte de ce niveau ou le confère
+        (``permissions.peut_conferer_le_role``, que la matrice expose en
+        ``assignable``).
         """
         access = get_access(self.request.user)
-        if access is not None and access.role == Role.SUPER_ADMIN:
-            return
         profile = getattr(cible, "profile", None) if cible is not None else None
-        if role_vise == Role.SUPER_ADMIN or (
-            profile is not None and profile.role == Role.SUPER_ADMIN
+        role_porte = profile.role if profile is not None else None
+        if not (
+            peut_conferer_le_role(access, role_vise)
+            and peut_conferer_le_role(access, role_porte)
         ):
             raise PermissionDenied(
                 _(
@@ -634,7 +637,7 @@ class PermissionMatrixView(APIView):
     permission_classes = [BackOfficePermission]
 
     @staticmethod
-    def _matrice(configuration):
+    def _matrice(configuration, access):
         effective = matrice_effective(configuration)
         return {
             "roles": [
@@ -646,6 +649,9 @@ class PermissionMatrixView(APIView):
                     # (DM, DF) ; la RH et les super administrateurs,
                     # jamais : ils administrent l'ensemble.
                     "always_global": role in ALWAYS_GLOBAL_ROLES,
+                    # Ce que le lecteur peut conférer à un compte : la même
+                    # règle que ``UserViewSet`` applique au refus.
+                    "assignable": peut_conferer_le_role(access, role),
                 }
                 for role in Role
             ],
@@ -672,7 +678,9 @@ class PermissionMatrixView(APIView):
 
     @extend_schema(responses=PermissionMatrixSerializer)
     def get(self, request):
-        return Response(self._matrice(WorkflowConfiguration.charger()))
+        return Response(
+            self._matrice(WorkflowConfiguration.charger(), get_access(request.user))
+        )
 
     @extend_schema(request=PermissionMatrixUpdateSerializer, responses=PermissionMatrixSerializer)
     @transaction.atomic
@@ -715,4 +723,4 @@ class PermissionMatrixView(APIView):
                 changed_fields=changes,
                 diff={cle: [avant[cle], apres[cle]] for cle in changes},
             )
-        return Response(self._matrice(configuration))
+        return Response(self._matrice(configuration, get_access(request.user)))

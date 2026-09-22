@@ -132,7 +132,9 @@ class ServicesDuCircuitTests(ExpenseTestCase):
         auteur = make_user("df.ouvreur", Role.DF)
         self.dossier.created_by = auteur.username
         self.dossier.save()
-        self.soumettre()
+        # Ouvert au siège, le brouillon ne part pas par le pays (décision
+        # 46, appliquée à la soumission) : c'est le siège qui le soumet.
+        self.soumettre(self.doo)
 
         with self.assertRaises(PermissionRefusee):
             transitions.mettre_en_controle(self.dossier, get_access(auteur), trace(auteur))

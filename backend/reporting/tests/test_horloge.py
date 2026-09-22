@@ -8,6 +8,7 @@ imputée — et doit se lire ainsi dans l'export, la répartition et l'import.
 from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
+from unittest import mock
 from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook
@@ -16,10 +17,11 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.permissions import Access
 from budget.models import Budget
-from core.models import Country, Team
+from core.models import Country, Team, WorkflowConfiguration
 from expenses.models import Dossier, Expense
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
+from reporting import alerts as alert_rules
 from reporting.exports import EXPENSE_COLUMNS, XLSX
 from reporting.scope import UTC, bornes_periode, fuseau_du_perimetre
 
@@ -141,3 +143,32 @@ class ImportTests(HorlogeTestCase):
         importee = Expense.objects.get(title="Taxi importé")
         self.assertEqual(importee.date, datetime(self.suivant, 1, 1, 1, 0, tzinfo=DJIBOUTI))
         self.assertEqual(importee.date.astimezone(UTC).hour, 22)
+
+
+class DelaiDeGraceTests(HorlogeTestCase):
+    """Le délai « justificatif manquant » se compte à la date du pays."""
+
+    def setUp(self):
+        super().setUp()
+        configuration = WorkflowConfiguration.charger()
+        configuration.unjustified_alert_days = 1
+        configuration.save()
+
+    def _manquants(self, maintenant):
+        dossiers = Dossier.objects.filter(pk=self.dossier_dj.pk)
+        with mock.patch("django.utils.timezone.now", return_value=maintenant):
+            return [
+                a for a in alert_rules.proof_alerts(dossiers) if a["kind"] == "proof_missing"
+            ]
+
+    def test_le_jour_echu_se_lit_a_l_heure_du_pays(self):
+        """Le 31 décembre à 22:00 UTC, c'est déjà le 1er janvier à Djibouti :
+        le dossier daté du 31 a un jour, le délai est écoulé."""
+        maintenant = datetime(self.year, 12, 31, 22, 0, tzinfo=UTC)
+
+        self.assertEqual(len(self._manquants(maintenant)), 1)
+
+    def test_avant_minuit_a_djibouti_rien(self):
+        maintenant = datetime(self.year, 12, 31, 20, 0, tzinfo=UTC)
+
+        self.assertEqual(self._manquants(maintenant), [])

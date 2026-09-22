@@ -141,3 +141,68 @@ class RenommageDesDoublonsTests(TransactionTestCase):
             # Les autres tests attendent la base au dernier état.
             executor = MigrationExecutor(connection)
             executor.migrate(executor.loader.graph.leaf_nodes())
+
+
+class PaysFigeTests(ApiTestCase):
+    """Une équipe ou un projet auxquels on se réfère ne changent plus de pays."""
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate()
+        self.ivoire = Country.objects.create(
+            name="Côte d'Ivoire", code="CI", currency="XOF", timezone="Africa/Abidjan"
+        )
+        self.equipe = Team.objects.create(country=self.country, name="Équipe Lomé")
+        self.projet = Project.objects.create(country=self.country, name="Campagne T1")
+
+    def test_une_equipe_sans_reference_se_deplace(self):
+        response = self.client.patch(f"/api/teams/{self.equipe.pk}/", {"country": self.ivoire.pk})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_une_equipe_portee_par_un_dossier_reste_dans_son_pays(self):
+        from datetime import date
+
+        from expenses.models import Dossier
+
+        Dossier.objects.create(
+            number="N-1", label="Mission", country=self.country, team=self.equipe,
+            date=date(2026, 1, 1),
+        )
+
+        response = self.client.patch(f"/api/teams/{self.equipe.pk}/", {"country": self.ivoire.pk})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("country", response.data)
+        self.equipe.refresh_from_db()
+        self.assertEqual(self.equipe.country, self.country)
+
+    def test_une_equipe_d_un_profil_reste_dans_son_pays(self):
+        profil = self.user.profile
+        profil.countries.add(self.country)
+        profil.teams.add(self.equipe)
+
+        response = self.client.patch(f"/api/teams/{self.equipe.pk}/", {"country": self.ivoire.pk})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_un_projet_porte_par_une_enveloppe_reste_dans_son_pays(self):
+        from budget.models import Budget
+
+        Budget.objects.create(country=self.country, year=2026, project=self.projet, amount=1000)
+
+        response = self.client.patch(f"/api/projects/{self.projet.pk}/", {"country": self.ivoire.pk})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("country", response.data)
+
+    def test_le_meme_pays_n_est_pas_un_deplacement(self):
+        from budget.models import Budget
+
+        Budget.objects.create(country=self.country, year=2026, project=self.projet, amount=1000)
+
+        response = self.client.patch(
+            f"/api/projects/{self.projet.pk}/", {"country": self.country.pk, "name": "Campagne T2"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)

@@ -112,6 +112,10 @@ class PermissionMatrixRoleSerializer(serializers.Serializer):
     label = serializers.CharField(read_only=True)
     siege = serializers.BooleanField(read_only=True)
     always_global = serializers.BooleanField(read_only=True)
+    #: Le lecteur de la matrice peut-il conférer ce rôle à un compte ?
+    #: Un administrateur ne confère pas ``super_admin``
+    #: (``permissions.peut_conferer_le_role``).
+    assignable = serializers.BooleanField(read_only=True)
 
 
 def _liste_de_roles(**kwargs):
@@ -213,6 +217,7 @@ class MeSerializer(serializers.ModelSerializer):
     language = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
     workflow = serializers.SerializerMethodField()
+    alert_thresholds = serializers.SerializerMethodField()
     supervision = serializers.SerializerMethodField()
 
     class Meta:
@@ -221,7 +226,7 @@ class MeSerializer(serializers.ModelSerializer):
             "id", "username", "first_name", "last_name", "email",
             "role", "role_display", "countries", "teams", "has_global_scope",
             "must_change_password", "totp_required", "totp_confirmed", "language",
-            "permissions", "workflow", "supervision",
+            "permissions", "workflow", "alert_thresholds", "supervision",
         ]
 
     def _role(self, user):
@@ -313,6 +318,15 @@ class MeSerializer(serializers.ModelSerializer):
         """
         configuration = WorkflowConfiguration.charger()
         return {"require_review_step": configuration.require_review_step}
+
+    @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
+    def get_alert_thresholds(self, user):
+        """Seuils d'alerte (en %) de la configuration, pour tous les rôles.
+
+        L'interface les affiche à côté des jauges d'exécution ; le niveau
+        (``execution_level``), lui, reste jugé par le serveur.
+        """
+        return list(WorkflowConfiguration.charger().alert_thresholds or [])
 
     @extend_schema_field(serializers.BooleanField())
     def get_supervision(self, user):
@@ -418,7 +432,20 @@ class UserSerializer(serializers.ModelSerializer):
         ]
 
     def validate_email(self, value):
-        return _validate_email(value)
+        value = _validate_email(value)
+        # Une adresse nomme un compte dans l'application d'authentification
+        # et reçoit ses notifications : deux comptes ne se la partagent pas,
+        # quelle qu'en soit la casse. Vérifié ici, sans contrainte en base :
+        # des doublons hérités peuvent exister, et ils se corrigent à la
+        # main, pas par une migration qui échouerait.
+        doublons = User.objects.filter(email__iexact=value)
+        if self.instance is not None:
+            doublons = doublons.exclude(pk=self.instance.pk)
+        if doublons.exists():
+            raise serializers.ValidationError(
+                _("Cette adresse e-mail est déjà utilisée par un autre compte.")
+            )
+        return value
 
     def validate_password(self, value):
         return _validate_password(value)

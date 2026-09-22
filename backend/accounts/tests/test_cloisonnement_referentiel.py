@@ -201,3 +201,55 @@ class ResponsablesDuPaysTests(ScopingTestCase):
         self.assertEqual(reponse.status_code, status.HTTP_403_FORBIDDEN, reponse.data)
         self.togo.refresh_from_db()
         self.assertNotEqual(self.togo.currency, "EUR")
+
+
+class RattachementsHorsPerimetreTests(ScopingTestCase):
+    """Un compte restreint ne détache pas un responsable des pays qu'il ne voit pas.
+
+    ``countries`` ne lui propose que ses pays : la liste qu'il soumet est
+    celle de ce qu'il voit. Un DM restreint au Togo qui la réécrivait
+    effaçait le rattachement ivoirien sans le savoir.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.rh = make_user("rh.rattachements", Role.ADMIN)
+        cls.dm_togo = make_user("dm.togo", Role.DM, [cls.togo])
+        cls.responsable = Manager.objects.create(name="Responsable des deux pays")
+        cls.responsable.countries.set([cls.togo, cls.ivoire])
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+        self.login(self.rh)
+        reponse = self.client.patch(
+            "/api/permissions/",
+            {"capabilities": {"managers.update": ["super_admin", "admin", "dm"]}},
+            format="json",
+        )
+        self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
+        self.login(self.dm_togo)
+
+    def test_reecrire_ses_pays_ne_detache_pas_le_voisin(self):
+        reponse = self.client.patch(
+            f"/api/managers/{self.responsable.pk}/",
+            {"countries": [self.togo.pk]},
+            format="json",
+        )
+
+        self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
+        self.assertEqual(
+            set(self.responsable.countries.all()), {self.togo, self.ivoire},
+        )
+
+    def test_en_lecture_seuls_les_pays_du_perimetre_sont_montres(self):
+        """Le rattachement ivoirien n'existe pas pour lui, comme le pays."""
+        reponse = self.client.get(f"/api/managers/{self.responsable.pk}/")
+
+        self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
+        self.assertEqual(reponse.data["countries"], [self.togo.pk])
+        # Le siège, lui, voit les deux.
+        self.login(self.siege)
+        complet = self.client.get(f"/api/managers/{self.responsable.pk}/")
+        self.assertEqual(set(complet.data["countries"]), {self.togo.pk, self.ivoire.pk})

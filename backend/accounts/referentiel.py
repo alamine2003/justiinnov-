@@ -113,6 +113,42 @@ def _exiger_un_pays_du_perimetre(self, attrs):
     return attrs
 
 
+def _acces_du_lecteur(self):
+    return get_access(getattr(self.context.get("request"), "user", None))
+
+
+def _rattacher_sans_detacher_le_voisin(self, instance, validated_data):
+    """Un compte restreint ne touche qu'aux rattachements de son périmètre.
+
+    ``countries`` ne lui propose que ses pays (``ChampCloisonne``) ; la
+    liste qu'il soumet est donc la liste **de ce qu'il voit**. L'écrire
+    telle quelle détachait le responsable des pays qu'il ne voit pas — un
+    DM restreint au Togo effaçait, sans le savoir ni le vouloir, le
+    rattachement ivoirien. Les pays hors périmètre sont recopiés tels
+    quels : ils ne sont ni proposés, ni retirés.
+    """
+    access = _acces_du_lecteur(self)
+    if "countries" in validated_data and access is not None and not access.has_global_scope:
+        hors_perimetre = instance.countries.exclude(pk__in=access.country_ids)
+        validated_data["countries"] = [
+            *validated_data["countries"], *hors_perimetre,
+        ]
+    return _ManagerSerializerDeCore.update(self, instance, validated_data)
+
+
+def _ne_montrer_que_le_perimetre(self, instance):
+    """En lecture, les pays du responsable se limitent à ceux du lecteur :
+    un rattachement hors périmètre n'existe pas pour lui, comme le pays
+    lui-même (``CountryViewSet``)."""
+    data = _ManagerSerializerDeCore.to_representation(self, instance)
+    access = _acces_du_lecteur(self)
+    if access is not None and not access.has_global_scope:
+        visibles = set(access.country_ids)
+        data["countries"] = [pk for pk in data["countries"] if pk in visibles]
+    return data
+
+
+_ManagerSerializerDeCore = ManagerSerializer
 ManagerSerializer = _cloisonne(
     ManagerSerializer,
     countries=ChampCloisonne(
@@ -120,6 +156,8 @@ ManagerSerializer = _cloisonne(
         label=gettext_lazy("Pays"), required=False,
     ),
     validate=_exiger_un_pays_du_perimetre,
+    update=_rattacher_sans_detacher_le_voisin,
+    to_representation=_ne_montrer_que_le_perimetre,
 )
 # Le détail d'un pays imbrique son référentiel. Tant qu'il le tirait de
 # ``core``, deux classes distinctes portaient le même nom — l'originale par

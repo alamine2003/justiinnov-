@@ -36,6 +36,7 @@ from decimal import Decimal
 from django.db.models import Q, Sum
 from django.utils import timezone
 
+from core.models import WorkflowConfiguration
 from core.statuts import CONSUMING_STATUSES, ENGAGING_STATUSES
 
 from .models import CONSOLIDATION_CURRENCY, ExchangeRate
@@ -44,6 +45,52 @@ ZERO = Decimal("0.00")
 CENTS = Decimal("0.01")
 #: Précision d'un taux figé sur une opération (``Expense.original_rate``).
 RATE_PRECISION = Decimal("0.000001")
+
+#: Niveaux d'exécution d'une enveloppe, tels que l'API les publie
+#: (``execution_level``) à côté de chaque ``execution_rate``.
+NIVEAUX_D_EXECUTION = ("ok", "warning", "exceeded")
+#: Seuil (en %) retenu quand la configuration n'en fixe aucun sous 100.
+SEUIL_D_ALERTE_PAR_DEFAUT = 80
+
+
+def seuil_d_alerte(configuration=None):
+    """Seuil (en %) à partir duquel une exécution est « à surveiller ».
+
+    Le plus haut des seuils d'alerte de la configuration strictement
+    inférieur à 100 : c'est le dernier avertissement avant le dépassement,
+    celui que l'écran doit colorer. Sans seuil sous 100, 80 %.
+    """
+    if configuration is None:
+        configuration = WorkflowConfiguration.charger()
+    seuils = []
+    for seuil in configuration.alert_thresholds or ():
+        # ``True`` est un entier pour Python ; une valeur illisible glissée
+        # en base ne doit pas casser un tableau de bord.
+        if isinstance(seuil, bool) or not isinstance(seuil, (int, float, Decimal)):
+            continue
+        if seuil < 100:
+            seuils.append(seuil)
+    return max(seuils, default=SEUIL_D_ALERTE_PAR_DEFAUT)
+
+
+def niveau_d_execution(taux, seuil=None):
+    """``execution_level`` d'un taux d'exécution : ``ok``, ``warning``, ``exceeded``.
+
+    Calculé ici, une fois pour toutes, et publié partout où le taux l'est :
+    l'interface colore, elle ne compare pas un taux à un seuil qu'elle
+    aurait recopié. ``exceeded`` au-delà de 100 %, ``warning`` dès le seuil
+    de :func:`seuil_d_alerte`, ``ok`` sinon — y compris sans taux (pas
+    d'attribué) : il n'y a rien à mesurer.
+    """
+    if taux is None:
+        return "ok"
+    if taux > 1:
+        return "exceeded"
+    if seuil is None:
+        seuil = seuil_d_alerte()
+    if taux >= Decimal(seuil) / 100:
+        return "warning"
+    return "ok"
 
 
 def consumption(budget):
@@ -79,19 +126,21 @@ def consumption(budget):
     }
 
 
-def budget_figures(budget, rates=None):
+def budget_figures(budget, rates=None, seuil=None):
     """Indicateurs d'une enveloppe, dans la devise du pays.
 
     Avec ``rates`` (voir :func:`current_rates`), ajoute ``amount_xof`` et
     ``remaining_xof`` sans requête supplémentaire ; sans lui, les clés
     restent celles d'origine — les exports et les alertes n'en attendent pas
-    d'autres.
+    d'autres. ``seuil`` (voir :func:`seuil_d_alerte`) évite à une liste de
+    relire la configuration pour chaque enveloppe.
     """
     totals = consumption(budget)
     engaged = totals["engaged"]
     consumed = totals["consumed"]
     justified = totals["justified"]
     remaining = budget.amount - consumed - engaged
+    execution_rate = _ratio(consumed, budget.amount)
     figures = {
         "engaged": engaged,
         "consumed": consumed,
@@ -101,7 +150,8 @@ def budget_figures(budget, rates=None):
         # Le disponible retranche aussi l'engagé : sans cela, une enveloppe
         # paraîtrait libre alors qu'elle est déjà mobilisée.
         "remaining": remaining,
-        "execution_rate": _ratio(consumed, budget.amount),
+        "execution_rate": execution_rate,
+        "execution_level": niveau_d_execution(execution_rate, seuil),
         "justification_rate": _ratio(justified, consumed),
     }
     if rates is not None:
@@ -162,6 +212,19 @@ def current_rates(on_date=None):
     # seul moteur de la plateforme.
     latest = rates.order_by("currency", "-valid_from", "-pk").distinct("currency")
     return dict(latest.values_list("currency", "rate_to_xof"))
+
+
+def taux_en_vigueur_ids(on_date=None):
+    """Identifiants des taux en vigueur à la date (aujourd'hui par défaut).
+
+    Même règle que :func:`current_rates` — le dernier taux dont
+    ``valid_from`` ne dépasse pas la date, par devise —, mais lue par
+    identifiant : c'est ce que ``ExchangeRateSerializer.is_current`` compare,
+    et un taux daté du futur n'y figure jamais.
+    """
+    rates = ExchangeRate.objects.filter(valid_from__lte=_date_effective(on_date))
+    latest = rates.order_by("currency", "-valid_from", "-pk").distinct("currency")
+    return set(latest.values_list("pk", flat=True))
 
 
 def rate_to_xof(currency, on_date=None, rates=None):
@@ -270,6 +333,8 @@ def consolidation_par_pays(budgets, rates=None):
         }
     )
     countries = {}
+    # Le seuil d'alerte se lit une fois par consolidation, pas par enveloppe.
+    seuil = seuil_d_alerte()
 
     for budget in budgets:
         entry = per_country[budget.country_id]
@@ -278,7 +343,7 @@ def consolidation_par_pays(budgets, rates=None):
             entry["allocated"] += budget.amount
         else:
             entry["sub_allocated"] += budget.amount
-        figures = budget_figures(budget)
+        figures = budget_figures(budget, seuil=seuil)
         entry["engaged"] += figures["engaged"]
         entry["consumed"] += figures["consumed"]
         entry["justified"] += figures["justified"]
@@ -296,6 +361,7 @@ def consolidation_par_pays(budgets, rates=None):
             entry["allocated"] = entry["sub_allocated"]
         used = entry["consumed"] + entry["engaged"]
         remaining = entry["allocated"] - used
+        execution_rate = _ratio(used, entry["allocated"])
         row = {
             "country": country_id,
             "country_name": country.name,
@@ -311,7 +377,8 @@ def consolidation_par_pays(budgets, rates=None):
             # pas à masquer par un plancher à zéro.
             "unallocated": entry["allocated"] - entry["sub_allocated"],
             "remaining": remaining,
-            "execution_rate": _ratio(used, entry["allocated"]),
+            "execution_rate": execution_rate,
+            "execution_level": niveau_d_execution(execution_rate, seuil),
             "justification_rate": _ratio(entry["justified"], entry["consumed"]),
         }
 
@@ -328,11 +395,13 @@ def consolidation_par_pays(budgets, rates=None):
 
     rows.sort(key=lambda row: row["country_name"])
     used_xof = xof["consumed"] + xof["engaged"]
+    execution_rate_xof = _ratio(used_xof, xof["allocated"])
     return (
         rows,
         {
             **{key: xof[key] for key in CONSOLIDATED_KEYS},
-            "execution_rate": _ratio(used_xof, xof["allocated"]),
+            "execution_rate": execution_rate_xof,
+            "execution_level": niveau_d_execution(execution_rate_xof, seuil),
             "justification_rate": _ratio(xof["justified"], xof["consumed"]),
             "unconverted_currencies": sorted(unconverted),
         },

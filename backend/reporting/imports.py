@@ -480,12 +480,29 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
             # pays de la ligne, jamais ailleurs.
             cle_dossier = (pays_ligne.pk, number)
             if cle_dossier not in dossiers_existants:
-                dossiers_existants[cle_dossier] = Dossier.objects.filter(
-                    country=pays_ligne, number=number
-                ).first()
+                dossiers_existants[cle_dossier] = (
+                    Dossier.objects.select_related("team")
+                    .filter(country=pays_ligne, number=number)
+                    .first()
+                )
             dossier = dossiers_existants[cle_dossier]
             if dossier is not None and dossier.status != Status.DRAFT:
                 raise ValueError(_("Le dossier « %(number)s » est déjà déclaré") % {"number": number})
+            # Le dossier est lu par l'équipe qu'il porte (``ExpenseSerializer``) :
+            # une ligne d'une autre équipe y serait visible par la première
+            # et invisible pour la seconde.
+            if (
+                dossier is not None
+                and dossier.team_id is not None
+                and team_name
+                and (team is None or team.pk != dossier.team_id)
+            ):
+                raise ValueError(
+                    _(
+                        "Le dossier « %(number)s » porte l'équipe « %(team)s » : "
+                        "la ligne doit porter la même."
+                    ) % {"number": number, "team": dossier.team.name}
+                )
 
             empreinte = _empreinte(cle_dossier, date_ligne.date(), title, amount)
             deja = empreintes_vues.get(empreinte)

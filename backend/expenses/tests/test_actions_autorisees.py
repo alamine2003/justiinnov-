@@ -184,7 +184,9 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.dossier.save()
         self.make_expense()
         self._piece()
-        self.submit_dossier()
+        # Ouvert au siège, le brouillon ne part pas par le pays (décision
+        # 46, appliquée à la soumission) : c'est le siège qui le soumet.
+        self.submit_dossier(user=self.doo)
 
         self.assertEqual(self._actions(self.controller), [])
         self.assertEqual(self._actions(self.doo), ["upload", "review", "reopen"])

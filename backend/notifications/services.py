@@ -30,7 +30,7 @@ from django.db.models import F, Q
 from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 
-from accounts.perimetre import comptes_couvrant
+from accounts.perimetre import PAYS_ENTIER, comptes_couvrant
 
 from .models import Notification
 
@@ -74,7 +74,7 @@ def rendre(texte, langue):
         return str(texte)
 
 
-def recipients_for(roles, country=None, team=None):
+def recipients_for(roles, country=None, team=PAYS_ENTIER):
     """Comptes actifs portant l'un des rôles et couvrant le pays — et l'équipe — visés.
 
     Un rôle du siège sans périmètre couvre tous les pays ; un rôle pays — ou
@@ -86,10 +86,13 @@ def recipients_for(roles, country=None, team=None):
     ``team`` — l'équipe d'un dossier ou d'une ligne — applique le second
     cloisonnement, celui des managers : rattaché à des équipes, un manager
     n'est prévenu que de ce qui touche les siennes ; sans équipe, il couvre
-    tout son pays (``UserProfile.team_ids``). Les rôles du siège ne sont
-    jamais cloisonnés par équipe : le DM et le DF contrôlent le pays entier,
-    et une équipe posée sur leur profil ne porte aucun droit. Une alerte
-    d'enveloppe, qui se lit par pays, ne passe pas d'équipe.
+    tout son pays (``UserProfile.team_ids``). Un dossier **sans équipe**
+    (``team=None``) échappe aux managers rattachés à des équipes, qui ne
+    pourraient pas l'ouvrir : ils n'en sont pas prévenus. Les rôles du siège
+    ne sont jamais cloisonnés par équipe : le DM et le DF contrôlent le pays
+    entier, et une équipe posée sur leur profil ne porte aucun droit. Une
+    alerte d'enveloppe, qui se lit par pays, ne passe pas d'équipe
+    (``PAYS_ENTIER``, le défaut).
 
     La règle est celle du cloisonnement des lectures, lue depuis l'objet :
     ``accounts.perimetre.comptes_couvrant`` (décision 39).
