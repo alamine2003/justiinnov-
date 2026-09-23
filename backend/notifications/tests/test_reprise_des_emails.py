@@ -47,7 +47,7 @@ assert len(LIBELLE_DE_250) == 250
 
 
 class RefusTestCase(ExpenseTestCase):
-    """Un dossier déclaré, une ligne soumise, le DF qui la refuse."""
+    """Un dossier déclaré, une ligne soumise, l'administrateur qui la refuse."""
 
     dossier_status = Status.SUBMITTED
 

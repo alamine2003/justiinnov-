@@ -1,4 +1,4 @@
-"""Jeu de recette : les dix-sept filiales, les cinq rôles, chaque état du circuit.
+"""Jeu de recette : les dix-sept filiales, les trois rôles, chaque état du circuit.
 
     docker compose exec backend python manage.py seed_recette --base-jetable
 
@@ -22,10 +22,10 @@ Ce qu'il crée, en une transaction :
 - des taux de change **fictifs**, dont un taux en euros daté du mois
   prochain : il doit s'afficher « historique » tant qu'il n'est pas en
   vigueur ;
-- **quarante comptes connectables** : six au siège (DG, RH, deux DM dont un
-  restreint à l'Afrique de l'Ouest, deux DF dont un restreint à l'Afrique
-  centrale) et, par pays, un manager du pays entier et un manager restreint
-  à une équipe ;
+- **trente-six comptes connectables** : deux au siège — la DG, super
+  administratrice, qui supervise, et la RH, administratrice, qui contrôle
+  (décision 89) — et, par pays, un manager du pays entier et un manager
+  restreint à une équipe ;
 - par pays, **huit dossiers** qui couvrent le circuit : deux brouillons (dont
   un d'un collègue, que le manager du pays ne doit pas pouvoir soumettre),
   un soumis, un en contrôle, un justifié en partie avec une ligne payée en
@@ -128,15 +128,11 @@ EN_DEPASSEMENT = {"GN": Decimal("1.15"), "CD": Decimal("1.25")}
 #: Politique « bloquer » : le brouillon du manager dépasserait l'enveloppe.
 BLOQUE = "ML"
 
-#: Siège : identifiant → (rôle, pays ou None pour tous, libellé).
+#: Siège : identifiant → (rôle, pays ou None pour tous, libellé). Le siège
+#: voit toujours tous les pays.
 SIEGE = {
     "dg": (Role.SUPER_ADMIN, None, "Direction générale"),
     "rh": (Role.ADMIN, None, "Ressources humaines"),
-    "dm": (Role.DM, None, "Directeur manager, tous pays"),
-    "dm.ouest": (Role.DM, ("SN", "ML", "CI", "BF", "NE", "BJ", "GN", "TG", "GM", "MR"),
-                 "Directeur manager, Afrique de l'Ouest"),
-    "df": (Role.DF, None, "Directeur financier, tous pays"),
-    "df.centre": (Role.DF, ("CM", "GA", "TD", "CG", "CD"), "Directeur financier, Afrique centrale"),
 }
 
 #: Les huit dossiers d'un pays. Montants en FCFA d'équivalent, convertis dans
@@ -307,7 +303,8 @@ class Command(BaseCommand):
         country = self.pays[code]
         cc = code.lower()
         manager, equipe = self.comptes[f"{cc}.manager"], self.comptes[f"{cc}.equipe"]
-        dm, df, rh = self.comptes["dm"], self.comptes["df"], self.comptes["rh"]
+        # Le contrôle, de bout en bout, est à l'administrateur (décision 89).
+        rh = self.comptes["rh"]
         d = {}
         for rang, titre, idx_equipe, auteur, jours, lignes in DOSSIERS:
             d[rang] = self._dossier(
@@ -316,41 +313,41 @@ class Command(BaseCommand):
                 jours, lignes,
             )
 
-        # 03 — soumis, avec pièce : attend la mise en contrôle d'un DM.
+        # 03 — soumis, avec pièce : attend la mise en contrôle.
         self._piece(d["03"], manager)
         self._action("submit", d["03"], manager)
 
-        # 04 — en contrôle : attend la décision d'un DF.
+        # 04 — en contrôle : attend la décision de l'administrateur.
         self._piece(d["04"], manager)
         self._action("submit", d["04"], manager)
-        self._action("review", d["04"], dm)
+        self._action("review", d["04"], rh)
 
         # 05 — justifié en partie ; la ligne en euros reste en contrôle.
         self._piece(d["05"], manager)
         self._action("submit", d["05"], manager)
-        self._action("review", d["05"], dm)
+        self._action("review", d["05"], rh)
         stand, echantillons, _euros = d["05"].expenses.order_by("pk")
-        self._action("justify", stand, df)
-        self._action("justify", echantillons, df,
+        self._action("justify", stand, rh)
+        self._action("justify", echantillons, rh,
                      justified_amount=(echantillons.amount / 2).quantize(Decimal("1")),
                      note="Reçu partiel : le solde reste à prouver.")
 
         # 06 — non justifié, soumis sans pièce.
         self._action("submit", d["06"], manager)
-        self._action("review", d["06"], dm)
-        self._action("reject", d["06"].expenses.get(), df,
+        self._action("review", d["06"], rh)
+        self._action("reject", d["06"].expenses.get(), rh,
                      note="Aucune facture ni décharge fournie après relance.")
-        self._action("reject", d["06"], df,
+        self._action("reject", d["06"], rh,
                      note="Dossier constaté non justifié : aucune pièce fournie.")
 
         # 07 — clôturé, puis une rectification demandée par le pays.
         self._piece(d["07"], manager)
         self._action("submit", d["07"], manager)
-        self._action("review", d["07"], dm)
+        self._action("review", d["07"], rh)
         for ligne in d["07"].expenses.order_by("pk"):
-            self._action("justify", ligne, df)
-        self._action("justify", d["07"], df)
-        self._action("close", d["07"], df)
+            self._action("justify", ligne, rh)
+        self._action("justify", d["07"], rh)
+        self._action("close", d["07"], rh)
         try:
             transitions.demander_rectification(
                 d["07"].expenses.order_by("pk").first(), get_access(manager),

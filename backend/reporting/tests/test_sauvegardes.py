@@ -96,7 +96,9 @@ class FraicheurTests(ExpenseTestCase):
         self.assertEqual(notification.level, Notification.Level.CRITICAL)
         self.assertIn("copie hors machine", notification.title)
         self.assertIn("Aucune réussite enregistrée", notification.body)
-        self.assertEqual(len(mail.outbox), 1)
+        # Un e-mail par administrateur : le super administrateur et la RH.
+        self.assertEqual(sorted(m.to[0] for m in mail.outbox),
+                         sorted([self.doo.email, self.controller.email]))
         # Le pays n'est pas prévenu : l'exploitation est l'affaire du siège.
         self.assertFalse(Notification.objects.filter(recipient=self.owner).exists())
 

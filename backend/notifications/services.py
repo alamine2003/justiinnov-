@@ -95,7 +95,7 @@ def recipients_for(roles, country=None, team=PAYS_ENTIER):
     tout son pays (``UserProfile.team_ids``). Un dossier **sans équipe**
     (``team=None``) échappe aux managers rattachés à des équipes, qui ne
     pourraient pas l'ouvrir : ils n'en sont pas prévenus. Les rôles du siège
-    ne sont jamais cloisonnés par équipe : le DM et le DF contrôlent le pays
+    ne sont jamais cloisonnés par équipe : l'administrateur contrôle le pays
     entier, et une équipe posée sur leur profil ne porte aucun droit. Une
     alerte d'enveloppe, qui se lit par pays, ne passe pas d'équipe
     (``PAYS_ENTIER``, le défaut).

@@ -2,7 +2,6 @@
 
 import pyotp
 from django.contrib.auth.models import User
-from django.db.models import Max
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -206,67 +205,6 @@ class HistoryScopeTests(ApiTestCase):
         response = self.client.get("/api/history/")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_le_dm_et_le_df_ne_lisent_pas_l_historique_des_comptes(self):
-        """La liste des comptes leur est fermée ; son historique — qui a été
-        promu, qui n'a pas confirmé sa 2FA — le serait sinon par la bande."""
-        for role in (Role.DF, Role.DM):
-            with self.subTest(role=role):
-                self._compte(f"{role}.hist", role, [])
-                repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
-                ChangeLog.objects.create(
-                    model_name=ChangeLog.Models.USER, object_id=1,
-                    label="kofi.innov", action=ChangeLog.Actions.CREATED,
-                )
-                ChangeLog.objects.create(
-                    model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
-                    label="Configuration", action=ChangeLog.Actions.UPDATED,
-                )
-
-                response = self.client.get("/api/history/", {"model_name": "user"})
-                caches = [e for e in response.data["results"] if e["id"] > repere]
-
-                self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(caches, [])
-                tout = self.client.get("/api/history/")
-                labels = {e["model_name"] for e in tout.data["results"] if e["id"] > repere}
-                self.assertFalse(labels & {"user", "workflow_configuration"})
-
-    def test_un_siege_restreint_voit_aussi_les_entrees_sans_pays(self):
-        """Taux de change et autres entrées sans pays étaient invisibles pour
-        un rôle du siège limité à quelques pays — le DF comme le DM. La
-        configuration du workflow et les comptes, eux, relèvent de
-        l'administration et restent hors de leur vue."""
-        autre = Country.objects.create(name="Bénin", code="BJ", currency="XOF")
-        # Un fuseau différent à chaque tour : sans changement, rien ne
-        # s'écrit dans le journal.
-        for role, fuseau in ((Role.DF, "Africa/Accra"), (Role.DM, "Africa/Lagos")):
-            with self.subTest(role=role):
-                self._compte(f"{role}.test", role, [self.country])
-                # Le journal est en ajout seul : on ne le vide pas, on retient
-                # un repère et on ne juge que ce qui vient après.
-                repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
-                ChangeLog.objects.create(
-                    model_name=ChangeLog.Models.WORKFLOW_CONFIGURATION, object_id=1,
-                    label="Configuration", action=ChangeLog.Actions.UPDATED,
-                )
-                ChangeLog.objects.create(
-                    model_name=ChangeLog.Models.EXCHANGE_RATE, object_id=1,
-                    label="EUR", action=ChangeLog.Actions.CREATED,
-                )
-                self.country.timezone = fuseau
-                self.country.save()
-                autre.timezone = fuseau
-                autre.save()
-
-                response = self.client.get("/api/history/")
-
-                nouvelles = [e for e in response.data["results"] if e["id"] > repere]
-                labels = {e["model_name"] for e in nouvelles}
-                self.assertEqual(labels, {"exchange_rate", "country"})
-                pays = {e["country"] for e in nouvelles}
-                self.assertEqual(pays, {None, self.country.pk})
-
 
 class PaginationTests(ApiTestCase):
     """Sans taille de page réglable, l'interface paginerait dans le vide."""

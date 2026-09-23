@@ -469,10 +469,10 @@ class CountryReportView(ExportView):
 class ExpensesImportView(APIView):
     """Importe l'export des dépenses ou le classeur historique du client.
 
-    Réservé aux administrateurs, comme les exports : seuls eux manipulent
-    des fichiers. Le pays déclare dans l'application, ligne à ligne ; ce qui
-    entre par un classeur arrive en brouillon et suit ensuite le même
-    circuit.
+    Un import est une déclaration : il revient au pays (``data.import``,
+    manager par défaut, jamais le siège — décision 89) et suit les règles
+    de la saisie — son pays, ses équipes, ses brouillons. Ce qui entre par
+    un classeur arrive en brouillon et suit ensuite le même circuit.
 
     Le classeur historique est mono-pays et n'a pas de colonne PAYS : le
     pays vient alors du paramètre ``country`` (requête ou formulaire),

@@ -19,10 +19,6 @@ INTERDIT = re.compile(r"\b(team|team_id|country|country_id)__in\b")
 
 #: Filtres ``__in`` qui ne sont pas la règle du périmètre d'un compte.
 TOLERES = {
-    # Un rôle du siège restreint garde la vue sur l'historique sans pays
-    # (taux de change) : ``pays OU sans pays``, que ``filtrer`` ne sait pas
-    # exprimer et qui n'a de sens que pour cette ressource.
-    "accounts/referentiel.py": "historique du siège restreint : pays ou sans pays",
     # Les pays viennent du fichier d'amorçage, pas d'un périmètre de compte.
     "accounts/management/commands/seed_users.py": "équipes nommées dans les pays du fichier",
     # Sous-requête sur des dossiers déjà cloisonnés par ``querysets_pour``.

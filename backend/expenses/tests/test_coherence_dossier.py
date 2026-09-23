@@ -37,7 +37,8 @@ class DossierCoherenceTests(APITestCase):
         # (mot de passe remplacé, double authentification confirmée), qui ne
         # sont pas l'objet de ces tests.
         self.rep = make_user("togo.innov", Role.MANAGER, [self.pays])
-        self.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
+        # Le contrôle, jusqu'à la clôture, est à l'administrateur (décision 89).
+        self.controleur = make_user("rh.innov", Role.ADMIN)
         self.login(self.rep)
 
     def login(self, user):
@@ -95,7 +96,7 @@ class DossierCoherenceTests(APITestCase):
         dossier = self.dossier("N-2", Status.JUSTIFIED)
         self.ligne(dossier, Status.JUSTIFIED, "Traitée")
         self.ligne(dossier, Status.SUBMITTED, "En attente")
-        self.login(self.siege)
+        self.login(self.controleur)
 
         response = self.client.post(f"/api/dossiers/{dossier.pk}/close/")
 
@@ -111,7 +112,7 @@ class DossierCoherenceTests(APITestCase):
         dossier = self.dossier("N-3", Status.JUSTIFIED)
         self.ligne(dossier, Status.JUSTIFIED, "Avec preuve")
         self.ligne(dossier, Status.UNJUSTIFIED, "Sans preuve")
-        self.login(self.siege)
+        self.login(self.controleur)
 
         response = self.client.post(f"/api/dossiers/{dossier.pk}/close/")
 
@@ -147,11 +148,13 @@ class DossierCoherenceTests(APITestCase):
 
 
 class DeplacementDossierTests(DossierCoherenceTests):
-    """Un dossier qui a un contenu ne change ni de pays ni d'équipe.
+    """Un dossier ne change jamais de pays ; avec un contenu, ni d'équipe.
 
-    Ses lignes portent le pays et l'équipe en propre, ses pièces sont
-    rangées par pays : le déplacer les laisserait derrière lui. Le choix est
-    de refuser, jamais de propager en silence.
+    Le pays est attribué à la création (décision 89) ; les lignes portent
+    l'équipe en propre : déplacer le dossier les laisserait derrière lui. Le
+    choix est de refuser, jamais de propager en silence. Le manager qui
+    déplace est rattaché aux deux pays, pour que le refus vienne de la
+    règle et non du périmètre.
     """
 
     def setUp(self):
@@ -161,30 +164,36 @@ class DeplacementDossierTests(DossierCoherenceTests):
             currency="XOF", timezone="Africa/Abidjan",
         )
         self.autre_equipe = Team.objects.create(country=self.pays, name="Équipe Kara")
-        self.login(self.siege)
+        self.rep_deux_pays = make_user("deux.pays", Role.MANAGER, [self.pays, self.ivoire])
+
+    def _deplacer(self, dossier):
+        dossier.created_by = self.rep_deux_pays.username
+        dossier.save()
+        self.login(self.rep_deux_pays)
+        return self.client.patch(f"/api/dossiers/{dossier.pk}/", {"country": self.ivoire.pk})
 
     def test_un_dossier_avec_une_ligne_ne_change_pas_de_pays(self):
         dossier = self.dossier("N-10")
         self.ligne(dossier)
 
-        response = self.client.patch(
-            f"/api/dossiers/{dossier.pk}/", {"country": self.ivoire.pk}
-        )
+        response = self._deplacer(dossier)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("country", response.data)
         dossier.refresh_from_db()
         self.assertEqual(dossier.country, self.pays)
 
-    def test_un_dossier_vide_change_encore_de_pays(self):
+    def test_un_dossier_vide_ne_change_pas_non_plus_de_pays(self):
+        """Le pays d'un dossier est attribué une fois pour toutes : même
+        vide, il ne passe pas chez le voisin (décision 89)."""
         dossier = self.dossier("N-11")
 
-        response = self.client.patch(
-            f"/api/dossiers/{dossier.pk}/", {"country": self.ivoire.pk}
-        )
+        response = self._deplacer(dossier)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertEqual(response.data["country"], self.ivoire.pk)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("change pas de pays", str(response.data["country"]))
+        dossier.refresh_from_db()
+        self.assertEqual(dossier.country, self.pays)
 
     def test_un_dossier_ne_change_pas_d_equipe_contre_ses_lignes(self):
         """Les lignes portent l'équipe Lomé : le dossier ne passe ni à Kara
@@ -229,6 +238,6 @@ class DeplacementDossierTests(DossierCoherenceTests):
         self.assertEqual(refusee.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Lomé", str(refusee.data["team"]))
         self.assertEqual(acceptee.status_code, status.HTTP_201_CREATED, acceptee.data)
-        # Facultative en brouillon pour le siège, comme l'import l'exige ;
-        # la soumission la réclamera.
+        # Facultative en brouillon, comme l'import l'exige ; la soumission
+        # la réclamera.
         self.assertEqual(sans_equipe.status_code, status.HTTP_201_CREATED, sans_equipe.data)

@@ -2,8 +2,8 @@
 
 Les administrateurs règlent, case par case, quel rôle porte quelle
 capacité — l'argent compris (décision 58) ; les verrous, eux, ne se règlent
-pas : les administrateurs gardent tout, le pays ne contrôle jamais ce
-qu'il déclare.
+pas (décision 89) : le pays seul déclare, l'administrateur seul contrôle,
+les administrateurs gardent l'administration.
 """
 
 from django.core.cache import cache
@@ -12,9 +12,20 @@ from rest_framework import status
 from core.models import ChangeLog, WorkflowConfiguration
 
 from accounts.models import Role
-from accounts.permissions import CAPACITES, CAPACITES_PAR_CLE, roles_pour
+from accounts.permissions import CAPACITES, CAPACITES_PAR_CLE, COUNTRY_ROLES, roles_pour
 
 from .test_scoping import ScopingTestCase, make_user
+
+#: Les lignes de la matrice qui ne bougent pas : la déclaration au pays, le
+#: contrôle à l'administrateur (décision 89).
+DECLARATION = (
+    "expenses.create", "expenses.update", "expenses.delete",
+    "proofs.upload", "dossiers.submit",
+)
+CONTROLE = (
+    "expenses.review", "expenses.validate", "expenses.close",
+    "proofs.review", "dossiers.reopen", "rectifications.decide",
+)
 
 
 class MatriceDesDroitsTests(ScopingTestCase):
@@ -44,25 +55,51 @@ class MatriceDesDroitsTests(ScopingTestCase):
             with self.subTest(capacite=capacite.key):
                 self.assertEqual(matrice[capacite.key]["roles"], sorted(capacite.defaut))
                 self.assertEqual(matrice[capacite.key]["default_roles"], sorted(capacite.defaut))
-                self.assertEqual(
-                    matrice[capacite.key]["fixed_roles"], [Role.ADMIN, Role.SUPER_ADMIN]
-                )
+                self.assertEqual(matrice[capacite.key]["fixed_roles"], sorted(capacite.fixes))
+
+    def test_la_declaration_est_au_pays_seul(self):
+        """Ni l'administrateur ni le super administrateur ne créent de
+        dossier ni ne déposent de pièce (décision 89) ; le pays les garde."""
+        for cle in DECLARATION:
+            with self.subTest(cle=cle):
+                self.assertEqual(roles_pour(cle), COUNTRY_ROLES)
+                refus = self._regler(self.siege, **{cle: ["super_admin", "admin", "manager"]})
+                self.assertEqual(refus.status_code, status.HTTP_400_BAD_REQUEST)
+                retrait = self._regler(self.siege, **{cle: []})
+                self.assertEqual(retrait.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(roles_pour(cle), COUNTRY_ROLES)
+        # L'import, lui, peut être retiré au pays : il garde la saisie.
+        self.assertEqual(roles_pour("data.import"), COUNTRY_ROLES)
+        self.assertEqual(self._regler(self.rh, **{"data.import": []}).status_code, 200)
+        self.assertEqual(roles_pour("data.import"), frozenset())
+
+    def test_le_controle_est_a_l_administrateur_seul(self):
+        """Le super administrateur supervise, il ne tranche pas ; le pays ne
+        contrôle pas ce qu'il déclare (décision 89)."""
+        for cle in CONTROLE:
+            with self.subTest(cle=cle):
+                self.assertEqual(roles_pour(cle), {Role.ADMIN})
+                for roles in (["admin", "super_admin"], ["admin", "manager"], []):
+                    response = self._regler(self.siege, **{cle: roles})
+                    self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, roles)
+                self.assertEqual(roles_pour(cle), {Role.ADMIN})
 
     def test_un_droit_accorde_s_applique_a_la_requete_suivante(self):
-        """Le DM reçoit l'export : la route qui lui répondait 403 s'ouvre,
-        ``/api/me/`` le dit, et le journal garde l'avant et l'après."""
-        self.login(self.dm)
+        """Le manager reçoit l'export : la route qui lui répondait 403
+        s'ouvre, ``/api/me/`` le dit, et le journal garde l'avant et
+        l'après."""
+        self.login(self.rep_togo)
         self.assertEqual(
             self.client.get("/api/exports/expenses.csv?year=2026").status_code,
             status.HTTP_403_FORBIDDEN,
         )
 
-        response = self._regler(self.rh, **{"data.export": ["super_admin", "admin", "dm"]})
+        response = self._regler(self.rh, **{"data.export": ["super_admin", "admin", "manager"]})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         capacites = {c["key"]: c["roles"] for c in response.data["capabilities"]}
-        self.assertEqual(capacites["data.export"], ["admin", "dm", "super_admin"])
-        self.login(self.dm)
+        self.assertEqual(capacites["data.export"], ["admin", "manager", "super_admin"])
+        self.login(self.rep_togo)
         self.assertTrue(self.client.get("/api/me/").data["permissions"]["data.export"])
         self.assertEqual(
             self.client.get("/api/exports/expenses.csv?year=2026").status_code,
@@ -73,19 +110,19 @@ class MatriceDesDroitsTests(ScopingTestCase):
         ).latest("pk")
         self.assertEqual(entree.performed_by, self.rh.username)
         self.assertEqual(
-            entree.diff["data.export"], [["admin", "super_admin"], ["admin", "dm", "super_admin"]]
+            entree.diff["data.export"],
+            [["admin", "super_admin"], ["admin", "manager", "super_admin"]],
         )
 
     def test_revenir_au_defaut_efface_le_choix(self):
-        self._regler(self.rh, **{"data.export": ["super_admin", "admin", "dm"]})
+        self._regler(self.rh, **{"data.export": ["super_admin", "admin", "manager"]})
 
         self._regler(self.rh, **{"data.export": ["super_admin", "admin"]})
 
         self.assertEqual(WorkflowConfiguration.objects.get().capability_roles, {})
 
     def test_le_pays_ne_recoit_jamais_le_controle(self):
-        for cle in ("expenses.review", "expenses.validate", "expenses.close",
-                    "proofs.review", "dossiers.reopen", "audit.read", "users.update",
+        for cle in (*CONTROLE, "audit.read", "users.update",
                     "budgets.update", "reallocations.decide", "rates.manage",
                     "countries.create", "countries.update"):
             with self.subTest(cle=cle):
@@ -113,15 +150,15 @@ class MatriceDesDroitsTests(ScopingTestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertNotIn(Role.MANAGER, roles_pour("countries.create"))
 
-    def test_les_comptes_ne_s_ouvrent_pas_a_un_role_restrictible(self):
-        """Un DF restreint à un pays qui créerait des comptes pourrait se
-        donner un administrateur : les comptes restent aux rôles globaux."""
+    def test_les_comptes_ne_s_ouvrent_pas_au_pays(self):
+        """Un manager qui créerait des comptes pourrait se donner un
+        administrateur : les comptes restent au siège."""
         for cle in ("users.read", "users.create", "users.update"):
             with self.subTest(cle=cle):
-                response = self._regler(self.siege, **{cle: ["super_admin", "admin", "df"]})
+                response = self._regler(self.siege, **{cle: ["super_admin", "admin", "manager"]})
 
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-                self.assertNotIn(Role.DF, roles_pour(cle))
+                self.assertNotIn(Role.MANAGER, roles_pour(cle))
 
     def test_une_valeur_mal_formee_vaut_le_defaut(self):
         """Une matrice qui lèverait fermerait toute l'API, y compris la route
@@ -147,9 +184,11 @@ class MatriceDesDroitsTests(ScopingTestCase):
                 self.assertEqual(
                     self._matrice()[cle]["settable_by_roles"], ["admin", "super_admin"]
                 )
-                accord = self._regler(self.rh, **{cle: ["super_admin", "admin", "df"]})
-                self.assertEqual(accord.status_code, status.HTTP_200_OK, accord.data)
-                self.assertIn(Role.DF, roles_pour(cle))
+                # Retirer la ligne aux administrateurs est refusé : ils la
+                # gardent, et la règlent.
+                refus = self._regler(self.rh, **{cle: ["super_admin"]})
+                self.assertEqual(refus.status_code, status.HTTP_400_BAD_REQUEST, refus.data)
+                self.assertIn(Role.ADMIN, roles_pour(cle))
 
     def test_les_administrateurs_gardent_tout(self):
         """Ni le super administrateur ni l'administrateur ne se retirent un
@@ -163,9 +202,9 @@ class MatriceDesDroitsTests(ScopingTestCase):
         self.assertEqual(sorted(roles_pour("data.export")), ["admin", "super_admin"])
 
     def test_la_configuration_reste_aux_administrateurs(self):
-        """Ni ouverte au DF, ni retirée à la RH : sinon plus personne pour
+        """Ni ouverte au pays, ni retirée à la RH : sinon plus personne pour
         régler la matrice, ou n'importe qui."""
-        elargie = self._regler(self.siege, **{"configuration.manage": ["super_admin", "admin", "df"]})
+        elargie = self._regler(self.siege, **{"configuration.manage": ["super_admin", "admin", "manager"]})
         retiree = self._regler(self.siege, **{"configuration.manage": ["super_admin"]})
 
         self.assertEqual(elargie.status_code, status.HTTP_400_BAD_REQUEST)
@@ -182,7 +221,7 @@ class MatriceDesDroitsTests(ScopingTestCase):
         }
         configuration.save()
 
-        self.assertEqual(roles_pour("expenses.validate"), {Role.SUPER_ADMIN, Role.ADMIN})
+        self.assertEqual(roles_pour("expenses.validate"), {Role.ADMIN})
         self.login(self.rep_togo)
         self.assertFalse(self.client.get("/api/me/").data["permissions"]["expenses.validate"])
 
@@ -193,8 +232,8 @@ class MatriceDesDroitsTests(ScopingTestCase):
         self.assertEqual(inconnue.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(role.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_ni_le_pays_ni_le_controle_ne_reglent_la_matrice(self):
-        for user in (self.rep_togo, self.controleur, self.dm):
+    def test_le_pays_ne_regle_pas_la_matrice(self):
+        for user in (self.rep_togo,):
             with self.subTest(user=user.username):
                 response = self._regler(user, **{"data.export": ["super_admin", "admin"]})
                 self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -206,11 +245,13 @@ class MatriceDesDroitsTests(ScopingTestCase):
     def test_un_choix_enregistre_se_lit_dans_roles_pour(self):
         """Le défaut reste dans le code, le choix dans la base : ``roles_pour``
         rend le second (les services sont éprouvés dans ``expenses``)."""
-        response = self._regler(self.siege, **{"dossiers.reopen": ["super_admin", "admin", "df"]})
+        response = self._regler(self.siege, **{"data.export": ["super_admin", "admin", "manager"]})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        self.assertEqual(roles_pour("dossiers.reopen"), {Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
-        self.assertEqual(CAPACITES_PAR_CLE["dossiers.reopen"].defaut, {Role.SUPER_ADMIN, Role.ADMIN})
+        self.assertEqual(
+            roles_pour("data.export"), {Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER}
+        )
+        self.assertEqual(CAPACITES_PAR_CLE["data.export"].defaut, {Role.SUPER_ADMIN, Role.ADMIN})
 
 
 def matrice_de(cle):
@@ -254,7 +295,7 @@ class ContratDeLaMatriceTests(ScopingTestCase):
         configuration.alert_thresholds = [70, 90, 100]
         configuration.save()
 
-        for user in (self.rep_togo, self.dm, self.controleur, self.rh, self.siege):
+        for user in (self.rep_togo, self.controleur, self.rh, self.siege):
             with self.subTest(compte=user.username):
                 self.login(user)
                 response = self.client.get("/api/me/")

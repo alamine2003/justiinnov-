@@ -444,7 +444,7 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     country_field = None
     country_via = "dossier"
     team_lookup = "dossier__team"
-    # Le contrôle documentaire relève du siège (DF), pas du déposant.
+    # Le contrôle documentaire relève de l'administrateur, pas du déposant.
     write_capability = "proofs.upload"
     action_write_capabilities = {"review": "proofs.review"}
 
@@ -683,8 +683,8 @@ class RectificationViewSet(
 class AuditLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     """Journal d'audit — consultation par la RH, qui audite, et la direction.
 
-    Le DM et le DF n'y ont pas accès : le journal relit leurs propres
-    décisions, et cette relecture est un acte d'administration.
+    Le pays n'y a pas accès : le journal relit les décisions de chacun, et
+    cette relecture est un acte d'administration.
     """
 
     queryset = AuditLog.objects.select_related("country").all()

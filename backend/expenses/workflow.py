@@ -15,11 +15,12 @@ Trois principes gouvernent ce circuit :
   preuve ne fait pas revenir l'argent : elle se lit dans l'écart entre le
   montant dépensé et le montant justifié.
 - **Personne ne contrôle sa propre dépense.** Le pays (manager) déclare,
-  le siège constate — le DM met en contrôle, le DF tranche. Et même au
-  siège, celui qui a saisi une ligne ou ouvert un dossier n'y accomplit
-  aucun acte de contrôle : ni mise en contrôle, ni justification, ni rejet,
-  ni clôture (``FOUR_EYES_ACTIONS``). Sans cette séparation, une seule
-  personne pourrait décaisser puis se donner quitus.
+  l'administrateur constate de bout en bout — mise en contrôle,
+  justification ou rejet, clôture (décision 89). Les deux rôles ne se
+  recouvrent pas ; la règle des quatre yeux (``FOUR_EYES_ACTIONS``) reste
+  en garde : celui qui a saisi une ligne ou ouvert un dossier n'y
+  accomplit aucun acte de contrôle, quelle que soit la matrice. Sans cette
+  séparation, une seule personne pourrait décaisser puis se donner quitus.
 
 Les actions que le demandeur peut tenter sont calculées ici aussi
 (``expense_allowed_actions``, ``dossier_allowed_actions``) et exposées par
@@ -122,12 +123,10 @@ TRANSITIONS = {
 MOTIVATED_ACTIONS = frozenset({"reject", "reopen", "rectify"})
 
 #: Capacité exigée pour chaque action du circuit (``accounts.permissions``).
-#: Par défaut, le pays (manager) soumet ; au siège, le DM met en contrôle et
-#: le DF tranche (justifie, rejette, clôt), les administrateurs pouvant faire
-#: l'un et l'autre ; les administrateurs seuls rouvrent — ni le pays, qui se
-#: corrigerait lui-même, ni la direction financière, dont le constat ne se
-#: défait pas. La matrice des droits peut élargir ces défauts, jamais au
-#: pays pour le contrôle.
+#: Le pays (manager) soumet ; l'administrateur, seul, met en contrôle,
+#: tranche (justifie, rejette), clôt, rouvre et décide des rectifications
+#: (décision 89). Ces lignes de la matrice sont verrouillées : ni le pays,
+#: qui se contrôlerait lui-même, ni le super administrateur, qui supervise.
 ACTION_CAPACITES = {
     "submit": "dossiers.submit",
     "review": "expenses.review",
@@ -289,15 +288,16 @@ DOSSIER_ACTIONS = (
 def agit_en_auteur(objet, role, username):
     """Le compte peut-il agir sur ce brouillon comme son auteur ?
 
-    Vrai pour l'auteur, pour le siège — qui agit à découvert, chaque acte
-    journalisé — et sans auteur connu (import, compte disparu). Faux pour
-    un collègue du pays. Seul prédicat de la règle : le service qui refuse
-    (``transitions.exiger_l_auteur_du_brouillon``) et ``allowed_actions``
-    (:func:`peut_saisir`, :func:`dossier_allowed_actions`) le partagent,
-    pour ne jamais diverger.
+    Vrai pour l'auteur, et sans auteur connu (compte disparu, brouillon
+    rendu au pays par la décision 89). Faux pour un collègue du pays — et
+    pour le siège, qui ne déclare plus : il ne corrige pas un brouillon, il
+    le contrôle une fois soumis (décision 89). Seul prédicat de la règle :
+    le service qui refuse (``transitions.exiger_l_auteur_du_brouillon``) et
+    ``allowed_actions`` (:func:`peut_saisir`, :func:`dossier_allowed_actions`)
+    le partagent, pour ne jamais diverger.
     """
     if role not in COUNTRY_ROLES:
-        return True
+        return False
     return not objet.created_by or objet.created_by == username
 
 
@@ -305,8 +305,8 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
     """La saisie ``action`` (modifier, ajouter, déposer, supprimer) est-elle possible ?
 
     Une dépense déclarée ne se modifie plus ni ne se supprime ; une pièce se
-    dépose jusqu'à la clôture ; un brouillon ne se retire que par son auteur
-    et ne se modifie que par lui ou par le siège
+    dépose jusqu'à la clôture ; un brouillon ne se retire, ne se modifie et
+    ne se soumet que par son auteur
     (``transitions.exiger_l_auteur_du_brouillon``, ``retirer_brouillon``). Sans auteur connu — import, compte
     disparu — le retrait reste ouvert à qui a la capacité. Comme pour
     ``justify``, la liste dit ce qui peut être *tenté* : le retrait d'un
@@ -323,7 +323,7 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
             and not a_ete_rectifiee(objet)
         )
     if action == "edit":
-        # Le siège corrige à découvert ; un collègue du pays, non.
+        # Ni un collègue du pays, ni le siège (décision 89).
         return objet.status not in LOCKED_STATUSES and agit_en_auteur(
             objet, role, username
         )
@@ -413,8 +413,8 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
     (:meth:`Dossier.line_counts`), annotés par ``with_totals`` sur une
     liste pour ne pas coûter une requête par dossier.
 
-    Un brouillon de dossier ne se soumet que par son auteur ou par le
-    siège, comme il ne se modifie que par eux
+    Un brouillon de dossier ne se soumet que par son auteur, comme il ne
+    se modifie que par lui
     (``transitions.exiger_l_auteur_du_brouillon``) : un collègue du pays ne
     voit pas ``submit``.
 

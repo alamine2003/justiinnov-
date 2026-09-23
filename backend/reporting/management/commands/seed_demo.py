@@ -17,8 +17,9 @@ l'historique et les notifications sont donc ceux que ces actions produisent
 réellement, pas des lignes fabriquées.
 
 Les actions sont signées par trois comptes de démonstration — ``demo.pays``
-(manager du Togo), ``demo.controle`` (DF), ``demo.direction`` (super
-administrateur) — créés **sans mot de passe utilisable** et sans adresse :
+(manager du Togo), ``demo.controle`` (administrateur, qui contrôle),
+``demo.direction`` (super administrateur, qui supervise) — créés **sans
+mot de passe utilisable** et sans adresse :
 ils ne peuvent pas se connecter et ne reçoivent aucun e-mail. Ils existent
 parce que la règle des quatre yeux exige deux personnes, et parce qu'une
 trace d'audit dit *qui* a agi.
@@ -92,7 +93,7 @@ SOUS_ENVELOPPE_LOME = Decimal("8000000.00")
 
 COMPTES = {
     "demo.pays": (Role.MANAGER, "TG"),
-    "demo.controle": (Role.DF, None),
+    "demo.controle": (Role.ADMIN, None),
     "demo.direction": (Role.SUPER_ADMIN, None),
 }
 
@@ -209,7 +210,6 @@ class Command(BaseCommand):
         projet = self.projets["TG"]
         pays_user = self.comptes["demo.pays"]
         controle = self.comptes["demo.controle"]
-        direction = self.comptes["demo.direction"]
 
         # Brouillon : en cours de saisie, sans pièce.
         brouillon = self._dossier(
@@ -220,7 +220,7 @@ class Command(BaseCommand):
             ],
         )
 
-        # Soumis : rouvert une fois par la direction, corrigé, resoumis.
+        # Soumis : rouvert une fois par l'administrateur, corrigé, resoumis.
         soumis = self._dossier(
             "DEMO-0002", "Formation des délégués de Kara", togo, kara, manager, jours=20,
             lignes=[
@@ -232,7 +232,7 @@ class Command(BaseCommand):
         self._piece(soumis, pays_user)
         self._action("submit", soumis, pays_user)
         self._action(
-            "reopen", soumis, direction,
+            "reopen", soumis, controle,
             note="La facture de la salle est illisible : merci d'en déposer une lisible.",
         )
         self._piece(soumis, pays_user, version=2)

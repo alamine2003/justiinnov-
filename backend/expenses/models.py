@@ -451,7 +451,7 @@ class Expense(TimeStampedModel):
         _("Statut"), max_length=20, choices=Status.choices, default=Status.DRAFT
     )
     note = models.TextField(_("Remarque"), blank=True)
-    # Le motif du siège (DF) a son propre champ : il écrasait ``note``, la
+    # Le motif de l'administrateur a son propre champ : il écrasait ``note``, la
     # remarque du pays, si bien qu'un rejet effaçait ce que le déclarant
     # avait pris soin d'expliquer.
     control_note = models.TextField(_("Motif du contrôle"), blank=True)

@@ -20,8 +20,6 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from openpyxl import load_workbook
 
-from accounts.models import Role
-from accounts.tests.test_scoping import make_user
 from budget.models import Budget
 from core.management.commands.run_scheduler import JOBS, declencheur, run_job
 from core.models import ChangeLog, Country
@@ -155,9 +153,8 @@ class RapportPeriodiqueTests(DashboardTestCase):
         super().setUpTestData()
         cls.doo.email = "doo@example.org"
         cls.doo.save()
-        cls.controle_togo = make_user("controle.togo", Role.DF, [cls.togo])
-        cls.controle_togo.email = "togo@example.org"
-        cls.controle_togo.save()
+        cls.controller.email = "rh@example.org"
+        cls.controller.save()
         cls.abidjan = Dossier.objects.create(
             number="CI-0001", label="Salon Abidjan", country=cls.ivoire,
             date=date(cls.year, 4, 2), status=Status.SUBMITTED,
@@ -173,73 +170,59 @@ class RapportPeriodiqueTests(DashboardTestCase):
             row[0] for row in self._classeur(message).iter_rows(min_row=2, values_only=True)
         } - {None}
 
-    def test_une_direction_financiere_restreinte_ne_recoit_que_son_perimetre(self):
-        """Régression : la synthèse entière partait à tous, dossiers du
-        voisin compris — le cloisonnement contourné par un e-mail."""
+    def _message_de(self, adresse):
+        return next(m for m in mail.outbox if adresse in m.bcc)
+
+    def test_le_rapport_part_au_siege_sur_tous_les_pays(self):
+        """Le siège n'est jamais restreint (décision 89) : l'administrateur
+        qui contrôle et le super administrateur qui supervise lisent la même
+        synthèse, tous pays ; le manager ne la reçoit pas."""
         call_command("send_periodic_report", year=self.year, verbosity=0)
 
-        par_destinataire = {tuple(m.bcc): m for m in mail.outbox}
-        togo = par_destinataire[("togo@example.org",)]
-        siege = par_destinataire[("doo@example.org",)]
-        self.assertIn("Togo", togo.body)
-        self.assertNotIn("CI-0001", togo.body)
-        self.assertNotIn("Côte d'Ivoire", togo.body)
-        self.assertEqual(self._numeros(siege), {"N-0001", "CI-0001"})
-
-    def test_le_dm_recoit_le_rapport_de_son_perimetre(self):
-        """Le DM met en contrôle : il lit la même synthèse que le DF, sur son
-        périmètre, sans classeur."""
-        dm_togo = make_user("dm.togo", Role.DM, [self.togo], email="dm.togo@example.org")
-
-        call_command("send_periodic_report", year=self.year, verbosity=0)
-
-        # Même périmètre, même langue, pas de classeur : le DM du Togo lit
-        # le message du DF du Togo, en copie cachée avec lui.
-        message = next(m for m in mail.outbox if "dm.togo@example.org" in m.bcc)
-        self.assertIn("Togo", message.body)
-        self.assertNotIn("CI-0001", message.body)
-        self.assertEqual(message.attachments, [])
+        for adresse in ("doo@example.org", "rh@example.org"):
+            with self.subTest(adresse=adresse):
+                self.assertEqual(
+                    self._numeros(self._message_de(adresse)), {"N-0001", "CI-0001"}
+                )
         self.assertFalse(
-            any(m.bcc == [self.owner.email] for m in mail.outbox),
+            any(self.owner.email in m.bcc for m in mail.outbox),
             "le manager ne reçoit pas le rapport du siège",
         )
-        self.assertEqual(dm_togo.profile.role, Role.DM)
 
-    def test_la_piece_jointe_n_est_envoyee_qu_aux_administrateurs(self):
-        """Seuls les administrateurs manipulent des fichiers : la direction
-        financière lit la synthèse et retrouve le détail dans l'application."""
+    def test_le_siege_recoit_le_classeur(self):
+        """Les fichiers sont aux administrateurs : le rapport du siège porte
+        le classeur de rapprochement."""
         call_command("send_periodic_report", year=self.year, verbosity=0)
 
-        par_destinataire = {tuple(m.bcc): m for m in mail.outbox}
-        togo = par_destinataire[("togo@example.org",)]
-        siege = par_destinataire[("doo@example.org",)]
-        self.assertEqual(togo.attachments, [])
-        self.assertIn("dans l'application", togo.body)
+        siege = self._message_de("doo@example.org")
         self.assertEqual(len(siege.attachments), 1)
         self.assertIn("en pièce jointe", siege.body)
 
     def test_le_rapport_est_dans_la_langue_du_destinataire(self):
         with mock.patch(
             "reporting.management.commands.send_periodic_report.langue_de",
-            side_effect=lambda user: "en" if user == self.controle_togo else "fr",
+            side_effect=lambda user: "en" if user == self.controller else "fr",
         ):
             call_command("send_periodic_report", year=self.year, verbosity=0)
 
-        par_destinataire = {tuple(m.bcc): m for m in mail.outbox}
-        togo = par_destinataire[("togo@example.org",)]
-        siege = par_destinataire[("doo@example.org",)]
-        self.assertEqual(togo.subject, f"[Budget control] weekly report — {self.year}")
-        self.assertIn("Dossiers without any supporting document", togo.body)
-        self.assertEqual(siege.subject, f"[Contrôle budgétaire] Rapport hebdomadaire — {self.year}")
-        self.assertIn("Dossiers sans aucun justificatif", siege.body)
+        anglais = self._message_de("rh@example.org")
+        francais = self._message_de("doo@example.org")
+        self.assertNotIn("doo@example.org", anglais.bcc)
+        self.assertEqual(anglais.subject, f"[Budget control] weekly report — {self.year}")
+        self.assertIn("Dossiers without any supporting document", anglais.body)
+        self.assertEqual(francais.subject, f"[Contrôle budgétaire] Rapport hebdomadaire — {self.year}")
+        self.assertIn("Dossiers sans aucun justificatif", francais.body)
 
     def test_les_adresses_ne_sont_pas_exposees(self):
         for message in mail.outbox:
             self.assertEqual(message.to, [])
         call_command("send_periodic_report", year=self.year, verbosity=0)
+        destinataires = []
         for message in mail.outbox:
             self.assertEqual(message.to, [])
-            self.assertEqual(len(message.bcc), 1)
+            destinataires.extend(message.bcc)
+        # Chacun reçoit un seul message, en copie cachée.
+        self.assertEqual(len(destinataires), len(set(destinataires)))
 
     def test_les_dossiers_sans_justificatif_suivent_la_regle_des_alertes(self):
         """Un brouillon ne compte pas ; une pièce rejetée ne couvre rien."""
@@ -258,7 +241,7 @@ class RapportPeriodiqueTests(DashboardTestCase):
 
         call_command("send_periodic_report", year=self.year, verbosity=0)
 
-        siege = next(m for m in mail.outbox if m.bcc == ["doo@example.org"])
+        siege = self._message_de("doo@example.org")
         # N-0001 (pièce rejetée) et CI-0001 (aucune pièce) ; pas le brouillon.
         self.assertIn("Dossiers sans aucun justificatif : 2", siege.body)
 
@@ -271,7 +254,7 @@ class RapportPeriodiqueTests(DashboardTestCase):
 
         call_command("send_periodic_report", year=self.year, verbosity=0)
 
-        siege = next(m for m in mail.outbox if m.bcc == ["doo@example.org"])
+        siege = self._message_de("doo@example.org")
         self.assertIn("Guinée (GNF) : attribué 5000.00", siege.body)
         self.assertIn("Enveloppes attribuées : 1500000.00", siege.body)
         self.assertIn("faute de taux : GNF", siege.body)

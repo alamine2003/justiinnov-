@@ -307,7 +307,7 @@ jobs:
                 "email": "siege.ci@innovpharma.net",
                 "first_name": "Siège",
                 "last_name": "CI",
-                "role": "super_admin",
+                "role": "admin",
                 "countries": [],
                 "must_change_password": false,
                 "totp_secret": "$HQ_TOTP_SECRET"

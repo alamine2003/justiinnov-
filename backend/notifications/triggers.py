@@ -31,9 +31,8 @@ def controleurs():
     """Qui contrôle les dépenses — le siège, jamais le pays qui les a engagées.
 
     Ceux qui peuvent mettre en contrôle, lus dans la matrice des droits au
-    moment de l'envoi : le DM, le DF et les administrateurs par défaut.
-    ``recipients_for`` cloisonne : un DM ou un DF restreint à des pays n'est
-    prévenu que pour ceux-là.
+    moment de l'envoi : l'administrateur, seul (décision 89). Le siège n'est
+    jamais restreint à des pays : il est prévenu pour tous.
     """
     return roles_pour("expenses.review")
 
@@ -176,9 +175,8 @@ ALERT_KINDS = {
     "proof_incomplete": Notification.Kind.PROOF_INCOMPLETE,
 }
 
-#: Qui doit être averti, selon la nature de l'alerte : le siège entier
-#: (super administrateurs, RH, DF, DM), et le manager pour les alertes de
-#: son pays.
+#: Qui doit être averti, selon la nature de l'alerte : l'administrateur, qui
+#: contrôle, et le manager pour les alertes de son pays.
 #: L'enveloppe : les administrateurs l'arbitrent, le contrôle la surveille, et le
 #: pays reste averti de son état même s'il ne la justifie pas lui-même. Un
 #: justificatif manquant concerne d'abord ceux qui peuvent le fournir — le

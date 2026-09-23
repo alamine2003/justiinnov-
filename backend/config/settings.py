@@ -466,7 +466,8 @@ TOTP_REQUIRED_ROLES = frozenset(
     role.strip() for role in os.environ.get("DJANGO_TOTP_REQUIRED_ROLES", "").split(",")
     if role.strip()
 )
-_ROLES_CONNUS = {"manager", "dm", "df", "admin", "super_admin"}
+# Les trois rôles de la décision 89 (``accounts.models.Role``).
+_ROLES_CONNUS = {"manager", "admin", "super_admin"}
 if TOTP_REQUIRED_ROLES - _ROLES_CONNUS:
     raise ImproperlyConfigured(
         "DJANGO_TOTP_REQUIRED_ROLES contient un rôle inconnu : "

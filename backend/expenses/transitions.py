@@ -132,14 +132,14 @@ class Resultat:
 
 
 def exiger_l_auteur_du_brouillon(objet, acteur, message=None):
-    """Un brouillon ne se modifie — ni ne se soumet — que par qui l'a saisi, ou par le siège.
+    """Un brouillon ne se modifie — ni ne se soumet — que par qui l'a saisi.
 
     Un collègue du même pays qui changerait le montant laisserait l'auteur
     soumettre une ligne qu'il n'a pas écrite, sous son nom ; un collègue qui
     soumettrait le dossier d'un autre déclarerait au nom de l'auteur ce que
-    celui-ci n'a pas fini de saisir. Le siège, lui, corrige à découvert :
-    chaque modification est journalisée avec avant et après. Sans auteur
-    connu — import, compte disparu — la correction reste ouverte.
+    celui-ci n'a pas fini de saisir. Le siège ne corrige plus un brouillon :
+    il ne déclare pas (décision 89). Sans auteur connu — compte disparu,
+    brouillon rendu au pays — le pays le complète.
     """
     if not agit_en_auteur(objet, acteur.role, acteur.username):
         raise PermissionRefusee(
@@ -491,8 +491,8 @@ def _rouvrir_les_lignes(dossier, motif, trace, resultat):
 def _avant_sur_le_dossier(dossier, action, acteur, note, donnees, trace, resultat):
     """Contrôles propres au dossier. Renvoie un avertissement ou ``None``."""
     if action == "submit":
-        # Un brouillon part par son auteur, ou par le siège : un collègue du
-        # pays ne déclare pas à la place de qui saisit encore.
+        # Un brouillon part par son auteur : un collègue du pays ne déclare
+        # pas à la place de qui saisit encore.
         exiger_l_auteur_du_brouillon(
             dossier, acteur, _("Seul l'auteur d'un brouillon peut le soumettre.")
         )
@@ -601,7 +601,7 @@ def _avant_sur_la_ligne(expense, action, acteur, note, donnees, trace, resultat)
 
 
 def _appliquer_a_la_ligne(expense, action, note, donnees):
-    """Le siège (DF) fixe ce qui est prouvé, et pourquoi.
+    """L'administrateur fixe ce qui est prouvé, et pourquoi.
 
     Le motif va dans ``control_note`` : ``note`` est la remarque du
     déclarant, qu'un rejet ne doit pas effacer.
@@ -722,7 +722,7 @@ def rouvrir(dossier, acteur, motif, trace):
 
 
 def mettre_en_controle(objet, acteur, trace):
-    """Prend un dossier ou une ligne soumis en contrôle (le DM)."""
+    """Prend un dossier ou une ligne soumis en contrôle (l'administrateur)."""
     return _transition(objet, "review", acteur, trace)
 
 

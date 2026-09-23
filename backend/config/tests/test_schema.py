@@ -78,7 +78,7 @@ class AccesAuSchemaTests(APITestCase):
         self.assertEqual(self.client.get("/api/schema/").status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_le_siege_lit_le_schema(self):
-        for role in (Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM):
+        for role in (Role.SUPER_ADMIN, Role.ADMIN):
             with self.subTest(role=role):
                 self._connecter(role)
                 response = self.client.get("/api/schema/?format=json")
@@ -96,7 +96,7 @@ class AccesAuSchemaTests(APITestCase):
 
     def test_l_interface_est_reservee_aux_administrateurs(self):
         with override_settings(DEBUG=True):
-            self._connecter(Role.DF)
+            self._connecter(Role.MANAGER)
             self.assertEqual(self.client.get("/api/schema/ui/").status_code, status.HTTP_403_FORBIDDEN)
             self._connecter(Role.ADMIN)
             response = self.client.get("/api/schema/ui/")

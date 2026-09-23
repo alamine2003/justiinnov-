@@ -180,7 +180,7 @@ class ConnexionAvecCodeTests(ScopingTestCase):
     def setUp(self):
         super().setUp()
         self.repere = ChangeLog.objects.aggregate(Max("pk"))["pk__max"] or 0
-        self.user = make_user("dina.innov", Role.DF)
+        self.user = make_user("dina.innov", Role.ADMIN)
         self.secret = self.user.profile.totp_secret
 
     def connexion(self, **extra):

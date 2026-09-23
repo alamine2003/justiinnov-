@@ -631,9 +631,10 @@ class PermissionMatrixView(APIView):
     """Matrice des rôles et de ce qu'ils autorisent (décision 43).
 
     Lue dans la même table que celle appliquée par ``RolePermission``, et
-    modifiable par les administrateurs, case par case — sauf les verrous :
-    les administrateurs gardent tout, le pays ne reçoit jamais le droit de
-    contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
+    modifiable par les administrateurs, case par case — sauf les verrous
+    (décision 89) : le pays seul déclare, l'administrateur seul contrôle,
+    les administrateurs gardent l'administration ; le pays n'administre
+    rien et n'arbitre pas ses enveloppes.
     Chaque modification est journalisée avec l'avant et l'après.
     """
 
@@ -648,9 +649,8 @@ class PermissionMatrixView(APIView):
                     "value": role.value,
                     "label": str(role.label),
                     "siege": role in HEADQUARTERS_ROLES,
-                    # Un rôle du siège peut être restreint à des pays
-                    # (DM, DF) ; la RH et les super administrateurs,
-                    # jamais : ils administrent l'ensemble.
+                    # Le siège n'est jamais restreint à des pays : il
+                    # contrôle et supervise l'ensemble.
                     "always_global": role in ALWAYS_GLOBAL_ROLES,
                     # Ce que le lecteur peut conférer à un compte : la même
                     # règle que ``UserViewSet`` applique au refus.
@@ -674,8 +674,9 @@ class PermissionMatrixView(APIView):
             ],
             "note": _(
                 "Les droits s'appliquent à chaque requête, dès l'enregistrement. "
-                "Les administrateurs gardent tout ; un pays ne contrôle jamais "
-                "ce qu'il déclare, n'administre rien et n'arbitre pas ses enveloppes."
+                "Le pays seul déclare, l'administrateur seul contrôle ; les "
+                "administrateurs gardent l'administration, et un pays n'arbitre "
+                "jamais ses enveloppes."
             ),
         }
 

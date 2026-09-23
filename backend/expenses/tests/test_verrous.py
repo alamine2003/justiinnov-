@@ -54,8 +54,8 @@ class CourseTestCase(TransactionTestCase):
             overrun_policy=OverrunPolicy.BLOCK,
         )
         self.owner = self._compte("owner.togo", Role.MANAGER, [self.togo])
-        self.df = self._compte("df.innov", Role.DF)
-        self.df_bis = self._compte("df2.innov", Role.DF)
+        self.rh = self._compte("rh.innov", Role.ADMIN)
+        self.rh_bis = self._compte("rh2.innov", Role.ADMIN)
 
     def _compte(self, username, role, countries=()):
         """Un compte **et son jeton**, créés avant la course, donc validés.
@@ -153,15 +153,15 @@ class CourseSurLeCircuit(CourseTestCase):
         self.assertEqual(Expense.objects.filter(status=Status.SUBMITTED).count(), 1)
 
     def test_une_ligne_ne_se_justifie_qu_une_fois(self):
-        """Deux DF tranchent la même ligne au même instant : un constat,
+        """Deux administrateurs tranchent la même ligne au même instant : un constat,
         une trace, et le second apprend que c'est déjà fait."""
         dossier = self._dossier("N-0003", "100000.00", statut=Status.SUBMITTED)
         ligne = dossier.expenses.get()
         url = f"/api/expenses/{ligne.pk}/justify/"
 
         premiere, seconde = self._en_course(
-            lambda: self._client(self.df).post(url),
-            lambda: self._client(self.df_bis).post(url),
+            lambda: self._client(self.rh).post(url),
+            lambda: self._client(self.rh_bis).post(url),
         )
 
         self.assertEqual(premiere.status_code, status.HTTP_200_OK, premiere.data)
@@ -198,8 +198,8 @@ class CourseSurLeCircuit(CourseTestCase):
         ligne = dossier.expenses.get()
 
         premiere, seconde = self._en_course(
-            lambda: self._client(self.df).post(f"/api/expenses/{ligne.pk}/justify/"),
-            lambda: self._client(self.df_bis).post(
+            lambda: self._client(self.rh).post(f"/api/expenses/{ligne.pk}/justify/"),
+            lambda: self._client(self.rh_bis).post(
                 f"/api/expenses/{ligne.pk}/reject/", {"note": "Sans reçu"}, format="json"
             ),
         )
@@ -218,8 +218,7 @@ class CourseSurLeCircuit(CourseTestCase):
     def test_deux_reouvertures_simultanees(self):
         """Deux administrateurs rouvrent le même dossier : une réouverture,
         une notification, une trace par ligne."""
-        admin = self._compte("rh.innov", Role.ADMIN)
-        admin_bis = self._compte("rh2.innov", Role.ADMIN)
+        admin, admin_bis = self.rh, self.rh_bis
         dossier = self._dossier("N-0006", "100000.00", statut=Status.SUBMITTED)
         url = f"/api/dossiers/{dossier.pk}/reopen/"
 
@@ -341,10 +340,6 @@ class CourseSurLImport(CourseTestCase):
     la base et le verrou du dossier tranchent ce que la validation ne peut
     pas voir."""
 
-    def setUp(self):
-        super().setUp()
-        self.admin = self._compte("rh.innov", Role.ADMIN)
-
     def _classeur(self, numero, lignes):
         from io import BytesIO
 
@@ -369,7 +364,9 @@ class CourseSurLImport(CourseTestCase):
         return contenu.getvalue()
 
     def _importer(self, contenu):
-        return self._client(self.admin).post(
+        # L'import est une déclaration : l'auteur des brouillons du pays
+        # (décision 89).
+        return self._client(self.owner).post(
             "/api/imports/expenses.xlsx",
             {"file": SimpleUploadedFile("depenses.xlsx", contenu,
                                         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},

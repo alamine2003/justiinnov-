@@ -112,14 +112,19 @@ class AuteurDeLaSoumissionTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["status"], Status.SUBMITTED)
 
-    def test_le_siege_soumet_a_decouvert(self):
-        response = self.submit_dossier(user=self.doo)
+    def test_le_siege_ne_soumet_pas(self):
+        """Soumettre, c'est déclarer : le pays seul (décision 89)."""
+        for user in (self.controller, self.doo):
+            with self.subTest(role=user.profile.role):
+                response = self.submit_dossier(user=user)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertEqual(response.data["status"], Status.SUBMITTED)
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.DRAFT)
 
     def test_les_actions_proposees_disent_la_meme_chose(self):
         """``submit`` n'est proposé qu'à qui le service laissera passer."""
         self.assertIn("submit", self._actions(self.owner))
-        self.assertIn("submit", self._actions(self.doo))
+        self.assertNotIn("submit", self._actions(self.doo))
+        self.assertNotIn("submit", self._actions(self.controller))
         self.assertNotIn("submit", self._actions(self.collegue))

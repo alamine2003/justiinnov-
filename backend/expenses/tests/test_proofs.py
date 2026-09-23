@@ -566,12 +566,16 @@ class TypeFigeAvecLeDossierTests(ExpenseTestCase):
     def test_declare_le_dossier_fige_le_type(self):
         self.submit_dossier()
 
-        for user in (self.owner, self.doo):
+        self.login(self.owner)
+        response = self.client.patch(f"/api/proofs/{self.proof_id}/", {"kind": "invoice"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("kind", response.data)
+        # Le siège ne dépose ni ne retouche une pièce (décision 89).
+        for user in (self.controller, self.doo):
             with self.subTest(compte=user.username):
                 self.login(user)
                 response = self.client.patch(f"/api/proofs/{self.proof_id}/", {"kind": "invoice"})
 
-                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
-                self.assertIn("kind", response.data)
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
         self.assertEqual(Proof.objects.get(pk=self.proof_id).kind, "receipt")
         self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.UPDATED).exists())

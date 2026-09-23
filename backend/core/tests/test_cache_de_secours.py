@@ -249,7 +249,7 @@ class ConfigurationSousPanneDeRedisTests(TransactionTestCase):
     ``charger()`` mettait la configuration en cache **sans expiration** et
     l'invalidait par un seul ``delete``. Redis injoignable à l'instant du
     ``PATCH /api/permissions/`` : le ``delete`` tombait sur le secours,
-    l'ancienne matrice restait dans Redis, et à son retour un DF gardait
+    l'ancienne matrice restait dans Redis, et à son retour un manager gardait
     un droit qu'on venait de lui retirer — jusqu'au redémarrage du serveur,
     sur le serveur **et** sur l'ordonnanceur, pendant que le journal
     disait le droit retiré. Deux bornes désormais : l'entrée expire

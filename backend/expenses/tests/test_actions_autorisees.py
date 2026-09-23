@@ -29,7 +29,6 @@ SAISIE = ["edit", "add_line", "upload", "delete"]
 class ActionsDeLigneTests(ExpenseTestCase):
     def setUp(self):
         super().setUp()
-        self.dm = make_user("dm.innov", Role.DM)
         self.ligne = self.make_expense()
         self.submit_dossier()
 
@@ -42,10 +41,11 @@ class ActionsDeLigneTests(ExpenseTestCase):
     def test_le_pays_n_a_aucune_action_de_controle(self):
         self.assertEqual(self._actions(self.owner), [])
 
-    def test_le_dm_ne_fait_que_mettre_en_controle(self):
-        self.assertEqual(self._actions(self.dm), ["review"])
+    def test_le_super_administrateur_supervise_sans_agir(self):
+        """Il voit la ligne, il ne la contrôle pas (décision 89)."""
+        self.assertEqual(self._actions(self.doo), [])
 
-    def test_le_df_tranche_une_ligne_soumise(self):
+    def test_l_administrateur_tranche_une_ligne_soumise(self):
         self.assertEqual(self._actions(self.controller), ["review", "justify", "reject"])
 
     def test_l_etape_de_controle_obligatoire_retire_justify(self):
@@ -54,17 +54,19 @@ class ActionsDeLigneTests(ExpenseTestCase):
         self.assertEqual(self._actions(self.controller), ["review", "reject"])
 
     def test_l_auteur_d_une_ligne_ne_la_justifie_pas(self):
-        """Quatre yeux : la ligne saisie par le DF ne lui propose rien, et
-        propose tout à un autre membre du siège."""
+        """Quatre yeux, en garde : une ligne dont l'administrateur serait
+        l'auteur — une donnée d'avant la décision 89 — ne lui propose rien,
+        et propose tout à un autre administrateur."""
         dossier = Dossier.objects.create(
-            number="N-0002", label="Mission du DF", country=self.togo,
+            number="N-0002", label="Mission de la RH", country=self.togo,
             date=date(self.year, 3, 16), created_by=self.owner.username,
         )
         propre = self.make_expense(dossier=dossier, created_by=self.controller.username)
         self.submit_dossier(dossier)
 
         self.assertEqual(self._actions(self.controller, propre), [])
-        self.assertEqual(self._actions(self.doo, propre), ["review", "justify", "reject"])
+        autre = make_user("rh2.innov", Role.ADMIN)
+        self.assertEqual(self._actions(autre, propre), ["review", "justify", "reject"])
 
     def test_une_ligne_sans_auteur_n_admet_rien(self):
         dossier = Dossier.objects.create(
@@ -77,13 +79,14 @@ class ActionsDeLigneTests(ExpenseTestCase):
         self.assertEqual(self._actions(self.controller, anonyme), [])
 
     def test_une_ligne_justifiee_ne_propose_que_la_cloture_et_la_rectification(self):
-        """Constatée, la ligne se clôt (DF) ; et n'importe qui peut demander
-        à rectifier le constat — le DM aussi, qui ne tranche rien d'autre."""
+        """Constatée, la ligne se clôt (l'administrateur) ; et n'importe qui
+        peut demander à rectifier le constat — le super administrateur
+        aussi, qui ne tranche rien."""
         self.login(self.controller)
         self.client.post(f"/api/expenses/{self.ligne.pk}/justify/")
 
         self.assertEqual(self._actions(self.controller), ["close", "request_rectification"])
-        self.assertEqual(self._actions(self.dm), ["request_rectification"])
+        self.assertEqual(self._actions(self.doo), ["request_rectification"])
         self.assertEqual(self._actions(self.owner), ["request_rectification"])
 
     def test_le_registre_les_expose_aussi(self):
@@ -99,7 +102,6 @@ class ActionsDeLigneTests(ExpenseTestCase):
 class ActionsDeDossierTests(ExpenseTestCase):
     def setUp(self):
         super().setUp()
-        self.dm = make_user("dm.innov", Role.DM)
         self.admin = make_user("rh.admin", Role.ADMIN)
 
     def _actions(self, user, dossier=None, via="detail"):
@@ -128,16 +130,17 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.assertEqual(self._actions(self.controller), [])
 
     def test_un_dossier_soumis_attend_ses_lignes(self):
-        """Le DF peut le mettre en contrôle, pas le trancher tant qu'une
-        ligne reste en suspens ; le DM ne fait que le mettre en contrôle ;
-        l'administrateur peut aussi le rouvrir."""
+        """L'administrateur peut le mettre en contrôle ou le rouvrir, pas le
+        trancher tant qu'une ligne reste en suspens ; il ne dépose pas de
+        pièce, le pays si (décision 89). Le super administrateur ne fait
+        rien."""
         self.make_expense()
         self._piece()
         self.submit_dossier()
 
-        self.assertEqual(self._actions(self.dm), ["review"])
-        self.assertEqual(self._actions(self.controller), ["review"])
-        self.assertEqual(self._actions(self.admin), ["upload", "review", "reopen"])
+        self.assertEqual(self._actions(self.doo), [])
+        self.assertEqual(self._actions(self.controller), ["review", "reopen"])
+        self.assertEqual(self._actions(self.admin), ["review", "reopen"])
         self.assertEqual(self._actions(self.owner), ["upload"])
 
     def test_les_lignes_tranchees_ouvrent_le_constat(self):
@@ -158,7 +161,7 @@ class ActionsDeDossierTests(ExpenseTestCase):
         # constate non justifié.
         self.assertEqual(toutes_tranchees, ["review", "reject"])
         # Une ligne justifiée est un constat : plus de réouverture.
-        self.assertEqual(rouvrable, ["upload", "review", "reject"])
+        self.assertEqual(rouvrable, ["review", "reject"])
 
     def test_un_dossier_sans_piece_exploitable_ne_se_justifie_pas(self):
         ligne = self.make_expense()
@@ -180,16 +183,18 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.assertEqual(self._actions(self.controller, via="liste"), ["review", "justify", "reject"])
 
     def test_celui_qui_a_ouvert_le_dossier_n_y_voit_aucun_controle(self):
+        """Quatre yeux, en garde : un dossier déclaré qu'un administrateur
+        aurait ouvert — une donnée d'avant la décision 89 — ne lui propose
+        aucun contrôle ; un autre administrateur, si."""
         self.dossier.created_by = self.controller.username
+        self.dossier.status = Status.SUBMITTED
         self.dossier.save()
-        self.make_expense()
+        self.make_expense(status=Status.SUBMITTED)
         self._piece()
-        # Ouvert au siège, le brouillon ne part pas par le pays (décision
-        # 46, appliquée à la soumission) : c'est le siège qui le soumet.
-        self.submit_dossier(user=self.doo)
 
-        self.assertEqual(self._actions(self.controller), [])
-        self.assertEqual(self._actions(self.doo), ["upload", "review", "reopen"])
+        # La réouverture n'est pas un constat : elle reste proposée.
+        self.assertEqual(self._actions(self.controller), ["reopen"])
+        self.assertEqual(self._actions(self.admin), ["review", "reopen"])
 
     def test_un_dossier_justifie_se_clot(self):
         ligne = self.make_expense()
@@ -200,8 +205,8 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
 
         self.assertEqual(self._actions(self.controller), ["close"])
-        # La RH saisit aussi : une pièce peut encore arriver avant la clôture.
-        self.assertEqual(self._actions(self.admin), ["upload", "close"])
+        # Une pièce peut encore arriver avant la clôture — par le pays.
+        self.assertEqual(self._actions(self.owner), ["upload"])
 
 
 class TransitionRenvoieLeDetailTests(ExpenseTestCase):
@@ -266,11 +271,9 @@ class ActionsDeSaisieTests(ExpenseTestCase):
         ligne = self.make_expense()
 
         self.assertEqual(self._ligne(self.owner, ligne), ["edit", "delete"])
-        # Le siège corrige un brouillon à découvert, mais ne retire pas
-        # celui d'un autre.
-        self.assertEqual(self._ligne(self.admin, ligne), ["edit"])
-        # Le DF ne saisit pas.
-        self.assertEqual(self._ligne(self.controller, ligne), [])
+        # Le siège ne saisit pas, ni ne corrige un brouillon (décision 89).
+        self.assertEqual(self._ligne(self.admin, ligne), [])
+        self.assertEqual(self._ligne(self.doo, ligne), [])
 
     def test_le_brouillon_d_un_autre_ne_se_modifie_pas(self):
         """Un collègue du même pays changerait le montant d'une ligne que
@@ -287,11 +290,13 @@ class ActionsDeSaisieTests(ExpenseTestCase):
         ligne.refresh_from_db()
         self.assertEqual(str(ligne.amount), "100000.00")
 
-    def test_une_ligne_sans_auteur_se_retire_par_qui_saisit(self):
-        """Import, compte disparu : personne ne peut se plaindre du retrait."""
+    def test_une_ligne_sans_auteur_se_retire_par_le_pays(self):
+        """Compte disparu, brouillon rendu au pays (décision 89) : le pays
+        le complète ou le retire ; le siège, non."""
         anonyme = self.make_expense(created_by="")
 
-        self.assertEqual(self._ligne(self.admin, anonyme), ["edit", "delete"])
+        self.assertEqual(self._ligne(self.owner, anonyme), ["edit", "delete"])
+        self.assertEqual(self._ligne(self.admin, anonyme), [])
 
     def test_declaree_une_ligne_ne_se_touche_plus(self):
         ligne = self.make_expense()
@@ -315,24 +320,42 @@ class ActionsDeSaisieTests(ExpenseTestCase):
 
         self.assertEqual(self._dossier(self.owner), [])
 
-    def test_la_matrice_retire_la_suppression_au_pays(self):
+    def test_la_matrice_retire_la_rectification_au_pays(self):
         """Un droit retiré dans la configuration disparaît des actions
         proposées, sans que l'interface ait rien à savoir."""
         ligne = self.make_expense()
+        self.submit_dossier()
+        self.login(self.controller)
+        self.client.post(f"/api/expenses/{ligne.pk}/justify/")
+        self.assertEqual(self._ligne(self.owner, ligne), ["request_rectification"])
+        self.login(self.admin)
+        response = self.client.patch(
+            "/api/permissions/",
+            {"capabilities": {"rectifications.request": ["super_admin", "admin"]}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        self.assertEqual(self._ligne(self.owner, ligne), [])
+        self.login(self.owner)
+        self.assertEqual(
+            self.client.post(
+                "/api/rectifications/", {"expense": ligne.pk, "motif": "Montant faux"}
+            ).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_la_saisie_ne_se_retire_pas_au_pays(self):
+        """Retirer la saisie au pays laisserait les dépenses sans personne
+        pour les déclarer : la ligne ne bouge pas (décision 89)."""
         self.login(self.admin)
         response = self.client.patch(
             "/api/permissions/",
             {"capabilities": {"expenses.delete": ["super_admin", "admin"]}},
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
-        self.assertEqual(self._ligne(self.owner, ligne), ["edit"])
-        self.login(self.owner)
-        self.assertEqual(
-            self.client.delete(f"/api/expenses/{ligne.pk}/").status_code,
-            status.HTTP_403_FORBIDDEN,
-        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class MatriceEtServicesTests(ExpenseTestCase):
@@ -350,19 +373,23 @@ class MatriceEtServicesTests(ExpenseTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
-    def test_rouvrir_suit_la_matrice(self):
-        """Par défaut le DF ne rouvre pas ; la matrice le lui ouvre, et le
-        service le lit. (Les administrateurs, eux, gardent tout : la
-        matrice ne leur retire rien, décision 58.)"""
+    def test_rouvrir_n_appartient_qu_a_l_administrateur(self):
+        """Le super administrateur supervise : le service le refuse, et la
+        matrice ne peut pas le lui ouvrir (décision 89)."""
         self.make_expense()
         self.submit_dossier()
 
         with self.assertRaises(PermissionRefusee):
             transitions.rouvrir(
-                self.dossier, get_access(self.controller), "Ligne douteuse",
-                trace(self.controller),
+                self.dossier, get_access(self.doo), "Ligne douteuse", trace(self.doo),
             )
-        self._regler(**{"dossiers.reopen": ["super_admin", "admin", "df"]})
+        self.login(self.admin)
+        ouverture = self.client.patch(
+            "/api/permissions/",
+            {"capabilities": {"dossiers.reopen": ["super_admin", "admin"]}},
+            format="json",
+        )
+        self.assertEqual(ouverture.status_code, status.HTTP_400_BAD_REQUEST)
         resultat = transitions.rouvrir(
             self.dossier, get_access(self.controller), "Ligne douteuse",
             trace(self.controller),
@@ -370,9 +397,14 @@ class MatriceEtServicesTests(ExpenseTestCase):
 
         self.assertEqual(resultat.instance.status, Status.DRAFT)
 
-    def test_retirer_un_brouillon_suit_la_matrice(self):
+    def test_demander_une_rectification_suit_la_matrice(self):
         ligne = self.make_expense()
-        self._regler(**{"expenses.delete": ["super_admin", "admin"]})
+        self.submit_dossier()
+        transitions.executer(ligne, "justify", get_access(self.controller), trace(self.controller))
+        ligne.refresh_from_db()
+        self._regler(**{"rectifications.request": ["super_admin", "admin"]})
 
         with self.assertRaises(PermissionRefusee):
-            transitions.retirer_brouillon(ligne, get_access(self.owner), trace(self.owner))
+            transitions.demander_rectification(
+                ligne, get_access(self.owner), "Montant faux", trace(self.owner)
+            )

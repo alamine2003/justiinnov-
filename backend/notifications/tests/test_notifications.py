@@ -89,16 +89,14 @@ class CloisonnementTests(NotificationTestCase):
 
 
 class DestinatairesTests(NotificationTestCase):
-    def test_un_siege_restreint_ne_couvre_que_son_perimetre(self):
-        """Un contrôleur limité au Togo n'est pas concerné par Abidjan."""
-        restreint = make_user("controle.togo", Role.DF, [self.togo])
+    def test_un_manager_ne_couvre_que_son_pays(self):
+        """Le manager du Togo n'est pas concerné par Abidjan ; le siège, qui
+        n'est jamais restreint, couvre les deux (décision 89)."""
+        togo = set(recipients_for([Role.MANAGER, Role.ADMIN], self.togo))
+        ivoire = set(recipients_for([Role.MANAGER, Role.ADMIN], self.ivoire))
 
-        togo = set(recipients_for([Role.DF], self.togo))
-        ivoire = set(recipients_for([Role.DF], self.ivoire))
-
-        self.assertIn(restreint, togo)
-        self.assertNotIn(restreint, ivoire)
-        # Le contrôleur sans périmètre couvre les deux.
+        self.assertIn(self.owner, togo)
+        self.assertNotIn(self.owner, ivoire)
         self.assertIn(self.controller, togo & ivoire)
 
     def test_un_role_toujours_global_couvre_tout(self):
@@ -107,9 +105,9 @@ class DestinatairesTests(NotificationTestCase):
         self.assertIn(admin, set(recipients_for([Role.ADMIN], self.ivoire)))
 
     def test_sans_pays_tous_les_comptes_du_role_sont_renvoyes(self):
-        restreint = make_user("controle.togo", Role.DF, [self.togo])
+        restreint = make_user("controle.togo", Role.ADMIN, [self.togo])
 
-        tous = set(recipients_for([Role.DF]))
+        tous = set(recipients_for([Role.ADMIN]))
 
         self.assertEqual(tous, {self.controller, restreint})
 
@@ -209,9 +207,9 @@ class DeclencheursTests(NotificationTestCase):
     def test_une_reouverture_previent_ceux_qui_ont_declare(self):
         """Seule exception à l'irréversibilité : le dossier revient au pays,
         avec le motif, sous un type qui lui est propre. Les managers du pays
-        sont prévenus ; le DM, au siège, non ; le voisin, non ;
-        l'administrateur qui rouvre, pas davantage."""
-        dm_togo = make_user("dm.togo", Role.DM, [self.togo])
+        sont prévenus ; le siège, non ; le voisin, non ; l'administrateur qui
+        rouvre, pas davantage."""
+        rh = make_user("rh2.innov", Role.ADMIN)
         self.dossier.status = Status.SUBMITTED
         self.dossier.save()
 
@@ -223,15 +221,14 @@ class DeclencheursTests(NotificationTestCase):
         self.assertIn("N-0001", notification.title)
         self.assertIn("Facture illisible", notification.body)
         self.assertEqual(notification.link, f"/dossiers/{self.dossier.pk}")
-        for absent in (dm_togo, self.rep_ivoire, self.doo):
+        for absent in (rh, self.rep_ivoire, self.doo):
             self.assertFalse(Notification.objects.filter(recipient=absent).exists(), absent)
 
-    def test_une_soumission_previent_le_dm_et_le_df_du_pays(self):
-        """Le contrôle est au siège, en deux temps : le DM qui mettra en
-        contrôle et le DF qui tranchera sont prévenus — chacun sur son
-        périmètre, et jamais le manager qui a soumis."""
-        dm_togo = make_user("dm.togo", Role.DM, [self.togo])
-        dm_ivoire = make_user("dm.ivoire", Role.DM, [self.ivoire])
+    def test_une_soumission_previent_les_administrateurs(self):
+        """Le contrôle est à l'administrateur (décision 89) : chacun est
+        prévenu ; ni le super administrateur, qui supervise, ni le manager
+        qui a soumis, ni le voisin."""
+        rh = make_user("rh2.innov", Role.ADMIN)
         self.make_expense(amount="1000.00")
 
         self.submit_dossier()
@@ -239,10 +236,10 @@ class DeclencheursTests(NotificationTestCase):
         soumissions = Notification.objects.filter(kind=Notification.Kind.EXPENSE_SUBMITTED)
         self.assertEqual(
             set(soumissions.values_list("recipient__username", flat=True)),
-            {dm_togo.username, self.controller.username, self.doo.username},
+            {rh.username, self.controller.username},
         )
-        self.assertFalse(soumissions.filter(recipient=dm_ivoire).exists())
-        self.assertFalse(soumissions.filter(recipient=self.owner).exists())
+        for absent in (self.doo, self.owner, self.rep_ivoire):
+            self.assertFalse(soumissions.filter(recipient=absent).exists(), absent)
 
     def test_le_type_dossier_rouvert_se_traduit(self):
         from django.utils import translation
@@ -388,13 +385,16 @@ class DeclencheursBilinguesTests(NotificationTestCase):
         cls.manager_en = make_user("kojo.togo", Role.MANAGER, [cls.togo])
         cls.manager_en.profile.language = "en"
         cls.manager_en.profile.save()
+        # Un second administrateur, francophone : la soumission revient au
+        # contrôle, et chacun la lit dans sa langue.
+        cls.rh_fr = make_user("rh.fr", Role.ADMIN)
         cls.make_expense(cls, amount="1000.00")
 
     def test_la_soumission_arrive_en_anglais(self):
         self.submit_dossier()
 
         anglais = Notification.objects.get(recipient=self.controller)
-        francais = Notification.objects.get(recipient=self.doo)
+        francais = Notification.objects.get(recipient=self.rh_fr)
         self.assertEqual(anglais.title, "Dossier to review — N-0001")
         self.assertIn("on 1 line(s)", anglais.body)
         self.assertEqual(francais.title, "Dossier à contrôler — N-0001")
@@ -443,11 +443,11 @@ class EquipesTests(NotificationTestCase):
         self.assertEqual(pays, {self.owner, self.manager_lome})
 
     def test_le_siege_ignore_les_equipes(self):
-        """Une équipe posée sur le profil d'un DF ne porte aucun droit."""
-        df_lome = make_user("df.lome", Role.DF, [self.togo], teams=[self.team])
+        """Une équipe posée sur le profil d'un administrateur ne porte aucun droit."""
+        rh_lome = make_user("rh.lome", Role.ADMIN, [self.togo], teams=[self.team])
 
-        self.assertIn(df_lome, set(recipients_for([Role.DF], self.togo, self.kara)))
-        self.assertIn(self.controller, set(recipients_for([Role.DF], self.togo, self.kara)))
+        self.assertIn(rh_lome, set(recipients_for([Role.ADMIN], self.togo, self.kara)))
+        self.assertIn(self.controller, set(recipients_for([Role.ADMIN], self.togo, self.kara)))
 
     def test_une_reouverture_a_kara_ne_previent_pas_le_manager_de_lome(self):
         triggers.dossier_reopened(self.dossier_kara, self.doo, "Pièce manquante")
@@ -464,11 +464,11 @@ class EquipesTests(NotificationTestCase):
         self.assertTrue(Notification.objects.filter(recipient=self.manager_lome).exists())
 
     def test_une_soumission_ne_depend_pas_de_l_equipe_pour_le_siege(self):
-        dm_togo = make_user("dm.togo", Role.DM, [self.togo])
+        rh = make_user("rh2.innov", Role.ADMIN)
 
         triggers.dossier_submitted(self.dossier_kara, self.owner)
 
-        self.assertTrue(Notification.objects.filter(recipient=dm_togo).exists())
+        self.assertTrue(Notification.objects.filter(recipient=rh).exists())
         self.assertTrue(Notification.objects.filter(recipient=self.controller).exists())
 
 

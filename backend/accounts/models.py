@@ -1,6 +1,6 @@
 """Profils utilisateurs : rôle, périmètre pays, équipes, double authentification.
 
-Le cahier des charges (§4) définit six acteurs. Le rôle décide de *ce que* l'on
+Trois rôles (décision 89). Le rôle décide de *ce que* l'on
 peut faire, le périmètre décide *sur quels pays* — et, pour un manager, *sur
 quelles équipes*. Les deux sont portés par le profil, jamais déduits du nom
 d'utilisateur.
@@ -23,36 +23,33 @@ from core.models import Country, Manager, Team, TimeStampedModel
 
 
 class Role(models.TextChoices):
-    """Les cinq rôles de la plateforme.
+    """Les trois rôles de la plateforme (décision 89).
 
-    Côté pays, un seul rôle : le manager engage la dépense, la saisit et
-    soumet le dossier de son pays (de ses équipes, s'il en a). Le contrôle
-    est au siège, en deux temps : le DM (directeur manager) met le dossier
-    en contrôle, le DF (directeur financier, supérieur du DM) justifie ou
-    rejette. La RH administre les comptes, le référentiel de tous les pays,
-    et audite ; la direction (DG, DO, CEO) et l'équipe de développement sont
-    super administrateurs. RH et super administrateurs peuvent tout ce que
-    font le DM et le DF ; l'inverse est faux : **le DM et le DF n'ont aucun
-    droit d'administration** — ni comptes, ni référentiel, ni enveloppes,
-    ni journal d'audit. Il n'y a ni « direction des opérations » ni
-    « auditeur » distincts : la DO est super administratrice, l'audit
-    revient à la RH.
+    Côté pays, le **manager** : il ouvre les dossiers de son pays, y saisit
+    les dépenses, dépose les justificatifs et soumet — lui seul, et
+    seulement pour le pays auquel il est rattaché. Au siège,
+    l'**administrateur** (RH) contrôle chaque dossier de bout en bout — mise
+    en contrôle, justification ou refus, clôture, contrôle des pièces,
+    réouverture, rectification — et tient les comptes, le référentiel et
+    les enveloppes. Le **super administrateur** (DG, DO, CEO, développeurs)
+    supervise : il voit tout, relit le journal d'audit et administre la
+    plateforme, sans déclarer ni contrôler. Ni l'un ni l'autre ne crée de
+    dossier ni ne dépose de pièce. Il n'y a plus de DM ni de DF : le
+    contrôle qu'ils se partageaient revient à l'administrateur seul.
     """
 
     SUPER_ADMIN = "super_admin", _("Super administrateur (DG, DO, CEO, DEV)")
     ADMIN = "admin", _("Administrateur (RH)")
-    DF = "df", _("DF — directeur financier (siège)")
-    DM = "dm", _("DM — directeur manager (siège)")
     MANAGER = "manager", _("Manager (pays)")
 
 
-#: Rôles exercés depuis le siège : ils portent sur l'ensemble des pays.
-#: Le DM et le DF contrôlent pour le siège ; chacun peut être restreint à
-#: certains pays. Les administrateurs, eux, ne se restreignent jamais.
-HEADQUARTERS_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
+#: Rôles exercés depuis le siège : ils portent toujours sur l'ensemble des
+#: pays et ne se restreignent pas.
+HEADQUARTERS_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 
-#: Rôles dont le périmètre ne peut jamais être restreint.
-ALWAYS_GLOBAL_ROLES = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
+#: Rôles dont le périmètre ne peut jamais être restreint : le siège entier
+#: depuis que le DM et le DF, seuls restrictibles, ont disparu.
+ALWAYS_GLOBAL_ROLES = HEADQUARTERS_ROLES
 
 #: Langue par défaut d'un profil : celle de référence des messages.
 DEFAULT_LANGUAGE = "fr"
@@ -87,7 +84,7 @@ class UserProfile(TimeStampedModel):
         blank=True,
         related_name="profiles",
         verbose_name=_("Pays du périmètre"),
-        help_text=_("Vide pour un rôle du siège : accès à tous les pays."),
+        help_text=_("Le pays du manager. Le siège voit tous les pays."),
     )
     teams = models.ManyToManyField(
         Team,
@@ -163,14 +160,11 @@ class UserProfile(TimeStampedModel):
     def has_global_scope(self):
         """Le profil voit-il tous les pays ?
 
-        Un rôle du siège sans pays explicite couvre l'ensemble des pays ; s'il
-        reçoit des pays, il y est restreint. À l'inverse, un rôle pays sans
-        aucun pays ne voit **rien** : l'absence de périmètre ne doit jamais
-        valoir autorisation générale.
+        Le siège, toujours. Le manager jamais : sans aucun pays, il ne voit
+        **rien** — l'absence de périmètre ne doit jamais valoir
+        autorisation générale.
         """
-        if self.role in ALWAYS_GLOBAL_ROLES:
-            return True
-        return self.role in HEADQUARTERS_ROLES and not self.countries.exists()
+        return self.role in ALWAYS_GLOBAL_ROLES
 
     def country_ids(self):
         """Identifiants des pays visibles, ou ``None`` si tous le sont."""
@@ -181,8 +175,8 @@ class UserProfile(TimeStampedModel):
     def team_ids(self):
         """Identifiants des équipes auxquelles la vue est restreinte, ou ``None``.
 
-        Seul le manager est cloisonné par équipe : le siège (DM, DF)
-        couvre le pays entier. Un manager **sans équipe rattachée voit tout
+        Seul le manager est cloisonné par équipe : le siège couvre le pays
+        entier. Un manager **sans équipe rattachée voit tout
         son pays** : c'est le choix retenu, parce que l'équipe est une
         subdivision facultative du référentiel — un pays qui n'en a pas
         déclaré n'a pas à en inventer une pour que ses managers travaillent.

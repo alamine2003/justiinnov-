@@ -61,15 +61,15 @@ class CloisonnementParEquipeTests(ScopingTestCase):
             ["Équipe Kara", "Équipe Lomé"],
         )
 
-    def test_le_dm_n_est_pas_cloisonne_par_equipe(self):
-        """Seul le manager l'est : le siège couvre le pays entier, même si
-        une équipe lui est rattachée."""
-        dm = make_user("dm.togo", Role.DM, [self.togo], teams=[self.team_togo])
-        self.login(dm)
+    def test_le_siege_n_est_pas_cloisonne_par_equipe(self):
+        """Seul le manager l'est : le siège couvre tous les pays, même si une
+        équipe lui est rattachée en base."""
+        rh = make_user("rh.togo", Role.ADMIN, [self.togo], teams=[self.team_togo])
+        self.login(rh)
 
         response = self.client.get("/api/teams/")
 
-        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["count"], Team.objects.count())
 
     def test_le_profil_expose_les_equipes(self):
         self.login(self.manager)

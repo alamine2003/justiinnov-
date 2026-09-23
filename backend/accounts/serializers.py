@@ -12,7 +12,7 @@ from rest_framework import serializers
 
 from core.models import Country, Team, WorkflowConfiguration
 
-from .models import DEFAULT_LANGUAGE, Role, UserProfile, aligner_drapeaux
+from .models import DEFAULT_LANGUAGE, HEADQUARTERS_ROLES, Role, UserProfile, aligner_drapeaux
 from .permissions import CAPACITES, CAPACITES_PAR_CLE, capacites_du_role
 from .validators import valider_email_professionnel
 
@@ -466,8 +466,33 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"password": _("Un mot de passe est requis à la création.")}
             )
+        self._verifier_le_perimetre(attrs)
         self._verifier_equipes(attrs)
         return attrs
+
+    def _verifier_le_perimetre(self, attrs):
+        """Le manager a son pays ; le siège n'en a pas (décision 89).
+
+        Un manager sans pays ne verrait rien et ne pourrait ouvrir aucun
+        dossier : le compte serait créé inutilisable sans que rien ne le
+        dise. Le siège voit tous les pays : les pays et équipes d'un compte
+        du siège sont vidés à l'enregistrement (ci-dessous), pour
+        ne pas laisser croire à une restriction qui n'existe plus. Le rôle
+        et les pays jugés sont ceux d'après l'écriture.
+        """
+        profile_data = attrs.get("profile", {})
+        profil = getattr(self.instance, "profile", None) if self.instance else None
+        role = profile_data.get("role") or (profil.role if profil else None)
+        if "countries" in profile_data:
+            pays = list(profile_data["countries"])
+        else:
+            pays = list(profil.countries.all()) if profil is not None else []
+        if role == Role.MANAGER and not pays:
+            raise serializers.ValidationError(
+                {"countries": _("Un manager doit être rattaché à son pays.")}
+            )
+        if role in HEADQUARTERS_ROLES:
+            attrs.setdefault("profile", {}).update(countries=[], teams=[])
 
     def _verifier_equipes(self, attrs):
         """Chaque équipe doit appartenir à un pays du périmètre — tel qu'il

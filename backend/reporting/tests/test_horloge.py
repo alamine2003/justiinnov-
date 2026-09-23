@@ -16,6 +16,7 @@ from rest_framework import status
 
 from accounts.models import Role
 from accounts.permissions import Access
+from accounts.tests.test_scoping import make_user
 from budget.models import Budget
 from core.models import Country, Team, WorkflowConfiguration
 from expenses.models import Dossier, Expense
@@ -74,7 +75,7 @@ class BornesTests(HorlogeTestCase):
     def test_le_fuseau_du_perimetre(self):
         siege = Access(role=Role.SUPER_ADMIN, country_ids=None)
         djiboutien = Access(role=Role.MANAGER, country_ids=[self.djibouti.pk])
-        deux_pays = Access(role=Role.DF, country_ids=[self.togo.pk, self.djibouti.pk])
+        deux_pays = Access(role=Role.ADMIN, country_ids=[self.togo.pk, self.djibouti.pk])
 
         # Plusieurs pays lus ensemble : aucune horloge nationale ne s'impose.
         self.assertIs(fuseau_du_perimetre(siege), UTC)
@@ -132,7 +133,10 @@ class ImportTests(HorlogeTestCase):
         contenu = BytesIO()
         workbook.save(contenu)
         contenu.seek(0)
-        self.login(self.doo)
+        # L'import est une déclaration du pays (décision 89) : un manager de
+        # Djibouti, dont le responsable est déjà inscrit dans le pays.
+        self.djibouti.managers.add(self.manager)
+        self.login(make_user("djibouti.innov", Role.MANAGER, [self.djibouti]))
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",

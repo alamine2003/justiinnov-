@@ -364,8 +364,9 @@ class NotificationTests(DashboardTestCase):
         self.notifier()
         self.notifier()
 
+        # L'administrateur, qui contrôle, est prévenu une fois.
         notifications = Notification.objects.filter(
-            kind=Notification.Kind.BUDGET_THRESHOLD, recipient=self.doo
+            kind=Notification.Kind.BUDGET_THRESHOLD, recipient=self.controller
         )
         self.assertEqual(notifications.count(), 1)
 
@@ -410,7 +411,7 @@ class NotificationTests(DashboardTestCase):
         self.notifier()
         deja = Notification.objects.filter(kind=Notification.Kind.PROOF_MISSING).count()
 
-        nouveau = make_user("nouveau.controle", Role.DF)
+        nouveau = make_user("nouveau.controle", Role.ADMIN)
         self.notifier()
 
         self.assertTrue(

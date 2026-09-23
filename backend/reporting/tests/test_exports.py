@@ -197,7 +197,7 @@ class AccesTests(DashboardTestCase):
     """Exports réservés aux administrateurs : lecture comprise."""
 
     def test_les_autres_roles_recoivent_403_sans_trace(self):
-        for user in (self.controller, self.rep_ivoire, self.owner):
+        for user in (self.rep_ivoire, self.owner):
             self.login(user)
             for route in ROUTES:
                 with self.subTest(role=user.profile.role, route=route):
