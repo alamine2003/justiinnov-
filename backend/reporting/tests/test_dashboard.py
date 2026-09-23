@@ -6,6 +6,7 @@ from io import BytesIO
 
 from django.core import mail
 from django.core.management import call_command
+from django.test import override_settings
 from django.utils import translation
 from openpyxl import load_workbook
 from rest_framework import status
@@ -328,6 +329,7 @@ class AlertTests(DashboardTestCase):
         self.assertEqual(response.data["alerts"], [])
 
 
+@override_settings(EMAIL_ENABLED=True)
 class NotificationTests(DashboardTestCase):
     def notifier(self):
         """Émission des alertes, telle que la planification l'exécute."""

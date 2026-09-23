@@ -98,11 +98,13 @@ export function GeneralSection() {
           <Ligne
             label={t("configuration.general.envoi_emails")}
             valeur={
-              config.notifications.email_configure
-                ? t("configuration.general.smtp_configure")
-                : t("configuration.general.smtp_absent")
+              !config.notifications.email_actif
+                ? t("configuration.general.email_coupe")
+                : config.notifications.email_configure
+                  ? t("configuration.general.smtp_configure")
+                  : t("configuration.general.smtp_absent")
             }
-            alerte={!config.notifications.email_configure}
+            alerte={config.notifications.email_actif && !config.notifications.email_configure}
           />
           <Ligne
             label={t("configuration.general.expediteur")}

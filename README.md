@@ -533,7 +533,8 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `UNUSUAL_EXPENSE_FACTOR` | `5` | multiple de la moyenne au-delà duquel une dépense est signalée (idem) |
 | `UNJUSTIFIED_ALERT_DAYS` | `0` | jours sans pièce après soumission avant alerte ; `0` désactive (idem) |
 | `WARN_WITHOUT_PROOF_SUBMISSION` | `1` | avertir à la soumission d'un dossier sans pièce (idem) |
-| `EMAIL_HOST` | — | serveur SMTP, **obligatoire hors mode debug** : sans lui, le backend refuse de démarrer plutôt que de perdre les alertes |
+| `DJANGO_EMAIL_ENABLED` | `0` | **courrier coupé par défaut** (décision 88) : aucun e-mail ne part vers les utilisateurs, les notifications restent dans l'application. `1` rouvre l'envoi, sur décision de la direction |
+| `EMAIL_HOST` | — | serveur SMTP, **obligatoire hors mode debug quand le courrier est ouvert** : sans lui, le backend refuse de démarrer plutôt que de perdre les alertes |
 | `EMAIL_BACKEND_CONSOLE` | `0` | `1` acquitte l'**absence** de SMTP hors debug : les e-mails vont dans les journaux (CI, préproduction). Avec un `EMAIL_HOST` renseigné, le démarrage est refusé : l'hôte l'emporterait et les envois échoueraient sans rien laisser dans les journaux |
 | `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | `587` / — / — / `1` | paramètres SMTP |
 | `DEFAULT_FROM_EMAIL` | `controle-budgetaire@justi-innov.local` | expéditeur des e-mails |

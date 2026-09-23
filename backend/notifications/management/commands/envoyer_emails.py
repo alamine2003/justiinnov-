@@ -9,6 +9,7 @@ minutes (``SCHEDULE_EMAILS``), jusqu'à ``ESSAIS_MAX`` essais et pour les
 notifications de moins de ``AGE_MAX_DE_REPRISE``.
 """
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from notifications.services import abandonnees, envoyer_les_emails
@@ -18,6 +19,10 @@ class Command(BaseCommand):
     help = "Envoie les e-mails de notification restés en attente."
 
     def handle(self, *args, **options):
+        if not settings.EMAIL_ENABLED:
+            if options["verbosity"] > 1:
+                self.stdout.write("courrier coupé (DJANGO_EMAIL_ENABLED=0) : rien à envoyer")
+            return
         envoyes, echecs = envoyer_les_emails()
         perdues = abandonnees().count()
         if envoyes or echecs:

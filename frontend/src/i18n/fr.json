@@ -949,6 +949,7 @@
       "budget_notifications": "Budget et notifications",
       "devise_consolidation": "Devise de consolidation",
       "envoi_emails": "Envoi d'e-mails",
+      "email_coupe": "Coupé — aucun e-mail ne part, les notifications restent dans l'application",
       "smtp_configure": "Serveur SMTP configuré",
       "smtp_absent": "Aucun serveur — les messages partent dans les logs",
       "expediteur": "Expéditeur"

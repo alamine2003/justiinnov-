@@ -7,6 +7,7 @@ from config.settings import choisir_email_backend
 
 SMTP = "django.core.mail.backends.smtp.EmailBackend"
 CONSOLE = "django.core.mail.backends.console.EmailBackend"
+COUPE = "core.courrier.CourrierCoupe"
 
 
 class ChoixDuTransportTests(SimpleTestCase):
@@ -39,3 +40,38 @@ class ChoixDuTransportTests(SimpleTestCase):
         elle a été écrite, avant d'être recopiée dans un `.env` de serveur."""
         with self.assertRaisesMessage(ImproperlyConfigured, "se contredisent"):
             choisir_email_backend("smtp.example.org", debug=True, console=True)
+
+
+class CourrierCoupeTests(SimpleTestCase):
+    """Décision 88 : coupé, rien ne part, quel que soit le reste du réglage."""
+
+    def test_coupe_un_serveur_nomme_ne_sert_plus(self):
+        self.assertEqual(
+            choisir_email_backend("smtp.example.org", debug=False, console=False, actif=False),
+            COUPE,
+        )
+
+    def test_coupe_le_serveur_n_est_plus_exige_hors_debug(self):
+        """Sans envoi, exiger un SMTP n'aurait pas de sens : le serveur démarre."""
+        self.assertEqual(
+            choisir_email_backend("", debug=False, console=False, actif=False), COUPE
+        )
+
+    def test_le_transport_coupe_n_envoie_rien_et_le_dit(self):
+        from django.core.mail import EmailMessage, get_connection
+
+        connexion = get_connection(COUPE)
+        with self.assertLogs("core.courrier", "WARNING") as journaux:
+            envoyes = EmailMessage(
+                "Sujet", "Corps", "a@innovpharma.net", ["b@innovpharma.net"],
+                connection=connexion,
+            ).send()
+        self.assertEqual(envoyes, 0)
+        self.assertIn("non envoyé", journaux.output[0])
+
+    def test_le_serveur_est_coupe_par_defaut(self):
+        """La suite tourne sur le défaut du serveur, sans DJANGO_EMAIL_ENABLED :
+        le courrier y est coupé. Un défaut rebasculé à « ouvert » casserait ici."""
+        from django.conf import settings
+
+        self.assertFalse(settings.EMAIL_ENABLED)

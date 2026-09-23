@@ -123,6 +123,32 @@ class NotifyAlertsTests(DashboardTestCase):
 
 
 @in_memory_storage
+class RapportCourrierCoupeTests(DashboardTestCase):
+    """Décision 88 : courrier coupé, le rapport ne part pas et le dit."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.doo.email = "doo@example.org"
+        cls.doo.save()
+
+    def test_le_rapport_ne_part_pas(self):
+        sortie = StringIO()
+        call_command("send_periodic_report", year=self.year, stdout=sortie)
+
+        self.assertEqual(mail.outbox, [])
+        self.assertIn("Courrier coupé", sortie.getvalue())
+
+    def test_la_relecture_a_blanc_reste_possible(self):
+        sortie = StringIO()
+        call_command("send_periodic_report", year=self.year, dry_run=True, stdout=sortie)
+
+        self.assertEqual(mail.outbox, [])
+        self.assertIn("doo@example.org", sortie.getvalue())
+
+
+@override_settings(EMAIL_ENABLED=True)
+@in_memory_storage
 class RapportPeriodiqueTests(DashboardTestCase):
     @classmethod
     def setUpTestData(cls):

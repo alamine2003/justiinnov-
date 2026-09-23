@@ -57,6 +57,7 @@ def marquer(dossier, quoi, quand):
     )
 
 
+@override_settings(EMAIL_ENABLED=True)
 class FraicheurTests(ExpenseTestCase):
     def setUp(self):
         super().setUp()

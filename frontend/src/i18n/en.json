@@ -949,6 +949,7 @@
       "budget_notifications": "Budget and notifications",
       "devise_consolidation": "Consolidation currency",
       "envoi_emails": "Email sending",
+      "email_coupe": "Off — no email is sent, notifications stay in the application",
       "smtp_configure": "SMTP server configured",
       "smtp_absent": "No server — messages go to the logs",
       "expediteur": "Sender"
