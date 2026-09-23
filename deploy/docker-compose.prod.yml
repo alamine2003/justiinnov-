@@ -292,7 +292,7 @@ services:
     logging: *journal
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.0-alpine
     # Aucune persistance : un cache perdu se reconstruit, et un cache qu'on
     # sauvegarde coûte des écritures pour rien — c'est précisément ce qu'on
     # cherche à éviter. L'éviction porte sur la clé la moins récemment
