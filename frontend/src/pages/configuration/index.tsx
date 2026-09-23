@@ -2,9 +2,7 @@ import { useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { PageHeader } from "@/components/ui/page-header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useAuth } from "@/context/use-auth"
 import { CountriesSection } from "@/pages/configuration/countries-section"
-import { ImportSection } from "@/pages/configuration/import-section"
 import { UsersSection } from "@/pages/configuration/users-section"
 import { GeneralSection } from "@/pages/configuration/general-section"
 import { PermissionsSection } from "@/pages/configuration/permissions-section"
@@ -13,22 +11,21 @@ import { PermissionsSection } from "@/pages/configuration/permissions-section"
  * Identifiants d'onglets : valeurs techniques, reprises dans l'URL
  * (`?onglet=utilisateurs`). Seuls les libellés sont traduits.
  */
-const ONGLETS = ["general", "utilisateurs", "pays", "permissions", "import"] as const
+const ONGLETS = ["general", "utilisateurs", "pays", "permissions"] as const
 
 type Onglet = (typeof ONGLETS)[number]
 
 export function ConfigurationPage() {
   const { t } = useTranslation()
-  const { can } = useAuth()
   // L'onglet vit dans l'URL : un lien vers « Configuration › Permissions »
   // doit rouvrir cet onglet, pas le premier.
   const [params, setParams] = useSearchParams()
-  // L'import manipule des fichiers : réservé aux administrateurs par défaut
-  // (`data.import`).
-  const onglets = ONGLETS.filter((value) => value !== "import" || can("data.import"))
-  // Une valeur inconnue — `?onglet=xyz`, ou `?onglet=import` sur un compte
-  // qui n'y a pas droit — laissait une barre d'onglets sans onglet actif et
-  // aucun contenu : une page blanche sans explication.
+  // L'import a quitté la configuration pour les dossiers : c'est une
+  // déclaration, qui revient au pays (décision 89).
+  const onglets = ONGLETS
+  // Une valeur inconnue — `?onglet=xyz`, ou l'ancien `?onglet=import` —
+  // laissait une barre d'onglets sans onglet actif et aucun contenu : une
+  // page blanche sans explication.
   const demande = params.get("onglet")
   const onglet = demande && onglets.includes(demande as Onglet) ? demande : "general"
 
@@ -63,11 +60,6 @@ export function ConfigurationPage() {
         <TabsContent value="permissions" className="mt-4">
           <PermissionsSection />
         </TabsContent>
-        {can("data.import") && (
-          <TabsContent value="import" className="mt-4">
-            <ImportSection />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   )

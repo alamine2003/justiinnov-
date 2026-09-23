@@ -15,7 +15,6 @@ let monRole = "super_admin"
 let conferables: Record<string, boolean> = {
   super_admin: true,
   admin: true,
-  dm: true,
   manager: true,
 }
 
@@ -50,7 +49,6 @@ vi.mock("@/lib/accounts", () => ({
       roles: [
         { value: "super_admin", label: "Super administrateur", siege: true, always_global: true },
         { value: "admin", label: "Administrateur", siege: true, always_global: true },
-        { value: "dm", label: "DM", siege: true, always_global: false },
         { value: "manager", label: "Manager", siege: false, always_global: false },
       ].map((role) => ({ ...role, assignable: conferables[role.value] })),
       capabilities: [],
@@ -198,17 +196,16 @@ describe("UsersSection — périmètre selon le rôle", () => {
     expect(screen.getByText("Un manager est rattaché à au moins un pays.")).toBeInTheDocument()
   })
 
-  it("propose le périmètre, facultatif, à un compte du siège restrictible", async () => {
-    // Le DM est au siège : sans pays coché il voit tout, un pays coché le
-    // restreint. La liste reste donc affichée.
+  it("ne propose aucun pays à un compte du siège", async () => {
+    // Le siège voit toujours tous les pays (décision 89) : rien à cocher.
     render(<UsersSection />)
     fireEvent.click(await screen.findByRole("button", { name: "Créer un compte" }))
 
     const role = await screen.findByLabelText("Rôle")
-    fireEvent.change(role, { target: { value: "dm" } })
+    fireEvent.change(role, { target: { value: "admin" } })
 
-    expect(screen.getByText(/Facultatif pour un compte du siège/)).toBeInTheDocument()
-    expect(screen.getByRole("checkbox", { name: /Togo/ })).toBeInTheDocument()
+    expect(screen.getByText(/voit toujours tous les pays/)).toBeInTheDocument()
+    expect(screen.queryByRole("checkbox", { name: /Togo/ })).not.toBeInTheDocument()
   })
 })
 
@@ -244,7 +241,7 @@ describe("UsersSection — rôles toujours globaux", () => {
     // Qui peut nommer un super administrateur, c'est le serveur qui le dit
     // (`assignable`) : l'écran ne compare plus le rôle du compte courant.
     monRole = "super_admin"
-    conferables = { super_admin: false, admin: true, dm: true, manager: true }
+    conferables = { super_admin: false, admin: true, manager: true }
     invalidateReferentiel("permissions")
     render(<UsersSection />)
     fireEvent.click(await screen.findByRole("button", { name: "Créer un compte" }))
@@ -256,7 +253,7 @@ describe("UsersSection — rôles toujours globaux", () => {
 
   it("propose « super administrateur » dès que le serveur le rend conférable", async () => {
     monRole = "admin"
-    conferables = { super_admin: true, admin: true, dm: true, manager: true }
+    conferables = { super_admin: true, admin: true, manager: true }
     invalidateReferentiel("permissions")
     render(<UsersSection />)
     fireEvent.click(await screen.findByRole("button", { name: "Créer un compte" }))

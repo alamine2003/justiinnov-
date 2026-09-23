@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils"
  * action : celles-ci viennent d'`allowed_actions`, dans l'en-tête de page.
  *
  * Elle n'affiche ni date ni auteur par étape : ces informations vivent dans
- * le journal d'audit, réservé aux administrateurs, et un DF qui lit cet
- * écran n'y a pas accès.
+ * le journal d'audit, réservé aux administrateurs, et un manager qui lit
+ * cet écran n'y a pas accès.
  */
 export function FriseDuCircuit({ status }: { status: WorkflowStatus }) {
   const { t } = useTranslation()

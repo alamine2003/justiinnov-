@@ -83,7 +83,7 @@ export function AppLayout() {
     navigate("/login")
   }
 
-  // Un manager, ou un DM/DF restreint à des pays, n'a qu'un périmètre :
+  // Un manager n'a qu'un périmètre, son pays :
   // l'afficher évite toute ambiguïté sur les données consultées.
   const scope = me?.has_global_scope
     ? t("commun.siege_tous_pays")

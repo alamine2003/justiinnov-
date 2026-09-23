@@ -79,7 +79,7 @@ export function RegisterPage() {
   //
   // Le fuseau n'est connu que lorsqu'un pays l'est : celui du filtre, ou
   // l'unique pays du périmètre. Prendre `countries[0]` d'un périmètre qui en
-  // compte deux décalait les bornes — un `df` sur Madagascar (UTC+3) et la
+  // compte deux décalait les bornes — un manager sur Madagascar (UTC+3) et la
   // Côte d'Ivoire (UTC+0) perdait les dépenses ivoiriennes du dernier soir —
   // et le libellé du champ affirmait un fuseau valable pour la moitié de son
   // périmètre. Sans pays déterminé, on lit dans le fuseau du lecteur.

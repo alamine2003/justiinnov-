@@ -30,8 +30,8 @@ import { cn, currentYear, formatAmount, yearChoices } from "@/lib/utils"
 /**
  * Le plafond est toujours gradué : c'est l'enveloppe elle-même, pas un
  * réglage. Les seuils d'alerte, eux, viennent du profil
- * (`me.alert_thresholds`), que le serveur rend à tous les rôles : un DF lit
- * le même rail qu'un administrateur.
+ * (`me.alert_thresholds`), que le serveur rend à tous les rôles : un manager
+ * lit le même rail qu'un administrateur.
  */
 const PLAFOND = 100
 

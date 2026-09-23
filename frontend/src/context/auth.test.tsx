@@ -25,7 +25,7 @@ const { matrice } = vi.hoisted(() => ({
     roles: [
       { value: "super_admin", label: "Super administrateur", siege: true, always_global: true, assignable: true },
       { value: "admin", label: "Administrateur (RH)", siege: true, always_global: true, assignable: true },
-      { value: "dm", label: "DM", siege: true, always_global: false, assignable: true },
+      { value: "manager", label: "Manager (pays)", siege: false, always_global: false, assignable: true },
     ],
     capabilities: [
       {
@@ -188,11 +188,11 @@ describe("AuthProvider — relecture du profil", () => {
     )
     updatePermissionMatrix.mockResolvedValue({
       ...matrice,
-      capabilities: [{ ...matrice.capabilities[0], roles: ["admin", "super_admin", "dm"] }],
+      capabilities: [{ ...matrice.capabilities[0], roles: ["admin", "super_admin", "manager"] }],
     })
     ouvrir("/configuration")
 
-    fireEvent.click(await screen.findByRole("switch", { name: "Exporter pour DM" }))
+    fireEvent.click(await screen.findByRole("switch", { name: "Exporter pour Manager (pays)" }))
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
 
     expect(

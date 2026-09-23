@@ -13,6 +13,7 @@ import type { Permissions } from "@/lib/types"
 const LoginPage = lazy(() => import("@/pages/login").then((m) => ({ default: m.LoginPage })))
 const DashboardPage = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.DashboardPage })))
 const DossiersPage = lazy(() => import("@/pages/dossiers/list").then((m) => ({ default: m.DossiersPage })))
+const ImportPage = lazy(() => import("@/pages/dossiers/import").then((m) => ({ default: m.ImportPage })))
 const DossierDetailPage = lazy(() => import("@/pages/dossiers/detail").then((m) => ({ default: m.DossierDetailPage })))
 const RegisterPage = lazy(() => import("@/pages/register").then((m) => ({ default: m.RegisterPage })))
 const BudgetsPage = lazy(() => import("@/pages/budgets/list").then((m) => ({ default: m.BudgetsPage })))
@@ -159,6 +160,16 @@ export default function App() {
           <Route path="/budgets" element={<BudgetsPage />} />
           <Route path="/" element={<DashboardPage />} />
           <Route path="/dossiers" element={<DossiersPage />} />
+          {/* Importer, c'est déclarer : la page suit le droit du pays
+              (`data.import`), à côté des dossiers (décision 89). */}
+          <Route
+            path="/dossiers/import"
+            element={
+              <RequirePermission permission="data.import">
+                <ImportPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/dossiers/:id" element={<DossierDetailPage />} />
           <Route path="/registre" element={<RegisterPage />} />
           <Route

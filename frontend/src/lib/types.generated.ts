@@ -12,8 +12,8 @@ export interface paths {
         /**
          * @description Journal d'audit — consultation par la RH, qui audite, et la direction.
          *
-         *     Le DM et le DF n'y ont pas accès : le journal relit leurs propres
-         *     décisions, et cette relecture est un acte d'administration.
+         *     Le pays n'y a pas accès : le journal relit les décisions de chacun, et
+         *     cette relecture est un acte d'administration.
          */
         get: operations["audit_list"]
         put?: never
@@ -34,8 +34,8 @@ export interface paths {
         /**
          * @description Journal d'audit — consultation par la RH, qui audite, et la direction.
          *
-         *     Le DM et le DF n'y ont pas accès : le journal relit leurs propres
-         *     décisions, et cette relecture est un acte d'administration.
+         *     Le pays n'y a pas accès : le journal relit les décisions de chacun, et
+         *     cette relecture est un acte d'administration.
          */
         get: operations["audit_retrieve"]
         put?: never
@@ -981,10 +981,10 @@ export interface paths {
         /**
          * @description Importe l'export des dépenses ou le classeur historique du client.
          *
-         *     Réservé aux administrateurs, comme les exports : seuls eux manipulent
-         *     des fichiers. Le pays déclare dans l'application, ligne à ligne ; ce qui
-         *     entre par un classeur arrive en brouillon et suit ensuite le même
-         *     circuit.
+         *     Un import est une déclaration : il revient au pays (``data.import``,
+         *     manager par défaut, jamais le siège — décision 89) et suit les règles
+         *     de la saisie — son pays, ses équipes, ses brouillons. Ce qui entre par
+         *     un classeur arrive en brouillon et suit ensuite le même circuit.
          *
          *     Le classeur historique est mono-pays et n'a pas de colonne PAYS : le
          *     pays vient alors du paramètre ``country`` (requête ou formulaire),
@@ -1319,9 +1319,10 @@ export interface paths {
          * @description Matrice des rôles et de ce qu'ils autorisent (décision 43).
          *
          *     Lue dans la même table que celle appliquée par ``RolePermission``, et
-         *     modifiable par les administrateurs, case par case — sauf les verrous :
-         *     les administrateurs gardent tout, le pays ne reçoit jamais le droit de
-         *     contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
+         *     modifiable par les administrateurs, case par case — sauf les verrous
+         *     (décision 89) : le pays seul déclare, l'administrateur seul contrôle,
+         *     les administrateurs gardent l'administration ; le pays n'administre
+         *     rien et n'arbitre pas ses enveloppes.
          *     Chaque modification est journalisée avec l'avant et l'après.
          */
         get: operations["permissions_retrieve"]
@@ -1334,9 +1335,10 @@ export interface paths {
          * @description Matrice des rôles et de ce qu'ils autorisent (décision 43).
          *
          *     Lue dans la même table que celle appliquée par ``RolePermission``, et
-         *     modifiable par les administrateurs, case par case — sauf les verrous :
-         *     les administrateurs gardent tout, le pays ne reçoit jamais le droit de
-         *     contrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.
+         *     modifiable par les administrateurs, case par case — sauf les verrous
+         *     (décision 89) : le pays seul déclare, l'administrateur seul contrôle,
+         *     les administrateurs gardent l'administration ; le pays n'administre
+         *     rien et n'arbitre pas ses enveloppes.
          *     Chaque modification est journalisée avec l'avant et l'après.
          */
         patch: operations["permissions_partial_update"]
@@ -3032,7 +3034,7 @@ export interface components {
             is_active?: boolean
         }
         /**
-         * @description Transition d'une ligne : le siège (DF) peut fixer ce qui est prouvé.
+         * @description Transition d'une ligne : l'administrateur peut fixer ce qui est prouvé.
          *
          *     Par défaut, justifier couvre toute la dépense ; une pièce partielle
          *     permet d'en constater une partie seulement. La borne haute (le montant
@@ -3868,7 +3870,7 @@ export interface components {
          */
         PatchedPermissionMatrixUpdateRequest: {
             capabilities?: {
-                [key: string]: ("super_admin" | "admin" | "df" | "dm" | "manager")[]
+                [key: string]: ("super_admin" | "admin" | "manager")[]
             }
         }
         /**
@@ -4053,9 +4055,9 @@ export interface components {
             readonly "reallocations.decide": boolean
             /** @description Ajouter ou corriger un taux vers la devise de consolidation. */
             readonly "rates.manage": boolean
-            /** @description Ouvrir un dossier, y ajouter des lignes de dépense. */
+            /** @description Ouvrir un dossier dans son pays, y ajouter des lignes de dépense. */
             readonly "expenses.create": boolean
-            /** @description Corriger un dossier ou une ligne tant qu'ils ne sont pas soumis. */
+            /** @description Corriger son dossier ou sa ligne tant qu'ils ne sont pas soumis. */
             readonly "expenses.update": boolean
             /** @description Retirer un dossier ou une ligne jamais soumis. Son auteur seulement. */
             readonly "expenses.delete": boolean
@@ -4063,7 +4065,7 @@ export interface components {
             readonly "proofs.upload": boolean
             /** @description Déclarer un dossier : ses lignes partent avec lui, sans retour. */
             readonly "dossiers.submit": boolean
-            /** @description Prendre un dossier soumis en contrôle : le DM prépare, le DF tranche. */
+            /** @description Prendre un dossier soumis en contrôle. */
             readonly "expenses.review": boolean
             /** @description Constater qu'une pièce couvre une dépense, ou l'absence de preuve. */
             readonly "expenses.validate": boolean
@@ -4079,7 +4081,7 @@ export interface components {
             readonly "rectifications.decide": boolean
             /** @description Télécharger le registre en Excel, CSV, Word ou PDF. */
             readonly "data.export": boolean
-            /** @description Charger un classeur de dépenses en brouillons. */
+            /** @description Charger un classeur de dépenses de son pays en brouillons. */
             readonly "data.import": boolean
         }
         /**
@@ -4320,12 +4322,10 @@ export interface components {
         /**
          * @description * `super_admin` - Super administrateur (DG, DO, CEO, DEV)
          *     * `admin` - Administrateur (RH)
-         *     * `df` - DF — directeur financier (siège)
-         *     * `dm` - DM — directeur manager (siège)
          *     * `manager` - Manager (pays)
          * @enum {string}
          */
-        RoleEnum: "super_admin" | "admin" | "df" | "dm" | "manager"
+        RoleEnum: "super_admin" | "admin" | "manager"
         /**
          * @description Pays du périmètre, en représentation compacte.
          *
@@ -8028,11 +8028,9 @@ export interface operations {
                 /**
                  * @description * `super_admin` - Super administrateur (DG, DO, CEO, DEV)
                  *     * `admin` - Administrateur (RH)
-                 *     * `df` - DF — directeur financier (siège)
-                 *     * `dm` - DM — directeur manager (siège)
                  *     * `manager` - Manager (pays)
                  */
-                profile__role?: "admin" | "df" | "dm" | "manager" | "super_admin"
+                profile__role?: "admin" | "manager" | "super_admin"
                 /** @description Un terme de recherche. */
                 search?: string
             }
