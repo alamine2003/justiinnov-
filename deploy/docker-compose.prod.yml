@@ -406,7 +406,7 @@ services:
         condition: service_healthy
 
   caddy:
-    image: caddy:2.8-alpine
+    image: caddy:2.11-alpine
     mem_limit: 128m
     ports:
       - "80:80"
