@@ -88,6 +88,23 @@ docker compose exec backend python manage.py seed_users
 La commande est idempotente : elle crée ou met à jour pays et comptes, et
 adopte un pays préexistant plutôt que d'échouer sur son nom.
 
+### Recette manuelle
+
+Pour tester l'application à la main, compte par compte, sur la **pile locale
+seulement** :
+
+```bash
+docker compose exec backend python manage.py seed_recette --base-jetable
+```
+
+La commande ouvre les dix-sept filiales, crée quarante comptes `recette.*`
+(un mot de passe commun tiré au hasard, écrit dans `backend/recette.local.md`,
+ignoré par git) et huit dossiers par pays qui couvrent chaque état du circuit.
+Elle refuse de tourner hors du mode debug : rien ne se supprime dans
+l'application, un jeu de recette posé sur une base réelle y resterait. On le
+retire en effaçant la pile locale, `docker compose down -v`. Le guide des
+parcours à tester est [`docs/recette.md`](docs/recette.md).
+
 ### Rôles et périmètres
 
 Cinq rôles, calqués sur l'organisation du groupe :

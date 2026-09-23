@@ -18,6 +18,8 @@ docker-data/
 
 # Secrets et données locales (jamais versionnés)
 *.local.json
+# Comptes du jeu de recette (manage.py seed_recette) : mot de passe en clair.
+*.local.md
 # Comptes jetables générés par l'intégration continue
 backend/seed_users.ci.json
 media/
