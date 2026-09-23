@@ -48,7 +48,9 @@ console, et plusieurs défauts n'ont été trouvés qu'en regardant les images.
 La CI (`.github/workflows/ci.yml`) rejoue tout cela, captures comprises, sur
 la pile livrable (`docker-compose.ci.yml`) ; elle tourne sur chaque PR et
 au sein de la livraison (`cd.yml`), qui publie les images et déploie
-`deploy/` ; voir `deploy/README.md`.
+`deploy/` ; voir `deploy/README.md`. Préproduction et production sont deux
+serveurs, chacun marqué `ENVIRONNEMENT`, et un serveur refuse une
+livraison destinée à l'autre (décision 90).
 
 ## Règles que le code doit respecter
 

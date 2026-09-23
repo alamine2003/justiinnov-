@@ -450,9 +450,15 @@ repli documentée ([`docs/deploiement-railway.md`](docs/deploiement-railway.md))
 le code n'a pas à changer pour y aller. La livraison appelle la CI, puis :
 
 ```
-main ──────▶ CI ──▶ images ghcr.io ──▶ staging      (automatique)
+main ──────▶ CI ──▶ images ghcr.io ──▶ staging      (automatique, si PREPRODUCTION=1)
 tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation requise, tags v* seulement)
 ```
+
+Préproduction et production sont **deux serveurs** (décision 90) : chacun
+porte une marque `ENVIRONNEMENT` et refuse une livraison destinée à
+l'autre ; tant que le serveur de préproduction n'existe pas, la variable
+de dépôt `PREPRODUCTION` n'est pas posée et `main` ne se déploie nulle
+part (`deploy/README.md`, « Préproduction et production »).
 
 Les images sont étiquetées par le SHA du commit — jamais `latest` — ; c'est
 cette étiquette que le serveur reçoit, si bien que revenir en arrière consiste

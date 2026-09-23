@@ -7,13 +7,15 @@
 > [`docs/deploiement-railway.md`](../docs/deploiement-railway.md).
 
 La livraison continue (`.github/workflows/cd.yml`) livre `main` en
-préproduction et les tags `v*` en production, après approbation. Ce dossier
+préproduction et les tags `v*` en production, après approbation — **sur
+deux serveurs distincts** (décision 90, « Préproduction et production »,
+plus bas). Ce dossier
 est copié en entier sur le serveur à chaque livraison ; il contient tout ce
 qu'il faut pour exploiter la plateforme sans autre document — l'équipe de
 développement compte une seule personne, ce fichier doit se suffire.
 
 ```
-main ──────▶ CI ──▶ images ghcr.io ──▶ staging      (automatique)
+main ──────▶ CI ──▶ images ghcr.io ──▶ staging      (automatique, si PREPRODUCTION=1 ; son propre serveur)
 tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation requise)
 ```
 
@@ -53,8 +55,11 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    ```bash
    ssh-keygen -t ed25519 -N "" -C deploy@justi-innov -f ~/.ssh/justi-innov-deploy
    rsync -a --exclude .env deploy/ root@<hôte>:/home/deploy/justi-innov/
-   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)'" < deploy/preparer_serveur.sh
+   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)' production" < deploy/preparer_serveur.sh
    ```
+   Le second argument, `production` ou `staging`, dit ce qu'est la machine :
+   il est écrit dans `ENVIRONNEMENT`, que la commande forcée compare à
+   chaque livraison (« Préproduction et production », plus bas).
    Les humains entrent en **root**, avec la clé que l'hébergeur y a posée ;
    toute l'exploitation (`docker compose`, `restaurer.sh`, `.env`) se fait
    en root, dans `/home/deploy/justi-innov`.
@@ -97,7 +102,8 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    machine », plus bas) ; une préproduction peut s'en passer, `deploy.sh`
    et les services de sauvegarde le rappellent alors à chaque occasion.
 5. Dans GitHub, un environnement `staging` et un environnement `production`
-   (Settings › Environments) portant chacun :
+   (Settings › Environments) portant chacun **ses propres valeurs** —
+   deux serveurs, deux clés, deux domaines ; jamais les mêmes :
 
    | Type | Nom | Contenu |
    |---|---|---|
@@ -117,7 +123,9 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
      quelle branche pourrait viser la production ; avec elle, GitHub refuse
      le travail avant même de demander une approbation.
 
-   Sur `staging`, aucune règle : `main` part seule.
+   Sur `staging`, aucune règle : `main` part seule — une fois la variable
+   de dépôt `PREPRODUCTION` posée à `1`, pas avant (« Préproduction et
+   production »).
 
    Les valeurs transmises au serveur (étiquette, noms d'images, domaine,
    compte du registre) sont vérifiées par expression régulière avant
@@ -213,9 +221,10 @@ serveur, sans approbation. Désormais :
   d'agent) : sshd ignore la commande demandée et lance celle-ci, qui relit
   la demande dans `SSH_ORIGINAL_COMMAND`, refuse tout ce qui n'est pas
   exactement `livrer <IMAGE_TAG> <BACKEND_IMAGE> <FRONTEND_IMAGE>
-  <APP_DOMAIN> <GHCR_USER>` — chaque valeur bornée par les mêmes
-  expressions régulières que `cd.yml` — puis lance le `deploy.sh` du
-  répertoire d'exploitation ;
+  <APP_DOMAIN> <GHCR_USER> <ENVIRONNEMENT>` — chaque valeur bornée par les
+  mêmes expressions régulières que `cd.yml` —, refuse un environnement qui
+  n'est pas celui du fichier `ENVIRONNEMENT` du serveur, puis lance le
+  `deploy.sh` du répertoire d'exploitation ;
 - ce répertoire, `deploy.sh`, `docker-compose.prod.yml`, les scripts de
   sauvegarde et le `.env` appartiennent à **root** : la clé ne peut ni les
   lire (le `.env`), ni les remplacer, ni copier quoi que ce soit ;
@@ -236,7 +245,7 @@ vérification et son retour arrière :
 1. Poser `justi-livrer` et les fichiers de `deploy/` à jour, en root
    (`rsync` ci-dessus), puis :
    ```bash
-   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)'" < deploy/durcir_livraison.sh
+   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)' production" < deploy/durcir_livraison.sh
    ```
    Le script retire `deploy` du groupe `docker`, pose le sudo restreint et
    la commande forcée, **remplace** `~deploy/.ssh/authorized_keys` par la
@@ -246,7 +255,7 @@ vérification et son retour arrière :
    ```bash
    ssh -i ~/.ssh/justi-innov-deploy deploy@<hôte> id          # → « livraison refusée : aucune commande »
    ssh -i ~/.ssh/justi-innov-deploy deploy@<hôte> 'livrer x'  # → « forme attendue : … »
-   ssh -i ~/.ssh/justi-innov-deploy deploy@<hôte> 'livrer sha-000000000000 ghcr.io/x ghcr.io/y a.b c; id'
+   ssh -i ~/.ssh/justi-innov-deploy deploy@<hôte> 'livrer sha-000000000000 ghcr.io/x ghcr.io/y a.b c;id production'
    #                                                            → « GHCR_USER invalide » : rien ne s'enchaîne
    ssh root@<hôte> 'id deploy; sudo -l -U deploy'             # sans « docker » ; justi-livrer seul
    ```
@@ -291,6 +300,81 @@ Seules les erreurs 500 passent par là ; les 4xx sont dans le journal d'accès
 de gunicorn et de nginx, sur la même sortie. `DJANGO_LOG_REQUESTS=WARNING`
 les ramène le temps d'une enquête, `DJANGO_LOG_LEVEL=DEBUG` ouvre tout —
 jamais le SQL, qui reste muet par construction.
+
+## Préproduction et production
+
+**Deux serveurs, pas un** (décision 90). Jusqu'au 23 septembre 2026,
+l'environnement GitHub `staging` portait les secrets du serveur de
+production : la « préproduction » était la production, et chaque fusion
+sur `main` y partait sans tag ni approbation — le code de la v1.1.0 était
+en ligne cinq minutes avant que son tag n'existe. Deux piles sur une même machine
+ne sont pas une solution : une seule peut tenir les ports 80 et 443, et
+une préproduction qui remplit le disque ou la mémoire fait tomber la
+production avec elle.
+
+Trois verrous, désormais :
+
+- **Chaque serveur sait ce qu'il est.** Le fichier
+  `/home/deploy/justi-innov/ENVIRONNEMENT`, propriété de root, contient
+  `staging` ou `production` ; `preparer_serveur.sh` et
+  `durcir_livraison.sh` l'écrivent (second argument) et refusent de
+  réécrire une marque qui dit autre chose.
+- **La livraison dit où elle va, le serveur vérifie.** `cd.yml` transmet
+  l'environnement à `justi-livrer`, qui refuse une livraison destinée à
+  l'autre, et toute livraison sur un serveur sans marque
+  (`deploy/tests/test_justi_livrer.sh`, joué par la CI). Des secrets
+  GitHub mal recopiés ne peuvent donc plus mener `main` en production.
+- **Pas de préproduction sans serveur.** Le travail `Déployer (staging)`
+  ne part que si la variable de dépôt `PREPRODUCTION` vaut `1`
+  (Settings › Secrets and variables › Actions › Variables). Sans elle,
+  `main` passe la CI et publie ses images, puis s'arrête — sans ticket :
+  un travail sauté n'est pas un échec. La production, elle, part d'un tag.
+
+### Mettre le serveur de production à jour — avant de fusionner
+
+L'ancienne `justi-livrer` refuse la nouvelle forme de commande, la
+nouvelle exige la marque : **le serveur se met à jour d'abord, le dépôt
+ensuite**. Dans l'intervalle, une livraison de l'ancien `cd.yml` serait
+refusée — ce qui est précisément le but pour `main`. En root, depuis un
+dépôt à jour :
+
+```bash
+rsync -a --exclude .env --exclude .deployed deploy/ root@<hôte-production>:/home/deploy/justi-innov/
+ssh root@<hôte-production> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)' production" < deploy/durcir_livraison.sh
+ssh root@<hôte-production> 'cat /home/deploy/justi-innov/ENVIRONNEMENT'   # → production
+```
+
+Puis, dans GitHub, **videz les secrets de l'environnement `staging`** : ce
+sont ceux de la production. Une livraison de préproduction serait refusée
+par le serveur de toute façon ; mieux vaut qu'elle n'ait pas de quoi
+frapper à sa porte.
+
+### Monter la préproduction
+
+1. Une seconde machine, plus petite que la production si l'on veut —
+   elle ne porte que des données fictives. Préparez-la comme la première
+   (« Préparer un serveur »), avec **une autre clé de livraison** et
+   l'argument `staging` :
+   ```bash
+   ssh-keygen -t ed25519 -N "" -C deploy@justi-innov-preprod -f ~/.ssh/justi-innov-deploy-preprod
+   rsync -a --exclude .env deploy/ root@<hôte-preprod>:/home/deploy/justi-innov/
+   ssh root@<hôte-preprod> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy-preprod.pub)' staging" < deploy/preparer_serveur.sh
+   ```
+2. Son `.env`, d'après `.env.example`, **sans rien reprendre de celui de
+   la production** : secrets régénérés (`DJANGO_SECRET_KEY`,
+   `POSTGRES_PASSWORD`, `AWS_SECRET_ACCESS_KEY`, `METRICS_TOKEN`,
+   `GRAFANA_ADMIN_PASSWORD`), `APP_DOMAIN` à son adresse
+   (`<ip-en-tirets>.sslip.io` en attendant un nom), courrier coupé
+   (`DJANGO_EMAIL_ENABLED=0`, le défaut), et `SAUVEGARDE_DISTANT_*` vide
+   ou vers un autre bucket que celui de la production — jamais le même.
+3. Ni copie ni restauration de la base de production : des comptes de
+   test (`seed_users`, avec un fichier à part) et des données saisies pour
+   l'occasion.
+4. Dans GitHub, l'environnement `staging` reçoit les valeurs de **cette**
+   machine (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` — la clé
+   `-preprod` —, `DEPLOY_KNOWN_HOSTS`, `APP_DOMAIN`), puis la variable de
+   dépôt `PREPRODUCTION` passe à `1`. La fusion suivante sur `main` s'y
+   déploie ; *Run workflow* sur `staging` le vérifie sans attendre.
 
 ## Commandes d'exploitation
 

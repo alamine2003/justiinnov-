@@ -8,7 +8,7 @@
 # n'est PAS membre du groupe docker — ce groupe vaut root — et n'a d'autre
 # droit sudo que celui-ci. La livraison continue (cd.yml) demande :
 #
-#   ssh deploy@<hôte> "livrer <IMAGE_TAG> <BACKEND_IMAGE> <FRONTEND_IMAGE> <APP_DOMAIN> <GHCR_USER>"
+#   ssh deploy@<hôte> "livrer <IMAGE_TAG> <BACKEND_IMAGE> <FRONTEND_IMAGE> <APP_DOMAIN> <GHCR_USER> <ENVIRONNEMENT>"
 #
 # avec le jeton de registre sur l'entrée standard. sshd ignore la commande
 # demandée et exécute celle-ci, qui la relit dans SSH_ORIGINAL_COMMAND,
@@ -17,6 +17,14 @@
 # puis lance deploy.sh depuis le répertoire d'exploitation, propriété de
 # root. La clé de livraison ne peut donc ni copier un fichier, ni ouvrir
 # un shell, ni remplacer le script qu'elle exécute, ni lire le .env.
+#
+# Le serveur sait ce qu'il est : le fichier ENVIRONNEMENT du répertoire
+# d'exploitation, propriété de root, dit `staging` ou `production`
+# (preparer_serveur.sh, durcir_livraison.sh). Une livraison destinée à
+# l'autre environnement est refusée avant tout geste : des secrets GitHub
+# de préproduction qui pointeraient vers le serveur de production — ce qui
+# a été le cas jusqu'à la décision 90 — ne peuvent plus y déployer `main`
+# sans tag ni approbation.
 #
 # Mettre à jour deploy.sh, docker-compose.prod.yml ou les scripts de
 # sauvegarde est un acte d'exploitation, fait en root, jamais par la CI
@@ -34,7 +42,7 @@ set -f
 # shellcheck disable=SC2086
 set -- $SSH_ORIGINAL_COMMAND
 set +f
-[ "$#" -eq 6 ] || refuser "forme attendue : livrer <IMAGE_TAG> <BACKEND_IMAGE> <FRONTEND_IMAGE> <APP_DOMAIN> <GHCR_USER>"
+[ "$#" -eq 7 ] || refuser "forme attendue : livrer <IMAGE_TAG> <BACKEND_IMAGE> <FRONTEND_IMAGE> <APP_DOMAIN> <GHCR_USER> <ENVIRONNEMENT>"
 [ "$1" = "livrer" ] || refuser "commande inconnue : $1"
 
 verifier() {
@@ -46,9 +54,18 @@ verifier BACKEND_IMAGE  "$3" '^ghcr\.io/[a-z0-9._/-]+$'
 verifier FRONTEND_IMAGE "$4" '^ghcr\.io/[a-z0-9._/-]+$'
 verifier APP_DOMAIN     "$5" '^[a-z0-9.-]+$'
 verifier GHCR_USER      "$6" '^[]A-Za-z0-9._[-]+$'
+verifier ENVIRONNEMENT  "$7" '^(staging|production)$'
 
 [ -f "$REPERTOIRE/deploy.sh" ] || refuser "$REPERTOIRE/deploy.sh introuvable"
 [ "$(stat -c %U "$REPERTOIRE/deploy.sh")" = "root" ] || refuser "$REPERTOIRE/deploy.sh n'appartient pas à root"
+
+# Sans marque, le serveur ne sait pas ce qu'il est : on refuse plutôt que
+# de deviner. La marque appartient à root, comme ce qu'elle protège.
+MARQUE="$REPERTOIRE/ENVIRONNEMENT"
+[ -f "$MARQUE" ] || refuser "$MARQUE absent : écrivez-y staging ou production, en root (deploy/README.md, « Préproduction et production »)"
+[ "$(stat -c %U "$MARQUE")" = "root" ] || refuser "$MARQUE n'appartient pas à root"
+ICI="$(tr -d '[:space:]' < "$MARQUE")"
+[ "$ICI" = "$7" ] || refuser "ce serveur est « $ICI », la livraison vise « $7 »"
 
 export IMAGE_TAG="$2" BACKEND_IMAGE="$3" FRONTEND_IMAGE="$4" APP_DOMAIN="$5" GHCR_USER="$6"
 cd "$REPERTOIRE"

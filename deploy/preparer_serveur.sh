@@ -11,8 +11,12 @@
 # script, la clé publique de déploiement en argument :
 #
 #   rsync -a --exclude .env deploy/ root@<hôte>:/home/deploy/justi-innov/
-#   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)'" \
+#   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)' production" \
 #       < deploy/preparer_serveur.sh
+#
+# Le second argument dit ce qu'est ce serveur, `staging` ou `production` :
+# préproduction et production sont deux machines (décision 90), et chaque
+# environnement a sa propre clé de livraison.
 #
 # Les humains entrent en root, avec la clé que l'hébergeur y a posée : le
 # compte `deploy` ne sert qu'à la livraison continue, et ne peut rien
@@ -25,6 +29,18 @@ case "$CLE_DEPLOIEMENT" in
   ssh-ed25519\ *|ssh-rsa\ *|ecdsa-sha2-*) ;;
   *) echo "argument inattendu : ce n'est pas une clé publique SSH" >&2; exit 1 ;;
 esac
+ENVIRONNEMENT="${2:-}"
+case "$ENVIRONNEMENT" in
+  staging|production) ;;
+  *) echo "second argument attendu : staging ou production (ce que ce serveur est, décision 90)" >&2; exit 1 ;;
+esac
+# Vérifié avant tout changement : un serveur déjà marqué autrement n'est
+# pas reconfiguré à moitié.
+MARQUE=/home/deploy/justi-innov/ENVIRONNEMENT
+if [ -f "$MARQUE" ] && [ "$(tr -d '[:space:]' < "$MARQUE")" != "$ENVIRONNEMENT" ]; then
+  echo "✘ $MARQUE dit « $(tr -d '[:space:]' < "$MARQUE") » : supprimez-le à la main si ce serveur change vraiment d'environnement." >&2
+  exit 1
+fi
 
 echo "== Paquets"
 apt-get update -q
@@ -71,6 +87,15 @@ find "$REPERTOIRE" -type d -exec chmod 755 {} +
 find "$REPERTOIRE" -type f -exec chmod 644 {} +
 chmod 755 "$REPERTOIRE"/*.sh
 if [ -f "$REPERTOIRE/.env" ]; then chmod 600 "$REPERTOIRE/.env"; fi
+
+echo "== Marque d'environnement : ${ENVIRONNEMENT}"
+# justi-livrer compare chaque livraison à cette marque et refuse l'autre
+# environnement (décision 90). Changer ce qu'est un serveur est un geste
+# délibéré : une marque qui dit autre chose n'a pas été écrasée (contrôle
+# en tête du script).
+printf '%s\n' "$ENVIRONNEMENT" > "$MARQUE"
+chown root:root "$MARQUE"
+chmod 644 "$MARQUE"
 
 echo "== Pare-feu"
 ufw default deny incoming >/dev/null

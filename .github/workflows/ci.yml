@@ -448,6 +448,12 @@ jobs:
       - name: Tests de sauvegarder.sh
         run: sh deploy/tests/test_sauvegarder.sh
 
+      - name: Tests de justi-livrer
+        # La commande forcée est le seul verrou entre une livraison et le
+        # serveur : une livraison de préproduction ne doit jamais se
+        # déployer sur le serveur de production (décision 90).
+        run: sh deploy/tests/test_justi_livrer.sh
+
   pile:
     name: Pile de production — archivage et reprise
     runs-on: ubuntu-latest

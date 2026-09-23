@@ -39,7 +39,9 @@ réécriture d'historique se pousse avec `--force-with-lease`, jamais
 ### Étape 4 : livraison
 
 - Une poussée sur `main` déclenche `ci.yml` puis, si tout est vert, la
-  livraison en préproduction (`cd.yml`).
+  livraison en préproduction (`cd.yml`) — sur son propre serveur, et
+  seulement si la variable de dépôt `PREPRODUCTION` vaut `1`
+  (décision 90).
 - Un tag `vX.Y.Z` livre en production après approbation dans l'environnement
   GitHub `production` :
 
