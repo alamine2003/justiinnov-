@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Jauge, Legende, RailEnveloppe } from "@/components/ui/charts"
 import { EXECUTION_LEVEL_TEXT, STATUS_TONES } from "@/lib/status-styles"
 import type { Budget, CountryBudgetRow } from "@/lib/types"
+import { SupprimerEnveloppe } from "./supprimer-enveloppe"
 import { cn, formatAmount, formatRate } from "@/lib/utils"
 
 /**
@@ -19,6 +20,7 @@ export function EnveloppeDuPays({
   thresholds,
   symbol,
   onEdit,
+  onDelete,
 }: {
   row: CountryBudgetRow
   /** L'enveloppe de portée « pays » de l'exercice, quand elle existe. */
@@ -27,6 +29,7 @@ export function EnveloppeDuPays({
   thresholds: number[]
   symbol: string
   onEdit?: (budget: Budget) => void
+  onDelete: (budget: Budget) => Promise<void>
 }) {
   const { t } = useTranslation()
   const allocated = Number(row.allocated)
@@ -87,6 +90,13 @@ export function EnveloppeDuPays({
               >
                 <Pencil className="h-4 w-4" />
               </Button>
+            )}
+            {budget && (
+              <SupprimerEnveloppe
+                budget={budget}
+                nom={t("budgets.enveloppe.titre", { pays: row.country_name })}
+                onDelete={onDelete}
+              />
             )}
           </div>
         </div>
@@ -153,6 +163,7 @@ export function SousEnveloppes({
   canEdit,
   onCreate,
   onEdit,
+  onDelete,
 }: {
   budgets: Budget[]
   row: CountryBudgetRow
@@ -160,6 +171,7 @@ export function SousEnveloppes({
   canEdit: boolean
   onCreate: () => void
   onEdit: (budget: Budget) => void
+  onDelete: (budget: Budget) => Promise<void>
 }) {
   const { t } = useTranslation()
   // Le serveur publie la part non découpée (`unallocated`) : l'écran ne la
@@ -194,18 +206,25 @@ export function SousEnveloppes({
                       )}
                     </p>
                   </div>
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={t("budgets.sous.modifier_aria", {
-                        enveloppe: budget.scope_label ?? budget.country_name,
-                      })}
-                      onClick={() => onEdit(budget)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="flex shrink-0 items-center">
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t("budgets.sous.modifier_aria", {
+                          enveloppe: budget.scope_label ?? budget.country_name,
+                        })}
+                        onClick={() => onEdit(budget)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <SupprimerEnveloppe
+                      budget={budget}
+                      nom={budget.scope_label ?? budget.country_name}
+                      onDelete={onDelete}
+                    />
+                  </div>
                 </div>
                 <div className="mt-4 flex items-center gap-4">
                   <Jauge

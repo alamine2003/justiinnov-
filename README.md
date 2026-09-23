@@ -113,8 +113,8 @@ super administrateur supervise.
 | Rôle | Libellé | Qui | Périmètre | Peut |
 |------|---------|-----|-----------|------|
 | `manager` | Manager (pays) | responsable dans une filiale | **son pays**, obligatoire, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | **seul à déclarer** : ouvrir les dossiers de son pays, saisir les lignes, déposer les justificatifs, **soumettre**, importer un classeur ; le référentiel de son pays est tenu par la RH |
-| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | **seul à contrôler, de bout en bout** : mise en contrôle, justification ou refus, clôture, contrôle des pièces, **réouverture**, **décision sur une rectification** ; et l'administration : comptes et rôles, pays et référentiel, **enveloppes, réallocations et taux de change**, **journal d'audit**, **exports**, double authentification, **matrice des droits** |
-| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | **superviser** : tout lire, relire le journal d'audit, administrer à égalité avec l'administrateur — sans déclarer ni contrôler |
+| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | **seul à contrôler, de bout en bout** : mise en contrôle, justification ou refus, clôture, contrôle des pièces, **réouverture**, **décision sur une rectification** ; et l'administration : comptes et rôles, pays et référentiel, **journal d'audit**, **exports**, double authentification, **matrice des droits** ; il **lit** les enveloppes sans les fixer |
+| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | **superviser et allouer** : tout lire, relire le journal d'audit, administrer à égalité avec l'administrateur, et **seul attribuer, modifier et supprimer les enveloppes**, arbitrer les réallocations, tenir les taux de change (décision 91) — sans déclarer ni contrôler |
 
 Il n'y a plus de DM ni de DF : le contrôle qu'ils se partageaient revient à
 l'administrateur seul. La migration `accounts.0006_trois_roles` a désactivé
@@ -135,9 +135,10 @@ Permissions » (`GET`/`PATCH /api/permissions/`, réponse : la matrice
 appliquée avec, pour chaque capacité, `roles`, `default_roles`,
 `fixed_roles`, `locked_roles`) ; le choix est gardé dans
 `WorkflowConfiguration.capability_roles`, journalisé avec l'avant et
-l'après, et s'applique à la requête suivante. Trois verrous ne se règlent
+l'après, et s'applique à la requête suivante. Quatre verrous ne se règlent
 pas : **la déclaration est au pays seul** ; **le contrôle est à
-l'administrateur seul** ; **l'administration est aux administrateurs**,
+l'administrateur seul** ; **les enveloppes sont au super administrateur
+seul** (décision 91) ; **l'administration est aux administrateurs**,
 qui règlent toute la matrice — et le pays ne reçoit jamais le contrôle,
 l'administration ni l'arbitrage des enveloppes. `/api/me/` traduit la
 matrice en capacités que l'interface se contente de lire, et chaque
@@ -309,11 +310,16 @@ Ce que le schéma ne dit pas, et qui vaut pour toutes les routes :
   `non_field_errors`, `detail`) ; `401` sans jeton valable ; `403` quand le
   rôle ne permet pas l'action ; `404` pour ce qui n'existe pas **ou** est
   hors périmètre — un objet du voisin ne se distingue pas d'un objet
-  inexistant ; `405` sur `DELETE`, sauf brouillon ; `429` au-delà des
+  inexistant ; `405` sur `DELETE`, sauf brouillon et enveloppe jamais
+  servie ; `429` au-delà des
   limites de débit.
 - **Pas de suppression.** Le retrait d'une entité se fait par désactivation
   (`is_active`). Seul un dossier ou une dépense **en brouillon** se retire,
-  par son auteur.
+  par son auteur — et une **enveloppe jamais servie**, par le super
+  administrateur : `DELETE /api/budgets/{id}/` (`budgets.delete`) répond
+  `204`, ou `400` sur `budget` quand une dépense y est imputée, qu'une
+  réallocation la touche ou qu'elle porte des sous-enveloppes ;
+  `can_delete` sur chaque enveloppe le dit d'avance (décision 91).
 - **Pagination** : toute liste est paginée (`?page=`, `?page_size=` plafonné
   à 200) et répond `{count, next, previous, results}`. Les listes acceptent
   `?search=`, `?ordering=` et les filtres déclarés route par route ;

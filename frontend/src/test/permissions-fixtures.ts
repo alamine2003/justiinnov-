@@ -20,6 +20,7 @@ export const PERMISSIONS_DU_PAYS: Permissions = {
   "referentiel.update": false,
   "budgets.create": false,
   "budgets.update": false,
+  "budgets.delete": false,
   "reallocations.request": false,
   "reallocations.decide": false,
   "rates.manage": false,

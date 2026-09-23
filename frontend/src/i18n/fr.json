@@ -637,7 +637,7 @@
     "vide": {
       "pays_titre": "Aucune enveloppe attribuée",
       "pays_indication_siege": "Attribuez une enveloppe annuelle à chaque pays suivi.",
-      "pays_indication_pays": "Le siège n'a pas encore attribué d'enveloppe à votre périmètre.",
+      "pays_indication_pays": "Aucune enveloppe n'est encore attribuée dans votre périmètre : c'est la direction qui les attribue.",
       "enveloppes_titre": "Aucune enveloppe",
       "enveloppes_indication_siege": "Attribuez une enveloppe pour commencer le suivi.",
       "enveloppes_indication_pays": "Aucune enveloppe sur votre périmètre."
@@ -719,6 +719,13 @@
       "decouper": "Découper encore",
       "non_reparti": "{{montant}} de l'enveloppe du pays ne sont pas répartis. Une sous-enveloppe suit une seule dimension : projet, équipe ou manager.",
       "tout_reparti": "L'enveloppe du pays est entièrement répartie."
+    },
+    "suppression": {
+      "bouton_aria": "Supprimer l'enveloppe {{enveloppe}}",
+      "titre": "Supprimer « {{enveloppe}} » ({{annee}}) ?",
+      "description": "Cette enveloppe n'a jamais servi : aucune dépense imputée, aucune réallocation, aucune sous-enveloppe. Elle disparaît de l'application ; l'historique garde qui l'a supprimée et quand. Une enveloppe qui a servi se désactive au lieu de se supprimer.",
+      "confirmer": "Supprimer",
+      "impossible": "Suppression impossible"
     }
   },
   "pilotage": {

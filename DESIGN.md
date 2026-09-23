@@ -490,6 +490,23 @@ Dans le journal d'audit : `rectification_requested`, `rectified` (la
 ligne, et le dossier qui la suit), `rectification_decided` ; dans les
 notifications, l'icône `Undo2`.
 
+### Supprimer une enveloppe
+
+Sur la page Budgets, l'enveloppe du pays et chaque sous-enveloppe portent
+un bouton icône **Supprimer** (`ghost`, `Trash2`, `text-destructive`,
+`components/budgets/supprimer-enveloppe.tsx`), à côté du crayon, rendu
+**seulement** si `can_delete` — le serveur le dit : droit
+(`budgets.delete`, le super administrateur seul) et enveloppe jamais
+servie (aucune dépense imputée, aucune réallocation, aucune
+sous-enveloppe ; décision 91). Il ouvre un dialogue au titre en question
+(« Supprimer « Équipe Lomé » (2027) ? »), dont la description dit la
+conséquence : l'enveloppe disparaît, l'historique garde qui l'a supprimée,
+une enveloppe qui a servi se désactive au lieu de se supprimer. Boutons
+« Annuler » (`outline`) et « Supprimer » (`destructive`). Un refus du
+serveur (une dépense imputée entre-temps, `400` sur `budget`) s'affiche en
+`<FormError>` dans le dialogue, qui reste ouvert. Après une suppression, la
+page relit les enveloppes.
+
 ### Menu d'export
 
 Les exports sont réservés aux administrateurs : le menu n'apparaît que si

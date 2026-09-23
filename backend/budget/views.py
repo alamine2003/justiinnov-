@@ -5,9 +5,10 @@ Le circuit d'une réallocation — demande, approbation, refus — est dans
 périmètre, lit la charge utile, appelle le service et répond.
 """
 
+from django.db import transaction
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -30,17 +31,25 @@ from .serializers import (
 
 
 class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
-    """Enveloppes annuelles et sous-enveloppes par projet."""
+    """Enveloppes annuelles et sous-enveloppes par projet.
+
+    ``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :
+    une enveloppe qui n'a jamais servi se supprime, comme un brouillon
+    jamais soumis (décision 91). Celle qui a servi se désactive.
+    """
 
     queryset = (
         Budget.objects.select_related(
             "country", "project", "team", "manager"
-        ).with_consumption()
+        ).with_consumption().with_usage()
     )
     serializer_class = BudgetSerializer
     permission_classes = [RolePermission]
     write_capability = "budgets.update"
-    action_write_capabilities = {"create": "budgets.create"}
+    action_write_capabilities = {
+        "create": "budgets.create",
+        "destroy": "budgets.delete",
+    }
     filterset_fields = [
         "country", "country__country_ref", "year", "project", "team",
         "manager", "is_active",
@@ -58,6 +67,14 @@ class BudgetViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         # Les taux de change sont lus une fois par exercice et par requête,
         # pas une fois par enveloppe affichée (``BudgetSerializer._rates``).
         return {**super().get_serializer_context(), "rates_par_exercice": {}}
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        """Supprime une enveloppe qui n'a jamais servi (décision 91)."""
+        budget = self.get_object()
+        with traduire_les_regles():
+            transitions.supprimer_enveloppe(budget, get_access(request.user))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
         parameters=[

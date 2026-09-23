@@ -172,23 +172,31 @@ class MatriceDesDroitsTests(ScopingTestCase):
         self.login(self.siege)
         self.assertEqual(self.client.get("/api/permissions/").status_code, status.HTTP_200_OK)
 
-    def test_l_administrateur_a_l_argent_et_le_regle(self):
-        """Décision 58 : l'administrateur a tous les droits, enveloppes,
-        réallocations et taux compris, et règle ces lignes comme les autres
-        — il les attribue à qui il veut. La matrice le dit
-        (``settable_by_roles``)."""
-        for cle in ("budgets.create", "budgets.update", "reallocations.request",
-                    "reallocations.decide", "rates.manage"):
+    def test_les_enveloppes_sont_a_la_direction_seule(self):
+        """Décision 91 : attribuer, modifier, supprimer une enveloppe,
+        arbitrer une réallocation, tenir les taux — le super administrateur
+        seul. L'administrateur contrôle les dépenses et lit les enveloppes :
+        il ne peut ni se rouvrir ces lignes, ni les retirer à la direction."""
+        for cle in ("budgets.create", "budgets.update", "budgets.delete",
+                    "reallocations.request", "reallocations.decide", "rates.manage"):
             with self.subTest(cle=cle):
-                self.assertIn(Role.ADMIN, roles_pour(cle))
-                self.assertEqual(
-                    self._matrice()[cle]["settable_by_roles"], ["admin", "super_admin"]
-                )
-                # Retirer la ligne aux administrateurs est refusé : ils la
-                # gardent, et la règlent.
-                refus = self._regler(self.rh, **{cle: ["super_admin"]})
-                self.assertEqual(refus.status_code, status.HTTP_400_BAD_REQUEST, refus.data)
-                self.assertIn(Role.ADMIN, roles_pour(cle))
+                self.assertEqual(sorted(roles_pour(cle)), ["super_admin"])
+                self.assertIn("admin", self._matrice()[cle]["locked_roles"])
+                # L'administrateur qui se rouvrirait la ligne est refusé…
+                rouverte = self._regler(self.rh, **{cle: ["super_admin", "admin"]})
+                self.assertEqual(rouverte.status_code, status.HTTP_400_BAD_REQUEST, rouverte.data)
+                # … la direction ne se la retire pas non plus.
+                retiree = self._regler(self.siege, **{cle: []})
+                self.assertEqual(retiree.status_code, status.HTTP_400_BAD_REQUEST, retiree.data)
+                self.assertEqual(sorted(roles_pour(cle)), ["super_admin"])
+
+    def test_la_demande_de_reallocation_reste_ouvrable_au_pays(self):
+        """Choix d'organisation : la matrice peut ouvrir la demande de
+        réallocation au manager — jamais à l'administrateur."""
+        ouverte = self._regler(self.siege, **{"reallocations.request": ["super_admin", "manager"]})
+
+        self.assertEqual(ouverte.status_code, status.HTTP_200_OK, ouverte.data)
+        self.assertEqual(sorted(roles_pour("reallocations.request")), ["manager", "super_admin"])
 
     def test_les_administrateurs_gardent_tout(self):
         """Ni le super administrateur ni l'administrateur ne se retirent un

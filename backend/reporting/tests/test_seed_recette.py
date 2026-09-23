@@ -1,4 +1,4 @@
-"""Jeu de recette : dix-sept pays, quarante comptes, chaque état du circuit.
+"""Jeu de recette : dix-sept pays, trente-sept comptes, chaque état du circuit.
 
 La recette manuelle (docs/recette.md) promet des cas précis — un brouillon de
 collègue qu'on ne soumet pas, un Mali qui bloque, des décisions en attente.
@@ -70,7 +70,7 @@ class SeedRecetteTests(TestCase):
 
         self.assertEqual(Country.objects.count(), 17)
         # Deux comptes au siège, deux par pays (décision 89).
-        self.assertEqual(User.objects.filter(username__startswith="recette.").count(), 36)
+        self.assertEqual(User.objects.filter(username__startswith="recette.").count(), 37)
         self.assertEqual(
             set(User.objects.filter(username__startswith="recette.")
                 .values_list("profile__role", flat=True)),

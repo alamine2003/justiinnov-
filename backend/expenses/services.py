@@ -21,10 +21,14 @@ ZERO = Decimal("0.00")
 def approuve_les_depassements(role):
     """Le rôle peut-il valider une dépense qui dépasse son enveloppe ?
 
-    Ceux qui modifient les enveloppes (``budgets.update``) — les
-    administrateurs par défaut ; le pays n'arbitre pas son propre
-    dépassement. La capacité est la même que pour l'attribution, pour ne
-    pas dériver d'elle.
+    Ceux qui modifient les enveloppes (``budgets.update``) — le super
+    administrateur seul depuis la décision 91 ; le pays n'arbitre pas son
+    propre dépassement. La capacité est la même que pour l'attribution,
+    pour ne pas dériver d'elle. Le super administrateur ne justifie pas
+    (décision 89) et l'administrateur, qui justifie, ne tient pas les
+    enveloppes : sous la politique « soumettre à approbation », une
+    dépense en dépassement attend donc que l'enveloppe soit abondée —
+    montant relevé ou réallocation — avant d'être justifiée.
     """
     return role in roles_pour("budgets.update")
 
@@ -167,13 +171,15 @@ def check_budget_capacity(
             raise RegleViolee(
                 "amount",
                 _(
-                    "{message} La validation d'un dépassement relève d'un "
-                    "administrateur."
+                    "{message} L'enveloppe doit d'abord être abondée — "
+                    "montant relevé ou réallocation — par qui attribue les "
+                    "enveloppes."
                 ).format(message=message),
             )
         if not at_approval:
             return _(
-                "{message} Sa validation relèvera d'un administrateur."
+                "{message} Elle ne sera justifiée qu'une fois l'enveloppe "
+                "abondée par qui attribue les enveloppes."
             ).format(message=message)
 
     return message

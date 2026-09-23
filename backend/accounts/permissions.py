@@ -11,7 +11,7 @@ Les rôles qui portent une capacité viennent de la **configuration**
 (``WorkflowConfiguration.capability_roles``, modifiable par les
 administrateurs dans « Configuration › Permissions »), sinon du défaut
 inscrit ici (décision 43). Trois verrous ne se configurent pas, parce
-qu'ils tiennent la raison d'être de l'application (décision 89) :
+qu'ils tiennent la raison d'être de l'application (décisions 89 et 91) :
 
 - **la déclaration est au pays seul** : ouvrir un dossier, saisir ses
   lignes, déposer ses pièces, soumettre, importer — le manager, pour son
@@ -20,11 +20,14 @@ qu'ils tiennent la raison d'être de l'application (décision 89) :
   justification ou refus, clôture, contrôle d'une pièce, réouverture,
   décision sur une rectification — ni le pays, qui ne contrôle pas ce
   qu'il déclare, ni le super administrateur, qui supervise ;
+- **les enveloppes sont au super administrateur seul** : attribuer,
+  modifier, supprimer une enveloppe, arbitrer une réallocation, tenir les
+  taux (décision 91) — l'administrateur, qui contrôle les dépenses, lit
+  les enveloppes sans les fixer, et le pays ne fixe pas les siennes ;
 - **l'administration est aux administrateurs** — ``admin`` et
   ``super_admin`` gardent toujours comptes, configuration, référentiel,
-  enveloppes, audit et fichiers (``fixes``) et règlent toute la matrice
-  (décision 58) ; le pays n'administre rien et ne fixe pas ses propres
-  enveloppes.
+  audit et fichiers (``fixes``) et règlent toute la matrice (décision
+  58) ; le pays n'administre rien.
 
 Décrire les rôles ailleurs qu'ici les ferait diverger de ce qui est
 réellement appliqué : ``/api/permissions/`` et ``/api/me/`` lisent cette
@@ -130,6 +133,8 @@ _ADMINISTRATEURS = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
 _TOUS = frozenset(Role)
 #: Le contrôleur : l'administrateur, et lui seul (décision 89).
 _CONTROLEUR = frozenset({Role.ADMIN})
+#: Celui qui alloue : le super administrateur, et lui seul (décision 91).
+_ALLOCATEUR = frozenset({Role.SUPER_ADMIN})
 
 
 @dataclass(frozen=True)
@@ -209,6 +214,21 @@ def _controle(key, label, description):
     return Capacite(
         key, GROUPE_CONTROLE, label, description, _CONTROLEUR,
         verrouillees=_TOUS - _CONTROLEUR, fixes=_CONTROLEUR,
+    )
+
+def _enveloppe(key, label, description, *, pays_reglable=False):
+    """Une capacité d'enveloppe : au super administrateur seul (décision 91).
+
+    L'administrateur contrôle les dépenses et lit les enveloppes ; s'il
+    pouvait les fixer, il contrôlerait des dépenses imputées sur l'argent
+    qu'il s'est lui-même alloué. La case lui reste fermée — sinon, réglant
+    la matrice, il se la rouvrirait. Le pays ne fixe pas ses enveloppes,
+    sauf ce que l'organisation choisit de lui ouvrir (``pays_reglable``).
+    """
+    verrous = {Role.ADMIN} if pays_reglable else {Role.ADMIN, *COUNTRY_ROLES}
+    return Capacite(
+        key, GROUPE_ENVELOPPES, label, description, _ALLOCATEUR,
+        verrouillees=frozenset(verrous), fixes=_ALLOCATEUR,
     )
 
 #: Matrice des capacités, source unique, dans l'ordre où l'interface les
@@ -302,38 +322,42 @@ CAPACITES = (
         _("Renommer, rattacher, activer ou désactiver une entité du référentiel."),
         _ADMINISTRATEURS,
     ),
-    Capacite(
-        "budgets.create", GROUPE_ENVELOPPES,
+    _enveloppe(
+        "budgets.create",
         _("Attribuer une enveloppe"),
         _("Créer une enveloppe annuelle ou une sous-enveloppe."),
-        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
-    Capacite(
-        "budgets.update", GROUPE_ENVELOPPES,
+    _enveloppe(
+        "budgets.update",
         _("Modifier une enveloppe"),
         _(
             "Changer le montant, la politique de dépassement, désactiver ; "
             "valider une dépense qui dépasse son enveloppe."
         ),
-        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
-    Capacite(
-        "reallocations.request", GROUPE_ENVELOPPES,
+    _enveloppe(
+        "budgets.delete",
+        _("Supprimer une enveloppe"),
+        _(
+            "Retirer une enveloppe qui n'a jamais servi : aucune dépense "
+            "imputée, aucune réallocation, aucune sous-enveloppe."
+        ),
+    ),
+    _enveloppe(
+        "reallocations.request",
         _("Demander une réallocation"),
         _("Proposer un transfert entre deux enveloppes."),
-        _ADMINISTRATEURS,
+        pays_reglable=True,
     ),
-    Capacite(
-        "reallocations.decide", GROUPE_ENVELOPPES,
+    _enveloppe(
+        "reallocations.decide",
         _("Arbitrer une réallocation"),
         _("Approuver ou refuser un transfert. Jamais le sien."),
-        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
-    Capacite(
-        "rates.manage", GROUPE_ENVELOPPES,
+    _enveloppe(
+        "rates.manage",
         _("Tenir les taux de change"),
         _("Ajouter ou corriger un taux vers la devise de consolidation."),
-        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
     _declaration(
         "expenses.create",

@@ -449,22 +449,22 @@ class OverrunPolicyTests(ExpenseTestCase):
         self.assertEqual(expense.status, Status.SUBMITTED)
 
     def test_politique_approbation_laisse_demander(self):
-        """Le manager doit pouvoir demander le dépassement ; sa validation
-        relève d'un administrateur (décision 58)."""
+        """Le manager doit pouvoir demander le dépassement ; il ne sera
+        justifié qu'une fois l'enveloppe abondée (décision 91)."""
         self.budget.overrun_policy = OverrunPolicy.APPROVAL
         self.budget.save()
         expense, submitted = self._submit("150000.00")
 
         self.assertEqual(submitted.status_code, status.HTTP_200_OK)
-        self.assertIn("relèvera d'un administrateur", submitted.data["warning"])
-        self.assertNotIn("super administrateur", submitted.data["warning"])
+        self.assertIn("l'enveloppe abondée", submitted.data["warning"])
         expense.refresh_from_db()
         self.assertEqual(expense.status, Status.SUBMITTED)
 
-    def test_politique_approbation_validee_par_l_administrateur(self):
-        """L'administrateur contrôle et tient les enveloppes : il valide le
-        dépassement en justifiant (décision 89). Le super administrateur,
-        qui supervise, ne tranche pas."""
+    def test_politique_approbation_attend_que_la_direction_abonde(self):
+        """Décision 91 : l'administrateur justifie mais ne tient plus les
+        enveloppes, le super administrateur les tient mais ne justifie pas.
+        La dépense en dépassement attend donc que la direction abonde
+        l'enveloppe ; l'administrateur la justifie ensuite."""
         self.budget.overrun_policy = OverrunPolicy.APPROVAL
         self.budget.save()
         expense, _ = self._submit("150000.00")
@@ -472,11 +472,20 @@ class OverrunPolicyTests(ExpenseTestCase):
         self.login(self.doo)
         superviseur = self.client.post(f"/api/expenses/{expense.pk}/justify/")
         self.login(self.controller)
-        response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
+        trop_tot = self.client.post(f"/api/expenses/{expense.pk}/justify/")
 
         self.assertEqual(superviseur.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("Dépassement", response.data["warning"])
+        self.assertEqual(trop_tot.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("abondée", str(trop_tot.data["amount"]))
+
+        self.login(self.doo)
+        abondee = self.client.patch(f"/api/budgets/{self.budget.pk}/", {"amount": "200000.00"})
+        self.login(self.controller)
+        response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
+
+        self.assertEqual(abondee.status_code, status.HTTP_200_OK, abondee.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["status"], Status.JUSTIFIED)
 
     def test_le_cumul_des_depenses_est_pris_en_compte(self):
         self.budget.overrun_policy = OverrunPolicy.BLOCK

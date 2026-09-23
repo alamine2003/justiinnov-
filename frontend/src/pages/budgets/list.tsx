@@ -17,6 +17,7 @@ import { useAuth } from "@/context/use-auth"
 import { fetchConfiguration } from "@/lib/accounts"
 import {
   createBudget,
+  deleteBudget,
   fetchBudgetSummary,
   fetchBudgets,
   updateBudget,
@@ -115,6 +116,13 @@ export function BudgetsPage() {
       await createBudget(values)
     }
     setEditing(null)
+    query.reload()
+  }
+
+  // Le rejet remonte au dialogue, qui l'affiche : la page ne relit les
+  // enveloppes qu'après une suppression acceptée.
+  const supprimer = async (budget: Budget) => {
+    await deleteBudget(budget.id)
     query.reload()
   }
 
@@ -234,6 +242,7 @@ export function BudgetsPage() {
             thresholds={thresholds}
             symbol={symbolOf(selected.country, selected.currency)}
             onEdit={canEdit ? ouvrirFormulaire : undefined}
+            onDelete={supprimer}
           />
           <SousEnveloppes
             budgets={sousEnveloppes}
@@ -242,6 +251,7 @@ export function BudgetsPage() {
             canEdit={canEdit}
             onCreate={() => ouvrirFormulaire(null)}
             onEdit={ouvrirFormulaire}
+            onDelete={supprimer}
           />
         </>
       ) : (

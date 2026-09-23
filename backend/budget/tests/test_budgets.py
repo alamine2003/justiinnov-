@@ -50,9 +50,9 @@ class BudgetTestCase(APITestCase):
             name="Togo", code="TG", country_ref="TG-02",
             currency="XOF", timezone="Africa/Lome",
         )
-        # Les administrateurs attribuent et arbitrent (``budgets.create`` =
-        # admin, super_admin). Deux comptes distincts : celui qui demande
-        # une réallocation ne peut pas la décider.
+        # La direction attribue et arbitre (``budgets.create`` = super_admin,
+        # décision 91). Deux comptes distincts : celui qui demande une
+        # réallocation ne peut pas la décider.
         cls.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
         cls.doo = make_user("do.innov", Role.SUPER_ADMIN)
         # Le pays déclare ; il n'attribue ni n'arbitre ses enveloppes.
@@ -162,17 +162,20 @@ class BudgetAccessTests(BudgetTestCase):
         self.budget_togo.refresh_from_db()
         self.assertEqual(self.budget_togo.amount, Decimal("10000000.00"))
 
-    def test_la_rh_attribue_une_enveloppe_comme_la_direction(self):
-        """Décision 58 : l'administrateur a tous les droits, l'argent
-        compris — il attribue une enveloppe comme la direction."""
+    def test_la_rh_lit_les_enveloppes_sans_les_attribuer(self):
+        """Décision 91 : la direction seule alloue ; l'administrateur, qui
+        contrôle les dépenses, lit les enveloppes sans les fixer."""
         self.login(make_user("rh.innov", Role.ADMIN))
 
-        response = self.client.post(
+        attribuee = self.client.post(
             "/api/budgets/",
             {"country": self.togo.pk, "year": 2027, "amount": "1.00"},
         )
+        lue = self.client.get("/api/budgets/")
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(attribuee.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(lue.status_code, status.HTTP_200_OK)
+        self.assertFalse(any(b["can_delete"] for b in lue.data["results"]))
 
     def test_manager_doit_etre_rattache_au_pays(self):
         """Un manager n'a pas de pays propre : c'est ``Country.managers``

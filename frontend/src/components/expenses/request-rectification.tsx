@@ -26,11 +26,11 @@ interface RequestRectificationProps {
  * Bouton « Rectifier » d'une ligne et son dialogue.
  *
  * Seconde exception à l'irréversibilité : une ligne justifiée ou clôturée
- * l'a été à tort. N'importe qui peut le dire — avec un motif — ; un
- * administrateur décide, et la ligne ne bouge qu'à sa décision. Le bouton
- * n'apparaît que lorsque le serveur accepterait la demande : il le dit
- * dans `allowed_actions` (droit, état de la ligne, aucune demande déjà en
- * attente).
+ * l'a été à tort. Le pays ou le super administrateur le disent — avec un
+ * motif — ; un administrateur décide, et la ligne ne bouge qu'à sa
+ * décision. Le bouton n'apparaît que lorsque le serveur accepterait la
+ * demande : il le dit dans `allowed_actions` (droit, état de la ligne,
+ * aucune demande déjà en attente).
  */
 export function RequestRectification({ expense, size = "sm", onRequest }: RequestRectificationProps) {
   const { t } = useTranslation()

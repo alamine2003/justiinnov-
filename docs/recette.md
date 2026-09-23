@@ -25,8 +25,8 @@ dépensé, quand, où, au profit de qui — et où est la preuve ?*
 | Rôle | Qui | Ce qu'il fait |
 |---|---|---|
 | `manager` | le pays | **déclare**, seul : ouvre les dossiers de son pays, saisit ses dépenses, joint les pièces, soumet, importe |
-| `admin` | RH, au siège | **contrôle**, seul, jusqu'à la clôture : met en contrôle, justifie ou refuse, clôture, rouvre, décide des rectifications ; tient les comptes, le référentiel, les enveloppes, l'audit, les exports |
-| `super_admin` | direction | **supervise** : voit tout, relit l'audit, administre ; ne déclare ni ne contrôle |
+| `admin` | RH, au siège | **contrôle**, seul, jusqu'à la clôture : met en contrôle, justifie ou refuse, clôture, rouvre, décide des rectifications ; tient les comptes, le référentiel, l'audit, les exports ; **lit** les enveloppes |
+| `super_admin` | direction | **supervise et alloue** : voit tout, relit l'audit, administre ; seul, attribue, modifie et supprime les enveloppes, arbitre les réallocations (décision 91) ; ne déclare ni ne contrôle |
 
 Ni l'administrateur ni le super administrateur ne créent de dossier ni ne
 déposent de pièce. Un dossier appartient à **un pays**, pour toujours : seul
@@ -108,11 +108,12 @@ bandeau, compte par compte.
 - Par pays : deux équipes (la première porte le nom de la capitale), un
   projet, un client, un prospect, une enveloppe et une sous-enveloppe pour la
   première équipe.
-- **36 comptes**, préfixés `recette.` :
+- **37 comptes**, préfixés `recette.` :
 
 | Compte | Rôle | Périmètre |
 |---|---|---|
 | `recette.dg` | super_admin | tout |
+| `recette.do` | super_admin | tout — tranche les réallocations de `recette.dg` |
 | `recette.rh` | admin | tout |
 | `recette.<pays>.manager` | manager | le pays entier (`<pays>` = `tg`, `sn`, `ci`…) |
 | `recette.<pays>.equipe` | manager | la première équipe du pays seulement |
@@ -134,7 +135,8 @@ bandeau, compte par compte.
   Guinée et RDC **en dépassement**, Mali en politique **« bloquer »**, les
   autres à l'aise.
 - **Réallocations** demandées par `recette.dg` : une en attente au Togo, au
-  Sénégal et au Cameroun ; une approuvée et une refusée au Togo.
+  Sénégal et au Cameroun ; une approuvée et une refusée au Togo par
+  `recette.do` — nul ne tranche sa propre demande.
 - **Taux de change** : un taux en euros daté du **mois prochain**, qui ne doit
   pas être « en vigueur ».
 
@@ -201,10 +203,15 @@ mesure ; noter tout écart avec le compte, le dossier et une capture.
 - [ ] `R-TG-07` : décider la **rectification** demandée par le manager, sur
       la fiche du dossier. Approuvée, *attendu* : la ligne revient **en
       contrôle**, pas au brouillon, montant justifié à zéro.
-- [ ] **Budgets › Réallocations** : approuver celle du Sénégal, refuser celle
-      du Cameroun avec un motif.
-- [ ] **Configuration › Général**, taux de change : le taux en euros du mois
-      prochain est « historique », celui du 1er janvier « en vigueur ».
+- [ ] **Budgets** : il **lit** les enveloppes et leur consommation, sans
+      bouton « Attribuer », « Modifier » ni « Supprimer », ni décision sur
+      une réallocation — les enveloppes sont à la direction (décision 91).
+- [ ] Une ligne en **dépassement** sous politique « soumettre à
+      approbation » : la justifier est refusé tant que la direction n'a pas
+      abondé l'enveloppe.
+- [ ] **Configuration › Général**, taux de change : consultables, le taux en
+      euros du mois prochain est « historique », celui du 1er janvier « en
+      vigueur » ; aucun ajout possible.
 - [ ] **Configuration › Permissions** : les lignes de la déclaration et du
       contrôle sont figées. Retirer au pays la demande de rectification, se
       reconnecter en manager, constater que le bouton « Rectifier » a
@@ -230,6 +237,16 @@ mesure ; noter tout écart avec le compte, le dossier et une capture.
       congolais.
 - [ ] Réallocation en attente du Togo : **pas de décision possible** — il l'a
       demandée lui-même.
+- [ ] **Budgets** : attribuer une sous-enveloppe à la seconde équipe d'un
+      pays, puis la **supprimer** : le bouton « Supprimer » n'apparaît que
+      sur une enveloppe qui n'a jamais servi, et l'historique garde la
+      suppression. Sur l'enveloppe du Togo, qui porte des dépenses, pas de
+      « Supprimer » : elle se désactive.
+
+### Super administrateur (opérations) — `recette.do`
+
+- [ ] **Budgets › Réallocations** : approuver celle du Sénégal, refuser celle
+      du Cameroun avec un motif.
 
 ### Partout
 
