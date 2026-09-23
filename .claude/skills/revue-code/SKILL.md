@@ -40,9 +40,10 @@ touchés par app : un changement dans `expenses` sans test dans
   hors périmètre, clés étrangères de la charge utile restreintes au
   périmètre (`ChampCloisonne`), une seule règle (`accounts.perimetre.filtrer`).
 - Rôles : `accounts/permissions.py` est la seule source ; trois rôles,
-  trois verrous (déclaration au pays, contrôle à l'administrateur,
-  administration aux administrateurs) ; enveloppes, exports, réouverture,
-  audit et comptes sont réservés selon la matrice.
+  quatre verrous (déclaration au pays, contrôle à l'administrateur,
+  enveloppes au super administrateur, administration aux administrateurs) ;
+  exports, réouverture, audit et comptes sont réservés selon la matrice.
+  Rien ne se supprime hors brouillon et enveloppe jamais servie.
 - Toute action sensible laisse une trace (`AuditLog`, `ChangeLog`) avec
   auteur, IP (`core.requetes.client_ip`), avant et après.
 

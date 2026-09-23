@@ -69,10 +69,11 @@ l'application.
   soumet et importe. Au siège, l'`admin` (RH) **contrôle chaque dossier de
   bout en bout, à lui seul** — mise en contrôle, justification ou refus,
   clôture, contrôle des pièces, réouverture, décision sur une
-  rectification — et tient les comptes, le référentiel, les enveloppes,
-  l'audit et les exports ; le `super_admin` (DG, DO, CEO, développeurs)
-  **supervise** : il voit tout, relit le journal d'audit et administre,
-  sans déclarer ni contrôler. Ni l'un ni l'autre ne crée de dossier ni ne
+  rectification — et tient les comptes, le référentiel, l'audit et les
+  exports ; il **lit** les enveloppes sans les fixer. Le `super_admin`
+  (DG, DO, CEO, développeurs) **supervise et alloue** : il voit tout,
+  relit le journal d'audit, administre, et **seul il attribue, modifie et
+  supprime les enveloppes** (décision 91), sans déclarer ni contrôler. Ni l'un ni l'autre ne crée de dossier ni ne
   dépose de justificatif. Il n'y a plus de DM ni de DF : leurs comptes ont
   été désactivés par la migration `accounts.0006_trois_roles`, et un
   administrateur décide de leur sort. Le siège voit toujours tous les
@@ -89,7 +90,8 @@ l'application.
   « Configuration › Permissions » (`PATCH /api/permissions/`, stocké dans
   `WorkflowConfiguration.capability_roles`, journalisé) ; le réglage
   s'applique à la requête suivante, côté vues, services, notifications et
-  `allowed_actions`. **Trois verrous ne se règlent pas** (décision 89) :
+  `allowed_actions`. **Quatre verrous ne se règlent pas** (décisions 89
+  et 91) :
   **la déclaration est au pays seul** (`expenses.create`,
   `expenses.update`, `expenses.delete`, `proofs.upload`,
   `dossiers.submit` : le `manager`, fixe, jamais le siège ; `data.import`
@@ -97,9 +99,13 @@ l'application.
   l'administrateur seul** (`expenses.review`, `expenses.validate`,
   `expenses.close`, `proofs.review`, `dossiers.reopen`,
   `rectifications.decide` : `admin`, fixe, jamais le pays ni le
-  `super_admin`) ; **l'administration est aux administrateurs** —
+  `super_admin`) ; **les enveloppes sont au super administrateur seul**
+  (`budgets.create`, `budgets.update`, `budgets.delete`,
+  `reallocations.request`, `reallocations.decide`, `rates.manage` :
+  `super_admin`, fixe, jamais l'`admin` — qui règle la matrice et se les
+  rouvrirait sinon) ; **l'administration est aux administrateurs** —
   `admin` et `super_admin` gardent comptes, configuration, référentiel,
-  enveloppes, audit et exports et règlent toute la matrice (décision 58).
+  audit et exports et règlent toute la matrice (décision 58).
   Le `manager` ne reçoit jamais l'administration (comptes, configuration,
   journal d'audit, ouverture ou modification d'un pays) ni l'arbitrage des
   enveloppes. Le référentiel d'un pays et la demande de réallocation
@@ -109,18 +115,21 @@ l'application.
 - **Les administrateurs administrent, et attribuent les droits.** `admin`
   et `super_admin` sont fixes sur chaque capacité d'administration
   (`Capacite.fixes`) et règlent chaque ligne de la matrice
-  (`reglable_par`), l'argent compris. Ils ne sont pas fixes partout : la
-  déclaration leur est fermée, et le contrôle est fermé au `super_admin`.
-  Conséquence assumée : l'administrateur qui contrôle tient aussi les
-  enveloppes, donc la politique « approbation » d'un dépassement se valide
-  en justifiant, par lui.
-- **Par défaut, les enveloppes sont l'affaire des administrateurs.**
-  Attribuer une enveloppe, demander, approuver ou refuser une réallocation,
-  tenir les taux de change, valider un dépassement : `budgets.create`,
-  `budgets.update`, `reallocations.request`, `reallocations.decide`,
-  `rates.manage` sont à `admin` et `super_admin` (décision 58 ; avant
-  elle, à `super_admin` seul). Le pays déclare ce qui a été dépensé, il ne
-  fixe pas ce qui peut l'être.
+  (`reglable_par`). Ils ne sont pas fixes partout : la déclaration leur
+  est fermée, le contrôle est fermé au `super_admin`, les enveloppes à
+  l'`admin`.
+- **Le super administrateur alloue, l'administrateur contrôle**
+  (décision 91). Attribuer, modifier ou supprimer une enveloppe, demander,
+  approuver ou refuser une réallocation, tenir les taux de change, valider
+  un dépassement : le `super_admin` seul. L'`admin` lit les enveloppes et
+  leur consommation ; il ne contrôle pas des dépenses imputées sur
+  l'argent qu'il se serait alloué. Conséquence assumée : sous la politique
+  « soumettre à approbation », une dépense en dépassement attend que la
+  direction **abonde** l'enveloppe (montant relevé ou réallocation) avant
+  que l'`admin` ne la justifie. Nul ne tranche sa propre réallocation : il
+  faut deux comptes `super_admin`. Le pays déclare ce qui a été dépensé,
+  il ne fixe pas ce qui peut l'être ; la demande de réallocation reste
+  ouvrable au pays par la matrice.
 - **Le journal d'audit est l'affaire de la RH et de la direction.**
   `audit.read` = `admin`, `super_admin` par défaut ; jamais le pays. Le
   journal relit les décisions de l'administrateur autant que celles des
@@ -173,7 +182,12 @@ l'application.
 - **Une dépense non justifiée pèse quand même sur l'enveloppe.** L'absence de
   preuve ne fait pas revenir l'argent ; elle se lit dans l'écart entre dépensé
   et justifié.
-- **Rien ne se supprime, rien ne se purge**, hors brouillon. Le retrait
+- **Rien ne se supprime, rien ne se purge**, hors brouillon — et hors
+  enveloppe **jamais servie** : sans dépense imputée, sans réallocation,
+  sans sous-enveloppe, elle n'a pas plus de valeur probante qu'un
+  brouillon, et le `super_admin` la supprime (`DELETE /api/budgets/{id}/`,
+  `budgets.delete`, trace dans l'historique ; décision 91). Une enveloppe
+  qui a servi se désactive. Le retrait
   d'une entité de référentiel se fait par désactivation (`is_active`) ;
   l'API répond 405 sur `DELETE`. La conservation est illimitée : ni tâche
   de ménage, ni rétention sur les dossiers, les pièces ou les journaux.
