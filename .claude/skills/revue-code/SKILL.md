@@ -21,10 +21,14 @@ touchés par app : un changement dans `expenses` sans test dans
 ### Étape 2 : passer la liste de contrôle
 
 **Règles métier**
-- Le manager déclare, le DM contrôle, le DF constate : aucune route ne
-  permet à un rôle de pays de justifier, ni au DM de trancher.
+- Le manager déclare, l'administrateur contrôle, le super administrateur
+  supervise (décision 89) : aucune route ne permet au pays de contrôler, ni
+  au siège de déclarer (dossier, ligne, pièce, soumission, import), ni au
+  super administrateur de trancher.
+- Un dossier appartient à un pays : il n'en change jamais, et seul ce
+  pays remplit ses lignes et ses pièces.
 - Une dépense soumise ne se modifie ni ne se supprime ; la seule
-  réouverture est celle des administrateurs, motivée et tracée.
+  réouverture est celle de l'administrateur, motivée et tracée.
 - Une dépense non justifiée pèse sur l'enveloppe ; l'écart se calcule côté
   serveur ; l'interface affiche, elle ne recalcule pas.
 - Rien ne se supprime : `PROTECT`, désactivation, 405 sur `DELETE`.
@@ -35,8 +39,9 @@ touchés par app : un changement dans `expenses` sans test dans
 - Filtrage sur le queryset (`CountryScopedMixin`, `team_lookup`), 404 muet
   hors périmètre, clés étrangères de la charge utile restreintes au
   périmètre (`ChampCloisonne`), une seule règle (`accounts.perimetre.filtrer`).
-- Rôles : `accounts/permissions.py` est la seule source. DM et DF n'ont
-  aucun droit d'administration ; enveloppes, exports, import, réouverture,
+- Rôles : `accounts/permissions.py` est la seule source ; trois rôles,
+  trois verrous (déclaration au pays, contrôle à l'administrateur,
+  administration aux administrateurs) ; enveloppes, exports, réouverture,
   audit et comptes sont réservés selon la matrice.
 - Toute action sensible laisse une trace (`AuditLog`, `ChangeLog`) avec
   auteur, IP (`core.requetes.client_ip`), avant et après.

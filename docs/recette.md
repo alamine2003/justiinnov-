@@ -20,18 +20,18 @@ justificatifs. **Elle n'autorise pas une dépense** : l'argent est déjà dépen
 quand on la déclare. Elle répond à quatre questions : *qu'est-ce qui a été
 dépensé, quand, où, au profit de qui — et où est la preuve ?*
 
-### Les cinq rôles
+### Les trois rôles
 
 | Rôle | Qui | Ce qu'il fait |
 |---|---|---|
-| `manager` | le pays | déclare : saisit ses dépenses, joint les pièces, soumet |
-| `dm` | directeur manager, au siège | met en contrôle ce que le pays a soumis |
-| `df` | directeur financier, au siège | constate : justifie, refuse, clôture |
-| `admin` | RH, au siège | tient les comptes, le référentiel, les enveloppes, l'audit, les fichiers ; rouvre |
-| `super_admin` | direction | peut tout |
+| `manager` | le pays | **déclare**, seul : ouvre les dossiers de son pays, saisit ses dépenses, joint les pièces, soumet, importe |
+| `admin` | RH, au siège | **contrôle**, seul, jusqu'à la clôture : met en contrôle, justifie ou refuse, clôture, rouvre, décide des rectifications ; tient les comptes, le référentiel, les enveloppes, l'audit, les exports |
+| `super_admin` | direction | **supervise** : voit tout, relit l'audit, administre ; ne déclare ni ne contrôle |
 
-Le `dm` et le `df` peuvent être **restreints à des pays**. Un `manager`
-rattaché à une **équipe** ne voit que ses dossiers ; sans équipe, tout son pays.
+Ni l'administrateur ni le super administrateur ne créent de dossier ni ne
+déposent de pièce. Un dossier appartient à **un pays**, pour toujours : seul
+ce pays le remplit. Un `manager` rattaché à une **équipe** ne voit que ses
+dossiers ; sans équipe, tout son pays.
 
 ### Le circuit d'une dépense
 
@@ -48,7 +48,8 @@ brouillon → soumis → en contrôle → justifié / non justifié → clôtur�
   au pays un dossier soumis pour qu'il le corrige) et la **rectification** (le
   pays demande de revoir une ligne déjà constatée, un administrateur qui n'est
   pas le demandeur décide).
-- **Deux personnes** : celui qui a saisi une dépense ne peut pas la justifier.
+- **Deux personnes** : le pays déclare, l'administrateur contrôle ; personne
+  ne justifie ce qu'il a saisi.
 
 ### L'argent : enveloppes, engagé, consommé, justifié
 
@@ -72,8 +73,9 @@ brouillon → soumis → en contrôle → justifié / non justifié → clôtur�
 - **Traçabilité** : toute action sensible laisse une trace — qui, quoi, quand,
   depuis quelle adresse, avant et après. Rien ne s'efface.
 - **Droits réglables** : chaque action est une « capacité » que la RH attribue
-  aux rôles dans *Configuration › Permissions*, avec deux verrous que personne
-  ne lève (les administrateurs gardent tout ; le manager ne contrôle jamais).
+  aux rôles dans *Configuration › Permissions*, avec trois verrous que
+  personne ne lève : le pays seul déclare, l'administrateur seul contrôle, les
+  administrateurs gardent l'administration.
 
 Pour aller plus loin : `CLAUDE.md` (les règles), `docs/model-de-donnees.md`
 (le modèle et les décisions numérotées), `DESIGN.md` (l'interface).
@@ -106,16 +108,12 @@ bandeau, compte par compte.
 - Par pays : deux équipes (la première porte le nom de la capitale), un
   projet, un client, un prospect, une enveloppe et une sous-enveloppe pour la
   première équipe.
-- **40 comptes**, préfixés `recette.` :
+- **36 comptes**, préfixés `recette.` :
 
 | Compte | Rôle | Périmètre |
 |---|---|---|
 | `recette.dg` | super_admin | tout |
 | `recette.rh` | admin | tout |
-| `recette.dm` | dm | tous les pays |
-| `recette.dm.ouest` | dm | Afrique de l'Ouest (10 pays) |
-| `recette.df` | df | tous les pays |
-| `recette.df.centre` | df | Afrique centrale (Cameroun, Gabon, Tchad, Congo, RDC) |
 | `recette.<pays>.manager` | manager | le pays entier (`<pays>` = `tg`, `sn`, `ci`…) |
 | `recette.<pays>.equipe` | manager | la première équipe du pays seulement |
 
@@ -125,8 +123,8 @@ bandeau, compte par compte.
 |---|---|---|---|
 | 01 | 2 | brouillon du manager du pays | soumettre ; au Mali, la soumission est **bloquée** par l'enveloppe |
 | 02 | 1 | brouillon du manager d'équipe | le manager du pays **ne peut pas** le soumettre |
-| 03 | 1 | soumis, avec pièce | mise en contrôle par un DM ; réouverture par la RH |
-| 04 | 2 | en contrôle | justification ou refus par un DF |
+| 03 | 1 | soumis, avec pièce | mise en contrôle et réouverture par la RH |
+| 04 | 2 | en contrôle | justification ou refus par la RH |
 | 05 | 1 | en contrôle, deux lignes justifiées (dont une à moitié), une ligne payée en euros en attente | justification partielle, conversion de devise ; **ne se rouvre plus** |
 | 06 | 2 | non justifié, soumis sans pièce | motif du refus, écart consommé / justifié |
 | 07 | 1 | clôturé, avec une **demande de rectification en attente** | décision de rectification par un administrateur |
@@ -163,6 +161,9 @@ mesure ; noter tout écart avec le compte, le dossier et une capture.
 - [ ] `R-TG-05`, ligne justifiée : **demander une rectification** avec un
       motif. *Attendu* : la demande apparaît « en attente » ; le motif est
       obligatoire.
+- [ ] **Importer** (sur la liste des dossiers) : simuler l'import d'un
+      classeur du Togo. *Attendu* : le compte rendu de la simulation, rien
+      d'écrit ; une équipe inconnue est refusée, il faut la demander à la RH.
 - [ ] Aucune entrée **Audit**, **Configuration**, **Pays** dans le menu.
 - [ ] **Cloisonnement** : avec `recette.dg`, ouvrir `R-SN-03` et copier son
       adresse ; la coller dans la session du manager togolais. *Attendu* :
@@ -178,18 +179,13 @@ mesure ; noter tout écart avec le compte, le dossier et une capture.
 - [ ] Soumettre `R-ML-01`. *Attendu* : refus, avec le montant du dépassement
       et le nom de l'enveloppe.
 
-### Directeur manager — `recette.dm`, puis `recette.dm.ouest`
+### Administrateur (RH) — `recette.rh`
 
-- [ ] `R-TG-03` : **mettre en contrôle**. *Attendu* : le dossier passe « en
+- [ ] **Dossiers** : filtrer par pays avec « Tous les pays » ; l'adresse
+      garde le choix (`?country=`).
+- [ ] Ni **Nouveau dossier** ni **Importer** : le siège ne déclare pas.
+- [ ] `R-SN-03` : **mettre en contrôle**. *Attendu* : le dossier passe « en
       contrôle ».
-- [ ] Aucun bouton « Justifier » ni « Refuser » : le DM contrôle, il ne
-      constate pas.
-- [ ] Pas d'**Audit**, pas de **Configuration**.
-- [ ] Avec `recette.dm.ouest` : le Cameroun, le Gabon, le Tchad, le Congo, la
-      RDC, Djibouti et Madagascar **n'apparaissent pas**.
-
-### Directeur financier — `recette.df`, puis `recette.df.centre`
-
 - [ ] `R-TG-04` : justifier une ligne, **refuser** l'autre. *Attendu* : le
       refus exige un motif.
 - [ ] Justifier une ligne **en partie** (montant inférieur) : l'écart apparaît
@@ -198,10 +194,6 @@ mesure ; noter tout écart avec le compte, le dossier et une capture.
       tranchées. *Attendu* : pas de clôture tant qu'une ligne est en suspens.
 - [ ] `R-TG-05`, ligne en euros : le montant d'origine (150 EUR), le taux et
       le montant en FCFA sont affichés.
-- [ ] Avec `recette.df.centre` : seuls les cinq pays d'Afrique centrale.
-
-### RH — `recette.rh`
-
 - [ ] `R-TG-03` : **rouvrir** avec un motif. *Attendu* : le dossier revient au
       brouillon, le motif est affiché, le manager du Togo est notifié.
 - [ ] `R-TG-05` : **pas de réouverture possible** — une ligne est déjà
@@ -211,20 +203,26 @@ mesure ; noter tout écart avec le compte, le dossier et une capture.
       contrôle**, pas au brouillon, montant justifié à zéro.
 - [ ] **Budgets › Réallocations** : approuver celle du Sénégal, refuser celle
       du Cameroun avec un motif.
-- [ ] Créer un dossier soi-même, le soumettre, puis essayer de le
-      **justifier**. *Attendu* : refusé — il faut deux personnes.
 - [ ] **Configuration › Général**, taux de change : le taux en euros du mois
       prochain est « historique », celui du 1er janvier « en vigueur ».
-- [ ] **Configuration › Permissions** : retirer une capacité au DF, se
-      reconnecter en DF, constater que le bouton a disparu ; la remettre.
+- [ ] **Configuration › Permissions** : les lignes de la déclaration et du
+      contrôle sont figées. Retirer au pays la demande de rectification, se
+      reconnecter en manager, constater que le bouton « Rectifier » a
+      disparu ; la remettre.
 - [ ] **Configuration › Utilisateurs** : créer un compte ; l'adresse doit
       être en `@innovpharma.net`, et une adresse déjà prise est refusée.
 - [ ] **Audit** : retrouver la réouverture, la rectification et la
       réallocation, avec l'auteur, l'heure et l'avant / après.
 - [ ] **Exports** (menu d'export du Pilotage, des Dossiers ou du Registre) : un export
-      Excel du Togo, puis un PDF. Avec un compte DF, le menu n'existe pas.
+      Excel du Togo, puis un PDF. Avec un compte manager, le menu n'existe
+      pas.
 
-### Direction — `recette.dg`
+### Super administrateur (direction) — `recette.dg`
+
+- [ ] **Dossiers** : tous les pays, filtrables ; ni création, ni import.
+- [ ] Ouvrir `R-TG-04` : **aucun** bouton de contrôle — il supervise, il ne
+      tranche pas. Pas de « Rouvrir » non plus.
+- [ ] **Audit** : il relit les décisions de la RH.
 
 - [ ] **Pilotage** consolidé en FCFA : Sénégal, Cameroun, Madagascar en
       **alerte** ; Guinée et RDC en **dépassement** ; les autres normaux.

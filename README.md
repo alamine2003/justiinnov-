@@ -97,7 +97,7 @@ seulement** :
 docker compose exec backend python manage.py seed_recette --base-jetable
 ```
 
-La commande ouvre les dix-sept filiales, crée quarante comptes `recette.*`
+La commande ouvre les dix-sept filiales, crée trente-six comptes `recette.*`
 (un mot de passe commun tiré au hasard, écrit dans `backend/recette.local.md`,
 ignoré par git) et huit dossiers par pays qui couvrent chaque état du circuit.
 Elle refuse de tourner hors du mode debug : rien ne se supprime dans
@@ -107,27 +107,22 @@ parcours à tester est [`docs/recette.md`](docs/recette.md).
 
 ### Rôles et périmètres
 
-Cinq rôles, calqués sur l'organisation du groupe :
+Trois rôles (décision 89) : le pays déclare, l'administrateur contrôle, le
+super administrateur supervise.
 
 | Rôle | Libellé | Qui | Périmètre | Peut |
 |------|---------|-----|-----------|------|
-| `manager` | Manager (pays) | responsable dans une filiale | son pays, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | saisir ses dépenses, déposer les justificatifs, **soumettre** (déclarer) ; le référentiel de son pays est tenu par la RH |
-| `dm` | DM — directeur manager (siège) | au siège | tous pays, **restrictible** à certains | **mettre en contrôle** une dépense soumise (`expenses.review`) ; lire l'historique du référentiel de son périmètre |
-| `df` | DF — directeur financier (siège) | au siège | tous pays, **restrictible** à certains | mettre en contrôle, contrôler les pièces (`proofs.review`), **justifier ou non** (`expenses.validate`), clôturer (`expenses.close`) ; lire l'historique du référentiel de son périmètre |
-| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | **tout** : le circuit, les comptes et rôles, les pays et le référentiel de tous les pays, les **enveloppes, réallocations et taux de change**, le **journal d'audit**, les **imports et exports**, la **réouverture** d'un dossier, la **décision sur une rectification**, la double authentification — et **la matrice des droits**, qu'il règle ligne par ligne pour attribuer chaque droit à qui il veut (décision 58) |
-| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | tout, à égalité avec l'administrateur ; les deux rôles ne se distinguent que par leur libellé et ne peuvent se voir retirer aucun droit |
+| `manager` | Manager (pays) | responsable dans une filiale | **son pays**, obligatoire, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | **seul à déclarer** : ouvrir les dossiers de son pays, saisir les lignes, déposer les justificatifs, **soumettre**, importer un classeur ; le référentiel de son pays est tenu par la RH |
+| `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | **seul à contrôler, de bout en bout** : mise en contrôle, justification ou refus, clôture, contrôle des pièces, **réouverture**, **décision sur une rectification** ; et l'administration : comptes et rôles, pays et référentiel, **enveloppes, réallocations et taux de change**, **journal d'audit**, **exports**, double authentification, **matrice des droits** |
+| `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | **superviser** : tout lire, relire le journal d'audit, administrer à égalité avec l'administrateur — sans déclarer ni contrôler |
 
-Il n'y a ni « direction des opérations » ni « auditeur » distincts : la DO
-est super administratrice, l'audit revient à la RH.
-
-**Par défaut, le DM et le DF n'ont aucun droit d'administration** —
-décision du produit : ils ne sont ni administrateurs ni super
-administrateurs. Ils gardent leurs fonctions de contrôle (`expenses.review`
-pour le DM ; `expenses.validate`, `expenses.close`, `proofs.review` pour
-le DF) et la lecture de l'historique du référentiel (`history.read`).
-Comptes, pays, référentiel, fichiers, réouverture, journal d'audit,
-enveloppes, réallocations, taux de change et validation d'un dépassement
-relèvent des administrateurs — RH et direction à égalité (décision 58).
+Il n'y a plus de DM ni de DF : le contrôle qu'ils se partageaient revient à
+l'administrateur seul. La migration `accounts.0006_trois_roles` a désactivé
+leurs comptes, passés au rôle `manager`, sans leur donner les droits d'un
+administrateur ; un administrateur décide ensuite de leur rôle et les
+réactive. Ni l'administrateur ni le super administrateur ne créent de
+dossier ni ne déposent de justificatif ; les brouillons qu'ils avaient
+ouverts ont été rendus au pays (`expenses.0017`).
 
 **La matrice des droits se règle dans l'application.** Chaque action de
 l'API est une capacité nommée — `users.create`, `referentiel.update`,
@@ -140,37 +135,37 @@ Permissions » (`GET`/`PATCH /api/permissions/`, réponse : la matrice
 appliquée avec, pour chaque capacité, `roles`, `default_roles`,
 `fixed_roles`, `locked_roles`) ; le choix est gardé dans
 `WorkflowConfiguration.capability_roles`, journalisé avec l'avant et
-l'après, et s'applique à la requête suivante. Deux verrous ne se règlent
-pas : les administrateurs — `admin` et `super_admin` — gardent tout et
-règlent toute la matrice, et le pays ne reçoit jamais le contrôle,
-l'administration ni l'arbitrage des enveloppes. `/api/me/`
-traduit la matrice en capacités que l'interface se contente de lire, et
-chaque dossier ou ligne porte `allowed_actions` — saisie et circuit —
-calculées par le serveur.
+l'après, et s'applique à la requête suivante. Trois verrous ne se règlent
+pas : **la déclaration est au pays seul** ; **le contrôle est à
+l'administrateur seul** ; **l'administration est aux administrateurs**,
+qui règlent toute la matrice — et le pays ne reçoit jamais le contrôle,
+l'administration ni l'arbitrage des enveloppes. `/api/me/` traduit la
+matrice en capacités que l'interface se contente de lire, et chaque
+dossier ou ligne porte `allowed_actions` — saisie et circuit — calculées
+par le serveur.
 
-**Le manager déclare, le DM contrôle, le DF constate.** Le circuit est
-tenu par trois personnes : le `manager` soumet, le `dm` met en contrôle,
-le `df` tranche — justifie, refuse ou clôture. Un `manager` ne peut ni
-justifier, ni déclarer non justifiée, ni mettre en contrôle, ni clôturer
-une dépense — pas même les siennes. Autrement, il pourrait décaisser puis
-se donner quitus, ce qui viderait l'application de sa raison d'être. Un
-`dm` ne constate pas. Le `df` peut mettre en contrôle comme tout le
-siège (`expenses.review`), mais il est le seul, avec les administrateurs,
-à constater. `admin` et `super_admin` peuvent tout.
+**Le manager déclare, l'administrateur contrôle, le super administrateur
+supervise.** Un `manager` ne peut ni justifier, ni déclarer non justifiée,
+ni mettre en contrôle, ni clôturer une dépense — pas même les siennes.
+Autrement, il pourrait décaisser puis se donner quitus, ce qui viderait
+l'application de sa raison d'être. La règle des quatre yeux reste en garde :
+celui qui a saisi une dépense ne la contrôle pas.
 
-La séparation vaut aussi **à l'intérieur du siège** : celui qui a saisi une
-dépense ne peut pas la justifier lui-même. Il faut deux personnes.
+**Un dossier appartient à un pays.** Son pays est attribué à la création,
+dans le périmètre de son auteur, et ne change plus. Seul ce pays remplit
+ses lignes et ses pièces ; un brouillon ne se modifie et ne se soumet que
+par son auteur. La liste des dossiers se filtre par pays (`?country=`).
 
 Le référentiel d'un pays — équipes, projets, intitulés, catégories,
 bénéficiaires — est tenu par la RH et les super administrateurs pour tous
-les pays (`referentiel.create`, `referentiel.update`) ; ni le `manager`,
-ni le `dm`, ni le `df` n'y écrivent par défaut.
+les pays (`referentiel.create`, `referentiel.update`) ; le `manager` n'y
+écrit pas par défaut.
 
-Le périmètre est porté par le profil : un compte du siège sans pays
-explicite couvre tous les pays ; `dm` et `df` peuvent être restreints à
-certains, `admin` et `super_admin` jamais. Un `manager` **sans** périmètre
-ne voit rien — l'absence de périmètre ne vaut jamais autorisation générale.
-Un pays hors périmètre répond 404, sans révéler son existence.
+Le périmètre est porté par le profil : le siège couvre toujours tous les
+pays, et ses pays éventuels sont vidés à l'enregistrement ; un `manager`
+doit avoir son pays — **sans** périmètre il ne verrait rien, l'absence de
+périmètre ne valant jamais autorisation générale. Un pays hors périmètre
+répond 404, sans révéler son existence.
 
 ### Comptes, double authentification et adresses professionnelles
 
@@ -227,23 +222,24 @@ un cas prévu : les écrans sont conçus pour un poste de travail, et les
 captures de `DESIGN.md` ne vérifient que le grand écran — l'écran de
 connexion mis à part.
 
-### Fichiers : imports et exports réservés aux administrateurs
+### Fichiers : les exports au siège, l'import au pays
 
-L'import du classeur Excel et les exports — Excel, CSV, Word et PDF, classés
-par exercice ou par mois — sont réservés à `admin` et `super_admin`. Tous les
-autres travaillent dans l'application : un fichier sorti du système n'est
-plus ni calculé ni tracé, et un fichier entré contourne la saisie ligne à
-ligne. Chaque export laisse une entrée dans le journal d'audit. La
-conservation est illimitée : rien n'est jamais purgé, ni dossier, ni pièce,
-ni journal, et les sauvegardes suivent la même règle (copie mensuelle gardée
-pour toujours).
+Les exports — Excel, CSV, Word et PDF, classés par exercice ou par mois —
+sont réservés à `admin` et `super_admin`. Un fichier sorti du système n'est
+plus ni calculé ni tracé ; chaque export laisse une entrée dans le journal
+d'audit. L'import d'un classeur Excel est une **déclaration** : il revient
+au pays (`data.import`, `manager` par défaut, jamais le siège — décision 89),
+depuis la page « Importer » des dossiers (`/dossiers/import`), dans son pays
+et ses équipes ; il ne crée une équipe ou un responsable que pour qui a ce
+droit sur le référentiel. La conservation est illimitée : rien n'est jamais
+purgé, ni dossier, ni pièce, ni journal, et les sauvegardes suivent la même
+règle (copie mensuelle gardée pour toujours).
 
 Les exports prennent `year` (exercice), `month` facultatif (1 à 12, pour un
 classement par mois) et `country`. Le CSV est en UTF-8 avec BOM, séparateur
 `;`, pour s'ouvrir tel quel dans Excel ; les totaux ne figurent que si une
 seule devise est concernée — additionner deux devises serait un chiffre
-faux. Le rapport périodique envoyé par l'ordonnanceur n'attache le classeur
-qu'aux administrateurs ; les autres reçoivent le message sans pièce jointe.
+faux. Le rapport périodique part au siège, classeur joint.
 
 ## Démarrage manuel (sans conteneur backend ni frontend)
 
@@ -711,7 +707,7 @@ l'envoi, jamais avant.
 
 ## Import Excel et N°ORDRE
 
-`POST /api/imports/expenses.xlsx` (champ `file`, administrateurs seulement)
+`POST /api/imports/expenses.xlsx` (champ `file`, le pays : `data.import`)
 lit deux classeurs : l'export de la plateforme, et le **classeur historique du
 client** — feuille « BASE DE DONNEES ACTIONS », titre et note en tête,
 en-tête en septième ligne, neuf colonnes (N°ORDRE, DATE, TEAM, OWNER,
@@ -747,8 +743,12 @@ obligatoires.
   (« Pièce : Reçu(justif incomplet) ») ; la pièce elle-même se dépose ensuite
   sur le dossier.
 - Une équipe ou un manager que le pays ne connaît pas est **créé dans le
-  pays** (et journalisé dans l'historique) ; un homonyme d'un autre pays n'est
-  jamais réutilisé. `?dry_run=true` valide tout, compte ce qui serait créé
+  pays** (et journalisé dans l'historique) **si l'importateur a ce droit sur
+  le référentiel** (`referentiel.create`, `managers.create` — la RH par
+  défaut, que la matrice peut ouvrir au pays) ; sinon la ligne est refusée
+  et nomme ce qu'il faut demander. Un homonyme d'un autre pays n'est jamais
+  réutilisé. Un manager rattaché à des équipes n'importe que pour elles, et
+  jamais dans le brouillon d'un collègue. `?dry_run=true` valide tout, compte ce qui serait créé
   (`dossiers_crees`, `lignes_creees`, `equipes_creees`, `managers_crees`) et
   n'écrit rien.
 - Rien n'est écrit tant qu'une ligne est en erreur ; chaque erreur porte le

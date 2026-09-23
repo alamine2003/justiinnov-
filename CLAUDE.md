@@ -62,14 +62,21 @@ l'application.
   code est refusé. Au démarrage, seules la Côte d'Ivoire et le Togo sont
   créées ; les autres le seront à leur entrée dans le dispositif. Ouvrir une
   filiale demande de modifier ce fichier, donc une décision explicite.
-- **Cinq rôles, pas un de plus.** Côté pays : `manager` saisit et soumet.
-  Côté siège : `dm` (directeur manager) met en contrôle, `df` (directeur
-  financier) constate — tous deux restrictibles à des pays ; `admin` (RH)
-  tient les comptes, le référentiel, l'audit, les imports et exports, la
-  réouverture ; `super_admin` (DG, DO, CEO, développeurs) peut tout. Il n'y
-  a ni « direction des opérations » ni « auditeur » distincts. Un `manager`
-  rattaché à des équipes ne voit que les leurs (`team__in`, sur le queryset,
-  via `CountryScopedMixin.team_lookup`) ; sans équipe, tout son pays.
+- **Trois rôles, pas un de plus** (décision 89). Côté pays, le `manager`
+  ouvre les dossiers **de son pays**, saisit les lignes, dépose les pièces,
+  soumet et importe. Au siège, l'`admin` (RH) **contrôle chaque dossier de
+  bout en bout, à lui seul** — mise en contrôle, justification ou refus,
+  clôture, contrôle des pièces, réouverture, décision sur une
+  rectification — et tient les comptes, le référentiel, les enveloppes,
+  l'audit et les exports ; le `super_admin` (DG, DO, CEO, développeurs)
+  **supervise** : il voit tout, relit le journal d'audit et administre,
+  sans déclarer ni contrôler. Ni l'un ni l'autre ne crée de dossier ni ne
+  dépose de justificatif. Il n'y a plus de DM ni de DF : leurs comptes ont
+  été désactivés par la migration `accounts.0006_trois_roles`, et un
+  administrateur décide de leur sort. Le siège voit toujours tous les
+  pays ; un `manager` rattaché à des équipes ne voit que les leurs
+  (`team__in`, sur le queryset, via `CountryScopedMixin.team_lookup`) ;
+  sans équipe, tout son pays.
 - **Chaque action de l'API est une capacité nommée, et la matrice se
   règle dans la configuration.** `accounts/permissions.py` (`CAPACITES`)
   liste chaque création, modification, suppression, transition, lecture
@@ -80,56 +87,51 @@ l'application.
   « Configuration › Permissions » (`PATCH /api/permissions/`, stocké dans
   `WorkflowConfiguration.capability_roles`, journalisé) ; le réglage
   s'applique à la requête suivante, côté vues, services, notifications et
-  `allowed_actions`. **Deux verrous ne se règlent pas** : les
-  administrateurs — `admin` et `super_admin`, à égalité — gardent toutes
-  les capacités et règlent toute la matrice, l'argent compris
-  (décision 58 : l'administrateur attribue chaque droit à qui il veut, et
-  personne ne peut lui retirer les siens) ; et le `manager` ne reçoit
-  jamais le contrôle (mise en contrôle, justification, clôture, contrôle
-  d'une pièce, réouverture, décision sur une rectification),
-  l'administration (comptes, configuration, journal d'audit, ouverture ou
-  modification d'un pays) ni l'arbitrage des enveloppes ; les comptes et la
-  configuration ne s'ouvrent qu'aux administrateurs, jamais au DM ni au
-  DF, qui pourraient sinon se créer un administrateur. Le référentiel d'un
-  pays et la demande de réallocation, eux, restent ouvrables au pays par
-  choix d'organisation. Les verrous s'appliquent à la lecture de la
-  matrice, pas seulement à l'enregistrement.
-- **Par défaut, le DM et le DF n'ont aucun droit d'administration.**
-  Décision du produit : ils ne sont ni administrateurs ni super
-  administrateurs. Ils gardent leurs fonctions de contrôle — `dm` sur
-  `expenses.review`, `df` sur `expenses.validate`, `expenses.close`,
-  `proofs.review` — et lisent l'historique du référentiel
-  (`history.read`, `/api/history/`) sur leur périmètre. Ils ne figurent
-  dans aucune autre capacité par défaut : ni comptes, ni pays, ni
-  référentiel, ni enveloppes, ni fichiers, ni réouverture, ni journal
-  d'audit. Un administrateur peut leur en ouvrir une depuis la matrice ;
-  c'est une décision tracée, pas un défaut.
-- **L'administrateur a tous les droits, et les attribue.** `admin` et
-  `super_admin` sont fixes sur chaque capacité (`Capacite.fixes`) et
-  règlent chaque ligne de la matrice (`reglable_par`), l'argent compris :
-  il n'y a plus de ligne « direction seule ». Ce qui les distingue est un
-  libellé, pas un droit ; la matrice garde les deux rôles pour que les
-  comptes disent qui est RH et qui est direction.
+  `allowed_actions`. **Trois verrous ne se règlent pas** (décision 89) :
+  **la déclaration est au pays seul** (`expenses.create`,
+  `expenses.update`, `expenses.delete`, `proofs.upload`,
+  `dossiers.submit` : le `manager`, fixe, jamais le siège ; `data.import`
+  au pays par défaut, retirable, jamais au siège) ; **le contrôle est à
+  l'administrateur seul** (`expenses.review`, `expenses.validate`,
+  `expenses.close`, `proofs.review`, `dossiers.reopen`,
+  `rectifications.decide` : `admin`, fixe, jamais le pays ni le
+  `super_admin`) ; **l'administration est aux administrateurs** —
+  `admin` et `super_admin` gardent comptes, configuration, référentiel,
+  enveloppes, audit et exports et règlent toute la matrice (décision 58).
+  Le `manager` ne reçoit jamais l'administration (comptes, configuration,
+  journal d'audit, ouverture ou modification d'un pays) ni l'arbitrage des
+  enveloppes. Le référentiel d'un pays et la demande de réallocation
+  restent ouvrables au pays par choix d'organisation. Les verrous
+  s'appliquent à la lecture de la matrice, pas seulement à
+  l'enregistrement.
+- **Les administrateurs administrent, et attribuent les droits.** `admin`
+  et `super_admin` sont fixes sur chaque capacité d'administration
+  (`Capacite.fixes`) et règlent chaque ligne de la matrice
+  (`reglable_par`), l'argent compris. Ils ne sont pas fixes partout : la
+  déclaration leur est fermée, et le contrôle est fermé au `super_admin`.
+  Conséquence assumée : l'administrateur qui contrôle tient aussi les
+  enveloppes, donc la politique « approbation » d'un dépassement se valide
+  en justifiant, par lui.
 - **Par défaut, les enveloppes sont l'affaire des administrateurs.**
   Attribuer une enveloppe, demander, approuver ou refuser une réallocation,
   tenir les taux de change, valider un dépassement : `budgets.create`,
   `budgets.update`, `reallocations.request`, `reallocations.decide`,
   `rates.manage` sont à `admin` et `super_admin` (décision 58 ; avant
-  elle, à `super_admin` seul). Le DF constate ce qui a été dépensé, il ne
+  elle, à `super_admin` seul). Le pays déclare ce qui a été dépensé, il ne
   fixe pas ce qui peut l'être.
 - **Le journal d'audit est l'affaire de la RH et de la direction.**
   `audit.read` = `admin`, `super_admin` par défaut ; jamais le pays. Le
-  journal relit les décisions du DM et du DF autant que celles des pays :
-  cette relecture est un acte d'administration, pas de contrôle.
-  L'historique du référentiel (`/api/history/`), lui, reste ouvert au
-  siège entier.
+  journal relit les décisions de l'administrateur autant que celles des
+  pays : c'est l'outil de supervision du `super_admin`. L'historique du
+  référentiel (`/api/history/`), lui, reste ouvert au siège entier.
 - **Une dépense soumise est irréversible.** Elle ne revient pas au brouillon,
   ne se modifie plus, ne se supprime pas. Seul un brouillon — jamais soumis,
   donc sans valeur probante — peut être retiré par son auteur. **Une seule
   exception : la réouverture** (`reopen`, capacité `dossiers.reopen` :
-  `admin`, `super_admin` par défaut, jamais le pays), motivée (`note`, gardée dans `Dossier.reopen_note`),
-  tracée (`AuditLog` `reopened` sur le dossier et chaque ligne) et notifiée
-  aux `manager` du pays, pas au `dm` (décision 20) — elle sert à demander des comptes, jamais
+  `admin` seul, jamais le pays ni le `super_admin`), motivée (`note`,
+  gardée dans `Dossier.reopen_note`), tracée (`AuditLog` `reopened` sur le
+  dossier et chaque ligne) et notifiée aux `manager` du pays, pas au siège
+  (décision 20) — elle sert à demander des comptes, jamais
   à corriger en silence. Les lignes reviennent en brouillon sans
   imputation. Un dossier dont une ligne est justifiée ou clôturée ne se
   rouvre pas : le siège a constaté. **La seconde exception, la
@@ -137,7 +139,8 @@ l'application.
   *demande* à rectifier (`rectifications.request`, tous les rôles par
   défaut, motif obligatoire, une demande en attente par ligne) et un
   administrateur *qui n'est pas le demandeur* approuve ou refuse
-  (`rectifications.decide` : `admin`, `super_admin`, jamais le pays).
+  (`rectifications.decide` : `admin` seul, jamais le pays ni le
+  `super_admin`).
   Approuvée, la ligne revient **en contrôle** — jamais au brouillon : elle
   reste déclarée et imputée —, montant justifié à zéro, et le dossier
   constaté la suit ; tout est tracé (`rectification_requested`,
@@ -146,9 +149,19 @@ l'application.
   (`transitions.approuver_rectification`). Une ligne contestée un jour ne
   se retire plus, même rouverte au brouillon : elle se corrige et se
   resoumet.
-- **Un brouillon appartient à son auteur.** Il ne se retire que par lui,
-  et ne se modifie que par lui ou par le siège, jamais par un collègue du
-  pays (`transitions.exiger_l_auteur_du_brouillon`, décision 46).
+- **Un brouillon appartient à son auteur.** Il ne se retire, ne se
+  modifie et ne se soumet que par lui — jamais par un collègue du pays,
+  jamais par le siège, qui ne déclare pas
+  (`transitions.exiger_l_auteur_du_brouillon`, décisions 46 et 89). Un
+  brouillon sans auteur connu se complète par le pays : c'est le cas de
+  ceux que le siège avait ouverts, rendus au pays par la migration
+  `expenses.0017`.
+- **Un dossier appartient à un pays** (décision 89). Son pays est
+  attribué à la création, dans le périmètre de son auteur, et ne change
+  plus jamais — même vide. Seul ce pays remplit ses lignes et ses pièces :
+  une ligne porte le pays de son dossier, une pièce se range sous lui, et
+  tout le reste répond « introuvable ». La liste des dossiers se filtre
+  par pays (`?country=`) dès que le compte en voit plusieurs.
 - **Une pièce est ce qu'elle prétend être.** Les premiers octets d'un
   justificatif doivent confirmer son extension, le type MIME enregistré
   vient du serveur, et le doublon est tranché par une contrainte en base
@@ -172,20 +185,18 @@ l'application.
   créer une entité chez le voisin.
 - **Toute action sensible laisse une trace** dans `ChangeLog` ou `AuditLog` :
   qui, quoi, quand, depuis quelle adresse, ancienne et nouvelle valeur.
-- **Le manager déclare, le DM contrôle, le DF constate.** Côté pays, seul
-  le `manager` saisit et soumet. Au siège, le `dm` (directeur manager) met
-  en contrôle (`expenses.review`), le `df` (directeur financier) justifie,
-  refuse ou clôture (`expenses.validate`, `expenses.close`) ; `admin` (RH)
-  et `super_admin` peuvent tout. Un manager ne justifie jamais une dépense, pas même la
-  sienne. Et celui qui a saisi une dépense ne peut pas la justifier
-  lui-même, fût-il au siège — il faut deux personnes.
+- **Le manager déclare, l'administrateur contrôle, le super
+  administrateur supervise.** Côté pays, seul le `manager` saisit et
+  soumet. Au siège, l'`admin` met en contrôle (`expenses.review`),
+  justifie, refuse ou clôture (`expenses.validate`, `expenses.close`) ;
+  le `super_admin` lit tout et ne tranche rien. Un manager ne justifie
+  jamais une dépense, pas même la sienne ; et la règle des quatre yeux
+  reste en garde : celui qui a saisi une dépense ne la contrôle pas.
 - **La RH gère tous les pays.** Le référentiel d'un pays (équipes, projets,
   intitulés, catégories, bénéficiaires) est tenu par `admin` et
   `super_admin` sur tous les pays (`referentiel.create`,
-  `referentiel.update`) ; ni le `manager`, ni le `dm`, ni le `df` ne le
-  modifient par défaut. `dm` et `df` sont des comptes du
-  siège, restrictibles à des pays ; `admin` et `super_admin` sont toujours
-  globaux.
+  `referentiel.update`) ; le `manager` ne le modifie pas par défaut.
+  `admin` et `super_admin` sont toujours globaux.
 - **Déclarer tient en une action.** Le manager remplit ses lignes, joint la
   pièce et soumet le dossier : ses lignes partent avec lui. Un dossier vide ne
   se soumet pas ; un dossier sans pièce se soumet avec un avertissement.
@@ -196,13 +207,15 @@ l'application.
   est vrai et le second faux ; sinon elle propose l'enrôlement depuis le
   menu du compte. Un compte enrôlé présente son code à chaque connexion.
 - **Un rejet exige un motif.** Une réouverture aussi.
-- **Les fichiers entrent et sortent par les administrateurs.** L'import
-  Excel et les exports (`xlsx`, `csv`, `docx`, `pdf` ; `year`, `month`
-  facultatif, `country`) sont réservés aux administrateurs par défaut
-  (`data.export`, `data.import` : `admin`, `super_admin`), lecture
-  comprise ; tous les autres travaillent dans
-  l'application, où chaque chiffre est calculé et chaque action tracée. Un
-  total ne s'écrit qu'à devise unique.
+- **Les exports sont aux administrateurs, l'import est au pays.** Les
+  exports (`xlsx`, `csv`, `docx`, `pdf` ; `year`, `month` facultatif,
+  `country`) sont réservés aux administrateurs par défaut (`data.export` :
+  `admin`, `super_admin`), lecture comprise. L'import Excel est une
+  déclaration (`data.import` : le `manager`, jamais le siège, décision
+  89) : son pays, ses équipes, ses brouillons ; il ne crée une équipe ou
+  un responsable que pour qui a ce droit sur le référentiel. Sa page vit
+  avec les dossiers (`/dossiers/import`). Un total ne s'écrit qu'à devise
+  unique.
 - **La double authentification TOTP est prête, obligatoire seulement si la
   politique du serveur l'exige** (`DJANGO_TOTP_REQUIRED`, faux par défaut :
   la direction a reporté l'obligation — c'est la règle « proposée, pas
