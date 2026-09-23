@@ -225,6 +225,13 @@ l'application.
   e-mails dans la langue du destinataire) et par le dictionnaire de
   traduction côté client. Une chaîne en dur dans un composant est un défaut. Elle se sert sur le web et comme application de
   bureau installable (PWA) ; l'usage mobile n'est pas un cas prévu.
+- **Aucun e-mail ne part vers les utilisateurs, par défaut.** Décision de
+  la direction (décision 88) : `DJANGO_EMAIL_ENABLED` vaut `0` par défaut,
+  et alors ni notification, ni rapport périodique, ni alerte d'exploitation
+  ne partent par courrier — les notifications restent dans l'application.
+  Tout nouvel envoi passe par `settings.EMAIL_ENABLED` ; le transport
+  `core.courrier.CourrierCoupe` retient ce qui y échapperait. Le rouvrir
+  est une décision de la direction, pas un réglage de confort.
 - **Une requête `GET` n'écrit rien.** Les alertes sont calculées à la
   lecture ; leur notification passe par `manage.py notify_alerts`, pour ne
   pas dépendre de quelqu'un qui ouvre une page. Une seule exception,

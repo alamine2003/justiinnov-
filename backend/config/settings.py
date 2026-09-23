@@ -612,16 +612,22 @@ WARN_WITHOUT_PROOF_SUBMISSION = os.environ.get(
 
 
 
-def choisir_email_backend(email_host, *, debug, console):
+def choisir_email_backend(email_host, *, debug, console, actif=True):
     """Transport des e-mails, ou refus de démarrer.
 
-    Un serveur SMTP dès qu'il est nommé. Sinon, la console — les messages
+    Courrier coupé (``actif`` faux, le défaut du serveur, décision 88) : un
+    transport qui n'envoie rien et le dit dans les journaux, quel que soit
+    ``EMAIL_HOST`` — un hôte laissé dans le ``.env`` ne rouvre pas l'envoi,
+    et son absence n'empêche plus de démarrer. Sinon, un serveur SMTP dès
+    qu'il est nommé. Sinon, la console — les messages
     vont dans les journaux — mais seulement en développement ou sur demande
     explicite (``EMAIL_BACKEND_CONSOLE=1``) : en production, un ``EMAIL_HOST``
     oublié ferait disparaître les alertes budgétaires dans les logs sans
     que personne ne s'en aperçoive. Fonction pure, pour être testable sans
     recharger les réglages.
     """
+    if not actif:
+        return "core.courrier.CourrierCoupe"
     if email_host and console:
         # Les deux ensemble ne veulent rien dire, et l'hôte l'emportait en
         # silence : un `smtp.a-renseigner.invalid` posé en attendant le vrai
@@ -645,13 +651,20 @@ def choisir_email_backend(email_host, *, debug, console):
     )
 
 
+#: Interrupteur général du courrier (décision 88). **Coupé par défaut** :
+#: aucun e-mail ne part vers les utilisateurs — ni notification, ni rapport
+#: périodique, ni alerte d'exploitation. Les notifications restent écrites
+#: et lisibles dans l'application ; seule leur copie par e-mail disparaît.
+#: ``DJANGO_EMAIL_ENABLED=1`` rouvre l'envoi, et c'est une décision de la
+#: direction, pas un réglage de confort.
+EMAIL_ENABLED = os.environ.get("DJANGO_EMAIL_ENABLED", "0") == "1"
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
 EMAIL_BACKEND_CONSOLE = os.environ.get("EMAIL_BACKEND_CONSOLE", "0") == "1"
 # Un serveur SMTP injoignable ne doit pas bloquer une requête ou une tâche
 # planifiée indéfiniment.
 EMAIL_TIMEOUT = 10
 EMAIL_BACKEND = choisir_email_backend(
-    EMAIL_HOST, debug=DEBUG, console=EMAIL_BACKEND_CONSOLE
+    EMAIL_HOST, debug=DEBUG, console=EMAIL_BACKEND_CONSOLE, actif=EMAIL_ENABLED
 )
 if EMAIL_HOST:
     EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))

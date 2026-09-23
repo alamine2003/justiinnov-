@@ -83,7 +83,8 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
    surcharge. Le Caddyfile, lui, survit à une valeur vide (le placeholder
    est entre guillemets) ; il démarrerait alors sans contact ACME, donc
    sans personne à prévenir avant l'expiration d'un certificat. `EMAIL_HOST` l'est
-   aussi : hors mode debug, le backend refuse de démarrer sans serveur SMTP,
+   aussi **dès que le courrier est ouvert** (`DJANGO_EMAIL_ENABLED=1` ; il est
+   coupé par défaut, voir « Courrier ») : le backend refuse alors de démarrer sans serveur SMTP,
    parce que les alertes budgétaires et les rapports partiraient dans les
    journaux sans que personne ne le voie ; une préproduction sans SMTP
    l'acquitte explicitement avec `EMAIL_BACKEND_CONSOLE=1`.
@@ -371,8 +372,24 @@ la pile après l'avoir changé). Créez alors les comptes « direction » et
 
 ## Courrier
 
-Le backend refuse de démarrer sans transport de courrier : `EMAIL_HOST`
-renseigné, ou `EMAIL_BACKEND_CONSOLE=1` pour acquitter son absence. **Les
+**Le courrier est coupé par défaut** (décision 88) : sans
+`DJANGO_EMAIL_ENABLED=1` dans le `.env`, aucun e-mail ne part vers les
+utilisateurs — ni notification, ni rapport périodique, ni alerte
+d'exploitation (sauvegardes, stockage). Les notifications restent écrites
+et lisibles dans l'application, dans la cloche du bandeau ; seule leur
+copie par e-mail disparaît. `EMAIL_HOST` peut rester renseigné, il ne
+rouvre rien ; *Configuration › Général* affiche « Coupé ». Un envoi qui
+passerait quand même par Django (un `send_mail` lancé à la main) n'est pas
+transmis et laisse une ligne `Courrier coupé` dans les journaux.
+
+Rouvrir l'envoi est une décision de la direction : poser
+`DJANGO_EMAIL_ENABLED=1`, puis relancer `backend` et `scheduler`. Les
+notifications des trois derniers jours dont l'e-mail n'est jamais parti
+partiront alors par la reprise ; les plus anciennes, non.
+
+Quand l'envoi est ouvert, le backend refuse de démarrer sans transport de
+courrier : `EMAIL_HOST` renseigné, ou `EMAIL_BACKEND_CONSOLE=1` pour
+acquitter son absence. **Les
 deux ensemble sont refusés** — un hôte de remplissage l'emporterait sur le
 drapeau, et chaque envoi échouerait après dix secondes sans que rien
 n'atterrisse dans les journaux.

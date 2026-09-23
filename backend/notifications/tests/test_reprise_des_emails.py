@@ -16,6 +16,7 @@ from unittest import mock
 from django.core import mail
 from django.core.management import call_command
 from django.db import DatabaseError, connection, transaction
+from django.test import override_settings
 from django.utils import timezone, translation
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy
@@ -75,6 +76,7 @@ class RefusTestCase(ExpenseTestCase):
         )
 
 
+@override_settings(EMAIL_ENABLED=True)
 class TitreLongTests(RefusTestCase):
     def test_un_libelle_de_250_caracteres_ne_fait_pas_disparaitre_le_refus(self):
         """Le défaut de l'audit, rejoué : avant le correctif, ce test échouait
@@ -126,6 +128,7 @@ class TitreLongTests(RefusTestCase):
                         self.assertLessEqual(len(titre), TITRE_MAX)
 
 
+@override_settings(EMAIL_ENABLED=True)
 class NotificationEnEchecTests(RefusTestCase):
     def test_une_erreur_de_base_dans_la_notification_n_annule_pas_la_transition(self):
         """L'erreur de base la plus générale : la transaction est avortée par
@@ -184,6 +187,7 @@ class NotificationEnEchecTests(RefusTestCase):
         self.assertEqual(mail.outbox, [])
 
 
+@override_settings(EMAIL_ENABLED=True)
 class PanneSmtpTests(RefusTestCase):
     def _refuser_serveur_en_panne(self):
         with mock.patch.object(
@@ -285,6 +289,7 @@ class PanneSmtpTests(RefusTestCase):
         self.assertIsNone(Notification.objects.get(recipient=self.doo).emailed_at)
 
 
+@override_settings(EMAIL_ENABLED=True)
 class OrdonnanceurTests(ExpenseTestCase):
     def test_la_reprise_est_planifiee(self):
         reprise = next(job for job in JOBS if job["command"][0] == "envoyer_emails")
@@ -295,6 +300,7 @@ class OrdonnanceurTests(ExpenseTestCase):
         self.assertEqual(mail.outbox, [])
 
 
+@override_settings(EMAIL_ENABLED=True)
 class AbandonsSignalesTests(RefusTestCase):
     """Ce qui ne partira plus doit se dire — la dernière ligne disait l'inverse.
 

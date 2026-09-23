@@ -443,6 +443,7 @@ class ConfigurationBudgetSerializer(serializers.Serializer):
 
 
 class ConfigurationNotificationsSerializer(serializers.Serializer):
+    email_actif = serializers.BooleanField(read_only=True)
     email_configure = serializers.BooleanField(read_only=True)
     expediteur = serializers.CharField(read_only=True)
 

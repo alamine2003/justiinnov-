@@ -1,15 +1,16 @@
 """Notifications : cloisonnement par destinataire, dédoublonnage, e-mails."""
 
+from datetime import date
 from decimal import Decimal
+from io import StringIO
 from pathlib import Path
 from unittest import mock
-
-from datetime import date
 
 from django.contrib.auth.models import User
 from django.core import mail
 from django.db.models import ProtectedError
 from django.core.management import call_command
+from django.test import override_settings
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy
 from rest_framework import status
@@ -113,6 +114,7 @@ class DestinatairesTests(NotificationTestCase):
         self.assertEqual(tous, {self.controller, restreint})
 
 
+@override_settings(EMAIL_ENABLED=True)
 class DedoublonnageTests(NotificationTestCase):
     def test_un_meme_evenement_ne_notifie_qu_une_fois(self):
         self.notifier([self.controller])
@@ -138,6 +140,7 @@ class DedoublonnageTests(NotificationTestCase):
         self.assertEqual(len(mail.outbox), 1)
 
 
+@override_settings(EMAIL_ENABLED=True)
 class EmailTests(NotificationTestCase):
     @classmethod
     def setUpTestData(cls):
@@ -257,6 +260,7 @@ class DeclencheursTests(NotificationTestCase):
         self.assertFalse(hasattr(triggers, "expense_submitted"))
 
 
+@override_settings(EMAIL_ENABLED=True)
 class LangueTests(NotificationTestCase):
     """Chaque destinataire lit sa notification et son e-mail dans sa langue."""
 
@@ -512,3 +516,35 @@ class PaysProtegeTests(NotificationTestCase):
 
         with self.assertRaises(ProtectedError):
             self.togo.delete()
+
+
+class CourrierCoupeTests(NotificationTestCase):
+    """Décision 88 : par défaut, aucun e-mail ne part, et rien ne le prétend."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.controller.email = "dina@example.org"
+        cls.controller.save()
+
+    def test_la_notification_s_ecrit_mais_aucun_e_mail_ne_part(self):
+        (notification,) = self.notifier([self.controller])
+
+        self.assertEqual(mail.outbox, [])
+        notification.refresh_from_db()
+        # Lisible dans l'application, jamais marquée comme envoyée.
+        self.assertIsNone(notification.emailed_at)
+        # Aucun essai brûlé : la coupure n'épuise pas la reprise.
+        self.assertEqual(notification.email_attempts, 0)
+
+    def test_la_reprise_de_l_ordonnanceur_n_envoie_rien(self):
+        self.notifier([self.controller])
+
+        sortie = StringIO()
+        call_command("envoyer_emails", stdout=sortie, verbosity=2)
+
+        self.assertEqual(mail.outbox, [])
+        self.assertIn("courrier coupé", sortie.getvalue())
+        self.assertFalse(
+            Notification.objects.filter(email_attempts__gt=0).exists()
+        )

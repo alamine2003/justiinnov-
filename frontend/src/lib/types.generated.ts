@@ -2229,6 +2229,7 @@ export interface components {
             readonly stockage: string
         }
         ConfigurationNotifications: {
+            readonly email_actif: boolean
             readonly email_configure: boolean
             readonly expediteur: string
         }

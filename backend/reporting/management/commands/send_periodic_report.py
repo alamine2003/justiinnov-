@@ -84,6 +84,14 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not settings.EMAIL_ENABLED and not options["dry_run"]:
+            # Courrier coupé (décision 88) : le rapport n'a nulle part où
+            # aller. Le dire, sans calculer ce qu'on n'enverra pas ;
+            # ``--dry-run`` reste possible pour relire son contenu.
+            self.stdout.write(self.style.WARNING(
+                "Courrier coupé (DJANGO_EMAIL_ENABLED=0) : rapport non envoyé."
+            ))
+            return
         period = options["period"]
         year = options["year"] or timezone.now().year
         since = timezone.now() - timedelta(days=PERIODS[period])

@@ -8655,6 +8655,10 @@
             "ConfigurationNotifications": {
                 "type": "object",
                 "properties": {
+                    "email_actif": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "email_configure": {
                         "type": "boolean",
                         "readOnly": true
@@ -8665,6 +8669,7 @@
                     }
                 },
                 "required": [
+                    "email_actif",
                     "email_configure",
                     "expediteur"
                 ]

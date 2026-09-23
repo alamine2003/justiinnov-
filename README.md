@@ -88,6 +88,23 @@ docker compose exec backend python manage.py seed_users
 La commande est idempotente : elle crée ou met à jour pays et comptes, et
 adopte un pays préexistant plutôt que d'échouer sur son nom.
 
+### Recette manuelle
+
+Pour tester l'application à la main, compte par compte, sur la **pile locale
+seulement** :
+
+```bash
+docker compose exec backend python manage.py seed_recette --base-jetable
+```
+
+La commande ouvre les dix-sept filiales, crée quarante comptes `recette.*`
+(un mot de passe commun tiré au hasard, écrit dans `backend/recette.local.md`,
+ignoré par git) et huit dossiers par pays qui couvrent chaque état du circuit.
+Elle refuse de tourner hors du mode debug : rien ne se supprime dans
+l'application, un jeu de recette posé sur une base réelle y resterait. On le
+retire en effaçant la pile locale, `docker compose down -v`. Le guide des
+parcours à tester est [`docs/recette.md`](docs/recette.md).
+
 ### Rôles et périmètres
 
 Cinq rôles, calqués sur l'organisation du groupe :
@@ -533,7 +550,8 @@ Le modèle complet pour un serveur est `deploy/.env.example`.
 | `UNUSUAL_EXPENSE_FACTOR` | `5` | multiple de la moyenne au-delà duquel une dépense est signalée (idem) |
 | `UNJUSTIFIED_ALERT_DAYS` | `0` | jours sans pièce après soumission avant alerte ; `0` désactive (idem) |
 | `WARN_WITHOUT_PROOF_SUBMISSION` | `1` | avertir à la soumission d'un dossier sans pièce (idem) |
-| `EMAIL_HOST` | — | serveur SMTP, **obligatoire hors mode debug** : sans lui, le backend refuse de démarrer plutôt que de perdre les alertes |
+| `DJANGO_EMAIL_ENABLED` | `0` | **courrier coupé par défaut** (décision 88) : aucun e-mail ne part vers les utilisateurs, les notifications restent dans l'application. `1` rouvre l'envoi, sur décision de la direction |
+| `EMAIL_HOST` | — | serveur SMTP, **obligatoire hors mode debug quand le courrier est ouvert** : sans lui, le backend refuse de démarrer plutôt que de perdre les alertes |
 | `EMAIL_BACKEND_CONSOLE` | `0` | `1` acquitte l'**absence** de SMTP hors debug : les e-mails vont dans les journaux (CI, préproduction). Avec un `EMAIL_HOST` renseigné, le démarrage est refusé : l'hôte l'emporterait et les envois échoueraient sans rien laisser dans les journaux |
 | `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | `587` / — / — / `1` | paramètres SMTP |
 | `DEFAULT_FROM_EMAIL` | `controle-budgetaire@justi-innov.local` | expéditeur des e-mails |

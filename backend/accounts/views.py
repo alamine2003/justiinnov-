@@ -259,6 +259,9 @@ class ConfigurationView(APIView):
                     "devise_de_consolidation": CONSOLIDATION_CURRENCY,
                 },
                 "notifications": {
+                    # Coupé par défaut (décision 88) : l'interface doit
+                    # dire que rien ne part, même avec un SMTP renseigné.
+                    "email_actif": settings.EMAIL_ENABLED,
                     "email_configure": bool(settings.EMAIL_HOST),
                     "expediteur": settings.DEFAULT_FROM_EMAIL,
                 },

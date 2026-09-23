@@ -17,6 +17,12 @@ rappel — : la ligne elle-même est l'enregistrement durable du travail
 restant (``emailed_at`` vide), et ``envoyer_les_emails`` reprend ces lignes
 depuis l'ordonnanceur (``manage.py envoyer_emails``, toutes les cinq
 minutes) jusqu'à ``ESSAIS_MAX`` essais.
+
+**Le courrier est coupé par défaut** (``settings.EMAIL_ENABLED``, décision
+88) : la notification s'écrit toujours, aucun e-mail ne se programme, et la
+reprise ne réclame rien — aucun essai n'est brûlé pendant la coupure. À la
+réouverture, seules les notifications de moins de ``AGE_MAX_DE_REPRISE``
+partiraient par la reprise.
 """
 
 import logging
@@ -163,7 +169,7 @@ def notify(recipients, *, kind, title, dedup_key, body="", level=None, link="",
         ).select_related("recipient", "recipient__profile")
     )
 
-    if send_email:
+    if send_email and settings.EMAIL_ENABLED:
         a_envoyer = [n.pk for n in created if n.recipient.email]
         if a_envoyer:
             # Après la validation de la transaction de l'appelant — hors
@@ -252,6 +258,9 @@ def envoyer_les_emails(pks=None):
     préfixe du sujet reste à traduire. Aucune exception ne sort d'ici : un
     échec est journalisé, la ligne reste à reprendre.
     """
+    if not settings.EMAIL_ENABLED:
+        # Courrier coupé : rien n'est réclamé, aucun essai n'est compté.
+        return 0, 0
     maintenant = timezone.now()
     reclamees = reclamer(pks, maintenant=maintenant)
     if pks is None:
