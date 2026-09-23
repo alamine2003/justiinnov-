@@ -1,7 +1,16 @@
 # Livraison continue : de la poussée sur `main` à la plateforme en ligne.
 #
-#   main ─────────▶ CI ─▶ images (ghcr.io) ─▶ préproduction (automatique)
+#   main ─────────▶ CI ─▶ images (ghcr.io) ─▶ préproduction (automatique,
+#                                               si PREPRODUCTION vaut 1)
 #   tag v1.2.3 ───▶ CI ─▶ images (ghcr.io) ─▶ production (après approbation)
+#
+# Préproduction et production sont deux serveurs (décision 90). Jusqu'au
+# 23 septembre 2026, l'environnement `staging` portait les secrets du
+# serveur de production : chaque fusion sur `main` y partait, sans tag ni
+# approbation. Désormais, chaque serveur porte une marque (fichier
+# ENVIRONNEMENT, propriété de root) et sa commande forcée refuse une
+# livraison destinée à l'autre ; la préproduction ne se déploie que si la
+# variable de dépôt `PREPRODUCTION` vaut `1`, une fois son serveur prêt.
 #
 # Rien ne se déploie qui n'ait passé l'intégration continue : le workflow
 # `ci.yml` est appelé ici même, pas simplement supposé vert — et il ne se
@@ -31,7 +40,8 @@
 #                        obligatoire : relever l'empreinte au premier contact
 #                        reviendrait à faire confiance à n'importe qui
 # Variables d'environnement (Settings › Environments › Variables) :
-#   APP_DOMAIN           domaine public, pour le contrôle final
+#   APP_DOMAIN           domaine public, pour le contrôle final — un
+#                        domaine par environnement, jamais le même
 # Le fichier `.env` du serveur n'est jamais dans le dépôt : `deploy/.env.example`
 # en donne le modèle.
 #
@@ -200,6 +210,13 @@ jobs:
   deployer:
     name: Déployer (${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }})
     needs: images
+    # La préproduction a son propre serveur (décision 90) : tant qu'il
+    # n'existe pas, `PREPRODUCTION` n'est pas à 1 et `main` ne se déploie
+    # nulle part — le travail est sauté, ce qui n'ouvre aucun ticket. La
+    # production, elle, part toujours d'un tag, après approbation.
+    if: >-
+      (inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging')) == 'production'
+      || vars.PREPRODUCTION == '1'
     runs-on: ubuntu-latest
     # Le jeton sert au serveur pour tirer les images : lecture du registre,
     # rien d'autre.
@@ -228,6 +245,7 @@ jobs:
           FRONTEND_IMAGE: ${{ needs.images.outputs.frontend }}
           APP_DOMAIN: ${{ vars.APP_DOMAIN }}
           GHCR_USER: ${{ github.actor }}
+          ENVIRONNEMENT: ${{ inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
         run: |
           verifier() {
             nom="$1"; valeur="$2"; motif="$3"
@@ -244,9 +262,12 @@ jobs:
           # l'est pas — `\]` fermait la classe et le motif exigeait « -] »,
           # ce qu'aucun compte GitHub ne satisfait (livraison v1.0.1).
           verifier GHCR_USER      "$GHCR_USER"      '^[]A-Za-z0-9._[-]+$'
+          # Le serveur compare cet environnement à sa propre marque et
+          # refuse l'autre (deploy/justi-livrer, décision 90).
+          verifier ENVIRONNEMENT  "$ENVIRONNEMENT"  '^(staging|production)$'
           # Une seule ligne, lue par la commande forcée du serveur : les
           # valeurs viennent d'être bornées, aucune n'a besoin de guillemets.
-          echo "livrer $IMAGE_TAG $BACKEND_IMAGE $FRONTEND_IMAGE $APP_DOMAIN $GHCR_USER" > commande
+          echo "livrer $IMAGE_TAG $BACKEND_IMAGE $FRONTEND_IMAGE $APP_DOMAIN $GHCR_USER $ENVIRONNEMENT" > commande
 
       - name: Préparer l'accès SSH
         env:

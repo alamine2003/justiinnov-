@@ -2,8 +2,11 @@
 # Réduit les pouvoirs de la livraison sur un serveur déjà en service
 # (audit du 8 septembre 2026, §3.4). Idempotent. En root :
 #
-#   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)'" \
+#   ssh root@<hôte> "bash -s -- '$(cat ~/.ssh/justi-innov-deploy.pub)' production" \
 #       < deploy/durcir_livraison.sh
+#
+# Le second argument, `staging` ou `production`, écrit la marque
+# d'environnement que justi-livrer exige depuis la décision 90.
 #
 # Avant : le compte `deploy` était membre du groupe docker — ce qui vaut
 # root —, la livraison recopiait tout deploy/ depuis le dépôt puis
@@ -30,6 +33,18 @@ case "$CLE_DEPLOIEMENT" in
   ssh-ed25519\ *|ssh-rsa\ *|ecdsa-sha2-*) ;;
   *) echo "argument inattendu : ce n'est pas une clé publique SSH" >&2; exit 1 ;;
 esac
+ENVIRONNEMENT="${2:-}"
+case "$ENVIRONNEMENT" in
+  staging|production) ;;
+  *) echo "second argument attendu : staging ou production (ce que ce serveur est, décision 90)" >&2; exit 1 ;;
+esac
+# Vérifié avant tout changement : un serveur déjà marqué autrement n'est
+# pas reconfiguré à moitié.
+MARQUE=/home/deploy/justi-innov/ENVIRONNEMENT
+if [ -f "$MARQUE" ] && [ "$(tr -d '[:space:]' < "$MARQUE")" != "$ENVIRONNEMENT" ]; then
+  echo "✘ $MARQUE dit « $(tr -d '[:space:]' < "$MARQUE") » : supprimez-le à la main si ce serveur change vraiment d'environnement." >&2
+  exit 1
+fi
 REPERTOIRE=/home/deploy/justi-innov
 
 echo "== Commande forcée"
@@ -65,6 +80,15 @@ find "$REPERTOIRE" -type f -exec chmod 644 {} +
 chmod 755 "$REPERTOIRE"/*.sh
 if [ -f "$REPERTOIRE/.env" ]; then chmod 600 "$REPERTOIRE/.env"; fi
 rm -f "$REPERTOIRE/.deploy-env"
+
+echo "== Marque d'environnement : ${ENVIRONNEMENT}"
+# justi-livrer compare chaque livraison à cette marque et refuse l'autre
+# environnement (décision 90). Changer ce qu'est un serveur est un geste
+# délibéré : une marque qui dit autre chose n'a pas été écrasée (contrôle
+# en tête du script).
+printf '%s\n' "$ENVIRONNEMENT" > "$MARQUE"
+chown root:root "$MARQUE"
+chmod 644 "$MARQUE"
 
 echo
 echo "Prêt. Vérification, depuis votre poste, avec la clé de livraison :"
