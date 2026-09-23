@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost } from "@/lib/api"
+import { api, apiGet, apiPatch, apiPost } from "@/lib/api"
 import type {
   Budget,
   BudgetSummary,
@@ -24,6 +24,17 @@ export function createBudget(data: unknown) {
 
 export function updateBudget(id: number, data: unknown) {
   return apiPatch<Budget>(`/budgets/${id}/`, data)
+}
+
+/**
+ * Supprime une enveloppe qui n'a jamais servi (décision 91).
+ *
+ * Le serveur refuse celle qui porte une dépense, une réallocation ou des
+ * sous-enveloppes : elle se désactive. `can_delete` dit d'avance ce qu'il
+ * accepterait.
+ */
+export function deleteBudget(id: number) {
+  return api.delete(`/budgets/${id}/`)
 }
 
 // ---------------------------------------------------------------------------

@@ -278,6 +278,12 @@ async function main() {
     (await hq.getByRole("heading", { name: /enveloppe du pays/ }).count()) === 1,
     "l'enveloppe d'un pays s'ouvre en rail",
   )
+  // Décision 91 : le compte du siège est l'administrateur, qui lit les
+  // enveloppes sans les attribuer, les modifier ni les supprimer.
+  expect(
+    (await hq.getByRole("button", { name: /Attribuer|Découper encore|Supprimer l'enveloppe|Modifier l'enveloppe|Modifier la sous-enveloppe/ }).count()) === 0,
+    "l'administrateur lit les enveloppes sans les attribuer, modifier ni supprimer",
+  )
   await shot(hq, "budgets_enveloppes")
 
   // Les réallocations sont sur la même page, en flux, sous les enveloppes.

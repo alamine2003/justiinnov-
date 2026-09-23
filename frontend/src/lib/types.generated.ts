@@ -125,10 +125,22 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Enveloppes annuelles et sous-enveloppes par projet. */
+        /**
+         * @description Enveloppes annuelles et sous-enveloppes par projet.
+         *
+         *     ``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :
+         *     une enveloppe qui n'a jamais servi se supprime, comme un brouillon
+         *     jamais soumis (décision 91). Celle qui a servi se désactive.
+         */
         get: operations["budgets_list"]
         put?: never
-        /** @description Enveloppes annuelles et sous-enveloppes par projet. */
+        /**
+         * @description Enveloppes annuelles et sous-enveloppes par projet.
+         *
+         *     ``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :
+         *     une enveloppe qui n'a jamais servi se supprime, comme un brouillon
+         *     jamais soumis (décision 91). Celle qui a servi se désactive.
+         */
         post: operations["budgets_create"]
         delete?: never
         options?: never
@@ -143,15 +155,34 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Enveloppes annuelles et sous-enveloppes par projet. */
+        /**
+         * @description Enveloppes annuelles et sous-enveloppes par projet.
+         *
+         *     ``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :
+         *     une enveloppe qui n'a jamais servi se supprime, comme un brouillon
+         *     jamais soumis (décision 91). Celle qui a servi se désactive.
+         */
         get: operations["budgets_retrieve"]
-        /** @description Enveloppes annuelles et sous-enveloppes par projet. */
+        /**
+         * @description Enveloppes annuelles et sous-enveloppes par projet.
+         *
+         *     ``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :
+         *     une enveloppe qui n'a jamais servi se supprime, comme un brouillon
+         *     jamais soumis (décision 91). Celle qui a servi se désactive.
+         */
         put: operations["budgets_update"]
         post?: never
-        delete?: never
+        /** @description Supprime une enveloppe qui n'a jamais servi (décision 91). */
+        delete: operations["budgets_destroy"]
         options?: never
         head?: never
-        /** @description Enveloppes annuelles et sous-enveloppes par projet. */
+        /**
+         * @description Enveloppes annuelles et sous-enveloppes par projet.
+         *
+         *     ``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :
+         *     une enveloppe qui n'a jamais servi se supprime, comme un brouillon
+         *     jamais soumis (décision 91). Celle qui a servi se désactive.
+         */
         patch: operations["budgets_partial_update"]
         trace?: never
     }
@@ -1991,6 +2022,7 @@ export interface components {
             /** Actif */
             is_active: boolean
             readonly figures: components["schemas"]["BudgetFigures"]
+            readonly can_delete: boolean
             /**
              * Créé le
              * Format: date-time
@@ -4049,6 +4081,8 @@ export interface components {
             readonly "budgets.create": boolean
             /** @description Changer le montant, la politique de dépassement, désactiver ; valider une dépense qui dépasse son enveloppe. */
             readonly "budgets.update": boolean
+            /** @description Retirer une enveloppe qui n'a jamais servi : aucune dépense imputée, aucune réallocation, aucune sous-enveloppe. */
+            readonly "budgets.delete": boolean
             /** @description Proposer un transfert entre deux enveloppes. */
             readonly "reallocations.request": boolean
             /** @description Approuver ou refuser un transfert. Jamais le sien. */
@@ -4976,6 +5010,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Budget"]
                 }
+            }
+        }
+    }
+    budgets_destroy: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Budget. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content?: never
             }
         }
     }

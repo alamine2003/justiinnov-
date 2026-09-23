@@ -637,7 +637,7 @@
     "vide": {
       "pays_titre": "No budget allocated",
       "pays_indication_siege": "Allocate an annual budget to each country you track.",
-      "pays_indication_pays": "Headquarters has not allocated a budget to your scope yet.",
+      "pays_indication_pays": "No budget has been allocated in your scope yet: budgets are allocated by senior management.",
       "enveloppes_titre": "No budget",
       "enveloppes_indication_siege": "Allocate a budget to start tracking.",
       "enveloppes_indication_pays": "No budget in your scope."
@@ -719,6 +719,13 @@
       "decouper": "Split further",
       "non_reparti": "{{montant}} of the country envelope is not allocated. A sub-envelope follows a single dimension: project, team or manager.",
       "tout_reparti": "The country envelope is fully allocated."
+    },
+    "suppression": {
+      "bouton_aria": "Delete budget {{enveloppe}}",
+      "titre": "Delete “{{enveloppe}}” ({{annee}})?",
+      "description": "This budget was never used: no expense charged to it, no reallocation, no sub-budget. It disappears from the application; the history keeps who deleted it and when. A budget that has been used is deactivated instead of deleted.",
+      "confirmer": "Delete",
+      "impossible": "Deletion failed"
     }
   },
   "pilotage": {
