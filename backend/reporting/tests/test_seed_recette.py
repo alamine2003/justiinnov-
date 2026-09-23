@@ -69,7 +69,13 @@ class SeedRecetteTests(TestCase):
         sortie = self._lancer()
 
         self.assertEqual(Country.objects.count(), 17)
-        self.assertEqual(User.objects.filter(username__startswith="recette.").count(), 40)
+        # Deux comptes au siège, deux par pays (décision 89).
+        self.assertEqual(User.objects.filter(username__startswith="recette.").count(), 36)
+        self.assertEqual(
+            set(User.objects.filter(username__startswith="recette.")
+                .values_list("profile__role", flat=True)),
+            {"super_admin", "admin", "manager"},
+        )
         etats = Counter(Dossier.objects.values_list("status", flat=True))
         self.assertEqual(etats, {"draft": 34, "submitted": 34, "in_review": 34,
                                  "unjustified": 17, "closed": 17})
@@ -80,7 +86,7 @@ class SeedRecetteTests(TestCase):
         )
         # Le mot de passe est dit une fois, et il ouvre les comptes.
         mot_de_passe = sortie.split("recette.* : ")[1].split()[0]
-        self.assertTrue(User.objects.get(username="recette.df").check_password(mot_de_passe))
+        self.assertTrue(User.objects.get(username="recette.rh").check_password(mot_de_passe))
         self.assertIn(mot_de_passe, self.fichier.read_text())
 
     def test_les_niveaux_d_alerte_annonces(self):

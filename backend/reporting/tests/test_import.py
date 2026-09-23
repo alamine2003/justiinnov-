@@ -16,7 +16,7 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import ExchangeRate
-from core.models import ChangeLog, Manager, Team
+from core.models import ChangeLog, Manager, Team, WorkflowConfiguration
 from expenses.models import AuditLog, Dossier, Expense
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
@@ -24,6 +24,20 @@ from reporting import imports
 from reporting.exports import EXPENSE_COLUMNS
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def ouvrir_le_referentiel_au_pays():
+    """La RH ouvre au pays la création d'équipes et de responsables.
+
+    Par défaut, l'import d'un manager ne crée rien dans le référentiel
+    (décision 89) : ce choix d'organisation se règle dans la matrice.
+    """
+    configuration = WorkflowConfiguration.charger()
+    configuration.capability_roles = {
+        "referentiel.create": ["super_admin", "admin", "manager"],
+        "managers.create": ["super_admin", "admin", "manager"],
+    }
+    configuration.save()
 
 
 class ImportTests(ExpenseTestCase):
@@ -67,7 +81,8 @@ class ImportTests(ExpenseTestCase):
         return ligne
 
     def _importer(self, contenu, user=None, **query):
-        self.login(user or self.doo)
+        # L'import est une déclaration : le manager du pays (décision 89).
+        self.login(user or self.owner)
         url = "/api/imports/expenses.xlsx"
         if query:
             url += "?" + urlencode(query)
@@ -76,15 +91,15 @@ class ImportTests(ExpenseTestCase):
         )
 
     def test_un_classeur_exporte_se_reimporte(self):
-        """Export et import partagent le même contrat de fichier, entre les
-        mains des administrateurs — les seuls à manipuler des fichiers."""
+        """Export et import partagent le même contrat de fichier : le siège
+        exporte, le pays réimporte."""
         self.make_expense(amount="1200.00", justified_amount="800.00")
         self.login(self.doo)
         export = self.client.get("/api/exports/expenses.xlsx", {"year": self.year})
         Expense.objects.all().delete()
         Dossier.objects.all().delete()
 
-        response = self._importer(BytesIO(export.content), user=self.doo)
+        response = self._importer(BytesIO(export.content), user=self.owner)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["lignes_creees"], 1)
@@ -95,20 +110,65 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(str(expense.justified_amount), "0.00")
         self.assertEqual(expense.status, Status.DRAFT)
 
-    def test_seuls_les_administrateurs_importent(self):
-        """Importer est réservé aux administrateurs : la direction financière
-        constate, le pays déclare dans l'application — aucun d'eux ne
-        manipule de fichier."""
-        for user in (self.controller, self.rep_ivoire, self.owner):
+    def test_seul_le_pays_importe(self):
+        """Importer, c'est déclarer : un acte du pays (décision 89). Ni
+        l'administrateur ni le super administrateur ne créent de dossier,
+        fût-ce par un classeur."""
+        for user in (self.controller, self.doo):
             with self.subTest(role=user.profile.role):
                 response = self._importer(self._classeur([self._ligne()]), user=user)
                 self.assertEqual(response.status_code, 403)
         self.assertEqual(Expense.objects.count(), 0)
 
-        rh = make_user("rh.admin", Role.ADMIN)
-        response = self._importer(self._classeur([self._ligne()]), user=rh)
+        response = self._importer(self._classeur([self._ligne()]), user=self.owner)
 
         self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(Expense.objects.get().created_by, self.owner.username)
+
+    def test_un_pays_n_importe_pas_chez_le_voisin(self):
+        """Le manager ivoirien qui charge un classeur togolais ne verse rien :
+        chaque ligne est hors de son périmètre."""
+        response = self._importer(self._classeur([self._ligne()]), user=self.rep_ivoire)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("hors périmètre", response.data["erreurs"][0]["motif"])
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_sans_droit_sur_le_referentiel_une_equipe_inconnue_est_refusee(self):
+        """Le référentiel est tenu par la RH : l'import du pays ne crée ni
+        équipe ni responsable, il dit lesquels demander."""
+        response = self._importer(
+            self._classeur([self._ligne(TEAM="Équipe Kara", OWNER="Afi Lawson")])
+        )
+
+        motifs = " ".join(e["motif"] for e in response.data["erreurs"])
+        self.assertIn("Équipe « Équipe Kara » inconnue", motifs)
+        self.assertFalse(Team.objects.filter(name="Équipe Kara").exists())
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_un_manager_cloisonne_n_importe_que_pour_ses_equipes(self):
+        """Comme à la saisie : un manager rattaché à l'équipe de Lomé ne
+        verse rien pour Kara."""
+        Team.objects.create(country=self.togo, name="Équipe Kara")
+        lome = make_user("lome.togo", Role.MANAGER, [self.togo], teams=[self.team])
+
+        refuse = self._importer(self._classeur([self._ligne(TEAM="Équipe Kara")]), user=lome)
+        accepte = self._importer(
+            self._classeur([self._ligne(**{"N°ORDRE": "N-LOME"})]), user=lome
+        )
+
+        self.assertIn("l'une de vos équipes", refuse.data["erreurs"][0]["motif"])
+        self.assertFalse(accepte.data["erreurs"], accepte.data)
+        self.assertEqual(Expense.objects.get().team, self.team)
+
+    def test_un_brouillon_d_un_collegue_ne_recoit_pas_de_lignes(self):
+        """Un brouillon appartient à son auteur (décision 46), import compris."""
+        collegue = make_user("collegue.togo", Role.MANAGER, [self.togo])
+        self._importer(self._classeur([self._ligne()]), user=collegue)
+
+        response = self._importer(self._classeur([self._ligne(DEPENSES=900)]))
+
+        self.assertIn("brouillon d'un autre compte", response.data["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.count(), 1)
 
     def test_tout_arrive_en_brouillon(self):
@@ -173,6 +233,7 @@ class ImportTests(ExpenseTestCase):
     def test_un_homonyme_d_un_autre_pays_n_est_pas_reutilise(self):
         """Le manager ivoirien n'est pas rattaché au Togo en douce : un
         manager togolais est créé, le voisin reste tel quel."""
+        ouvrir_le_referentiel_au_pays()
         voisin = Manager.objects.create(name="Awa Diop")
         self.ivoire.managers.add(voisin)
 
@@ -189,6 +250,7 @@ class ImportTests(ExpenseTestCase):
         """Le classeur historique est la première source du référentiel :
         exiger sa saisie préalable rendrait l'import inutile. La création
         passe par le modèle, donc par l'historique."""
+        ouvrir_le_referentiel_au_pays()
         response = self._importer(
             self._classeur([
                 self._ligne(OWNER="Afi Lawson"),
@@ -204,11 +266,12 @@ class ImportTests(ExpenseTestCase):
         self.assertTrue(
             ChangeLog.objects.filter(
                 model_name=ChangeLog.Models.MANAGER, action=ChangeLog.Actions.CREATED,
-                performed_by=self.doo.username,
+                performed_by=self.owner.username,
             ).exists()
         )
 
     def test_une_equipe_inconnue_est_creee_dans_le_pays(self):
+        ouvrir_le_referentiel_au_pays()
         response = self._importer(self._classeur([self._ligne(TEAM="Équipe Kara")]))
 
         self.assertFalse(response.data["erreurs"])
@@ -218,6 +281,7 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(Expense.objects.get().team, equipe)
 
     def test_la_previsualisation_ne_cree_ni_equipe_ni_manager(self):
+        ouvrir_le_referentiel_au_pays()
         response = self._importer(
             self._classeur([self._ligne(TEAM="Équipe Kara", OWNER="Afi Lawson")]),
             dry_run="true",
@@ -355,7 +419,7 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(Expense.objects.count(), 30)
 
     def test_l_import_laisse_une_trace_avec_l_adresse_du_client(self):
-        self.login(self.doo)
+        self.login(self.owner)
         self.client.post(
             "/api/imports/expenses.xlsx",
             {"file": ("depenses.xlsx", self._classeur([self._ligne()]), XLSX)},
@@ -372,9 +436,8 @@ class ImportTests(ExpenseTestCase):
     # -- Comportements conservés -------------------------------------------
 
     def test_un_pays_hors_perimetre_est_refuse(self):
-        """Les administrateurs voient tout : par l'API, ce cas ne se
-        présente plus. La fonction garde sa garde-fou — un appelant futur au
-        périmètre restreint ne doit pas verser chez le voisin."""
+        """Le garde-fou vaut aussi hors de la vue : la fonction elle-même
+        ne verse pas chez le voisin."""
         resultat = imports.importer_depenses(
             self._classeur([self._ligne(PAYS="Côte d'Ivoire")]), self.owner, dry_run=True
         )
@@ -439,6 +502,10 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
     ECART, PIECES JUSTIFICATIVES. Les N°ORDRE sont des entiers numérotés par
     pays, un même numéro regroupant plusieurs lignes ; les dates n'ont pas
     d'heure ; les montants sont entiers ; MONTANT JUSTIFIER est parfois vide.
+
+    Le classeur nomme des équipes et des responsables que le pays ne connaît
+    pas encore : la RH a ouvert au pays leur création pour cette reprise
+    (``ouvrir_le_referentiel_au_pays``), sans quoi il les lui demanderait.
     """
 
     COLONNES = [
@@ -448,6 +515,7 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
 
     def setUp(self):
         super().setUp()
+        ouvrir_le_referentiel_au_pays()
         self.lignes = [
             [1, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Carburant", 15000, 15000, 0, "Reçu"],
             [1, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Péage", 2000, None, 2000, ""],
@@ -473,7 +541,7 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         return contenu
 
     def _importer(self, contenu, user=None, **query):
-        self.login(user or self.doo)
+        self.login(user or self.owner)
         url = "/api/imports/expenses.xlsx"
         if query:
             url += "?" + urlencode(query)
@@ -550,24 +618,26 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertIn("country", inconnu.data)
         self.assertEqual(Expense.objects.count(), 0)
 
-    def test_le_responsable_pays_ne_verse_pas_de_classeur_meme_chez_lui(self):
-        """Le pays déclare dans l'application ; le classeur historique est
-        repris par les administrateurs."""
-        response = self._importer(self._classeur(), user=self.owner, country=self.togo.pk)
-
-        self.assertEqual(response.status_code, 403)
+    def test_le_siege_ne_verse_pas_de_classeur(self):
+        """Le classeur historique est repris par le pays lui-même : le siège
+        ne crée pas de dossier (décision 89)."""
+        for user in (self.controller, self.doo):
+            with self.subTest(role=user.profile.role):
+                response = self._importer(self._classeur(), user=user, country=self.togo.pk)
+                self.assertEqual(response.status_code, 403)
         self.assertEqual(Expense.objects.count(), 0)
 
-    def test_le_siege_importe_dans_n_importe_quel_pays(self):
-        siege = make_user("ceo.innov", Role.SUPER_ADMIN)
+    def test_un_pays_n_importe_que_chez_lui(self):
+        """Le Togo pour le manager ivoirien est un pays qu'il ne voit pas :
+        même refus qu'un pays inconnu."""
+        response = self._importer(self._classeur(), user=self.rep_ivoire, country=self.togo.pk)
 
-        response = self._importer(self._classeur(), user=siege, country=self.ivoire.pk)
-
-        self.assertFalse(response.data["erreurs"])
-        self.assertEqual(Dossier.objects.filter(country=self.ivoire).count(), 2)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("country", response.data)
+        self.assertEqual(Expense.objects.count(), 0)
 
     def test_le_pays_peut_venir_du_formulaire(self):
-        self.login(self.doo)
+        self.login(self.owner)
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",
@@ -631,13 +701,12 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
     def test_les_lignes_importees_se_soumettent_ensuite(self):
         """L'import fournit équipe et manager : le dossier peut partir.
 
-        Par qui l'a importé, ou par le siège : le dossier importé porte
-        l'auteur de l'import, et un brouillon ne part que par son auteur ou
-        par le siège (décision 46) — comme il ne se corrige que par eux."""
+        Par qui l'a importé : le dossier importé porte l'auteur de l'import,
+        et un brouillon ne part que par son auteur (décision 46)."""
         self._importer(self._classeur(), country=self.togo.pk)
         premier = Dossier.objects.get(country=self.togo, number="1")
 
-        response = self.submit_dossier(premier, user=self.doo)
+        response = self.submit_dossier(premier, user=self.owner)
 
         self.assertEqual(response.status_code, 200, response.data)
 
@@ -727,7 +796,7 @@ class ClasseurGonfleTests(ExpenseTestCase):
             archive.writestr("[Content_Types].xml", "<Types/>")
             archive.writestr("xl/sharedStrings.xml", b"\x00" * (5 * settings.MAX_PROOF_SIZE + 1))
         self.assertLess(tampon.tell(), 1024 * 1024)
-        self.login(self.doo)
+        self.login(self.owner)
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",
@@ -751,6 +820,8 @@ class ReimportDUnExportTests(ExpenseTestCase):
         self.make_expense(amount="1200.00", date=datetime(self.year, 3, 15, 9, 0, tzinfo=tz.utc), title="Carburant")
         self.login(self.doo)
         classeur = self.client.get(f"/api/exports/expenses.xlsx?year={self.year}&country={self.togo.pk}").content
+        # Le siège exporte, le pays réimporte.
+        self.login(self.owner)
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",

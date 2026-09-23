@@ -29,7 +29,6 @@ function matrice(overrides: Partial<PermissionMatrix> = {}): PermissionMatrix {
     roles: [
       { value: "super_admin", label: "Super administrateur", siege: true, always_global: true, assignable: false },
       { value: "admin", label: "Administrateur (RH)", siege: true, always_global: true, assignable: true },
-      { value: "dm", label: "DM", siege: true, always_global: false, assignable: true },
       { value: "manager", label: "Manager (pays)", siege: false, always_global: false, assignable: true },
     ],
     capabilities: [
@@ -49,10 +48,10 @@ function matrice(overrides: Partial<PermissionMatrix> = {}): PermissionMatrix {
         group: "Contrôle",
         label: "Justifier ou refuser",
         description: "Constater.",
-        roles: ["admin", "df", "super_admin"],
-        default_roles: ["admin", "df", "super_admin"],
-        fixed_roles: ["admin", "super_admin"],
-        locked_roles: ["manager"],
+        roles: ["admin"],
+        default_roles: ["admin"],
+        fixed_roles: ["admin"],
+        locked_roles: ["manager", "super_admin"],
         settable_by_roles: ["admin", "super_admin"],
       },
     ],
@@ -95,8 +94,8 @@ describe("MatriceDesDroits", () => {
     expect(
       screen.queryByRole("switch", { name: "Justifier ou refuser pour Manager (pays)" }),
     ).not.toBeInTheDocument()
-    // Le DM peut recevoir l'export : la case existe, décochée.
-    expect(screen.getByRole("switch", { name: "Exporter pour DM" })).toHaveAttribute(
+    // Le manager peut recevoir l'export : la case existe, décochée.
+    expect(screen.getByRole("switch", { name: "Exporter pour Manager (pays)" })).toHaveAttribute(
       "aria-checked",
       "false",
     )
@@ -109,20 +108,20 @@ describe("MatriceDesDroits", () => {
     updatePermissionMatrix.mockResolvedValue(
       matrice({
         capabilities: [
-          { ...base.capabilities[0], roles: ["admin", "super_admin", "dm"] },
+          { ...base.capabilities[0], roles: ["admin", "super_admin", "manager"] },
           base.capabilities[1],
         ],
       }),
     )
     render(<Hote initiale={base} onSaved={onSaved} />)
 
-    fireEvent.click(screen.getByRole("switch", { name: "Exporter pour DM" }))
+    fireEvent.click(screen.getByRole("switch", { name: "Exporter pour Manager (pays)" }))
     expect(screen.getByText("1 modification non enregistrée")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
     expect(updatePermissionMatrix).toHaveBeenCalledWith({
-      "data.export": ["admin", "super_admin", "dm"],
+      "data.export": ["admin", "super_admin", "manager"],
     })
     expect(refreshProfile).toHaveBeenCalled()
     // La confirmation s'affiche une fois le profil relu, et y reste. Que la
@@ -140,7 +139,7 @@ describe("MatriceDesDroits", () => {
     refreshProfile.mockRejectedValueOnce(new Error("panne"))
     render(<MatriceDesDroits matrix={matrice()} onSaved={onSaved} />)
 
-    fireEvent.click(screen.getByRole("switch", { name: "Exporter pour DM" }))
+    fireEvent.click(screen.getByRole("switch", { name: "Exporter pour Manager (pays)" }))
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
@@ -151,7 +150,7 @@ describe("MatriceDesDroits", () => {
     const base = matrice()
     const ecartee = matrice({
       capabilities: [
-        { ...base.capabilities[0], roles: ["admin", "dm", "super_admin"] },
+        { ...base.capabilities[0], roles: ["admin", "manager", "super_admin"] },
         base.capabilities[1],
       ],
     })
@@ -159,7 +158,7 @@ describe("MatriceDesDroits", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Rétablir le défaut pour Exporter" }))
 
-    expect(screen.getByRole("switch", { name: "Exporter pour DM" })).toHaveAttribute(
+    expect(screen.getByRole("switch", { name: "Exporter pour Manager (pays)" })).toHaveAttribute(
       "aria-checked",
       "false",
     )
@@ -173,7 +172,7 @@ describe("MatriceDesDroits", () => {
     )
     render(<MatriceDesDroits matrix={matrice()} onSaved={() => {}} />)
 
-    fireEvent.click(screen.getByRole("switch", { name: "Exporter pour DM" }))
+    fireEvent.click(screen.getByRole("switch", { name: "Exporter pour Manager (pays)" }))
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
 
     expect(

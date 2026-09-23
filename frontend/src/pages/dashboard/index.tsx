@@ -96,8 +96,8 @@ export function DashboardPage() {
       // La répartition n'a de sens que pour un pays : sans pays choisi, le
       // serveur la refuse (deux équipes homonymes de pays différents
       // fusionneraient). Il ne devine le pays que lorsque le périmètre n'en
-      // compte qu'un — `_pays_unique`, reporting/views.py. Un DM ou un DF
-      // restreint à deux pays doit donc en nommer un : la demander sans pays
+      // compte qu'un — `_pays_unique`, reporting/views.py. Un manager
+      // rattaché à deux pays doit donc en nommer un : la demander sans pays
       // rapportait un 400 qui, dans un `Promise.all`, emportait tout le
       // tableau de bord — et le sélecteur de pays lui était masqué.
       const repartitionPossible = countryId !== "" || perimetre.length === 1
@@ -524,7 +524,7 @@ function ParPays({
                         </span>
                       )}
                       {/* Le serveur a comparé le taux aux seuils d'alerte
-                          (`execution_level`) : un DF et un administrateur
+                          (`execution_level`) : un manager et un administrateur
                           lisent la même teinte, sans lire la configuration. */}
                       <span
                         className={cn("font-semibold", EXECUTION_LEVEL_TEXT[row.execution_level])}

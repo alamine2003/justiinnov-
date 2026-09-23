@@ -8,7 +8,7 @@ import type { Proof } from "@/lib/types"
 vi.mock("@/context/use-auth", () => ({
   useAuth: () => ({
     can: () => false,
-    me: { username: "df.innov" },
+    me: { username: "rh.innov" },
   }),
 }))
 

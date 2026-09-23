@@ -6,7 +6,6 @@ que ``core`` ne connaît pas : ``core`` est au bas de l'ordre des
 dépendances, ``accounts`` juste au-dessus (décision 40).
 """
 
-from django.db.models import Q
 from django.utils.translation import gettext_lazy
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -40,7 +39,6 @@ from core.serializers import (
     TeamSerializer,
 )
 
-from .models import HEADQUARTERS_ROLES
 from .perimetre import ChampCloisonne
 from .permissions import RolePermission, get_access, roles_pour
 from .scoping import CountryScopedMixin
@@ -123,7 +121,7 @@ def _rattacher_sans_detacher_le_voisin(self, instance, validated_data):
     ``countries`` ne lui propose que ses pays (``ChampCloisonne``) ; la
     liste qu'il soumet est donc la liste **de ce qu'il voit**. L'écrire
     telle quelle détachait le responsable des pays qu'il ne voit pas — un
-    DM restreint au Togo effaçait, sans le savoir ni le vouloir, le
+    manager du Togo effaçait, sans le savoir ni le vouloir, le
     rattachement ivoirien. Les pays hors périmètre sont recopiés tels
     quels : ils ne sont ni proposés, ni retirés.
     """
@@ -335,9 +333,9 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     ordering_fields = ["created_at"]
 
     #: Entrées qui relèvent de l'administration : la vie des comptes (rôles,
-    #: périmètres, 2FA) et la politique du workflow. Le DM et le DF, qui ne
-    #: gèrent ni l'un ni l'autre, n'ont pas à les lire — la liste des comptes
-    #: leur est fermée, son historique aussi.
+    #: périmètres, 2FA) et la politique du workflow. Qui ne gère ni l'un ni
+    #: l'autre n'a pas à les lire — la liste des comptes lui est fermée, son
+    #: historique aussi.
     ENTREES_D_ADMINISTRATION = (
         ChangeLog.Models.USER,
         ChangeLog.Models.WORKFLOW_CONFIGURATION,
@@ -348,13 +346,6 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
         access = get_access(self.request.user)
         if access is None:
             return queryset
-        if not access.has_global_scope and access.role in HEADQUARTERS_ROLES:
-            # Un rôle du siège restreint à quelques pays garde la vue sur ce
-            # qui n'appartient à aucun : taux de change, par exemple. Le
-            # filtre du mixin les lui cachait avec le reste.
-            queryset = ChangeLog.objects.select_related("country").filter(
-                Q(country__in=access.country_ids) | Q(country__isnull=True)
-            )
         if access.role not in roles_pour("configuration.manage"):
             queryset = queryset.exclude(model_name__in=self.ENTREES_D_ADMINISTRATION)
         return queryset

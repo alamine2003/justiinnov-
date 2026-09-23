@@ -448,31 +448,33 @@ class OverrunPolicyTests(ExpenseTestCase):
         expense.refresh_from_db()
         self.assertEqual(expense.status, Status.SUBMITTED)
 
-    def test_politique_approbation_laisse_demander_mais_pas_valider(self):
-        """Le manager doit pouvoir demander le dépassement ; seule sa
-        validation relève d'un administrateur (décision 58)."""
+    def test_politique_approbation_laisse_demander(self):
+        """Le manager doit pouvoir demander le dépassement ; sa validation
+        relève d'un administrateur (décision 58)."""
         self.budget.overrun_policy = OverrunPolicy.APPROVAL
         self.budget.save()
         expense, submitted = self._submit("150000.00")
 
-        self.login(self.controller)
-        response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
-
         self.assertEqual(submitted.status_code, status.HTTP_200_OK)
         self.assertIn("relèvera d'un administrateur", submitted.data["warning"])
         self.assertNotIn("super administrateur", submitted.data["warning"])
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         expense.refresh_from_db()
         self.assertEqual(expense.status, Status.SUBMITTED)
 
-    def test_politique_approbation_acceptee_pour_le_do(self):
+    def test_politique_approbation_validee_par_l_administrateur(self):
+        """L'administrateur contrôle et tient les enveloppes : il valide le
+        dépassement en justifiant (décision 89). Le super administrateur,
+        qui supervise, ne tranche pas."""
         self.budget.overrun_policy = OverrunPolicy.APPROVAL
         self.budget.save()
         expense, _ = self._submit("150000.00")
 
         self.login(self.doo)
+        superviseur = self.client.post(f"/api/expenses/{expense.pk}/justify/")
+        self.login(self.controller)
         response = self.client.post(f"/api/expenses/{expense.pk}/justify/")
 
+        self.assertEqual(superviseur.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("Dépassement", response.data["warning"])
 
@@ -639,20 +641,28 @@ class DossierWorkflowTests(ExpenseTestCase):
         self.assertEqual(response.data["status"], Status.UNJUSTIFIED)
         self.assertEqual(response.data["note"], "Rien ne couvre")
 
-    def test_celui_qui_a_ouvert_le_dossier_ne_le_tranche_pas(self):
-        """Quatre yeux sur le dossier aussi : un contrôleur qui ouvre un
-        dossier ne se donne pas quitus dessus."""
+    def _declare_par_le_controleur(self):
+        """Un dossier déclaré dont l'administrateur est l'auteur.
+
+        Le siège ne déclare plus (décision 89) : le cas ne vient que de
+        données antérieures, posées ici en base. La règle des quatre yeux
+        reste en garde.
+        """
         self.dossier.created_by = self.controller.username
+        self.dossier.status = Status.SUBMITTED
         self.dossier.save()
-        self.make_expense()
+        self.make_expense(status=Status.SUBMITTED)
         self._piece()
-        # Ouvert au siège, le brouillon ne part pas par le pays (décision
-        # 46, appliquée à la soumission) : c'est le siège qui le soumet.
-        self.submit_dossier(user=self.doo)
+        return make_user("rh2.innov", Role.ADMIN)
+
+    def test_celui_qui_a_ouvert_le_dossier_ne_le_tranche_pas(self):
+        """Quatre yeux sur le dossier aussi : un contrôleur qui a ouvert un
+        dossier ne se donne pas quitus dessus."""
+        autre = self._declare_par_le_controleur()
         self._justifier_les_lignes()
 
         refuse = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
-        self.login(self.doo)
+        self.login(autre)
         accepte = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
 
         self.assertEqual(refuse.status_code, status.HTTP_403_FORBIDDEN)
@@ -661,18 +671,14 @@ class DossierWorkflowTests(ExpenseTestCase):
     def test_celui_qui_a_ouvert_le_dossier_ne_le_met_pas_en_controle_ni_ne_le_clot(self):
         """La mise en contrôle et la clôture sont des actes de contrôle
         comme les autres : la règle des quatre yeux vaut du début à la fin."""
-        self.dossier.created_by = self.controller.username
-        self.dossier.save()
-        self.make_expense()
-        self._piece()
-        self.submit_dossier(user=self.doo)
+        autre = self._declare_par_le_controleur()
 
         self.login(self.controller)
         review = self.client.post(f"/api/dossiers/{self.dossier.pk}/review/")
-        self.login(self.doo)
+        self.login(autre)
         self.client.post(f"/api/dossiers/{self.dossier.pk}/review/")
         self._justifier_les_lignes()
-        self.login(self.doo)
+        self.login(autre)
         self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
         self.login(self.controller)
         close = self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
@@ -757,9 +763,9 @@ class ScopingTests(ExpenseTestCase):
 
     def test_dossier_d_un_autre_pays_refuse(self):
         """Le dossier et la dépense doivent relever du même pays, même pour
-        le siège, qui voit les deux."""
-        siege = make_user("ceo.innov", Role.SUPER_ADMIN)
-        self.login(siege)
+        un manager rattaché aux deux."""
+        deux_pays = make_user("deux.pays", Role.MANAGER, [self.togo, self.ivoire])
+        self.login(deux_pays)
 
         response = self.client.post(
             "/api/expenses/", self._payload(country=self.ivoire.pk)
@@ -882,17 +888,6 @@ class AuditTests(ExpenseTestCase):
 
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_journal_ferme_au_dm_et_au_df(self):
-        """Le DM et le DF contrôlent les dépenses ; ils n'auditent pas. Le
-        journal relit leurs propres décisions : c'est un acte
-        d'administration, réservé à la RH et à la direction."""
-        for compte in (self.controller, make_user("dm.innov", Role.DM)):
-            with self.subTest(role=compte.profile.role):
-                self.login(compte)
-
-                response = self.client.get("/api/audit/")
-
-                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class DraftDeletionTests(ExpenseTestCase):
@@ -1094,13 +1089,12 @@ class LocalTimeTests(ExpenseTestCase):
 
 
 class SeparationOfDutiesTests(ExpenseTestCase):
-    """Le pays déclare, le siège constate — le DM met en contrôle, le DF
-    tranche. Personne ne se donne quitus."""
+    """Le pays déclare, l'administrateur constate, le super administrateur
+    supervise (décision 89). Personne ne se donne quitus."""
 
     def setUp(self):
         super().setUp()
         self.rep_togo = make_user("togo.innov", Role.MANAGER, [self.togo])
-        self.dm = make_user("dm.innov", Role.DM)
         self.expense = self.make_expense(created_by="owner.togo")
         self.submit_dossier()
 
@@ -1112,6 +1106,9 @@ class SeparationOfDutiesTests(ExpenseTestCase):
         )
         ligne = self.make_expense(dossier=dossier, created_by=created_by)
         self.submit_dossier(dossier)
+        # La soumission donne un auteur à une ligne qui n'en a pas : une
+        # ligne anonyme déjà déclarée ne vient que de données anciennes.
+        Expense.objects.filter(pk=ligne.pk).update(created_by=created_by)
         return ligne
 
     def test_un_pays_ne_justifie_pas_ses_propres_depenses(self):
@@ -1150,9 +1147,9 @@ class SeparationOfDutiesTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_le_dm_met_en_controle(self):
+    def test_l_administrateur_met_en_controle(self):
         """Premier temps du contrôle, au siège : la ligne et le dossier."""
-        self.login(self.dm)
+        self.login(self.controller)
 
         ligne = self.client.post(f"/api/expenses/{self.expense.pk}/review/")
         dossier = self.client.post(f"/api/dossiers/{self.dossier.pk}/review/")
@@ -1162,35 +1159,63 @@ class SeparationOfDutiesTests(ExpenseTestCase):
         self.assertEqual(dossier.status_code, status.HTTP_200_OK, dossier.data)
         self.assertEqual(dossier.data["status"], Status.IN_REVIEW)
 
-    def test_le_dm_ne_tranche_pas(self):
-        """Mettre en contrôle n'est pas conclure : justifier, rejeter et
-        clore reviennent au DF, son supérieur."""
-        self.login(self.dm)
-        self.client.post(f"/api/expenses/{self.expense.pk}/review/")
+    def test_le_super_administrateur_ne_controle_pas(self):
+        """Il supervise : ni mise en contrôle, ni justification, ni rejet,
+        ni constat sur le dossier (décision 89)."""
+        self.login(self.doo)
 
+        review = self.client.post(f"/api/expenses/{self.expense.pk}/review/")
         justify = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
         reject = self.client.post(
             f"/api/expenses/{self.expense.pk}/reject/", {"note": "Sans preuve"}
         )
         dossier = self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
 
-        for response in (justify, reject, dossier):
+        for response in (review, justify, reject, dossier):
             self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.expense.refresh_from_db()
-        self.assertEqual(self.expense.status, Status.IN_REVIEW)
+        self.assertEqual(self.expense.status, Status.SUBMITTED)
 
-    def test_le_dm_ne_declare_pas(self):
-        """Le DM est au siège : il ne saisit ni ne soumet — celui qui met en
-        contrôle ne peut pas être celui qui a déclaré."""
-        self.login(self.dm)
+    def test_le_super_administrateur_ne_cloture_pas(self):
+        """La clôture est le dernier geste du contrôle : l'administrateur
+        seul (décision 89)."""
+        self.login(self.controller)
+        justifie = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+        self.assertEqual(justifie.status_code, status.HTTP_200_OK, justifie.data)
+        self.login(self.doo)
 
-        response = self.client.post(
-            "/api/dossiers/",
-            {"label": "Mission DM", "country": self.togo.pk,
-             "date": date(self.year, 4, 1).isoformat()},
-        )
+        ligne = self.client.post(f"/api/expenses/{self.expense.pk}/close/")
+        dossier = self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(ligne.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(dossier.status_code, status.HTTP_403_FORBIDDEN)
+        self.expense.refresh_from_db()
+        self.assertEqual(self.expense.status, Status.JUSTIFIED)
+
+    def test_le_siege_ne_declare_pas(self):
+        """Ni l'administrateur ni le super administrateur n'ouvrent de
+        dossier, ne saisissent de ligne ni ne déposent de pièce : celui qui
+        contrôle ne peut pas être celui qui a déclaré (décision 89)."""
+        for compte in (self.controller, self.doo):
+            with self.subTest(role=compte.profile.role):
+                self.login(compte)
+
+                dossier = self.client.post(
+                    "/api/dossiers/",
+                    {"label": "Mission du siège", "country": self.togo.pk,
+                     "date": date(self.year, 4, 1).isoformat()},
+                )
+                ligne = self.client.post(
+                    "/api/expenses/",
+                    {"dossier": self.dossier.pk, "country": self.togo.pk,
+                     "title": "Taxi", "amount": "1000", "date": f"{self.year}-04-01"},
+                )
+                piece = self.client.post(
+                    "/api/proofs/", {"dossier": self.dossier.pk, "kind": "invoice"}
+                )
+
+                for response in (dossier, ligne, piece):
+                    self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_le_siege_justifie(self):
         self.login(self.controller)
@@ -1224,7 +1249,7 @@ class SeparationOfDutiesTests(ExpenseTestCase):
         décaissé ne le prononce pas, même une fois la ligne justifiée par
         quelqu'un d'autre."""
         propre = self._declarer(self.controller.username)
-        self.login(self.doo)
+        self.login(make_user("rh2.innov", Role.ADMIN))
         self.client.post(f"/api/expenses/{propre.pk}/justify/")
 
         self.login(self.controller)
@@ -1248,7 +1273,7 @@ class SeparationOfDutiesTests(ExpenseTestCase):
     def test_un_autre_controleur_peut_justifier(self):
         propre = self._declarer(self.controller.username)
 
-        autre = make_user("audit.siege", Role.SUPER_ADMIN)
+        autre = make_user("rh2.innov", Role.ADMIN)
         self.login(autre)
         response = self.client.post(f"/api/expenses/{propre.pk}/justify/")
 

@@ -64,12 +64,13 @@ class ExpenseTestCase(APITestCase):
             country=cls.ivoire, year=cls.year, amount=Decimal("500000.00")
         )
 
-        # Le pays : un manager par pays. Le siège : le DF qui tranche et la
-        # direction. Le DM, qui met en contrôle, est créé par les tests qui
+        # Le pays : un manager par pays. Le siège : l'administrateur qui
+        # contrôle (``controller``) et la direction qui supervise (``doo``).
+        # D'autres comptes du siège sont créés par les tests qui
         # en ont besoin — un destinataire de plus changerait les décomptes
         # de notifications et d'e-mails des autres.
         cls.owner = make_user("owner.togo", Role.MANAGER, [cls.togo])
-        cls.controller = make_user("rh.innov", Role.DF)
+        cls.controller = make_user("rh.innov", Role.ADMIN)
         cls.doo = make_user("do.innov", Role.SUPER_ADMIN)
         cls.rep_ivoire = make_user("cote-ivoire.innov", Role.MANAGER, [cls.ivoire])
 

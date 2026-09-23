@@ -9,7 +9,7 @@
         "/api/audit/": {
             "get": {
                 "operationId": "audit_list",
-                "description": "Journal d'audit — consultation par la RH, qui audite, et la direction.\n\nLe DM et le DF n'y ont pas accès : le journal relit leurs propres\ndécisions, et cette relecture est un acte d'administration.",
+                "description": "Journal d'audit — consultation par la RH, qui audite, et la direction.\n\nLe pays n'y a pas accès : le journal relit les décisions de chacun, et\ncette relecture est un acte d'administration.",
                 "parameters": [
                     {
                         "in": "query",
@@ -127,7 +127,7 @@
         "/api/audit/{id}/": {
             "get": {
                 "operationId": "audit_retrieve",
-                "description": "Journal d'audit — consultation par la RH, qui audite, et la direction.\n\nLe DM et le DF n'y ont pas accès : le journal relit leurs propres\ndécisions, et cette relecture est un acte d'administration.",
+                "description": "Journal d'audit — consultation par la RH, qui audite, et la direction.\n\nLe pays n'y a pas accès : le journal relit les décisions de chacun, et\ncette relecture est un acte d'administration.",
                 "parameters": [
                     {
                         "in": "path",
@@ -4293,7 +4293,7 @@
         "/api/imports/expenses.xlsx": {
             "post": {
                 "operationId": "imports_expenses.xlsx_create",
-                "description": "Importe l'export des dépenses ou le classeur historique du client.\n\nRéservé aux administrateurs, comme les exports : seuls eux manipulent\ndes fichiers. Le pays déclare dans l'application, ligne à ligne ; ce qui\nentre par un classeur arrive en brouillon et suit ensuite le même\ncircuit.\n\nLe classeur historique est mono-pays et n'a pas de colonne PAYS : le\npays vient alors du paramètre ``country`` (requête ou formulaire),\nvérifié contre le périmètre du demandeur.",
+                "description": "Importe l'export des dépenses ou le classeur historique du client.\n\nUn import est une déclaration : il revient au pays (``data.import``,\nmanager par défaut, jamais le siège — décision 89) et suit les règles\nde la saisie — son pays, ses équipes, ses brouillons. Ce qui entre par\nun classeur arrive en brouillon et suit ensuite le même circuit.\n\nLe classeur historique est mono-pays et n'a pas de colonne PAYS : le\npays vient alors du paramètre ``country`` (requête ou formulaire),\nvérifié contre le périmètre du demandeur.",
                 "parameters": [
                     {
                         "in": "query",
@@ -5381,7 +5381,7 @@
         "/api/permissions/": {
             "get": {
                 "operationId": "permissions_retrieve",
-                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous :\nles administrateurs gardent tout, le pays ne reçoit jamais le droit de\ncontrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
+                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous\n(décision 89) : le pays seul déclare, l'administrateur seul contrôle,\nles administrateurs gardent l'administration ; le pays n'administre\nrien et n'arbitre pas ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
                 "tags": [
                     "permissions"
                 ],
@@ -5408,7 +5408,7 @@
             },
             "patch": {
                 "operationId": "permissions_partial_update",
-                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous :\nles administrateurs gardent tout, le pays ne reçoit jamais le droit de\ncontrôler ce qu'il déclare, d'administrer ni d'arbitrer ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
+                "description": "Matrice des rôles et de ce qu'ils autorisent (décision 43).\n\nLue dans la même table que celle appliquée par ``RolePermission``, et\nmodifiable par les administrateurs, case par case — sauf les verrous\n(décision 89) : le pays seul déclare, l'administrateur seul contrôle,\nles administrateurs gardent l'administration ; le pays n'administre\nrien et n'arbitre pas ses enveloppes.\nChaque modification est journalisée avec l'avant et l'après.",
                 "tags": [
                     "permissions"
                 ],
@@ -7146,13 +7146,11 @@
                             "title": "Rôle",
                             "enum": [
                                 "admin",
-                                "df",
-                                "dm",
                                 "manager",
                                 "super_admin"
                             ]
                         },
-                        "description": "* `super_admin` - Super administrateur (DG, DO, CEO, DEV)\n* `admin` - Administrateur (RH)\n* `df` - DF — directeur financier (siège)\n* `dm` - DM — directeur manager (siège)\n* `manager` - Manager (pays)"
+                        "description": "* `super_admin` - Super administrateur (DG, DO, CEO, DEV)\n* `admin` - Administrateur (RH)\n* `manager` - Manager (pays)"
                     },
                     {
                         "name": "search",
@@ -10917,7 +10915,7 @@
             },
             "ExpenseTransitionRequest": {
                 "type": "object",
-                "description": "Transition d'une ligne : le siège (DF) peut fixer ce qui est prouvé.\n\nPar défaut, justifier couvre toute la dépense ; une pièce partielle\npermet d'en constater une partie seulement. La borne haute (le montant\nde la dépense) se vérifie dans la vue, qui connaît la ligne.",
+                "description": "Transition d'une ligne : l'administrateur peut fixer ce qui est prouvé.\n\nPar défaut, justifier couvre toute la dépense ; une pièce partielle\npermet d'en constater une partie seulement. La borne haute (le montant\nde la dépense) se vérifie dans la vue, qui connaît la ligne.",
                 "properties": {
                     "note": {
                         "type": "string"
@@ -12862,12 +12860,10 @@
                                 "enum": [
                                     "super_admin",
                                     "admin",
-                                    "df",
-                                    "dm",
                                     "manager"
                                 ],
                                 "type": "string",
-                                "description": "* `super_admin` - Super administrateur (DG, DO, CEO, DEV)\n* `admin` - Administrateur (RH)\n* `df` - DF — directeur financier (siège)\n* `dm` - DM — directeur manager (siège)\n* `manager` - Manager (pays)"
+                                "description": "* `super_admin` - Super administrateur (DG, DO, CEO, DEV)\n* `admin` - Administrateur (RH)\n* `manager` - Manager (pays)"
                             }
                         }
                     }
@@ -13284,12 +13280,12 @@
                     "expenses.create": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Ouvrir un dossier, y ajouter des lignes de dépense."
+                        "description": "Ouvrir un dossier dans son pays, y ajouter des lignes de dépense."
                     },
                     "expenses.update": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Corriger un dossier ou une ligne tant qu'ils ne sont pas soumis."
+                        "description": "Corriger son dossier ou sa ligne tant qu'ils ne sont pas soumis."
                     },
                     "expenses.delete": {
                         "type": "boolean",
@@ -13309,7 +13305,7 @@
                     "expenses.review": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Prendre un dossier soumis en contrôle : le DM prépare, le DF tranche."
+                        "description": "Prendre un dossier soumis en contrôle."
                     },
                     "expenses.validate": {
                         "type": "boolean",
@@ -13349,7 +13345,7 @@
                     "data.import": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Charger un classeur de dépenses en brouillons."
+                        "description": "Charger un classeur de dépenses de son pays en brouillons."
                     }
                 },
                 "required": [
@@ -13905,12 +13901,10 @@
                 "enum": [
                     "super_admin",
                     "admin",
-                    "df",
-                    "dm",
                     "manager"
                 ],
                 "type": "string",
-                "description": "* `super_admin` - Super administrateur (DG, DO, CEO, DEV)\n* `admin` - Administrateur (RH)\n* `df` - DF — directeur financier (siège)\n* `dm` - DM — directeur manager (siège)\n* `manager` - Manager (pays)"
+                "description": "* `super_admin` - Super administrateur (DG, DO, CEO, DEV)\n* `admin` - Administrateur (RH)\n* `manager` - Manager (pays)"
             },
             "ScopeCountry": {
                 "type": "object",

@@ -131,8 +131,6 @@
     "roles": {
       "super_admin": "Super administrateur (DG, DO, CEO, DEV)",
       "admin": "Administrateur (RH)",
-      "df": "DF — directeur financier (siège)",
-      "dm": "DM — directeur manager (siège)",
       "manager": "Manager (pays)"
     },
     "workflow": {
@@ -313,6 +311,8 @@
       "recherche_aria": "Rechercher un dossier",
       "filtrer_statut": "Filtrer par statut",
       "tous_statuts": "Tous les statuts",
+      "filtrer_pays": "Filtrer par pays",
+      "tous_pays": "Tous les pays",
       "colonnes": {
         "lignes": "Lignes",
         "preuves": "Preuves",
@@ -391,6 +391,30 @@
     },
     "circuit": {
       "titre": "Circuit de justification"
+    },
+    "import": {
+      "titre": "Importer un classeur",
+      "description": "Les dépenses de votre pays, depuis un classeur : elles arrivent en brouillon, à votre nom, et suivent ensuite le même circuit que les dépenses saisies. Simulez d'abord : rien n'est écrit tant que le classeur contient une erreur.",
+      "classeur": "Classeur Excel (.xlsx)",
+      "pays_colonne": "Selon la colonne PAYS du classeur",
+      "pays_aide": "Obligatoire pour un classeur sans colonne PAYS.",
+      "fichier": "Fichier",
+      "fichier_aide": "Export des dépenses ou classeur historique, au format .xlsx.",
+      "fichier_requis": "Choisissez un classeur .xlsx.",
+      "simulation": "Simulation (dry run)",
+      "simulation_aide": "Vérifie le classeur et compte ce qui serait créé, sans rien écrire.",
+      "simuler": "Simuler l'import",
+      "importer": "Importer",
+      "impossible": "Import impossible",
+      "resultat_simulation": "Résultat de la simulation",
+      "resultat_import": "Résultat de l'import",
+      "lignes_creees": "Lignes créées",
+      "equipes_creees": "Équipes créées",
+      "managers_crees": "Managers créés",
+      "rien_ecrit": "Un classeur en erreur n'est pas importé : corrigez les lignes signalées, puis recommencez.",
+      "ligne": "Ligne {{numero}}",
+      "dossiers_crees": "Dossiers créés",
+      "bouton": "Importer"
     }
   },
   "depenses": {
@@ -925,8 +949,7 @@
       "general": "Général",
       "utilisateurs": "Utilisateurs",
       "pays": "Pays",
-      "permissions": "Permissions",
-      "import": "Import"
+      "permissions": "Permissions"
     },
     "general": {
       "parametres_titre": "Paramètres du serveur et du workflow",
@@ -997,7 +1020,7 @@
     },
     "utilisateurs": {
       "titre": "Comptes",
-      "description": "Rôles et périmètres. DM et DF sont des comptes du siège, restrictibles à des pays ; le manager est un compte de pays et ne voit que le sien.",
+      "description": "Rôles et périmètres. Le manager est un compte de pays et ne voit que le sien ; l'administrateur et le super administrateur voient tous les pays.",
       "creer": "Créer un compte",
       "chargement_impossible": "Impossible de charger les comptes",
       "statut_impossible": "Changement de statut impossible",
@@ -1028,8 +1051,7 @@
         "email_requis": "Une adresse e-mail est nécessaire.",
         "email_aide": "Adresse @innovpharma.net : elle nomme le compte dans l'application d'authentification.",
         "email_exemple": "prenom.nom@innovpharma.net",
-        "role_aide": "DM et DF sont des comptes du siège, restrictibles à des pays ; le manager est un compte de pays. L'administrateur (RH) et le super administrateur voient tout.",
-        "perimetre_aide_siege": "Facultatif pour un compte du siège : sans pays coché, il voit tous les pays. Cochez des pays pour restreindre un DM ou un DF.",
+        "role_aide": "Le manager ouvre et déclare les dossiers de son pays. L'administrateur (RH) contrôle chaque dossier jusqu'à la clôture ; le super administrateur supervise. Ni l'un ni l'autre ne déclare.",
         "perimetre_aide_pays": "Un manager est rattaché à au moins un pays.",
         "identifiant_immuable": "L'identifiant ne se change pas : il signe les traces du journal.",
         "perimetre_aide_global": "Ce rôle voit toujours tous les pays : aucun périmètre à cocher.",
@@ -1075,29 +1097,6 @@
       "publier_action": "Publier",
       "devise_invalide": "Indiquez un code devise à trois lettres (ISO 4217).",
       "taux_invalide": "Indiquez un taux décimal strictement positif."
-    },
-    "import": {
-      "titre": "Import de dépenses",
-      "description": "Ce qui entre par un classeur arrive en brouillon et suit ensuite le même circuit que les dépenses saisies. Simulez d'abord : rien n'est écrit tant que le classeur contient une erreur.",
-      "classeur": "Classeur Excel (.xlsx)",
-      "pays_colonne": "Selon la colonne PAYS du classeur",
-      "pays_aide": "Obligatoire pour un classeur sans colonne PAYS.",
-      "fichier": "Fichier",
-      "fichier_aide": "Export des dépenses ou classeur historique, au format .xlsx.",
-      "fichier_requis": "Choisissez un classeur .xlsx.",
-      "simulation": "Simulation (dry run)",
-      "simulation_aide": "Vérifie le classeur et compte ce qui serait créé, sans rien écrire.",
-      "simuler": "Simuler l'import",
-      "importer": "Importer",
-      "impossible": "Import impossible",
-      "resultat_simulation": "Résultat de la simulation",
-      "resultat_import": "Résultat de l'import",
-      "lignes_creees": "Lignes créées",
-      "equipes_creees": "Équipes créées",
-      "managers_crees": "Managers créés",
-      "rien_ecrit": "Un classeur en erreur n'est pas importé : corrigez les lignes signalées, puis recommencez.",
-      "ligne": "Ligne {{numero}}",
-      "dossiers_crees": "Dossiers créés"
     }
   },
   "audit": {

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { AlertTriangle, FolderOpen, Loader2, Plus, Search } from "lucide-react"
+import { AlertTriangle, FolderOpen, Loader2, Plus, Search, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -45,16 +45,19 @@ import { cn, formatAmount, formatDay, todayIso } from "@/lib/utils"
 
 export function DossiersPage() {
   const { t } = useTranslation()
-  const { can } = useAuth()
+  const { can, me } = useAuth()
   const canCreate = can("expenses.create")
   const [params, setParams] = useSearchParams()
 
-  // Le statut vit dans l'URL : une tuile du tableau de bord ou un favori
-  // doivent rouvrir la même vue.
+  // Le statut et le pays vivent dans l'URL : une tuile du tableau de bord
+  // ou un favori doivent rouvrir la même vue.
   const statusParam = params.get("status") ?? ""
   const statusFilter = (WORKFLOW_STATUSES as string[]).includes(statusParam)
     ? (statusParam as WorkflowStatus)
     : ""
+  const countryParam = Number(params.get("country"))
+  const countryFilter: number | "" =
+    Number.isInteger(countryParam) && countryParam > 0 ? countryParam : ""
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
@@ -63,11 +66,12 @@ export function DossiersPage() {
   const [exportError, setExportError] = useState<string | null>(null)
 
   const query = useQuery(
-    JSON.stringify({ page, search: debouncedSearch, statusFilter }),
+    JSON.stringify({ page, search: debouncedSearch, statusFilter, countryFilter }),
     (signal) => {
       const requestParams: Record<string, unknown> = { page, page_size: PAGE_SIZE }
       if (debouncedSearch) requestParams.search = debouncedSearch
       if (statusFilter) requestParams.status = statusFilter
+      if (countryFilter !== "") requestParams.country = countryFilter
       return fetchDossiers(requestParams, signal)
     },
     { fallback: t("dossiers.liste.chargement_impossible") },
@@ -79,20 +83,28 @@ export function DossiersPage() {
   const dossiers = query.data?.results ?? []
   const count = query.data?.count ?? 0
 
+  // Un dossier appartient à un pays (décision 89) : la liste se filtre par
+  // pays dès que le compte en voit plusieurs — le siège, ou un manager
+  // rattaché à plusieurs pays. Le serveur cloisonne de toute façon.
+  const perimetre = me?.countries ?? []
+  const paysChoisissables = me?.has_global_scope ? (countries.data?.results ?? []) : perimetre
+  const choixPaysVisible = Boolean(me?.has_global_scope) || perimetre.length > 1
+
   // Un changement de filtre ramène à la première page : rester en page 4
   // d'un résultat qui n'en compte plus qu'une afficherait un tableau vide.
-  const changeStatus = (value: string) => {
+  const changeFilter = (name: "status" | "country", value: string) => {
     setPage(1)
     setParams(
       (current) => {
         const next = new URLSearchParams(current)
-        if (value) next.set("status", value)
-        else next.delete("status")
+        if (value) next.set(name, value)
+        else next.delete(name)
         return next
       },
       { replace: true },
     )
   }
+  const changeStatus = (value: string) => changeFilter("status", value)
 
   return (
     <div className="space-y-6">
@@ -100,7 +112,13 @@ export function DossiersPage() {
         title={t("dossiers.liste.titre")}
         description={t("dossiers.liste.description")}
       >
-        <ExportMenu onError={setExportError} />
+        <ExportMenu country={countryFilter} onError={setExportError} />
+        {can("data.import") && (
+          <Button variant="outline" nativeButton={false} render={<Link to="/dossiers/import" />}>
+            <Upload className="mr-2 h-4 w-4" aria-hidden />
+            {t("dossiers.import.bouton")}
+          </Button>
+        )}
         {canCreate && (
           <Button onClick={() => setFormOpen(true)}>
             <Plus className="mr-2 h-4 w-4" aria-hidden />
@@ -134,6 +152,26 @@ export function DossiersPage() {
             className="pl-9"
           />
         </div>
+        {choixPaysVisible && (
+          <div className="w-full lg:max-w-56">
+            <Label htmlFor="dossiers-country" className="sr-only">
+              {t("dossiers.liste.filtrer_pays")}
+            </Label>
+            <NativeSelect
+              id="dossiers-country"
+              value={countryFilter}
+              onChange={(e) => changeFilter("country", e.target.value)}
+            >
+              <option value="">{t("dossiers.liste.tous_pays")}</option>
+              {paysChoisissables.map((country) => (
+                <option key={country.id} value={country.id}>
+                  {country.country_ref ? `${country.country_ref} — ` : ""}
+                  {country.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        )}
         <FilterChips
           label={t("dossiers.liste.filtrer_statut")}
           value={statusFilter}

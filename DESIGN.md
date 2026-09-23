@@ -4,8 +4,8 @@
 > Les tokens vivent dans `frontend/src/index.css` ; ce document dit comment
 > s'en servir.
 
-L'application sert le siège — DM, DF, RH, direction — et les managers des
-filiales, qui lisent des chiffres et cherchent des preuves, sur un poste de
+L'application sert le siège — l'administrateur (RH), qui contrôle, et la
+direction, qui supervise — et les managers des filiales, qui déclarent, qui lisent des chiffres et cherchent des preuves, sur un poste de
 travail — dans un navigateur ou dans l'application de bureau installée
 (PWA) ; l'usage sur téléphone n'est pas un cas prévu. Trois principes en
 découlent :
@@ -429,14 +429,14 @@ de non-justification **n'est pas une sixième étape** : il prend la place de
 « justifié », en corail. La frise dit l'état et rien d'autre — les actions
 restent celles d'`allowed_actions`, dans `PageHeader` et sur chaque ligne.
 Elle n'affiche ni date ni auteur par étape : cela vit dans le journal
-d'audit, réservé aux administrateurs, qu'un DF lisant cet écran n'a pas.
+d'audit, réservé aux administrateurs, qu'un manager lisant cet écran n'a pas.
 
 ### Réouverture d'un dossier
 
 Sur le détail d'un dossier, un bouton **« Rouvrir »** en variante
 `outline`, dans les actions de `PageHeader`, rendu **seulement** si
-`can("dossiers.reopen")` — `admin` et `super_admin` par défaut, jamais le
-pays — et si le dossier est soumis, en contrôle ou non justifié
+`can("dossiers.reopen")` — l'`admin` seul, jamais le pays ni le
+`super_admin` (décision 89) — et si le dossier est soumis, en contrôle ou non justifié
 (`POST /api/dossiers/{id}/reopen/ {note}`). Il ouvre un
 dialogue au titre affirmatif (« Rouvrir le dossier N°… »), dont la
 description dit la conséquence : « Le dossier et ses lignes reviennent au
@@ -462,7 +462,7 @@ détail d'un dossier, un bouton **« Rectifier »** (`outline`, icône
 `Undo2`, `components/expenses/request-rectification.tsx`), à côté des
 actions du circuit, rendu **seulement** si `allowed_actions` de la ligne
 contient `request_rectification` — le serveur le dit : droit
-(`rectifications.request`, tous les rôles par défaut), ligne justifiée ou
+(`rectifications.request`, pays et super administrateur par défaut), ligne justifiée ou
 clôturée, aucune demande déjà en attente. Il ouvre un dialogue au titre
 affirmatif (« Demander la rectification — Hôtel… »), dont la description
 dit la conséquence : un administrateur décidera ; s'il approuve, la ligne
@@ -483,7 +483,7 @@ refusée `DANGER`), la décision et son auteur. Deux boutons icône,
 **Approuver** (`Check`, teinte succès) et **Refuser** (`X`, destructive),
 rendus seulement si `can_decide` — calculé par le serveur : demande en
 attente, rôle décideur (`rectifications.decide` : administrateurs, jamais
-le pays), pas l'auteur de la demande. Approuver agit en un geste ;
+le pays ni le `super_admin`), pas l'auteur de la demande. Approuver agit en un geste ;
 refuser ouvre un dialogue au motif obligatoire, bouton `destructive`
 « Refuser ». Après une décision, la page relit le dossier et ses lignes.
 Dans le journal d'audit : `rectification_requested`, `rectified` (la
@@ -492,8 +492,8 @@ notifications, l'icône `Undo2`.
 
 ### Menu d'export
 
-Les exports et l'import sont réservés aux administrateurs : le menu
-n'apparaît que si `can("data.export")`. C'est un `DropdownMenu` ouvert par
+Les exports sont réservés aux administrateurs : le menu n'apparaît que si
+`can("data.export")`. C'est un `DropdownMenu` ouvert par
 un bouton `outline` « Exporter » (icône `Download`) dans les actions de
 `PageHeader` des écrans registre, dossiers et tableau de bord, avec :
 
@@ -509,11 +509,27 @@ un bouton `outline` « Exporter » (icône `Download`) dans les actions de
 Le fichier se télécharge par la vue authentifiée (`/api/exports/…`), jamais
 par une URL construite à la main ; pendant la génération, le bouton montre
 `<Loader2 className="animate-spin" />`. Le registre porte le même menu, qui
-reprend le pays de son filtre. L'import (`Upload`) vit dans l'onglet
-« Import » de la Configuration (`?onglet=import`), réservé à
-`can("data.import")`, et propose la simulation (`dry_run`) avant
-l'écriture. Pour tous les autres rôles, ni bouton, ni lien : ils
-travaillent dans l'application.
+reprend le pays de son filtre, comme la liste des dossiers. Pour tous les
+autres rôles, ni bouton, ni lien : ils travaillent dans l'application.
+
+### Import d'un classeur
+
+Importer, c'est déclarer (décision 89) : l'import revient au pays et vit
+avec les dossiers, pas dans la Configuration. Sur la liste des dossiers,
+un bouton `outline` « Importer » (icône `Upload`), rendu seulement si
+`can("data.import")`, mène à la page `/dossiers/import` — une page à part,
+avec son `PageHeader` et le bouton « Retour » commun. Elle propose la
+simulation (`dry_run`) avant l'écriture ; les erreurs se lisent au numéro
+de ligne du classeur. Le siège ne voit pas le bouton.
+
+### Filtre par pays des dossiers
+
+Un dossier appartient à un pays (décision 89). La liste des dossiers
+porte un `NativeSelect` « Tous les pays », à côté de la recherche, dès que
+le compte voit plusieurs pays — le siège, ou un manager rattaché à
+plusieurs pays ; un manager d'un seul pays n'en a pas besoin. Le pays vit
+dans l'URL (`?country=`), comme le statut, et part aussi au menu
+d'export.
 
 ---
 

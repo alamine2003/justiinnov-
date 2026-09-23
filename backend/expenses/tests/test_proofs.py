@@ -371,6 +371,16 @@ class ProofReviewTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_le_super_administrateur_ne_controle_pas_une_piece(self):
+        """Il supervise : le contrôle d'une pièce est à l'administrateur
+        (décision 89)."""
+        self.login(self.doo)
+
+        response = self.review("validated")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Proof.objects.get(pk=self.proof_id).status, Proof.ProofStatus.RECEIVED)
+
     def test_une_piece_tranchee_ne_bouge_plus(self):
         """Validée, rejetée ou archivée, la pièce est figée : seul un
         remplacement fait avancer le dossier. Sans cela, un contrôleur
@@ -566,12 +576,16 @@ class TypeFigeAvecLeDossierTests(ExpenseTestCase):
     def test_declare_le_dossier_fige_le_type(self):
         self.submit_dossier()
 
-        for user in (self.owner, self.doo):
+        self.login(self.owner)
+        response = self.client.patch(f"/api/proofs/{self.proof_id}/", {"kind": "invoice"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("kind", response.data)
+        # Le siège ne dépose ni ne retouche une pièce (décision 89).
+        for user in (self.controller, self.doo):
             with self.subTest(compte=user.username):
                 self.login(user)
                 response = self.client.patch(f"/api/proofs/{self.proof_id}/", {"kind": "invoice"})
 
-                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
-                self.assertIn("kind", response.data)
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
         self.assertEqual(Proof.objects.get(pk=self.proof_id).kind, "receipt")
         self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.UPDATED).exists())

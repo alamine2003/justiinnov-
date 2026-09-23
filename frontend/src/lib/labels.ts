@@ -29,7 +29,7 @@ import type { Theme } from "@/lib/theme"
  * sont qu'un repli, pour ne jamais afficher une clé brute.
  */
 
-export const ROLES: Role[] = ["super_admin", "admin", "df", "dm", "manager"]
+export const ROLES: Role[] = ["super_admin", "admin", "manager"]
 
 export function roleLabel(t: TFunction, role: Role): string {
   return t(`libelles.roles.${role}`)

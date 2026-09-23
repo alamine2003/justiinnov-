@@ -20,9 +20,10 @@ reviews:
   path_instructions:
     - path: "backend/**/*.py"
       instructions: |
-        Plateforme de contrôle budgétaire. Vérifier : le manager déclare, le DM contrôle,
-        le DF constate ; une dépense soumise est irréversible (seule la réouverture par un
-        administrateur, motivée et tracée, ramène au brouillon) ; rien ne se supprime
+        Plateforme de contrôle budgétaire. Vérifier : le manager déclare, l'administrateur
+        contrôle, le super administrateur supervise, et le siège ne crée ni dossier ni pièce ;
+        un dossier ne change jamais de pays ; une dépense soumise est irréversible (seule la
+        réouverture par l'administrateur, motivée et tracée, ramène au brouillon) ; rien ne se supprime
         (PROTECT, désactivation, 405) ; les chiffres se calculent côté serveur en Decimal ;
         le cloisonnement par pays et par équipe s'applique sur le queryset et revalide les
         clés étrangères ; toute action sensible laisse une trace avec IP ; un GET n'écrit

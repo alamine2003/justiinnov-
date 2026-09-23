@@ -68,7 +68,7 @@ class TraceDesComptesTests(ScopingTestCase):
     def test_la_modification_porte_avant_et_apres(self):
         response = self.client.patch(
             f"/api/users/{self.rep_togo.pk}/",
-            {"role": Role.DM, "email": "togo@innovpharma.net"},
+            {"role": Role.ADMIN, "email": "togo@innovpharma.net"},
             format="json",
             REMOTE_ADDR="203.0.113.7",
         )
@@ -77,10 +77,14 @@ class TraceDesComptesTests(ScopingTestCase):
         # Le rôle est journalisé par le profil lui-même (``accounts.signals``),
         # le compte par la vue : deux entrées, chacune avec avant/après.
         diffs = [e.diff for e in entrees(self.rep_togo, action=ChangeLog.Actions.UPDATED)]
-        self.assertIn({"role": [Role.MANAGER, Role.DM]}, diffs)
-        self.assertIn(
-            {"email": ["togo.innov@innovpharma.net", "togo@innovpharma.net"]}, diffs
+        self.assertIn({"role": [Role.MANAGER, Role.ADMIN]}, diffs)
+        # L'adresse change dans la même écriture que les drapeaux du siège.
+        compte = next(d for d in diffs if "email" in d)
+        self.assertEqual(
+            compte["email"], ["togo.innov@innovpharma.net", "togo@innovpharma.net"]
         )
+        # Passé au siège, il voit tous les pays : son pays lui est retiré.
+        self.assertIn({"countries": [["Togo (TG)"], []]}, diffs)
         for entry in entrees(self.rep_togo, action=ChangeLog.Actions.UPDATED):
             self.assertEqual(entry.ip_address, "203.0.113.7")
             self.assertEqual(entry.performed_by, self.siege.username)
@@ -224,7 +228,8 @@ class TraceDesComptesTests(ScopingTestCase):
             "/api/users/",
             {
                 "username": "kofi.innov", "email": "kofi@innovpharma.net", "password": "Provisoire-2026-Ghana",
-                "role": Role.MANAGER, "must_change_password": False,
+                "role": Role.MANAGER, "countries": [self.togo.pk],
+                "must_change_password": False,
             },
             format="json",
         )
@@ -248,11 +253,46 @@ class TraceDesComptesTests(ScopingTestCase):
         self.assertTrue(dg.is_superuser)
         self.assertTrue(dg.is_staff)
 
-        self.client.patch(f"/api/users/{dg.pk}/", {"role": Role.DF}, format="json")
+        self.client.patch(
+            f"/api/users/{dg.pk}/",
+            {"role": Role.MANAGER, "countries": [self.togo.pk]},
+            format="json",
+        )
 
         dg.refresh_from_db()
         self.assertFalse(dg.is_superuser)
         self.assertFalse(dg.is_staff)
+
+    def test_un_manager_sans_pays_est_refuse(self):
+        """Un manager ouvre les dossiers de son pays (décision 89) : sans
+        pays, il ne pourrait rien déclarer, et le compte serait inutile."""
+        response = self.client.post(
+            "/api/users/",
+            {"username": "kofi.innov", "email": "kofi@innovpharma.net",
+             "password": MOT_DE_PASSE, "role": Role.MANAGER},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("countries", response.data)
+        self.assertFalse(User.objects.filter(username="kofi.innov").exists())
+
+    def test_le_siege_ne_garde_pas_de_pays(self):
+        """Le siège voit tous les pays : des pays envoyés avec son rôle sont
+        effacés, pour ne pas laisser croire à une restriction."""
+        response = self.client.post(
+            "/api/users/",
+            {"username": "rh2.innov", "email": "rh2@innovpharma.net",
+             "password": MOT_DE_PASSE, "role": Role.ADMIN,
+             "countries": [self.togo.pk]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["countries"], [])
+        profil = User.objects.get(username="rh2.innov").profile
+        self.assertFalse(profil.countries.exists())
+        self.assertTrue(profil.has_global_scope)
 
 
 class HierarchieDesRolesTests(ScopingTestCase):
@@ -507,7 +547,7 @@ class AdresseUniqueTests(ScopingTestCase):
 
     def test_un_compte_ne_prend_pas_l_adresse_d_un_autre(self):
         response = self.client.patch(
-            f"/api/users/{self.rep_togo.pk}/", {"email": "DM.innov@innovpharma.net"}, format="json"
+            f"/api/users/{self.rep_togo.pk}/", {"email": "RH.innov@innovpharma.net"}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)

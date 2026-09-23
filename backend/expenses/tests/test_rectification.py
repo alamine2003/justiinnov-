@@ -1,8 +1,8 @@
 """Rectification d'un constat : la seconde exception à l'irréversibilité.
 
-Une ligne justifiée ou clôturée l'a été à tort. N'importe qui le demande,
-motif à l'appui ; un administrateur — jamais l'auteur de la demande —
-approuve ou refuse. Approuvée, la ligne revient en contrôle, son montant
+Une ligne justifiée ou clôturée l'a été à tort. Le pays ou le super
+administrateur le demande, motif à l'appui ; un administrateur — jamais
+l'auteur de la demande — approuve ou refuse. Approuvée, la ligne revient en contrôle, son montant
 justifié remis à zéro, et le dossier constaté la suit ; tout est tracé et
 notifié. Refusée, le constat tient.
 """
@@ -14,6 +14,7 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.aggregates import budget_figures
+from core.models import WorkflowConfiguration
 from expenses.models import AuditLog, Rectification
 from expenses.workflow import REQUEST_RECTIFICATION, Status
 from notifications.models import Notification
@@ -24,12 +25,11 @@ MOTIF = "Le montant justifié ne correspond pas à la facture : 200 000, pas 250
 
 
 class RectificationTestCase(ExpenseTestCase):
-    """Un dossier soumis, sa ligne « Hôtel » justifiée par le DF."""
+    """Un dossier soumis, sa ligne « Hôtel » justifiée par l'administrateur."""
 
     def setUp(self):
         super().setUp()
         self.admin = make_user("rh.admin", Role.ADMIN)
-        self.dm_togo = make_user("dm.togo", Role.DM, [self.togo])
         self.ligne = self.make_expense(amount="250000.00", title="Hôtel")
         self.autre_ligne = self.make_expense(amount="50000.00", title="Taxi")
         self.submit_dossier()
@@ -58,6 +58,15 @@ class RectificationTestCase(ExpenseTestCase):
         self.login(user or self.owner)
         return self.client.get(f"/api/expenses/{self.ligne.pk}/").data
 
+    def ouvrir_la_demande_aux_administrateurs(self):
+        """Ce que la matrice permet quand le siège compte deux
+        administrateurs : l'un demande, l'autre tranche."""
+        configuration = WorkflowConfiguration.charger()
+        configuration.capability_roles = {
+            "rectifications.request": [Role.MANAGER, Role.ADMIN, Role.SUPER_ADMIN],
+        }
+        configuration.save()
+
 
 class DemandeTests(RectificationTestCase):
     def test_le_pays_demande_la_rectification_d_une_ligne_justifiee(self):
@@ -75,14 +84,25 @@ class DemandeTests(RectificationTestCase):
         self.assertEqual(self.ligne.status, Status.JUSTIFIED)
         self.assertEqual(self.ligne.justified_amount, Decimal("250000.00"))
 
-    def test_le_siege_demande_aussi(self):
-        """Ouverte à tous par défaut : le DF qui voit sa propre erreur, le
-        DM, l'administrateur."""
-        for compte in (self.controller, self.dm_togo, self.admin, self.doo):
-            demande = self.demander(user=compte)
-            self.assertEqual(demande.status_code, status.HTTP_201_CREATED, compte)
-            # Une demande à la fois : on la refuse pour laisser place à la suivante.
-            self.refuser(demande.data["id"], user=self.doo if compte != self.doo else self.admin)
+    def test_le_super_administrateur_demande_aussi(self):
+        """Il supervise : il signale l'erreur, un administrateur tranche."""
+        demande = self.demander(user=self.doo)
+
+        self.assertEqual(demande.status_code, status.HTTP_201_CREATED, demande.data)
+        self.assertEqual(self.refuser(demande.data["id"]).status_code, status.HTTP_200_OK)
+
+    def test_l_administrateur_ne_demande_pas_par_defaut(self):
+        """Il ne trancherait pas sa propre demande, et le siège peut ne
+        compter qu'un administrateur : elle attendrait sans fin. La
+        matrice la lui ouvre quand ils sont deux."""
+        refusee = self.demander(user=self.controller)
+        self.assertEqual(refusee.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertNotIn(REQUEST_RECTIFICATION, self.ligne_api(self.controller)["allowed_actions"])
+
+        self.ouvrir_la_demande_aux_administrateurs()
+
+        ouverte = self.demander(user=self.controller)
+        self.assertEqual(ouverte.status_code, status.HTTP_201_CREATED, ouverte.data)
 
     def test_une_ligne_cloturee_se_rectifie(self):
         self.login(self.controller)
@@ -121,7 +141,7 @@ class DemandeTests(RectificationTestCase):
     def test_une_seule_demande_en_attente_par_ligne(self):
         self.demander()
 
-        seconde = self.demander(user=self.controller, motif="Autre lecture de la facture.")
+        seconde = self.demander(user=self.doo, motif="Autre lecture de la facture.")
 
         self.assertEqual(seconde.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("expense", seconde.data)
@@ -152,7 +172,7 @@ class DemandeTests(RectificationTestCase):
 
     def test_la_demande_ne_se_modifie_ni_ne_se_supprime(self):
         demande = self.demander()
-        self.login(self.doo)
+        self.login(self.admin)
 
         modifie = self.client.patch(
             f"/api/rectifications/{demande.data['id']}/", {"motif": "Autre chose"}
@@ -176,14 +196,14 @@ class DemandeTests(RectificationTestCase):
 class ActionsProposeesTests(RectificationTestCase):
     def test_la_ligne_propose_la_demande_tant_qu_aucune_n_attend(self):
         self.assertIn(REQUEST_RECTIFICATION, self.ligne_api()["allowed_actions"])
-        self.assertIn(REQUEST_RECTIFICATION, self.ligne_api(self.controller)["allowed_actions"])
+        self.assertIn(REQUEST_RECTIFICATION, self.ligne_api(self.doo)["allowed_actions"])
         soumise = self.client.get(f"/api/expenses/{self.autre_ligne.pk}/").data
         self.assertNotIn(REQUEST_RECTIFICATION, soumise["allowed_actions"])
 
         self.demander()
 
         self.assertNotIn(REQUEST_RECTIFICATION, self.ligne_api()["allowed_actions"])
-        self.assertNotIn(REQUEST_RECTIFICATION, self.ligne_api(self.controller)["allowed_actions"])
+        self.assertNotIn(REQUEST_RECTIFICATION, self.ligne_api(self.doo)["allowed_actions"])
 
     def test_le_detail_du_dossier_le_dit_aussi(self):
         self.login(self.owner)
@@ -194,6 +214,7 @@ class ActionsProposeesTests(RectificationTestCase):
         self.assertNotIn(REQUEST_RECTIFICATION, par_ligne[self.autre_ligne.pk])
 
     def test_can_decide_dit_qui_tranche(self):
+        self.ouvrir_la_demande_aux_administrateurs()
         demande = self.demander(user=self.admin)
         pk = demande.data["id"]
 
@@ -202,13 +223,12 @@ class ActionsProposeesTests(RectificationTestCase):
             return self.client.get(f"/api/rectifications/{pk}/").data["can_decide"]
 
         self.assertFalse(can_decide(self.admin), "jamais l'auteur de la demande")
-        self.assertTrue(can_decide(self.doo))
+        self.assertTrue(can_decide(self.controller))
         self.assertFalse(can_decide(self.owner))
-        self.assertFalse(can_decide(self.controller))
-        self.assertFalse(can_decide(self.dm_togo))
+        self.assertFalse(can_decide(self.doo), "le super administrateur supervise")
 
-        self.approuver(pk, user=self.doo)
-        self.assertFalse(can_decide(self.doo), "déjà tranchée")
+        self.approuver(pk, user=self.controller)
+        self.assertFalse(can_decide(self.controller), "déjà tranchée")
 
 
 class DecisionTests(RectificationTestCase):
@@ -254,7 +274,7 @@ class DecisionTests(RectificationTestCase):
 
     def test_le_siege_tranche_a_nouveau(self):
         """La raison d'être de la rectification : la ligne repasse par le
-        contrôle, et le DF constate le bon montant."""
+        contrôle, et l'administrateur constate le bon montant."""
         self.approuver(self.demander().data["id"])
 
         self.login(self.controller)
@@ -334,7 +354,9 @@ class DecisionTests(RectificationTestCase):
 
     def test_l_auteur_de_la_demande_ne_la_tranche_pas(self):
         """Demander et trancher sont deux regards, comme pour une
-        réallocation — même pour un administrateur."""
+        réallocation — même pour un administrateur à qui la matrice ouvre
+        la demande."""
+        self.ouvrir_la_demande_aux_administrateurs()
         demande = self.demander(user=self.admin)
 
         approuve = self.approuver(demande.data["id"], user=self.admin)
@@ -345,13 +367,15 @@ class DecisionTests(RectificationTestCase):
         self.ligne.refresh_from_db()
         self.assertEqual(self.ligne.status, Status.JUSTIFIED)
 
-        autre = self.approuver(demande.data["id"], user=self.doo)
+        autre = self.approuver(demande.data["id"], user=self.controller)
         self.assertEqual(autre.status_code, status.HTTP_200_OK, autre.data)
 
-    def test_ni_le_pays_ni_le_dm_ni_le_df_ne_decident(self):
+    def test_ni_le_pays_ni_le_super_administrateur_ne_decident(self):
+        """Décider est un acte de contrôle : l'administrateur seul
+        (décision 89)."""
         demande = self.demander()
 
-        for compte in (self.owner, self.dm_togo, self.controller):
+        for compte in (self.owner, self.doo):
             approuve = self.approuver(demande.data["id"], user=compte)
             refuse = self.refuser(demande.data["id"], user=compte)
             self.assertEqual(approuve.status_code, status.HTTP_403_FORBIDDEN, compte)
@@ -363,8 +387,8 @@ class DecisionTests(RectificationTestCase):
         demande = self.demander()
         self.approuver(demande.data["id"])
 
-        encore = self.approuver(demande.data["id"], user=self.doo)
-        refus = self.refuser(demande.data["id"], user=self.doo)
+        encore = self.approuver(demande.data["id"], user=self.controller)
+        refus = self.refuser(demande.data["id"], user=self.controller)
 
         self.assertEqual(encore.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("status", encore.data)
@@ -414,18 +438,19 @@ class TraceEtNotificationTests(RectificationTestCase):
         self.assertEqual(decidee.detail["note"], "Relu.")
 
     def test_les_decideurs_sont_prevenus_de_la_demande(self):
-        """Ceux qui peuvent trancher — RH et direction — apprennent qu'un
-        constat est contesté ; ni le demandeur, ni le contrôle, ni le voisin."""
+        """Ceux qui peuvent trancher — les administrateurs — apprennent qu'un
+        constat est contesté ; ni le demandeur, ni le superviseur, ni le
+        voisin."""
         self.demander()
 
         demandes = Notification.objects.filter(kind=Notification.Kind.RECTIFICATION_REQUESTED)
-        for compte in (self.admin, self.doo):
+        for compte in (self.admin, self.controller):
             recue = demandes.filter(recipient=compte)
             self.assertEqual(recue.count(), 1, compte)
             self.assertIn("Hôtel", recue.get().title)
             self.assertIn(MOTIF, recue.get().body)
             self.assertEqual(recue.get().link, f"/dossiers/{self.dossier.pk}")
-        for compte in (self.owner, self.controller, self.dm_togo, self.rep_ivoire):
+        for compte in (self.owner, self.doo, self.rep_ivoire):
             self.assertFalse(demandes.filter(recipient=compte).exists(), compte)
 
     def test_le_demandeur_le_controle_et_le_pays_apprennent_l_approbation(self):
@@ -433,7 +458,7 @@ class TraceEtNotificationTests(RectificationTestCase):
         self.approuver(demande.data["id"])
 
         decisions = Notification.objects.filter(kind=Notification.Kind.RECTIFICATION_DECIDED)
-        for compte in (self.owner, self.controller, self.dm_togo, self.doo):
+        for compte in (self.owner, self.controller):
             recue = decisions.filter(recipient=compte)
             self.assertEqual(recue.count(), 1, compte)
             self.assertIn("approuvée", recue.get().title)
@@ -455,7 +480,8 @@ class ApresRectificationTests(RectificationTestCase):
     """Rectifiée, la ligne est de nouveau en contrôle : le dossier peut
     être rouvert — plus rien n'y est constaté — et la ligne revenir au
     brouillon. Mais elle a une histoire, et la demande la référence : elle
-    ne se retire plus, elle se corrige et se resoumet."""
+    ne se retire plus, elle se corrige et se resoumet. Déclarées avant la
+    réouverture, ses voisines ne se retirent pas davantage."""
 
     def setUp(self):
         super().setUp()
@@ -474,11 +500,11 @@ class ApresRectificationTests(RectificationTestCase):
         supprime = self.client.delete(f"/api/expenses/{self.ligne.pk}/")
 
         self.assertEqual(supprime.status_code, status.HTTP_400_BAD_REQUEST, supprime.data)
-        self.assertIn("rectification", str(supprime.data["status"]))
+        self.assertIn("status", supprime.data)
         self.assertTrue(Rectification.objects.filter(expense=self.ligne).exists())
-        # L'autre ligne, jamais contestée, se retire comme tout brouillon.
+        # L'autre ligne, jamais contestée mais déclarée, reste aussi.
         autre = self.client.delete(f"/api/expenses/{self.autre_ligne.pk}/")
-        self.assertEqual(autre.status_code, status.HTTP_204_NO_CONTENT, autre.data)
+        self.assertEqual(autre.status_code, status.HTTP_400_BAD_REQUEST, autre.data)
 
     def test_le_dossier_qui_la_porte_ne_se_retire_plus(self):
         self.login(self.owner)
@@ -486,7 +512,7 @@ class ApresRectificationTests(RectificationTestCase):
         supprime = self.client.delete(f"/api/dossiers/{self.dossier.pk}/")
 
         self.assertEqual(supprime.status_code, status.HTTP_400_BAD_REQUEST, supprime.data)
-        self.assertIn("rectification", str(supprime.data["expenses"]))
+        self.assertIn("status", supprime.data)
         self.ligne.refresh_from_db()
 
     def test_la_ligne_ne_propose_plus_le_retrait(self):
@@ -495,7 +521,7 @@ class ApresRectificationTests(RectificationTestCase):
 
         self.assertIn("edit", actions)
         self.assertNotIn("delete", actions)
-        self.assertIn("delete", autre)
+        self.assertNotIn("delete", autre)
 
     def test_elle_se_corrige_et_se_resoumet(self):
         self.login(self.owner)

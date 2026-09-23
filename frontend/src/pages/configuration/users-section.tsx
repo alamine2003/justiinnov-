@@ -427,9 +427,8 @@ function UserForm({
   // Le rattachement au siège vient du serveur. Tant que la matrice n'est pas
   // chargée, il reste inconnu : le formulaire propose alors les rôles sans
   // annoncer leur périmètre et laisse le serveur trancher, plutôt que de
-  // recopier ici une table de rôles qui divergerait. Un compte du siège
-  // sans pays voit tous les pays ; des pays cochés restreignent un DM ou
-  // un DF ; un rôle toujours global n'a rien à cocher.
+  // recopier ici une table de rôles qui divergerait. Le siège est toujours
+  // global : rien à cocher ; le manager coche son pays (décision 89).
   const roleInfo = roles.find((r) => r.value === role)
   const isHeadquarters = Boolean(roleInfo?.siege)
   const alwaysGlobal = Boolean(roleInfo?.always_global)
@@ -533,9 +532,8 @@ function UserForm({
         // si le compte en avait un, ou si le rôle vient de changer.
         if (!editing || roleChanged || editing.countries.length > 0) payload.countries = []
       } else if (!editing || countriesTouched || roleChanged) {
-        // Vide, le périmètre d'un compte du siège vaut tous les pays. Un
-        // changement de rôle renvoie le périmètre tel qu'affiché, pour que
-        // le serveur le revalide contre le nouveau rôle.
+        // Un changement de rôle renvoie le périmètre tel qu'affiché, pour
+        // que le serveur le revalide contre le nouveau rôle.
         payload.countries = countryIds
       }
       if (teamsApply && (!editing || teamsTouched || countriesTouched || roleChanged)) {
@@ -666,9 +664,7 @@ function UserForm({
                 {t("configuration.utilisateurs.form.perimetre_legend")}
               </legend>
               <p className="text-xs text-muted-foreground">
-                {isHeadquarters
-                  ? t("configuration.utilisateurs.form.perimetre_aide_siege")
-                  : t("configuration.utilisateurs.form.perimetre_aide_pays")}
+                {t("configuration.utilisateurs.form.perimetre_aide_pays")}
               </p>
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-2">
                 {countries.length === 0 && (

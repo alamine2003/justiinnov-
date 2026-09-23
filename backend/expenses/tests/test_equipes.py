@@ -49,6 +49,9 @@ class CloisonnementParEquipeTests(ExpenseTestCase):
 
         self.manager_a = make_user("manager.lome", Role.MANAGER, [self.togo])
         self.manager_a.profile.teams.set([self.equipe_a])
+        # Le brouillon de Lomé est le sien : seul l'auteur d'un brouillon y
+        # ajoute une ligne (décision 89).
+        Dossier.objects.filter(pk=self.dossier_a.pk).update(created_by=self.manager_a.username)
         self.manager_sans_equipe = make_user("manager.togo", Role.MANAGER, [self.togo])
 
     def _piece(self, dossier, empreinte):
@@ -188,12 +191,12 @@ class CloisonnementParEquipeTests(ExpenseTestCase):
         self.assertEqual(dossiers.data["count"], 2)
         self.assertEqual(lignes.data["count"], 2)
 
-    def test_le_dm_n_est_pas_cloisonne_par_equipe(self):
-        """Le DM contrôle pour le siège, fût-il restreint au Togo : les
-        équipes de son profil, s'il en a, ne le restreignent pas."""
-        dm = make_user("dm.togo", Role.DM, [self.togo])
-        dm.profile.teams.set([self.equipe_a])
-        self.login(dm)
+    def test_l_administrateur_n_est_pas_cloisonne_par_equipe(self):
+        """L'administrateur contrôle pour le siège : des pays ou des équipes
+        posés sur son profil ne le restreignent pas."""
+        rh = make_user("rh.togo", Role.ADMIN, [self.togo])
+        rh.profile.teams.set([self.equipe_a])
+        self.login(rh)
 
         response = self.client.get("/api/dossiers/")
 

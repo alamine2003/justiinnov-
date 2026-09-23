@@ -15,24 +15,25 @@ Trois principes gouvernent ce circuit :
   preuve ne fait pas revenir l'argent : elle se lit dans l'écart entre le
   montant dépensé et le montant justifié.
 - **Personne ne contrôle sa propre dépense.** Le pays (manager) déclare,
-  le siège constate — le DM met en contrôle, le DF tranche. Et même au
-  siège, celui qui a saisi une ligne ou ouvert un dossier n'y accomplit
-  aucun acte de contrôle : ni mise en contrôle, ni justification, ni rejet,
-  ni clôture (``FOUR_EYES_ACTIONS``). Sans cette séparation, une seule
-  personne pourrait décaisser puis se donner quitus.
+  l'administrateur constate de bout en bout — mise en contrôle,
+  justification ou rejet, clôture (décision 89). Les deux rôles ne se
+  recouvrent pas ; la règle des quatre yeux (``FOUR_EYES_ACTIONS``) reste
+  en garde : celui qui a saisi une ligne ou ouvert un dossier n'y
+  accomplit aucun acte de contrôle, quelle que soit la matrice. Sans cette
+  séparation, une seule personne pourrait décaisser puis se donner quitus.
 
 Les actions que le demandeur peut tenter sont calculées ici aussi
 (``expense_allowed_actions``, ``dossier_allowed_actions``) et exposées par
 l'API : l'interface les affiche, elle ne recopie pas les règles.
 
 **La réouverture est la seule exception à l'irréversibilité.** Un
-administrateur (RH ou super administrateur) peut renvoyer au brouillon un
+administrateur (la RH, qui contrôle) peut renvoyer au brouillon un
 dossier déclaré mais pas encore constaté, pour demander des comptes au pays :
 une ligne mal imputée, un montant douteux, une pièce qui ne correspond pas.
 Elle n'est pas une correction silencieuse, et le circuit le garantit :
 
-- elle est réservée aux administrateurs, jamais au pays qui a déclaré ni à la
-  direction financière qui constate ;
+- elle est réservée à l'administrateur par défaut (``dossiers.reopen``),
+  jamais au pays qui a déclaré ;
 - elle exige un motif, conservé sur le dossier et dans le journal d'audit,
   sur le dossier et sur chacune de ses lignes ;
 - elle est refusée dès qu'une ligne est justifiée ou clôturée : le siège a
@@ -50,14 +51,16 @@ justifié faux, une pièce prise pour une autre. Se corriger en silence
 serait pire que l'erreur ; c'est pourquoi la rectification se fait en deux
 temps, à deux personnes :
 
-- **n'importe qui demande** (``rectifications.request``, tous les rôles
-  par défaut) : une ligne justifiée ou clôturée, un motif obligatoire, une
-  seule demande en attente par ligne ;
-- **un administrateur décide** (``rectifications.decide`` : RH et
-  direction, jamais le pays) — et jamais l'auteur de la demande : demander
+- **le pays ou le super administrateur demande**
+  (``rectifications.request``) : une ligne justifiée ou clôturée, un motif
+  obligatoire, une seule demande en attente par ligne. L'administrateur ne
+  demande pas par défaut : il ne trancherait pas sa propre demande, et le
+  siège peut n'en compter qu'un ;
+- **l'administrateur décide** (``rectifications.decide``, jamais le pays
+  ni le super administrateur) — et jamais l'auteur de la demande : demander
   et trancher sont deux regards, comme pour une réallocation ;
 - approuvée, la ligne **revient en contrôle** (``rectify``), son montant
-  justifié remis à zéro, pour que la direction financière tranche à
+  justifié remis à zéro, pour que l'administrateur tranche à
   nouveau — elle ne revient jamais au brouillon, la dépense reste déclarée
   et pèse toujours sur l'enveloppe ; le dossier, s'il avait été constaté,
   revient en contrôle avec elle, puisqu'il ne dit jamais autre chose que
@@ -122,12 +125,10 @@ TRANSITIONS = {
 MOTIVATED_ACTIONS = frozenset({"reject", "reopen", "rectify"})
 
 #: Capacité exigée pour chaque action du circuit (``accounts.permissions``).
-#: Par défaut, le pays (manager) soumet ; au siège, le DM met en contrôle et
-#: le DF tranche (justifie, rejette, clôt), les administrateurs pouvant faire
-#: l'un et l'autre ; les administrateurs seuls rouvrent — ni le pays, qui se
-#: corrigerait lui-même, ni la direction financière, dont le constat ne se
-#: défait pas. La matrice des droits peut élargir ces défauts, jamais au
-#: pays pour le contrôle.
+#: Le pays (manager) soumet ; l'administrateur, seul, met en contrôle,
+#: tranche (justifie, rejette), clôt, rouvre et décide des rectifications
+#: (décision 89). Ces lignes de la matrice sont verrouillées : ni le pays,
+#: qui se contrôlerait lui-même, ni le super administrateur, qui supervise.
 ACTION_CAPACITES = {
     "submit": "dossiers.submit",
     "review": "expenses.review",
@@ -190,7 +191,7 @@ LINES_REQUIRED = {
 #: « re-signalée » incomplète : on attend le complément, puis on tranche.
 #: Validée, rejetée ou archivée, elle ne bouge plus : seul un remplacement
 #: par une nouvelle version (qui l'archive) fait avancer le dossier. Sans ce
-#: tableau, la direction financière pouvait dévalider une pièce déjà
+#: tableau, le contrôle pouvait dévalider une pièce déjà
 #: validée, voire ressusciter une pièce archivée.
 PROOF_TRANSITIONS = {
     "received": frozenset({"validated", "rejected", "incomplete", "to_review"}),
@@ -289,15 +290,16 @@ DOSSIER_ACTIONS = (
 def agit_en_auteur(objet, role, username):
     """Le compte peut-il agir sur ce brouillon comme son auteur ?
 
-    Vrai pour l'auteur, pour le siège — qui agit à découvert, chaque acte
-    journalisé — et sans auteur connu (import, compte disparu). Faux pour
-    un collègue du pays. Seul prédicat de la règle : le service qui refuse
-    (``transitions.exiger_l_auteur_du_brouillon``) et ``allowed_actions``
-    (:func:`peut_saisir`, :func:`dossier_allowed_actions`) le partagent,
-    pour ne jamais diverger.
+    Vrai pour l'auteur, et sans auteur connu (compte disparu, brouillon
+    rendu au pays par la décision 89). Faux pour un collègue du pays — et
+    pour le siège, qui ne déclare plus : il ne corrige pas un brouillon, il
+    le contrôle une fois soumis (décision 89). Seul prédicat de la règle :
+    le service qui refuse (``transitions.exiger_l_auteur_du_brouillon``) et
+    ``allowed_actions`` (:func:`peut_saisir`, :func:`dossier_allowed_actions`)
+    le partagent, pour ne jamais diverger.
     """
     if role not in COUNTRY_ROLES:
-        return True
+        return False
     return not objet.created_by or objet.created_by == username
 
 
@@ -305,8 +307,8 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
     """La saisie ``action`` (modifier, ajouter, déposer, supprimer) est-elle possible ?
 
     Une dépense déclarée ne se modifie plus ni ne se supprime ; une pièce se
-    dépose jusqu'à la clôture ; un brouillon ne se retire que par son auteur
-    et ne se modifie que par lui ou par le siège
+    dépose jusqu'à la clôture ; un brouillon ne se retire, ne se modifie et
+    ne se soumet que par son auteur
     (``transitions.exiger_l_auteur_du_brouillon``, ``retirer_brouillon``). Sans auteur connu — import, compte
     disparu — le retrait reste ouvert à qui a la capacité. Comme pour
     ``justify``, la liste dit ce qui peut être *tenté* : le retrait d'un
@@ -321,14 +323,21 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
             objet.status in DELETABLE_STATUSES
             and auteur_ou_anonyme
             and not a_ete_rectifiee(objet)
+            and not a_ete_declare(objet)
         )
     if action == "edit":
-        # Le siège corrige à découvert ; un collègue du pays, non.
+        # Ni un collègue du pays, ni le siège (décision 89).
         return objet.status not in LOCKED_STATUSES and agit_en_auteur(
             objet, role, username
         )
     if action == "upload":
         return objet.status not in PROOF_LOCKED_STATUSES
+    if action == "add_line":
+        # Ajouter une ligne, c'est modifier le brouillon : son auteur seul,
+        # comme à l'import (décision 46).
+        return objet.status not in LOCKED_STATUSES and agit_en_auteur(
+            objet, role, username
+        )
     return objet.status not in LOCKED_STATUSES
 
 
@@ -362,6 +371,31 @@ def expense_allowed_actions(expense, *, role, username, configuration=None):
     if peut_demander_une_rectification(expense, role=role, configuration=configuration):
         actions.append(REQUEST_RECTIFICATION)
     return actions
+
+
+def a_ete_declare(objet):
+    """Ce brouillon a-t-il déjà été déclaré, puis rouvert ?
+
+    Seul un brouillon jamais soumis se retire (CLAUDE.md) : un dossier
+    rouvert revient au brouillon, mais il a été déclaré, et ses lignes avec
+    lui. Un dossier le dit par son motif de réouverture (``reopen_note``) ;
+    une ligne, par l'entrée ``submitted`` du journal d'audit — lue sur
+    ``expense.declaree`` quand la liste l'a annotée
+    (``ExpenseQuerySet.with_rectification``), par une requête sinon.
+    """
+    if getattr(objet, "pk", None) is None:
+        return False
+    if hasattr(objet, "reopen_note"):
+        return bool(objet.reopen_note)
+    declaree = getattr(objet, "declaree", None)
+    if declaree is None:
+        from .models import AuditLog
+
+        declaree = AuditLog.objects.filter(
+            object_type=type(objet).__name__, object_id=objet.pk,
+            action=AuditLog.Action.SUBMITTED,
+        ).exists()
+    return declaree
 
 
 def a_ete_rectifiee(objet):
@@ -413,8 +447,8 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
     (:meth:`Dossier.line_counts`), annotés par ``with_totals`` sur une
     liste pour ne pas coûter une requête par dossier.
 
-    Un brouillon de dossier ne se soumet que par son auteur ou par le
-    siège, comme il ne se modifie que par eux
+    Un brouillon de dossier ne se soumet que par son auteur, comme il ne
+    se modifie que par lui
     (``transitions.exiger_l_auteur_du_brouillon``) : un collègue du pays ne
     voit pas ``submit``.
 

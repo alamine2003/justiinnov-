@@ -488,6 +488,31 @@ et `GET /api/me/` l'annonce (`totp_required`). Prévenez les comptes avant :
 chacun devra avoir une application d'authentification sous la main à sa
 connexion suivante.
 
+Pour ne l'imposer qu'à certains rôles — la recommandation pour les comptes
+privilégiés, décision 86 —, posez plutôt
+`DJANGO_TOTP_REQUIRED_ROLES=admin,super_admin`. La liste ne connaît que les
+trois rôles de la décision 89 (`manager`, `admin`, `super_admin`) : un
+`.env` qui nomme encore `dm` ou `df` empêche le backend de démarrer
+(`ImproperlyConfigured`). Retirez-les **avant** de livrer cette version.
+
+### Passage à trois rôles (décision 89)
+
+La livraison qui retire le DM et le DF applique trois migrations de
+reprise, sans rien supprimer :
+
+- les comptes `dm` et `df` passent au rôle `manager`, **désactivés** ; un
+  administrateur décide ensuite de leur sort (rôle d'administrateur s'ils
+  contrôlent désormais, puis réactivation) — l'historique garde leur
+  ancien rôle ;
+- la matrice des droits oublie ces deux rôles, et `data.import` comme
+  `rectifications.request` reprennent leur nouveau défaut ;
+- les brouillons ouverts par le siège perdent leur auteur et reviennent au
+  pays, qui les finit ; le journal d'audit garde l'ancien auteur.
+
+Mettez aussi à jour le fichier de `seed_users` : il refuse les rôles `dm`
+et `df`, et des pays sur un compte du siège (`admin`, `super_admin` sont
+toujours globaux) ; un `manager` exige au moins un pays.
+
 ### Réinitialiser un enrôlement
 
 Un titulaire enrôlé qui a perdu son téléphone ou son application ne peut

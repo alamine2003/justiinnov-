@@ -1,6 +1,6 @@
 """Réouverture d'un dossier déclaré : seule exception à l'irréversibilité.
 
-Réservée aux administrateurs, motivée, refusée dès que le siège a constaté,
+Réservée à l'administrateur (décision 89), motivée, refusée dès que le siège a constaté,
 tracée sur le dossier et sur chaque ligne, notifiée au pays. Elle sert à
 demander des comptes, jamais à corriger en silence.
 """
@@ -26,7 +26,6 @@ class ReouvertureTestCase(ExpenseTestCase):
     def setUp(self):
         super().setUp()
         self.admin = make_user("rh.admin", Role.ADMIN)
-        self.dm_togo = make_user("dm.togo", Role.DM, [self.togo])
         self.ligne = self.make_expense(amount="250000.00", title="Hôtel")
         self.autre_ligne = self.make_expense(amount="50000.00", title="Taxi")
         self.submit_dossier()
@@ -64,27 +63,49 @@ class ReouvertureTests(ReouvertureTestCase):
         self.assertEqual(figures["engaged"], Decimal("0.00"))
         self.assertEqual(figures["remaining"], Decimal("1000000.00"))
 
-    def test_le_super_administrateur_rouvre_aussi(self):
-        response = self.reopen(user=self.doo)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_ni_le_pays_ni_le_dm_ne_rouvrent(self):
+    def test_ni_le_pays_ni_le_super_administrateur_ne_rouvrent(self):
         """Le pays se corrigerait lui-même : c'est précisément ce que la
-        réouverture ne doit pas permettre. Le DM met en contrôle ; il ne
-        défait pas non plus une déclaration."""
-        for compte in (self.owner, self.dm_togo):
+        réouverture ne doit pas permettre. Le super administrateur
+        supervise ; il ne défait pas une déclaration (décision 89)."""
+        for compte in (self.owner, self.doo):
             response = self.reopen(user=compte)
 
             self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, compte)
         self.dossier.refresh_from_db()
         self.assertEqual(self.dossier.status, Status.SUBMITTED)
 
-    def test_la_direction_financiere_ne_rouvre_pas(self):
-        """Le DF constate ; il ne défait pas la déclaration du pays."""
-        response = self.reopen(user=self.controller)
+    def test_rouvert_il_ne_se_supprime_plus(self):
+        """Seul un brouillon jamais soumis se retire : un dossier rouvert a
+        été déclaré, ses lignes aussi. Il se corrige et se resoumet."""
+        self.reopen()
+        self.login(self.owner)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        dossier = self.client.delete(f"/api/dossiers/{self.dossier.pk}/")
+        ligne = self.client.delete(f"/api/expenses/{self.ligne.pk}/")
+        detail = self.client.get(f"/api/dossiers/{self.dossier.pk}/").data
+
+        self.assertEqual(dossier.status_code, status.HTTP_400_BAD_REQUEST, dossier.data)
+        self.assertEqual(ligne.status_code, status.HTTP_400_BAD_REQUEST, ligne.data)
+        self.assertNotIn("delete", detail["allowed_actions"])
+        for ligne_api in detail["expenses"]:
+            self.assertNotIn("delete", ligne_api["allowed_actions"])
+        self.assertTrue(Dossier.objects.filter(pk=self.dossier.pk).exists())
+
+    def test_une_ligne_ajoutee_apres_la_reouverture_se_retire(self):
+        """Elle n'a jamais été déclarée : c'est un brouillon comme un autre."""
+        self.reopen()
+        self.login(self.owner)
+        nouvelle = self.client.post(
+            "/api/expenses/",
+            {"dossier": self.dossier.pk, "country": self.togo.pk,
+             "date": "2026-03-16T10:00:00Z", "title": "Oubli", "amount": "1000.00"},
+            format="json",
+        )
+        self.assertEqual(nouvelle.status_code, status.HTTP_201_CREATED, nouvelle.data)
+
+        response = self.client.delete(f"/api/expenses/{nouvelle.data['id']}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_le_motif_est_obligatoire(self):
         sans = self.reopen(note=None)
@@ -227,8 +248,8 @@ class TraceDeReouvertureTests(ReouvertureTestCase):
 
     def test_le_pays_est_prevenu_avec_le_motif(self):
         """Les managers du pays apprennent que le dossier leur revient, et
-        pourquoi. L'administrateur qui rouvre n'est pas averti, et le siège
-        — DF, DM — non plus : ce n'est pas à lui d'agir."""
+        pourquoi. L'administrateur qui rouvre n'est pas averti, et le reste
+        du siège non plus : ce n'est pas à lui d'agir."""
         self.reopen()
 
         # La soumission a déjà prévenu le siège : seules les notifications
@@ -240,7 +261,7 @@ class TraceDeReouvertureTests(ReouvertureTestCase):
         self.assertIn("N-0001", notification.title)
         self.assertIn(MOTIF, notification.body)
         self.assertEqual(notification.link, f"/dossiers/{self.dossier.pk}")
-        for compte in (self.admin, self.controller, self.dm_togo, self.rep_ivoire):
+        for compte in (self.admin, self.controller, self.doo, self.rep_ivoire):
             self.assertFalse(rouvertures.filter(recipient=compte).exists(), compte)
 
     def test_une_ligne_ne_se_rouvre_pas_seule(self):

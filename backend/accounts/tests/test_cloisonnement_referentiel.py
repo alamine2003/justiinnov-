@@ -207,15 +207,16 @@ class RattachementsHorsPerimetreTests(ScopingTestCase):
     """Un compte restreint ne détache pas un responsable des pays qu'il ne voit pas.
 
     ``countries`` ne lui propose que ses pays : la liste qu'il soumet est
-    celle de ce qu'il voit. Un DM restreint au Togo qui la réécrivait
-    effaçait le rattachement ivoirien sans le savoir.
+    celle de ce qu'il voit. Un manager du Togo à qui la RH a ouvert les
+    responsables et qui la réécrivait effaçait le rattachement ivoirien sans
+    le savoir.
     """
 
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
         cls.rh = make_user("rh.rattachements", Role.ADMIN)
-        cls.dm_togo = make_user("dm.togo", Role.DM, [cls.togo])
+        cls.pays_togo = make_user("resp.togo", Role.MANAGER, [cls.togo])
         cls.responsable = Manager.objects.create(name="Responsable des deux pays")
         cls.responsable.countries.set([cls.togo, cls.ivoire])
 
@@ -225,11 +226,11 @@ class RattachementsHorsPerimetreTests(ScopingTestCase):
         self.login(self.rh)
         reponse = self.client.patch(
             "/api/permissions/",
-            {"capabilities": {"managers.update": ["super_admin", "admin", "dm"]}},
+            {"capabilities": {"managers.update": ["super_admin", "admin", "manager"]}},
             format="json",
         )
         self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
-        self.login(self.dm_togo)
+        self.login(self.pays_togo)
 
     def test_reecrire_ses_pays_ne_detache_pas_le_voisin(self):
         reponse = self.client.patch(

@@ -42,8 +42,8 @@ PERIODS = {"weekly": 7, "monthly": 30}
 #: Libellé de chaque fenêtre, dans la langue du destinataire.
 PERIOD_LABELS = {"weekly": gettext_lazy("hebdomadaire"), "monthly": gettext_lazy("mensuel")}
 
-#: Destinataires du rapport : le siège — ceux qui pilotent (direction, RH)
-#: et ceux qui contrôlent (DF, DM), chacun sur son périmètre.
+#: Destinataires du rapport : le siège — l'administrateur qui contrôle et
+#: le super administrateur qui supervise.
 AUDIENCE = HEADQUARTERS_ROLES
 
 

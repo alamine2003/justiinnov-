@@ -44,7 +44,7 @@ function demande(overrides: Partial<Reallocation>): Reallocation {
     reason: "Renfort",
     status: "pending",
     status_display: "En attente",
-    requested_by: "dm.innov",
+    requested_by: "rh.innov",
     decided_by: "",
     decided_at: null,
     decision_note: "",

@@ -148,13 +148,13 @@ describe("Pilotage — périmètre restreint à plusieurs pays", () => {
 
 /**
  * Régression : le seuil d'avertissement était recalculé côté client, d'après
- * la configuration — que seuls les administrateurs lisent. Un DF voyait donc
- * une barre à 85 % en azur là où l'administrateur la voyait en ambre, pour
- * les mêmes chiffres. Le serveur tranche désormais (`execution_level`).
+ * la configuration — que seuls les administrateurs lisent. Un compte sans
+ * accès à la configuration voyait donc une barre à 85 % en azur là où
+ * l'administrateur la voyait en ambre, pour les mêmes chiffres. Le serveur tranche désormais (`execution_level`).
  */
 describe("Pilotage — teinte du taux d'exécution", () => {
-  it("suit le niveau tranché par le serveur, pour un DF comme pour un administrateur", async () => {
-    profil = { role: "df", has_global_scope: true, countries: [] } as Partial<Me>
+  it("suit le niveau tranché par le serveur, quel que soit le rôle", async () => {
+    profil = { role: "super_admin", has_global_scope: true, countries: [] } as Partial<Me>
     fetchDashboard.mockResolvedValue({
       ...tableauDeBord(),
       countries: [

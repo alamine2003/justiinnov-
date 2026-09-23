@@ -131,8 +131,6 @@
     "roles": {
       "super_admin": "Super administrator (CEO, COO, DEV)",
       "admin": "Administrator (HR)",
-      "df": "DF — finance director (headquarters)",
-      "dm": "DM — director manager (headquarters)",
       "manager": "Manager (country)"
     },
     "workflow": {
@@ -313,6 +311,8 @@
       "recherche_aria": "Search for a file",
       "filtrer_statut": "Filter by status",
       "tous_statuts": "All statuses",
+      "filtrer_pays": "Filter by country",
+      "tous_pays": "All countries",
       "colonnes": {
         "lignes": "Lines",
         "preuves": "Proofs",
@@ -391,6 +391,30 @@
     },
     "circuit": {
       "titre": "Justification workflow"
+    },
+    "import": {
+      "titre": "Import a workbook",
+      "description": "Your country's expenses, from a workbook: they arrive as drafts, in your name, and then follow the same flow as expenses entered by hand. Simulate first: nothing is written while the workbook contains an error.",
+      "classeur": "Excel workbook (.xlsx)",
+      "pays_colonne": "From the workbook's COUNTRY column",
+      "pays_aide": "Required for a workbook without a COUNTRY column.",
+      "fichier": "File",
+      "fichier_aide": "Expense export or historical workbook, in .xlsx format.",
+      "fichier_requis": "Choose an .xlsx workbook.",
+      "simulation": "Simulation (dry run)",
+      "simulation_aide": "Checks the workbook and counts what would be created, without writing anything.",
+      "simuler": "Simulate the import",
+      "importer": "Import",
+      "impossible": "Import failed",
+      "resultat_simulation": "Simulation result",
+      "resultat_import": "Import result",
+      "lignes_creees": "Lines created",
+      "equipes_creees": "Teams created",
+      "managers_crees": "Managers created",
+      "rien_ecrit": "A workbook with errors is not imported: fix the reported lines, then try again.",
+      "ligne": "Line {{numero}}",
+      "dossiers_crees": "Files created",
+      "bouton": "Import"
     }
   },
   "depenses": {
@@ -925,8 +949,7 @@
       "general": "General",
       "utilisateurs": "Users",
       "pays": "Countries",
-      "permissions": "Permissions",
-      "import": "Import"
+      "permissions": "Permissions"
     },
     "general": {
       "parametres_titre": "Server and workflow settings",
@@ -997,7 +1020,7 @@
     },
     "utilisateurs": {
       "titre": "Accounts",
-      "description": "Roles and scopes. DM and DF are headquarters accounts that can be restricted to countries; the manager is a country account and sees only their own country.",
+      "description": "Roles and scopes. The manager is a country account and sees only their own country; the administrator and the super administrator see every country.",
       "creer": "Create an account",
       "chargement_impossible": "Unable to load the accounts",
       "statut_impossible": "Unable to change the status",
@@ -1028,8 +1051,7 @@
         "email_requis": "An e-mail address is required.",
         "email_aide": "@innovpharma.net address: it names the account in the authenticator app.",
         "email_exemple": "first.last@innovpharma.net",
-        "role_aide": "DM and DF are headquarters accounts that can be restricted to countries; the manager is a country account. The administrator (HR) and the super administrator see everything.",
-        "perimetre_aide_siege": "Optional for a headquarters account: with no country ticked, it sees every country. Tick countries to restrict a DM or a DF.",
+        "role_aide": "The manager opens and declares their country's dossiers. The administrator (HR) reviews each dossier through to closure; the super administrator supervises. Neither of them declares.",
         "perimetre_aide_pays": "A manager is attached to at least one country.",
         "identifiant_immuable": "The username cannot be changed: it signs the audit trail.",
         "perimetre_aide_global": "This role always sees every country: there is no scope to tick.",
@@ -1075,29 +1097,6 @@
       "publier_action": "Publish",
       "devise_invalide": "Enter a three-letter currency code (ISO 4217).",
       "taux_invalide": "Enter a strictly positive decimal rate."
-    },
-    "import": {
-      "titre": "Expense import",
-      "description": "What comes in through a workbook arrives as a draft and then follows the same circuit as entered expenses. Simulate first: nothing is written while the workbook contains an error.",
-      "classeur": "Excel workbook (.xlsx)",
-      "pays_colonne": "From the workbook's COUNTRY column",
-      "pays_aide": "Required for a workbook without a COUNTRY column.",
-      "fichier": "File",
-      "fichier_aide": "Expense export or historical workbook, in .xlsx format.",
-      "fichier_requis": "Choose an .xlsx workbook.",
-      "simulation": "Simulation (dry run)",
-      "simulation_aide": "Checks the workbook and counts what would be created, without writing anything.",
-      "simuler": "Simulate the import",
-      "importer": "Import",
-      "impossible": "Import failed",
-      "resultat_simulation": "Simulation result",
-      "resultat_import": "Import result",
-      "lignes_creees": "Lines created",
-      "equipes_creees": "Teams created",
-      "managers_crees": "Managers created",
-      "rien_ecrit": "A workbook with errors is not imported: fix the reported lines, then try again.",
-      "ligne": "Line {{numero}}",
-      "dossiers_crees": "Files created"
     }
   },
   "audit": {

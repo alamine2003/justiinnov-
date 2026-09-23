@@ -14,7 +14,7 @@ from accounts.tests.test_scoping import make_user
 from budget.models import OverrunPolicy
 from core.regles import PermissionRefusee, RegleViolee
 from expenses import transitions
-from expenses.models import AuditLog, Dossier
+from expenses.models import AuditLog, Dossier, Expense
 from expenses.workflow import Status, TransitionError
 
 from core.tests.aides import ADRESSE, trace
@@ -116,7 +116,7 @@ class ServicesDuCircuitTests(ExpenseTestCase):
 
     def test_quatre_yeux_sur_la_ligne(self):
         """Même au siège, celui qui a saisi ne tranche pas ce qu'il a saisi."""
-        auteur = make_user("df.auteur", Role.DF)
+        auteur = make_user("rh.auteur", Role.ADMIN)
         self.ligne.created_by = auteur.username
         self.ligne.save()
         self.soumettre()
@@ -129,20 +129,22 @@ class ServicesDuCircuitTests(ExpenseTestCase):
         self.assertEqual(resultat.instance.justified_amount, self.ligne.amount)
 
     def test_quatre_yeux_sur_le_dossier(self):
-        auteur = make_user("df.ouvreur", Role.DF)
+        """En garde : un dossier qu'un administrateur aurait ouvert — donnée
+        d'avant la décision 89 — ne se met pas en contrôle par lui."""
+        auteur = make_user("rh.ouvreur", Role.ADMIN)
+        self.soumettre()
+        self.dossier.refresh_from_db()
         self.dossier.created_by = auteur.username
         self.dossier.save()
-        # Ouvert au siège, le brouillon ne part pas par le pays (décision
-        # 46, appliquée à la soumission) : c'est le siège qui le soumet.
-        self.soumettre(self.doo)
 
         with self.assertRaises(PermissionRefusee):
             transitions.mettre_en_controle(self.dossier, get_access(auteur), trace(auteur))
 
     def test_une_ligne_sans_auteur_ne_se_controle_pas(self):
-        self.ligne.created_by = ""
-        self.ligne.save()
+        """Donnée ancienne : la soumission, elle, donne un auteur."""
         self.soumettre()
+        Expense.objects.filter(pk=self.ligne.pk).update(created_by="")
+        self.ligne.refresh_from_db()
 
         with self.assertRaises(RegleViolee) as refus:
             transitions.mettre_en_controle(
@@ -199,7 +201,7 @@ class ServicesDuCircuitTests(ExpenseTestCase):
     # -- Réouverture ----------------------------------------------------------
 
     def rouvrir(self, motif="Montant douteux", user=None):
-        user = user or self.doo
+        user = user or self.controller
         return transitions.rouvrir(self.dossier, get_access(user), motif, trace(user))
 
     def test_reouverture_ramene_le_dossier_et_ses_lignes_au_brouillon(self):
@@ -235,11 +237,14 @@ class ServicesDuCircuitTests(ExpenseTestCase):
         self.dossier.refresh_from_db()
         self.assertEqual(self.dossier.status, Status.SUBMITTED)
 
-    def test_reouverture_reservee_aux_administrateurs(self):
+    def test_reouverture_reservee_a_l_administrateur(self):
+        """Ni le pays, ni le super administrateur, qui supervise (décision 89)."""
         self.soumettre()
 
-        with self.assertRaises(PermissionRefusee):
-            self.rouvrir(user=self.controller)
+        for user in (self.owner, self.doo):
+            with self.subTest(role=user.profile.role):
+                with self.assertRaises(PermissionRefusee):
+                    self.rouvrir(user=user)
 
     # -- Brouillons -----------------------------------------------------------
 

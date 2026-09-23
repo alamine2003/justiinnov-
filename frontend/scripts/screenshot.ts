@@ -198,6 +198,17 @@ async function main() {
   await goto(hq, "/dossiers")
   const hqDossiers = await hq.locator("tbody tr").count()
   expectData(hqDossiers > 0, `des dossiers sont listés (${hqDossiers})`)
+  // Décision 89 : le siège contrôle, il ne déclare pas.
+  expect(
+    (await hq.getByRole("link", { name: /Nouveau dossier/ }).count()) +
+      (await hq.getByRole("button", { name: /Nouveau dossier/ }).count()) === 0,
+    "le siège n'a pas de bouton « Nouveau dossier »",
+  )
+  expect(
+    (await hq.getByRole("link", { name: /^Importer$/ }).count()) +
+      (await hq.getByRole("button", { name: /^Importer$/ }).count()) === 0,
+    "le siège n'a pas de bouton « Importer »",
+  )
   await shot(hq, "dossiers")
 
   // Premier dossier : lignes de dépenses, justificatifs, workflow, aperçu.
@@ -314,6 +325,14 @@ async function main() {
   const repDossiers = await rep.locator("tbody tr").count()
   expect(repDossiers <= hqDossiers, `le pays voit au plus autant de dossiers que le siège (${repDossiers})`)
   await shot(rep, "dossiers_representant")
+
+  // Le pays déclare, et importe ses propres classeurs.
+  await goto(rep, "/dossiers/import", 1200)
+  expect(
+    (await rep.textContent("h1"))?.includes("Importer un classeur") ?? false,
+    "le pays ouvre l'import de ses dépenses",
+  )
+  await shot(rep, "import_representant")
 
   await goto(rep, "/countries")
   expect((await rep.locator("tbody tr").count()) <= 1, "le pays ne voit que son pays")

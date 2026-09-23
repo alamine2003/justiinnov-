@@ -3,6 +3,8 @@
 from datetime import date
 from decimal import Decimal
 
+from accounts.models import Role
+from accounts.tests.test_scoping import make_user
 from budget.aggregates import budget_figures, convert
 from budget.models import ExchangeRate
 from rest_framework import status
@@ -227,9 +229,11 @@ class JourDuTauxTests(ExpenseTestCase):
             name="Djibouti", code="DJ", country_ref="DJ-03",
             currency="XOF", timezone="Africa/Djibouti",
         )
+        # Le pays déclare (décision 89) : un manager de Djibouti.
+        cls.rep_djibouti = make_user("djibouti.innov", Role.MANAGER, [cls.djibouti])
         cls.dossier_dj = Dossier.objects.create(
             number="DJ-0001", label="Mission Djibouti", country=cls.djibouti,
-            date=date(cls.year, 6, 1), created_by=cls.doo.username,
+            date=date(cls.year, 6, 1), created_by=cls.rep_djibouti.username,
         )
 
     def setUp(self):
@@ -240,11 +244,12 @@ class JourDuTauxTests(ExpenseTestCase):
         ExchangeRate.objects.create(
             currency="EUR", rate_to_xof=Decimal("700.000000"), valid_from=date(self.year, 6, 1)
         )
-        self.login(self.doo)
+        self.login(self.owner)
 
     def test_le_taux_se_cherche_au_jour_du_pays(self):
         """Le 31 mai à 22:00 UTC, il est déjà le 1er juin à Djibouti : c'est
         le taux du 1er juin qui s'applique, comme à l'import."""
+        self.login(self.rep_djibouti)
         response = self.client.post(
             "/api/expenses/",
             {

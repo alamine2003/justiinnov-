@@ -43,7 +43,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import Role, UserProfile, aligner_drapeaux
+from accounts.models import HEADQUARTERS_ROLES, Role, UserProfile, aligner_drapeaux
 from accounts.validators import valider_email_professionnel
 from core.models import Country, Manager, Team
 from core.requetes import reset_current_request, set_current_request
@@ -160,6 +160,13 @@ class Command(BaseCommand):
                 f"Valeurs possibles : {', '.join(Role.values)}"
             )
         refs = payload.get("countries", [])
+        if role in HEADQUARTERS_ROLES and refs:
+            # Le siège voit tous les pays (décision 89) : une liste ici
+            # laisserait croire à une restriction qui n'existe pas.
+            raise CommandError(
+                f"Le compte {username} est au siège : il voit tous les pays, "
+                "retirez sa liste 'countries'."
+            )
         if role == Role.MANAGER and not refs:
             # Un manager sans pays ne verrait rien (``has_global_scope``) :
             # le compte serait créé inutilisable, sans que rien ne le dise.

@@ -68,7 +68,7 @@ export const ALERT_LEVEL_STYLE: Record<AlertLevel, string> = {
 /**
  * Teinte du texte d'un taux d'exécution selon le niveau que le serveur a
  * tranché contre les seuils d'alerte. L'interface ne compare aucun taux à
- * aucun seuil : un DF et un administrateur lisent la même couleur.
+ * aucun seuil : un manager et un administrateur lisent la même couleur.
  */
 export const EXECUTION_LEVEL_TEXT: Record<ExecutionLevel, string> = {
   ok: "text-marque-fort",

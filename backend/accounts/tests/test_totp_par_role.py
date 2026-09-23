@@ -80,3 +80,15 @@ class RoleInconnuTests(ScopingTestCase):
         with mock.patch.dict(os.environ, {"DJANGO_TOTP_REQUIRED_ROLES": ""}), \
                 mock.patch.object(sys, "argv", ["manage.py", "test"]):
             importlib.reload(config.settings)
+
+
+class RolesConnusTests(ScopingTestCase):
+    def test_la_liste_des_reglages_suit_les_roles_du_modele(self):
+        """Les réglages ne peuvent pas importer le modèle : leur liste est
+        recopiée. Elle doit dire la même chose que lui — un ``dm`` ou un
+        ``df`` d'avant la décision 89 est refusé au démarrage."""
+        from config import settings as reglages
+
+        from accounts.models import Role
+
+        self.assertEqual(reglages._ROLES_CONNUS, set(Role.values))

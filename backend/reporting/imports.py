@@ -31,12 +31,12 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from openpyxl import load_workbook
 
-from accounts.permissions import get_access
+from accounts.permissions import get_access, roles_pour
 from budget.aggregates import convert
 from core.journal import tracer
 from core.models import Country, Manager, Team
 from expenses.models import AuditLog, Dossier, Expense
-from expenses.workflow import Status
+from expenses.workflow import Status, agit_en_auteur
 
 from .scope import fuseau_de
 
@@ -435,6 +435,13 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
         )
 
     access = get_access(user)
+    # L'import est une déclaration, donc un acte du pays (décision 89) : il
+    # obéit aux règles de la saisie. Il ne crée une équipe ou un
+    # responsable que pour qui a ce droit sur le référentiel — la RH par
+    # défaut, pas le pays — et un manager cloisonné n'importe que pour ses
+    # équipes.
+    cree_les_equipes = access.role in roles_pour("referentiel.create")
+    cree_les_responsables = access.role in roles_pour("managers.create")
     pays = {c.name.casefold(): c for c in Country.objects.all()}
     equipes = {(team.country_id, team.name.casefold()): team for team in Team.objects.all()}
     managers = _managers_par_pays()
@@ -469,11 +476,27 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
             cle_equipe = (pays_ligne.pk, team_name.casefold()) if team_name else None
             team = equipes.get(cle_equipe) if team_name else None
             if team_name and team is None:
+                if not cree_les_equipes:
+                    raise ValueError(
+                        _(
+                            "Équipe « %(team)s » inconnue du pays : demandez "
+                            "à l'administrateur de la créer."
+                        ) % {"team": team_name}
+                    )
                 equipes_a_creer.setdefault(cle_equipe, (pays_ligne, team_name))
+            if access.team_ids is not None and (team is None or team.pk not in access.team_ids):
+                raise ValueError(_("La ligne doit porter l'une de vos équipes."))
             owner_name = _texte_borne(row, "OWNER")
             cle_manager = (pays_ligne.pk, owner_name.casefold()) if owner_name else None
             owner = managers.get(cle_manager) if owner_name else None
             if owner_name and owner is None:
+                if not cree_les_responsables:
+                    raise ValueError(
+                        _(
+                            "Responsable « %(owner)s » inconnu du pays : "
+                            "demandez à l'administrateur de l'inscrire."
+                        ) % {"owner": owner_name}
+                    )
                 managers_a_creer.setdefault(cle_manager, (pays_ligne, owner_name))
 
             # Le N°ORDRE est unique par pays : le dossier se cherche dans le
@@ -488,6 +511,13 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
             dossier = dossiers_existants[cle_dossier]
             if dossier is not None and dossier.status != Status.DRAFT:
                 raise ValueError(_("Le dossier « %(number)s » est déjà déclaré") % {"number": number})
+            # Un brouillon appartient à son auteur (décision 46) : l'import
+            # n'y ajoute pas de lignes au nom d'un collègue.
+            if dossier is not None and not agit_en_auteur(dossier, access.role, access.username):
+                raise ValueError(
+                    _("Le dossier « %(number)s » est le brouillon d'un autre compte")
+                    % {"number": number}
+                )
             # Le dossier est lu par l'équipe qu'il porte (``ExpenseSerializer``) :
             # une ligne d'une autre équipe y serait visible par la première
             # et invisible pour la seconde.

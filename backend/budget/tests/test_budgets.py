@@ -34,7 +34,7 @@ from expenses.workflow import Status
 
 
 class BudgetTestCase(APITestCase):
-    """Deux pays, une enveloppe par pays, la direction et le DF.
+    """Deux pays, une enveloppe par pays, la direction et le pays.
 
     Planté une fois par classe (``setUpTestData``) : chaque test en reçoit
     une copie et sa transaction est annulée derrière lui.
@@ -55,10 +55,7 @@ class BudgetTestCase(APITestCase):
         # une réallocation ne peut pas la décider.
         cls.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
         cls.doo = make_user("do.innov", Role.SUPER_ADMIN)
-        # Le DF constate les dépenses ; il n'attribue ni n'arbitre, global
-        # ou restreint.
-        cls.df = make_user("df.innov", Role.DF)
-        cls.df_togo = make_user("df.togo", Role.DF, [cls.togo])
+        # Le pays déclare ; il n'attribue ni n'arbitre ses enveloppes.
         cls.rep_togo = make_user("togo.innov", Role.MANAGER, [cls.togo])
 
         cls.budget_togo = Budget.objects.create(
@@ -141,11 +138,11 @@ class BudgetAccessTests(BudgetTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("project", response.data)
 
-    def test_le_df_n_attribue_pas_d_enveloppe(self):
-        """Le DF constate ce qui a été dépensé ; il ne fixe pas ce qui peut
-        l'être. Global ou restreint à son pays, il lit les enveloppes et
-        n'en écrit aucune — ni création, ni montant."""
-        for compte in (self.df, self.df_togo):
+    def test_le_pays_n_attribue_pas_d_enveloppe(self):
+        """Le pays déclare ce qui a été dépensé ; il ne fixe pas ce qui peut
+        l'être. Il lit ses enveloppes et n'en écrit aucune — ni création,
+        ni montant."""
+        for compte in (self.rep_togo,):
             with self.subTest(compte=compte.username):
                 self.login(compte)
 
@@ -521,9 +518,9 @@ class ExchangeRateTests(BudgetTestCase):
 
     def test_seuls_les_administrateurs_saisissent_un_taux(self):
         """Un taux change la valeur consolidée de toutes les enveloppes : il
-        relève de ceux qui les attribuent — les administrateurs. Le DF lit
+        relève de ceux qui les attribuent — les administrateurs. Le pays lit
         les taux, n'en pose aucun."""
-        for compte in (self.df, self.df_togo):
+        for compte in (self.rep_togo,):
             with self.subTest(compte=compte.username):
                 self.login(compte)
 
@@ -749,14 +746,14 @@ class ReallocationTests(BudgetTestCase):
         decideur = self.client.get(url).data["can_decide"]
         self.login(self.siege)
         demandeur = self.client.get(url).data["can_decide"]
-        self.login(self.df)
-        df = self.client.get(url).data["can_decide"]
+        self.login(self.rep_togo)
+        pays = self.client.get(url).data["can_decide"]
         self.login(self.doo)
         approuvee = self.client.post(f"{url}approve/").data["can_decide"]
 
         self.assertTrue(decideur)
         self.assertFalse(demandeur)
-        self.assertFalse(df)
+        self.assertFalse(pays)
         self.assertFalse(approuvee)
 
     def test_reallocation_inter_devises_refusee(self):
@@ -801,12 +798,12 @@ class ReallocationTests(BudgetTestCase):
             BudgetReallocation.Status.PENDING,
         )
 
-    def test_le_df_ne_decide_pas_d_une_reallocation(self):
-        """Demander, approuver, refuser : trois écritures budgétaires, toutes
-        réservées à la direction. Le DF, global ou restreint, reçoit 403 et
-        les enveloppes ne bougent pas."""
+    def test_le_pays_ne_decide_pas_d_une_reallocation(self):
+        """Demander, approuver, refuser : trois écritures budgétaires,
+        réservées aux administrateurs par défaut. Le pays reçoit 403 et les
+        enveloppes ne bougent pas."""
         realloc_id = self._demander().data["id"]
-        for compte in (self.df, self.df_togo):
+        for compte in (self.rep_togo,):
             with self.subTest(compte=compte.username):
                 self.login(compte)
 
@@ -847,9 +844,11 @@ class PerimetreDesEnveloppesTests(BudgetTestCase):
     requête réelle n'atteint jamais ces branches — ``RolePermission`` a déjà
     refusé tout autre rôle. ``ChampCloisonne`` et la vérification de la
     destination dans ``transitions.verrouiller_pour_decision`` restent en
-    place pour le jour où un décideur aura un périmètre. On les exerce donc directement, avec le seul
-    périmètre restreint qui existe — un DF rattaché au Togo — plutôt qu'en
-    levant, le temps d'un appel, la règle qui rend la direction globale.
+    place pour le jour où un décideur aura un périmètre — un manager à qui
+    la matrice ouvrirait la demande de réallocation, par exemple. On les
+    exerce donc directement, avec le seul périmètre restreint qui existe —
+    un manager du Togo — plutôt qu'en levant, le temps d'un appel, la règle
+    qui rend le siège global.
     """
 
     def requete(self, user):
@@ -868,7 +867,7 @@ class PerimetreDesEnveloppesTests(BudgetTestCase):
         l'erreur ne distingue pas « hors périmètre » d'« inexistant »."""
         serializer = BudgetSerializer(
             data={"country": self.ivoire.pk, "year": 2027, "amount": "1.00"},
-            context={"request": self.requete(self.df_togo)},
+            context={"request": self.requete(self.rep_togo)},
         )
 
         self.assertFalse(serializer.is_valid())
@@ -884,7 +883,7 @@ class PerimetreDesEnveloppesTests(BudgetTestCase):
                 "country": self.togo.pk, "year": 2027,
                 "manager": manager.pk, "amount": "1.00",
             },
-            context={"request": self.requete(self.df_togo)},
+            context={"request": self.requete(self.rep_togo)},
         )
 
         self.assertFalse(serializer.is_valid())
@@ -899,7 +898,7 @@ class PerimetreDesEnveloppesTests(BudgetTestCase):
                     "source": source.pk, "target": target.pk,
                     "amount": "1000.00", "reason": "Renfort",
                 },
-                context={"request": self.requete(self.df_togo)},
+                context={"request": self.requete(self.rep_togo)},
             )
             serializer.is_valid()
             return serializer.errors
@@ -921,7 +920,7 @@ class PerimetreDesEnveloppesTests(BudgetTestCase):
         )
 
         with self.assertRaises(HorsPerimetre):
-            self.verrouiller(reallocation, self.df_togo)
+            self.verrouiller(reallocation, self.rep_togo)
 
     def test_decision_dans_le_perimetre(self):
         """La même vérification laisse passer une destination du périmètre :
@@ -935,7 +934,7 @@ class PerimetreDesEnveloppesTests(BudgetTestCase):
             amount=Decimal("1000.00"), reason="Renfort", requested_by="ceo.innov",
         )
 
-        verrouillee = self.verrouiller(reallocation, self.df_togo)
+        verrouillee = self.verrouiller(reallocation, self.rep_togo)
 
         self.assertEqual(verrouillee.pk, reallocation.pk)
         self.assertEqual(verrouillee.status, BudgetReallocation.Status.PENDING)

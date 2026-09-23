@@ -30,7 +30,8 @@ class FiltrerTests(ScopingTestCase):
         }
         cls.rep_lome = make_user("lome", Role.MANAGER, [cls.togo], teams=[cls.team_togo])
         cls.rep_kara = make_user("kara", Role.MANAGER, [cls.togo], teams=[cls.team_kara])
-        cls.df_togo = make_user("df.togo", Role.DF, [cls.togo])
+        # Un compte du siège qu'un pays rattaché en base ne restreint pas.
+        cls.rh_togo = make_user("rh.togo", Role.ADMIN, [cls.togo])
         cls.sans_profil = User.objects.create_user("orphelin", password="x")
 
     @classmethod
@@ -47,8 +48,11 @@ class FiltrerTests(ScopingTestCase):
     def test_le_siege_global_voit_tout(self):
         self.assertEqual(self._visibles(self.siege, equipe="team"), {"CI-1", "TG-1", "TG-2", "TG-3"})
 
-    def test_un_compte_restreint_ne_voit_que_ses_pays(self):
-        self.assertEqual(self._visibles(self.df_togo, equipe="team"), {"TG-1", "TG-2", "TG-3"})
+    def test_le_siege_rattache_a_un_pays_voit_tout(self):
+        """Le siège n'est jamais restreint (décision 89)."""
+        self.assertEqual(
+            self._visibles(self.rh_togo, equipe="team"), {"CI-1", "TG-1", "TG-2", "TG-3"}
+        )
 
     def test_un_manager_sans_equipe_voit_tout_son_pays(self):
         self.assertEqual(self._visibles(self.rep_togo, equipe="team"), {"TG-1", "TG-2", "TG-3"})
@@ -68,7 +72,7 @@ class FiltrerTests(ScopingTestCase):
     def test_distinct_sur_un_chemin_multiple(self):
         """Un manager rattaché à deux pays du périmètre ne sort qu'une fois."""
         self.manager.countries.add(self.ivoire)
-        deux_pays = make_user("df.deux", Role.DF, [self.togo, self.ivoire])
+        deux_pays = make_user("deux.pays", Role.MANAGER, [self.togo, self.ivoire])
         managers = filtrer(
             Manager.objects.all(), get_access(deux_pays), pays="countries", distinct=True
         )
@@ -79,8 +83,8 @@ class FiltrerTests(ScopingTestCase):
         prévenu (``comptes_couvrant``), pour chaque compte et chaque dossier
         porteur d'une équipe."""
         comptes = [
-            self.rep_togo, self.rep_lome, self.rep_kara, self.df_togo,
-            self.siege, self.controleur, self.dm,
+            self.rep_togo, self.rep_lome, self.rep_kara, self.rh_togo,
+            self.siege, self.controleur,
         ]
         for nom in ("ivoire", "lome", "kara"):
             dossier = self.dossiers[nom]
@@ -120,9 +124,9 @@ class FiltrerTests(ScopingTestCase):
 
         self.assertEqual(choix(self.rep_lome), {"TG-1", "TG-2", "TG-3"})
         self.assertEqual(choix(self.rep_lome, chemin_equipe="team"), {"TG-1"})
-        self.assertEqual(choix(self.df_togo, chemin_equipe="team"), {"TG-1", "TG-2", "TG-3"})
+        self.assertEqual(choix(self.rep_togo, chemin_equipe="team"), {"TG-1", "TG-2", "TG-3"})
         self.assertEqual(choix(self.sans_profil), set())
 
     def test_champ_cloisonne_sur_le_pays_lui_meme(self):
         champ = ChampCloisonne(queryset=Country.objects.all(), chemin_pays="pk")
-        self.assertEqual(list(self._choix(self.df_togo, champ)), [self.togo])
+        self.assertEqual(list(self._choix(self.rep_togo, champ)), [self.togo])

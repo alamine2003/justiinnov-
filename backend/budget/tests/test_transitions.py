@@ -46,7 +46,8 @@ class ServicesDeReallocationTests(TestCase):
         )
         cls.siege = make_user("ceo.innov", Role.SUPER_ADMIN)
         cls.doo = make_user("do.innov", Role.SUPER_ADMIN)
-        cls.df = make_user("df.innov", Role.DF)
+        # Le pays n'arbitre pas ses enveloppes.
+        cls.pays = make_user("togo.innov", Role.MANAGER, [cls.togo])
 
     def demander(self, montant="1000000.00", motif="Renfort", par=None, cible=None):
         par = par or self.siege
@@ -114,15 +115,15 @@ class ServicesDeReallocationTests(TestCase):
         self.assertEqual(devise.exception.champ, "target")
         self.assertEqual(meme.exception.champ, "target")
 
-    def test_le_df_ne_demande_ni_ne_decide(self):
+    def test_le_pays_ne_demande_ni_ne_decide(self):
         demande = self.demander().instance
 
         with self.assertRaises(PermissionRefusee):
-            self.demander(par=self.df)
+            self.demander(par=self.pays)
         with self.assertRaises(PermissionRefusee):
-            transitions.approuver(demande, get_access(self.df), "", trace(self.df))
+            transitions.approuver(demande, get_access(self.pays), "", trace(self.pays))
         with self.assertRaises(PermissionRefusee):
-            transitions.refuser(demande, get_access(self.df), "Non", trace(self.df))
+            transitions.refuser(demande, get_access(self.pays), "Non", trace(self.pays))
 
     # -- Décision ---------------------------------------------------------------
 
@@ -230,7 +231,7 @@ class ServicesDeReallocationTests(TestCase):
 
         self.assertTrue(transitions.peut_decider(demande, get_access(self.doo)))
         self.assertFalse(transitions.peut_decider(demande, get_access(self.siege)))
-        self.assertFalse(transitions.peut_decider(demande, get_access(self.df)))
+        self.assertFalse(transitions.peut_decider(demande, get_access(self.pays)))
         self.assertFalse(transitions.peut_decider(demande, None))
 
     # -- Trace ------------------------------------------------------------------

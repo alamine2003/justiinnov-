@@ -25,7 +25,7 @@ les notifications. Un test vérifie que les deux répondent la même chose.
 from django.db.models import Q
 from rest_framework import serializers
 
-from .models import ALWAYS_GLOBAL_ROLES, HEADQUARTERS_ROLES, Role
+from .models import HEADQUARTERS_ROLES, Role
 from .permissions import get_access
 
 
@@ -70,7 +70,7 @@ def comptes_couvrant(users, country, equipe=PAYS_ENTIER):
 
     La réciproque de :func:`filtrer`, lue depuis l'objet : rattaché au pays
     — et, pour un manager cloisonné, à ``equipe`` quand la ressource en
-    porte une —, ou rôle du siège sans restriction, ou rôle toujours global.
+    porte une —, ou rôle du siège, qui voit tous les pays.
     Les deux conditions sur ``teams`` tiennent dans le même ``filter`` :
     elles portent sur la même jointure, donc « aucune équipe » ou « cette
     équipe », jamais « une autre équipe ». Une ressource cloisonnée sans
@@ -84,9 +84,7 @@ def comptes_couvrant(users, country, equipe=PAYS_ENTIER):
             cloisonne |= Q(profile__teams=equipe)
         dans_le_pays &= cloisonne
     return users.filter(
-        dans_le_pays
-        | Q(profile__role__in=HEADQUARTERS_ROLES, profile__countries__isnull=True)
-        | Q(profile__role__in=ALWAYS_GLOBAL_ROLES)
+        dans_le_pays | Q(profile__role__in=HEADQUARTERS_ROLES)
     ).distinct()
 
 

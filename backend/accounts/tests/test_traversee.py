@@ -6,7 +6,7 @@ chaque viewset, sa liste, son détail et ses actions de détail. Le décor porte
 par modèle, un objet ivoirien, un objet togolais d'une autre équipe et un
 objet togolais de l'équipe du manager. Un manager du Togo rattaché à une
 équipe ne lit (200 sans l'objet, ou 404) et n'écrit rien d'ivoirien ni d'une
-autre équipe ; un DF restreint au Togo ne lit rien d'ivoirien.
+autre équipe ; un manager ivoirien ne lit rien du Togo.
 
 Un viewset dont le modèle n'est ni dans le décor ni déclaré sans périmètre
 fait échouer le test : une nouvelle ressource se classe, elle ne s'oublie pas.
@@ -76,7 +76,6 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
         cls.rep = make_user("lome.innov", Role.MANAGER, [cls.togo], teams=[cls.team_togo])
         cls.rep_ivoire = make_user("abidjan.innov", Role.MANAGER, [cls.ivoire])
         cls.rep_kara = make_user("kara.innov", Role.MANAGER, [cls.togo], teams=[cls.team_kara])
-        cls.df_togo = make_user("df.togo", Role.DF, [cls.togo])
         cls.decor = cls._planter()
 
     @classmethod
@@ -200,13 +199,11 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
             Rectification: rectifications,
             Proof: pieces,
             AuditLog: journaux,
-            # Une notification appartient à une personne : le « mien » du DF
-            # n'est pas celui du manager.
+            # Une notification appartient à une personne.
             Notification: {
                 "ivoire": notification(cls.rep_ivoire, cls.ivoire),
                 "autre_equipe": notification(cls.rep_kara, cls.togo),
                 "mien": notification(cls.rep, cls.togo),
-                "mien_df": notification(cls.df_togo, cls.togo),
             },
         }
 
@@ -309,34 +306,34 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
                     self.assertNotIn(reponse.status_code, (200, 201))
                     self.assertEqual(modele.objects.count(), avant, f"{prefixe} a créé chez {cle}")
 
-    # -- Le DF restreint ----------------------------------------------------
+    # -- Le manager d'un autre pays -----------------------------------------
 
-    def test_un_df_restreint_ne_lit_rien_d_un_autre_pays(self):
-        self.login(self.df_togo)
+    def test_un_manager_ne_lit_rien_d_un_autre_pays(self):
+        """Un dossier appartient à son pays (décision 89) : le manager
+        ivoirien ne lit rien du Togo, sur aucune route — et lit bien ce qui
+        est à lui, pour qu'un 404 ne cache pas une route cassée."""
+        self.login(self.rep_ivoire)
         for prefixe, basename, viewset, decor in self._cas():
-            ivoire = decor["ivoire"]
+            togolais = decor["mien"]
             with self.subTest(route=f"{prefixe}/", action="list"):
                 reponse = self.client.get(reverse(f"{basename}-list"))
                 self.assertIn(reponse.status_code, (200, 403))
                 if reponse.status_code == 200:
-                    self.assertNotIn(ivoire.pk, _identifiants(reponse.data), f"{prefixe} liste l'ivoirien")
+                    self.assertNotIn(togolais.pk, _identifiants(reponse.data), f"{prefixe} liste le togolais")
             with self.subTest(route=f"{prefixe}/{{pk}}/", action="retrieve"):
-                reponse = self.client.get(reverse(f"{basename}-detail", kwargs={"pk": ivoire.pk}))
+                reponse = self.client.get(reverse(f"{basename}-detail", kwargs={"pk": togolais.pk}))
                 self.assertIn(reponse.status_code, HORS_PERIMETRE)
                 if reponse.status_code == 404:
-                    mien = self.client.get(
-                        reverse(
-                            f"{basename}-detail",
-                            kwargs={"pk": decor.get("mien_df", decor["mien"]).pk},
-                        )
+                    sien = self.client.get(
+                        reverse(f"{basename}-detail", kwargs={"pk": decor["ivoire"].pk})
                     )
-                    self.assertEqual(mien.status_code, 200, f"{prefixe} ne rend pas le togolais")
+                    self.assertEqual(sien.status_code, 200, f"{prefixe} ne rend pas l'ivoirien")
             for action in viewset.get_extra_actions():
                 if not action.detail or "get" not in action.mapping:
                     continue
                 with self.subTest(route=f"{prefixe}/{{pk}}/{action.url_path}/"):
                     reponse = self.client.get(
-                        reverse(f"{basename}-{action.url_name}", kwargs={"pk": ivoire.pk})
+                        reverse(f"{basename}-{action.url_name}", kwargs={"pk": togolais.pk})
                     )
                     self.assertIn(reponse.status_code, HORS_PERIMETRE)
 

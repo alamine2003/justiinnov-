@@ -320,7 +320,7 @@ class ProofSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
         # ``is_complete`` ne se modifie que par ``review`` : c'est un constat
-        # de la direction financière, pas une case que le déposant coche.
+        # du contrôle, pas une case que le déposant coche.
         read_only_fields = [
             "original_name", "sha256", "size", "content_type", "version",
             "uploaded_by", "status", "rejection_reason", "is_complete",
@@ -510,7 +510,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
     country_name = serializers.CharField(source="country.name", read_only=True)
     currency = serializers.CharField(source="country.currency", read_only=True)
     # §6 : la date est conservée en UTC, mais doit se lire dans le fuseau du
-    # pays où la dépense a eu lieu. La direction financière verrait sinon
+    # pays où la dépense a eu lieu. Le siège verrait sinon
     # l'heure de son propre fuseau, ce qui fausse le « quand ».
     country_timezone = serializers.CharField(
         source="country.timezone", read_only=True
@@ -560,7 +560,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         # l'imputation budgétaire et le taux appliqué sont résolus par le
         # serveur — un taux fourni par le client serait un taux choisi.
         # Le montant justifié appartient au siège : le pays déclare ce qu'il
-        # a dépensé, le siège (DF) constate ce qui est prouvé (``justify``).
+        # a dépensé, l'administrateur constate ce qui est prouvé (``justify``).
         # Le laisser saisir revenait à laisser le déclarant se donner quitus.
         read_only_fields = [
             "status", "budget", "created_by", "original_rate",
@@ -902,29 +902,29 @@ class DossierSerializer(serializers.ModelSerializer):
         return attrs
 
     def _verifier_le_deplacement(self, attrs):
-        """Un dossier qui a un contenu ne change ni de pays ni d'équipe.
+        """Un dossier ne change jamais de pays ; avec un contenu, ni d'équipe.
 
-        Ses lignes portent le pays et l'équipe en propre (décision n°1) et
-        ses pièces sont rangées par pays : déplacer le dossier les laisserait
-        derrière lui — ou ferait lire à une équipe des lignes qui ne sont
-        pas les siennes. Le choix est de **refuser**, pas de propager : une
-        propagation silencieuse réécrirait des lignes que quelqu'un d'autre
-        a saisies. On corrige les lignes d'abord, ou on ouvre un autre
-        dossier.
+        Le pays est attribué à la création, une fois pour toutes
+        (décision 89) : seul ce pays remplit ses dépenses et ses pièces, et
+        un dossier qui passerait chez le voisin emporterait avec lui ce que
+        l'autre pays a commencé. Ses lignes portent aussi l'équipe en propre
+        (décision n°1) : déplacer un dossier qui en a ferait lire à une
+        équipe des lignes qui ne sont pas les siennes. Le choix est de
+        **refuser**, pas de propager : une propagation silencieuse
+        réécrirait des lignes que quelqu'un d'autre a saisies. On ouvre un
+        autre dossier.
         """
         dossier = self.instance
         country = attrs.get("country")
         if country is not None and country.pk != dossier.country_id:
-            counts = dossier.counts()
-            if counts["expenses"] or counts["proofs"]:
-                raise serializers.ValidationError(
-                    {
-                        "country": _(
-                            "Ce dossier porte des lignes ou des pièces : il "
-                            "ne change plus de pays. Ouvrez un nouveau dossier."
-                        )
-                    }
-                )
+            raise serializers.ValidationError(
+                {
+                    "country": _(
+                        "Un dossier ne change pas de pays : ouvrez un nouveau "
+                        "dossier dans l'autre pays."
+                    )
+                }
+            )
         if "team" not in attrs:
             return
         team_id = None if attrs["team"] is None else attrs["team"].pk
@@ -973,7 +973,7 @@ class TransitionWarningMixin(serializers.Serializer):
 
 
 class ExpenseTransitionSerializer(TransitionSerializer):
-    """Transition d'une ligne : le siège (DF) peut fixer ce qui est prouvé.
+    """Transition d'une ligne : l'administrateur peut fixer ce qui est prouvé.
 
     Par défaut, justifier couvre toute la dépense ; une pièce partielle
     permet d'en constater une partie seulement. La borne haute (le montant

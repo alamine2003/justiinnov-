@@ -19,7 +19,7 @@ from accounts.tests.test_scoping import make_user
 
 class RejeuSimultaneTests(TransactionTestCase):
     def test_deux_connexions_avec_le_meme_code(self):
-        user = make_user("rejeu.innov", Role.DF)
+        user = make_user("rejeu.innov", Role.ADMIN)
         user.set_password("Motdepasse-2026-test")
         user.save()
         secret = user.profile.totp_secret

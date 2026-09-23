@@ -10,18 +10,21 @@ et ``RolePermission`` tranche à chaque requête.
 Les rôles qui portent une capacité viennent de la **configuration**
 (``WorkflowConfiguration.capability_roles``, modifiable par les
 administrateurs dans « Configuration › Permissions »), sinon du défaut
-inscrit ici (décision 43). Deux verrous ne se configurent pas, parce qu'ils
-tiennent la raison d'être de l'application :
+inscrit ici (décision 43). Trois verrous ne se configurent pas, parce
+qu'ils tiennent la raison d'être de l'application (décision 89) :
 
-- les administrateurs — ``admin`` et ``super_admin`` — ont toujours toutes
-  les capacités (``fixes``) et règlent toute la matrice, l'argent compris :
-  l'administrateur attribue chaque droit à qui il veut, et personne ne
-  peut le lui retirer (décision 58) ;
-- le pays ne contrôle jamais ce qu'il déclare, n'administre rien (comptes,
-  configuration, journal d'audit, ouverture ou modification d'un pays) et ne
-  fixe pas ses propres enveloppes (``verrouillees``) ; les comptes et la
-  configuration ne s'ouvrent qu'aux administrateurs, jamais à un rôle
-  restrictible à des pays, qui pourrait sinon se créer un administrateur.
+- **la déclaration est au pays seul** : ouvrir un dossier, saisir ses
+  lignes, déposer ses pièces, soumettre, importer — le manager, pour son
+  pays ; jamais le siège, ni l'administrateur ni le super administrateur ;
+- **le contrôle est à l'administrateur seul** : mise en contrôle,
+  justification ou refus, clôture, contrôle d'une pièce, réouverture,
+  décision sur une rectification — ni le pays, qui ne contrôle pas ce
+  qu'il déclare, ni le super administrateur, qui supervise ;
+- **l'administration est aux administrateurs** — ``admin`` et
+  ``super_admin`` gardent toujours comptes, configuration, référentiel,
+  enveloppes, audit et fichiers (``fixes``) et règlent toute la matrice
+  (décision 58) ; le pays n'administre rien et ne fixe pas ses propres
+  enveloppes.
 
 Décrire les rôles ailleurs qu'ici les ferait diverger de ce qui est
 réellement appliqué : ``/api/permissions/`` et ``/api/me/`` lisent cette
@@ -124,10 +127,9 @@ def peut_conferer_le_role(acteur, role):
 # --- Matrice des capacités ---------------------------------------------------
 
 _ADMINISTRATEURS = frozenset({Role.SUPER_ADMIN, Role.ADMIN})
-_SIEGE = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF, Role.DM})
-_CONTROLE = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.DF})
-_PAYS_ET_ADMINISTRATEURS = frozenset({Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER})
 _TOUS = frozenset(Role)
+#: Le contrôleur : l'administrateur, et lui seul (décision 89).
+_CONTROLEUR = frozenset({Role.ADMIN})
 
 
 @dataclass(frozen=True)
@@ -143,10 +145,11 @@ class Capacite:
     #: Rôles qui ne peuvent jamais la recevoir, quelle que soit la
     #: configuration : la case reste vide et grisée.
     verrouillees: frozenset = frozenset()
-    #: Rôles qui l'ont toujours : les administrateurs, partout — sinon une
-    #: configuration malheureuse n'aurait plus personne pour la défaire, et
-    #: l'administrateur, qui attribue les droits, ne peut pas se voir
-    #: retirer les siens (décision 58).
+    #: Rôles qui l'ont toujours : les administrateurs sur l'administration —
+    #: sinon une configuration malheureuse n'aurait plus personne pour la
+    #: défaire, et l'administrateur, qui attribue les droits, ne peut pas se
+    #: voir retirer les siens (décision 58) ; le pays sur la déclaration et
+    #: l'administrateur sur le contrôle (décision 89).
     fixes: frozenset = _ADMINISTRATEURS
     #: Rôles qui peuvent modifier cette ligne de la matrice : les
     #: administrateurs, sur toutes les lignes, l'argent compris.
@@ -177,15 +180,41 @@ GROUPE_FICHIERS = _("Fichiers")
 #: pas ses propres enveloppes : ces cases ne s'ouvrent pas.
 _JAMAIS_LE_PAYS = COUNTRY_ROLES
 
-#: Les comptes ne s'administrent que depuis un rôle global : un DM ou un DF
-#: restreint à des pays qui créerait des comptes pourrait se donner un
-#: administrateur, donc la configuration.
+#: Les comptes ne s'administrent que depuis le siège : un manager qui
+#: créerait des comptes pourrait se donner un administrateur, donc la
+#: configuration.
 _JAMAIS_HORS_ADMINISTRATEURS = _TOUS - _ADMINISTRATEURS
 
+
+def _declaration(key, label, description, *, fixe=True):
+    """Une capacité de déclaration : au pays, jamais au siège (décision 89).
+
+    Le manager la porte toujours (``fixe``) — sans lui, plus personne ne
+    pourrait déclarer ; ni l'administrateur ni le super administrateur ne
+    peuvent la recevoir.
+    """
+    return Capacite(
+        key, GROUPE_DECLARATION, label, description, COUNTRY_ROLES,
+        verrouillees=_ADMINISTRATEURS,
+        fixes=COUNTRY_ROLES if fixe else frozenset(),
+    )
+
+
+def _controle(key, label, description):
+    """Une capacité de contrôle : à l'administrateur seul (décision 89).
+
+    Ni le pays, qui ne contrôle pas ce qu'il déclare, ni le super
+    administrateur, qui supervise sans trancher.
+    """
+    return Capacite(
+        key, GROUPE_CONTROLE, label, description, _CONTROLEUR,
+        verrouillees=_TOUS - _CONTROLEUR, fixes=_CONTROLEUR,
+    )
+
 #: Matrice des capacités, source unique, dans l'ordre où l'interface les
-#: présente. Les défauts sont les décisions du produit : le DM et le DF
-#: n'administrent rien, les enveloppes, les fichiers et l'administration
-#: sont aux administrateurs — RH et direction à égalité.
+#: présente. Les défauts sont les décisions du produit : le pays déclare,
+#: l'administrateur contrôle, le super administrateur supervise ; les
+#: enveloppes, les exports et l'administration sont aux administrateurs.
 CAPACITES = (
     Capacite(
         "users.read", GROUPE_ADMINISTRATION,
@@ -227,7 +256,7 @@ CAPACITES = (
         "history.read", GROUPE_ADMINISTRATION,
         _("Historique du référentiel"),
         _("Lire qui a modifié quoi dans le référentiel, sur son périmètre."),
-        _SIEGE,
+        _ADMINISTRATEURS,
     ),
     Capacite(
         "countries.create", GROUPE_REFERENTIEL,
@@ -306,82 +335,74 @@ CAPACITES = (
         _("Ajouter ou corriger un taux vers la devise de consolidation."),
         _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
-    Capacite(
-        "expenses.create", GROUPE_DECLARATION,
+    _declaration(
+        "expenses.create",
         _("Saisir"),
-        _("Ouvrir un dossier, y ajouter des lignes de dépense."),
-        _PAYS_ET_ADMINISTRATEURS,
+        _("Ouvrir un dossier dans son pays, y ajouter des lignes de dépense."),
     ),
-    Capacite(
-        "expenses.update", GROUPE_DECLARATION,
+    _declaration(
+        "expenses.update",
         _("Modifier un brouillon"),
-        _("Corriger un dossier ou une ligne tant qu'ils ne sont pas soumis."),
-        _PAYS_ET_ADMINISTRATEURS,
+        _("Corriger son dossier ou sa ligne tant qu'ils ne sont pas soumis."),
     ),
-    Capacite(
-        "expenses.delete", GROUPE_DECLARATION,
+    _declaration(
+        "expenses.delete",
         _("Supprimer un brouillon"),
         _("Retirer un dossier ou une ligne jamais soumis. Son auteur seulement."),
-        _PAYS_ET_ADMINISTRATEURS,
     ),
-    Capacite(
-        "proofs.upload", GROUPE_DECLARATION,
+    _declaration(
+        "proofs.upload",
         _("Déposer une pièce"),
         _("Joindre un justificatif, ou le remplacer, jusqu'à la clôture."),
-        _PAYS_ET_ADMINISTRATEURS,
     ),
-    Capacite(
-        "dossiers.submit", GROUPE_DECLARATION,
+    _declaration(
+        "dossiers.submit",
         _("Soumettre"),
         _("Déclarer un dossier : ses lignes partent avec lui, sans retour."),
-        _PAYS_ET_ADMINISTRATEURS,
     ),
-    Capacite(
-        "expenses.review", GROUPE_CONTROLE,
+    _controle(
+        "expenses.review",
         _("Mettre en contrôle"),
-        _("Prendre un dossier soumis en contrôle : le DM prépare, le DF tranche."),
-        _SIEGE, verrouillees=_JAMAIS_LE_PAYS,
+        _("Prendre un dossier soumis en contrôle."),
     ),
-    Capacite(
-        "expenses.validate", GROUPE_CONTROLE,
+    _controle(
+        "expenses.validate",
         _("Justifier ou refuser"),
         _("Constater qu'une pièce couvre une dépense, ou l'absence de preuve."),
-        _CONTROLE, verrouillees=_JAMAIS_LE_PAYS,
     ),
-    Capacite(
-        "expenses.close", GROUPE_CONTROLE,
+    _controle(
+        "expenses.close",
         _("Clôturer"),
         _("Déclarer l'affaire terminée une fois chaque ligne justifiée."),
-        _CONTROLE, verrouillees=_JAMAIS_LE_PAYS,
     ),
-    Capacite(
-        "proofs.review", GROUPE_CONTROLE,
+    _controle(
+        "proofs.review",
         _("Contrôler une pièce"),
         _("Valider, rejeter ou signaler incomplet un justificatif."),
-        _CONTROLE, verrouillees=_JAMAIS_LE_PAYS,
     ),
-    Capacite(
-        "dossiers.reopen", GROUPE_CONTROLE,
+    _controle(
+        "dossiers.reopen",
         _("Rouvrir un dossier"),
         _("Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui."),
-        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
     # La seconde exception à l'irréversibilité (``expenses.workflow``) : un
     # constat se rectifie sur demande motivée et décision d'un
-    # administrateur. Demander est ouvert à tous — le pays voit l'erreur le
-    # premier ; décider ne l'est jamais au pays, et le service refuse en
-    # outre l'auteur de la demande.
+    # administrateur qui n'est pas le demandeur. Demander est ouvert au pays
+    # — il voit l'erreur le premier — et au super administrateur, qui
+    # supervise. Pas à l'administrateur par défaut (décision 89) : seul à
+    # décider, il ne pourrait pas trancher sa propre demande, qui resterait
+    # en attente pour toujours. La matrice la lui ouvre quand la RH compte
+    # au moins deux administrateurs ; rien n'y est fixe.
     Capacite(
         "rectifications.request", GROUPE_CONTROLE,
         _("Demander la rectification d'un constat"),
         _("Signaler, motif à l'appui, qu'une ligne justifiée ou clôturée l'a été à tort."),
-        _TOUS,
+        frozenset({Role.MANAGER, Role.SUPER_ADMIN}), fixes=frozenset(),
     ),
-    Capacite(
-        "rectifications.decide", GROUPE_CONTROLE,
+    _controle(
+        "rectifications.decide",
         _("Décider d'une rectification"),
         _("Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne."),
-        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
     Capacite(
         "data.export", GROUPE_FICHIERS,
@@ -389,11 +410,14 @@ CAPACITES = (
         _("Télécharger le registre en Excel, CSV, Word ou PDF."),
         _ADMINISTRATEURS,
     ),
+    # L'import crée des dossiers et des lignes : c'est une déclaration,
+    # donc un acte du pays (décision 89). Il n'est pas fixe : le retirer au
+    # pays ne l'empêche pas de saisir à la main.
     Capacite(
         "data.import", GROUPE_FICHIERS,
         _("Importer"),
-        _("Charger un classeur de dépenses en brouillons."),
-        _ADMINISTRATEURS,
+        _("Charger un classeur de dépenses de son pays en brouillons."),
+        COUNTRY_ROLES, verrouillees=_ADMINISTRATEURS, fixes=frozenset(),
     ),
 )
 
