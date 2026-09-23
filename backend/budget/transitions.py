@@ -254,3 +254,64 @@ def refuser(reallocation, acteur, note, trace):
         reallocation, acteur, note, trace, BudgetReallocation.Status.REJECTED
     )
     return Resultat(reallocation, audit=[entree])
+
+
+# --- Suppression d'une enveloppe (décision 91) -------------------------------
+
+
+def raison_de_garder(budget):
+    """Pourquoi l'enveloppe ne peut pas être supprimée, ou ``None``.
+
+    Seule une enveloppe qui n'a jamais servi se supprime, comme seul un
+    brouillon jamais soumis se retire : dès qu'une dépense y est imputée
+    ou qu'une réallocation la touche, elle porte la preuve de ce qui a été
+    alloué et dépensé, et se désactive au lieu de disparaître. Une
+    enveloppe de pays qui porte des sous-enveloppes les garde aussi : les
+    retirer d'abord est un geste à part.
+    """
+    if budget.expenses.exists():
+        return _(
+            "Des dépenses sont imputées sur cette enveloppe : elle se "
+            "désactive, elle ne se supprime pas."
+        )
+    if BudgetReallocation.objects.filter(source=budget).exists() or (
+        BudgetReallocation.objects.filter(target=budget).exists()
+    ):
+        return _(
+            "Une réallocation touche cette enveloppe : elle se désactive, "
+            "elle ne se supprime pas."
+        )
+    if budget.scope_kind == "country" and sous_enveloppes(budget).exists():
+        return _(
+            "Cette enveloppe de pays porte des sous-enveloppes : "
+            "supprimez-les d'abord."
+        )
+    return None
+
+
+def sous_enveloppes(budget):
+    """Les sous-enveloppes du même pays et du même exercice."""
+    return Budget.objects.filter(
+        country_id=budget.country_id, year=budget.year
+    ).exclude(project__isnull=True, team__isnull=True, manager__isnull=True)
+
+
+@transaction.atomic
+def supprimer_enveloppe(budget, acteur):
+    """Supprime une enveloppe qui n'a jamais servi.
+
+    La capacité est revérifiée ici (``budgets.delete``, le super
+    administrateur par défaut), le périmètre aussi ; l'enveloppe est
+    verrouillée le temps de vérifier qu'aucune dépense n'y a été imputée
+    entre-temps. La trace — qui, quand, depuis où, quelle enveloppe — est
+    écrite dans l'historique par le signal ``post_delete`` du référentiel
+    (``budget.signals``), dans la même transaction.
+    """
+    exiger_la_capacite("budgets.delete", acteur)
+    exiger_le_perimetre(acteur, budget)
+    budget = Budget.objects.select_for_update().get(pk=budget.pk)
+    raison = raison_de_garder(budget)
+    if raison:
+        raise RegleViolee("budget", raison)
+    budget.delete()
+

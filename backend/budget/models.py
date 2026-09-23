@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Q, Sum, Value
+from django.db.models import Exists, ExpressionWrapper, OuterRef, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import pgettext_lazy
@@ -94,6 +94,33 @@ class BudgetQuerySet(models.QuerySet):
                 zero,
                 output_field=money,
             ),
+        )
+
+    def with_usage(self):
+        """Annote ``a_servi`` : l'enveloppe porte-t-elle une trace d'usage ?
+
+        Une dépense imputée, une réallocation qui la touche, ou — pour une
+        enveloppe de pays — une sous-enveloppe du même exercice. Une
+        enveloppe qui a servi ne se supprime pas (décision 91). La liste
+        l'annote en une requête ; la suppression, elle, revérifie sous
+        verrou (``budget.transitions.raison_de_garder``), qui fait foi.
+        """
+        # ``Expense`` vit dans ``expenses``, au-dessus de ``budget`` dans
+        # l'ordre des applications (décision 40) : on le rejoint par la
+        # relation inverse, sans l'importer.
+        Expense = Budget.expenses.field.model
+        sous = Budget.objects.filter(
+            country_id=OuterRef("country_id"), year=OuterRef("year")
+        ).exclude(project__isnull=True, team__isnull=True, manager__isnull=True)
+        de_pays = Q(project__isnull=True, team__isnull=True, manager__isnull=True)
+        return self.annotate(
+            a_servi=ExpressionWrapper(
+                Exists(Expense.objects.filter(budget=OuterRef("pk")))
+                | Exists(BudgetReallocation.objects.filter(source=OuterRef("pk")))
+                | Exists(BudgetReallocation.objects.filter(target=OuterRef("pk")))
+                | (de_pays & Exists(sous)),
+                output_field=models.BooleanField(),
+            )
         )
 
 

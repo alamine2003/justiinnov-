@@ -132,6 +132,9 @@ BLOQUE = "ML"
 #: voit toujours tous les pays.
 SIEGE = {
     "dg": (Role.SUPER_ADMIN, None, "Direction générale"),
+    # Un second super administrateur : les enveloppes sont à la direction
+    # seule (décision 91), et nul ne tranche sa propre réallocation.
+    "do": (Role.SUPER_ADMIN, None, "Direction des opérations"),
     "rh": (Role.ADMIN, None, "Ressources humaines"),
 }
 
@@ -160,7 +163,7 @@ DOSSIERS = [
 
 
 class Command(BaseCommand):
-    help = "Remplit une base jetable pour la recette : 17 pays, 40 comptes, 136 dossiers."
+    help = "Remplit une base jetable pour la recette : 17 pays, 37 comptes, 136 dossiers."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -171,7 +174,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not options["base_jetable"]:
             raise CommandError(
-                "seed_recette écrit dix-sept pays, quarante comptes et des centaines "
+                "seed_recette écrit dix-sept pays, trente-sept comptes et des centaines "
                 "de lignes qui ne se suppriment pas : réservé à une base jetable. "
                 "Relancez avec --base-jetable si c'est bien le cas."
             )
@@ -425,7 +428,7 @@ class Command(BaseCommand):
     # -- Enveloppes ------------------------------------------------------------
 
     def _reallocations(self):
-        dg, rh = self.comptes["dg"], self.comptes["rh"]
+        dg, do = self.comptes["dg"], self.comptes["do"]
         motif = "Renfort de l'équipe pour la campagne de visites du trimestre."
         demandes = {}
         for code in ("TG", "SN", "CM"):
@@ -435,11 +438,11 @@ class Command(BaseCommand):
         env = self.enveloppes["TG"]
         approuvee = self._demander(env["pays"], env["equipe"],
                                    self._local(500_000, self.pays["TG"]), motif, dg)
-        enveloppes.approuver(approuvee, get_access(rh), "Accordé.", Trace.depuis_compte(rh))
+        enveloppes.approuver(approuvee, get_access(do), "Accordé.", Trace.depuis_compte(do))
         refusee = self._demander(env["pays"], env["equipe"],
                                  self._local(2_000_000, self.pays["TG"]), motif, dg)
-        enveloppes.refuser(refusee, get_access(rh),
-                           "Refusé : la sous-enveloppe n'est pas consommée.", Trace.depuis_compte(rh))
+        enveloppes.refuser(refusee, get_access(do),
+                           "Refusé : la sous-enveloppe n'est pas consommée.", Trace.depuis_compte(do))
 
     def _demander(self, source, cible, montant, motif, user):
         try:

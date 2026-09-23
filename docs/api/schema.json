@@ -466,7 +466,7 @@
         "/api/budgets/": {
             "get": {
                 "operationId": "budgets_list",
-                "description": "Enveloppes annuelles et sous-enveloppes par projet.",
+                "description": "Enveloppes annuelles et sous-enveloppes par projet.\n\n``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :\nune enveloppe qui n'a jamais servi se supprime, comme un brouillon\njamais soumis (décision 91). Celle qui a servi se désactive.",
                 "parameters": [
                     {
                         "in": "query",
@@ -580,7 +580,7 @@
             },
             "post": {
                 "operationId": "budgets_create",
-                "description": "Enveloppes annuelles et sous-enveloppes par projet.",
+                "description": "Enveloppes annuelles et sous-enveloppes par projet.\n\n``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :\nune enveloppe qui n'a jamais servi se supprime, comme un brouillon\njamais soumis (décision 91). Celle qui a servi se désactive.",
                 "tags": [
                     "budgets"
                 ],
@@ -629,7 +629,7 @@
         "/api/budgets/{id}/": {
             "get": {
                 "operationId": "budgets_retrieve",
-                "description": "Enveloppes annuelles et sous-enveloppes par projet.",
+                "description": "Enveloppes annuelles et sous-enveloppes par projet.\n\n``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :\nune enveloppe qui n'a jamais servi se supprime, comme un brouillon\njamais soumis (décision 91). Celle qui a servi se désactive.",
                 "parameters": [
                     {
                         "in": "path",
@@ -667,7 +667,7 @@
             },
             "put": {
                 "operationId": "budgets_update",
-                "description": "Enveloppes annuelles et sous-enveloppes par projet.",
+                "description": "Enveloppes annuelles et sous-enveloppes par projet.\n\n``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :\nune enveloppe qui n'a jamais servi se supprime, comme un brouillon\njamais soumis (décision 91). Celle qui a servi se désactive.",
                 "parameters": [
                     {
                         "in": "path",
@@ -725,7 +725,7 @@
             },
             "patch": {
                 "operationId": "budgets_partial_update",
-                "description": "Enveloppes annuelles et sous-enveloppes par projet.",
+                "description": "Enveloppes annuelles et sous-enveloppes par projet.\n\n``DELETE`` est ouvert ici, par exception à ``NoDestroyModelViewSet`` :\nune enveloppe qui n'a jamais servi se supprime, comme un brouillon\njamais soumis (décision 91). Celle qui a servi se désactive.",
                 "parameters": [
                     {
                         "in": "path",
@@ -777,6 +777,37 @@
                             }
                         },
                         "description": ""
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "budgets_destroy",
+                "description": "Supprime une enveloppe qui n'a jamais servi (décision 91).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Budget.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "budgets"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
                     }
                 }
             }
@@ -8006,6 +8037,10 @@
                         ],
                         "readOnly": true
                     },
+                    "can_delete": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -8039,6 +8074,7 @@
                     "overrun_policy_display",
                     "is_active",
                     "figures",
+                    "can_delete",
                     "created_at",
                     "updated_at"
                 ]
@@ -13262,6 +13298,11 @@
                         "readOnly": true,
                         "description": "Changer le montant, la politique de dépassement, désactiver ; valider une dépense qui dépasse son enveloppe."
                     },
+                    "budgets.delete": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Retirer une enveloppe qui n'a jamais servi : aucune dépense imputée, aucune réallocation, aucune sous-enveloppe."
+                    },
                     "reallocations.request": {
                         "type": "boolean",
                         "readOnly": true,
@@ -13363,6 +13404,7 @@
                     "referentiel.update",
                     "budgets.create",
                     "budgets.update",
+                    "budgets.delete",
                     "reallocations.request",
                     "reallocations.decide",
                     "rates.manage",

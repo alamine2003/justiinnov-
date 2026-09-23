@@ -7,7 +7,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from accounts.perimetre import ChampCloisonne
-from accounts.permissions import get_access
+from accounts.permissions import get_access, roles_pour
 from core.models import Country, Manager, Project, Team, WorkflowConfiguration
 from core.regles import RegleViolee
 from core.serializers import champ_montant, champ_taux
@@ -22,7 +22,7 @@ from .aggregates import (
     taux_en_vigueur_ids,
 )
 from .models import Budget, BudgetReallocation, ExchangeRate
-from .transitions import exiger_le_disponible, peut_decider
+from .transitions import exiger_le_disponible, peut_decider, raison_de_garder
 
 
 def champ_niveau_d_execution(**kwargs):
@@ -142,6 +142,7 @@ class BudgetSerializer(serializers.ModelSerializer):
         source="get_overrun_policy_display", read_only=True
     )
     figures = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = Budget
@@ -150,7 +151,7 @@ class BudgetSerializer(serializers.ModelSerializer):
             "year", "project", "project_name", "team", "team_name",
             "manager", "manager_name", "scope_kind", "scope_label", "amount",
             "overrun_policy", "overrun_policy_display", "is_active",
-            "figures", "created_at", "updated_at",
+            "figures", "can_delete", "created_at", "updated_at",
         ]
         # Les validateurs d'unicité déduits des contraintes rendraient
         # ``project`` obligatoire, alors qu'il est justement absent pour une
@@ -158,6 +159,29 @@ class BudgetSerializer(serializers.ModelSerializer):
         # ``validate``, avec des messages parlants ; les contraintes en base
         # restent le dernier rempart.
         validators = []
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_delete(self, budget):
+        """Le demandeur peut-il supprimer cette enveloppe ?
+
+        Il faut la capacité (``budgets.delete``) et une enveloppe qui n'a
+        jamais servi — lu sur l'annotation ``a_servi`` de la liste, sinon
+        vérifié comme le service (``raison_de_garder``). L'interface
+        n'affiche le bouton que sur ce qu'on lui dit ici.
+        """
+        request = self.context.get("request")
+        access = get_access(getattr(request, "user", None)) if request else None
+        if access is None:
+            return False
+        configuration = self.context.get("workflow_configuration")
+        if configuration is None:
+            configuration = self.context["workflow_configuration"] = WorkflowConfiguration.charger()
+        if access.role not in roles_pour("budgets.delete", configuration):
+            return False
+        a_servi = getattr(budget, "a_servi", None)
+        if a_servi is None:
+            a_servi = raison_de_garder(budget) is not None
+        return not a_servi
 
     @extend_schema_field(BudgetFiguresSerializer)
     def get_figures(self, budget):
