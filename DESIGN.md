@@ -462,7 +462,7 @@ détail d'un dossier, un bouton **« Rectifier »** (`outline`, icône
 `Undo2`, `components/expenses/request-rectification.tsx`), à côté des
 actions du circuit, rendu **seulement** si `allowed_actions` de la ligne
 contient `request_rectification` — le serveur le dit : droit
-(`rectifications.request`, tous les rôles par défaut), ligne justifiée ou
+(`rectifications.request`, pays et super administrateur par défaut), ligne justifiée ou
 clôturée, aucune demande déjà en attente. Il ouvre un dialogue au titre
 affirmatif (« Demander la rectification — Hôtel… »), dont la description
 dit la conséquence : un administrateur décidera ; s'il approuve, la ligne

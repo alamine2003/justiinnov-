@@ -22,7 +22,7 @@ def approuve_les_depassements(role):
     """Le rôle peut-il valider une dépense qui dépasse son enveloppe ?
 
     Ceux qui modifient les enveloppes (``budgets.update``) — les
-    administrateurs par défaut ; la direction financière n'arbitre pas un
+    administrateurs par défaut ; le pays n'arbitre pas son propre
     dépassement. La capacité est la même que pour l'attribution, pour ne
     pas dériver d'elle.
     """

@@ -371,6 +371,16 @@ class ProofReviewTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_le_super_administrateur_ne_controle_pas_une_piece(self):
+        """Il supervise : le contrôle d'une pièce est à l'administrateur
+        (décision 89)."""
+        self.login(self.doo)
+
+        response = self.review("validated")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Proof.objects.get(pk=self.proof_id).status, Proof.ProofStatus.RECEIVED)
+
     def test_une_piece_tranchee_ne_bouge_plus(self):
         """Validée, rejetée ou archivée, la pièce est figée : seul un
         remplacement fait avancer le dossier. Sans cela, un contrôleur

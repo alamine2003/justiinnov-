@@ -27,13 +27,13 @@ Les actions que le demandeur peut tenter sont calculées ici aussi
 l'API : l'interface les affiche, elle ne recopie pas les règles.
 
 **La réouverture est la seule exception à l'irréversibilité.** Un
-administrateur (RH ou super administrateur) peut renvoyer au brouillon un
+administrateur (la RH, qui contrôle) peut renvoyer au brouillon un
 dossier déclaré mais pas encore constaté, pour demander des comptes au pays :
 une ligne mal imputée, un montant douteux, une pièce qui ne correspond pas.
 Elle n'est pas une correction silencieuse, et le circuit le garantit :
 
-- elle est réservée aux administrateurs, jamais au pays qui a déclaré ni à la
-  direction financière qui constate ;
+- elle est réservée à l'administrateur par défaut (``dossiers.reopen``),
+  jamais au pays qui a déclaré ;
 - elle exige un motif, conservé sur le dossier et dans le journal d'audit,
   sur le dossier et sur chacune de ses lignes ;
 - elle est refusée dès qu'une ligne est justifiée ou clôturée : le siège a
@@ -51,14 +51,16 @@ justifié faux, une pièce prise pour une autre. Se corriger en silence
 serait pire que l'erreur ; c'est pourquoi la rectification se fait en deux
 temps, à deux personnes :
 
-- **n'importe qui demande** (``rectifications.request``, tous les rôles
-  par défaut) : une ligne justifiée ou clôturée, un motif obligatoire, une
-  seule demande en attente par ligne ;
-- **un administrateur décide** (``rectifications.decide`` : RH et
-  direction, jamais le pays) — et jamais l'auteur de la demande : demander
+- **le pays ou le super administrateur demande**
+  (``rectifications.request``) : une ligne justifiée ou clôturée, un motif
+  obligatoire, une seule demande en attente par ligne. L'administrateur ne
+  demande pas par défaut : il ne trancherait pas sa propre demande, et le
+  siège peut n'en compter qu'un ;
+- **l'administrateur décide** (``rectifications.decide``, jamais le pays
+  ni le super administrateur) — et jamais l'auteur de la demande : demander
   et trancher sont deux regards, comme pour une réallocation ;
 - approuvée, la ligne **revient en contrôle** (``rectify``), son montant
-  justifié remis à zéro, pour que la direction financière tranche à
+  justifié remis à zéro, pour que l'administrateur tranche à
   nouveau — elle ne revient jamais au brouillon, la dépense reste déclarée
   et pèse toujours sur l'enveloppe ; le dossier, s'il avait été constaté,
   revient en contrôle avec elle, puisqu'il ne dit jamais autre chose que
@@ -189,7 +191,7 @@ LINES_REQUIRED = {
 #: « re-signalée » incomplète : on attend le complément, puis on tranche.
 #: Validée, rejetée ou archivée, elle ne bouge plus : seul un remplacement
 #: par une nouvelle version (qui l'archive) fait avancer le dossier. Sans ce
-#: tableau, la direction financière pouvait dévalider une pièce déjà
+#: tableau, le contrôle pouvait dévalider une pièce déjà
 #: validée, voire ressusciter une pièce archivée.
 PROOF_TRANSITIONS = {
     "received": frozenset({"validated", "rejected", "incomplete", "to_review"}),
@@ -321,6 +323,7 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
             objet.status in DELETABLE_STATUSES
             and auteur_ou_anonyme
             and not a_ete_rectifiee(objet)
+            and not a_ete_declare(objet)
         )
     if action == "edit":
         # Ni un collègue du pays, ni le siège (décision 89).
@@ -329,6 +332,12 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
         )
     if action == "upload":
         return objet.status not in PROOF_LOCKED_STATUSES
+    if action == "add_line":
+        # Ajouter une ligne, c'est modifier le brouillon : son auteur seul,
+        # comme à l'import (décision 46).
+        return objet.status not in LOCKED_STATUSES and agit_en_auteur(
+            objet, role, username
+        )
     return objet.status not in LOCKED_STATUSES
 
 
@@ -362,6 +371,31 @@ def expense_allowed_actions(expense, *, role, username, configuration=None):
     if peut_demander_une_rectification(expense, role=role, configuration=configuration):
         actions.append(REQUEST_RECTIFICATION)
     return actions
+
+
+def a_ete_declare(objet):
+    """Ce brouillon a-t-il déjà été déclaré, puis rouvert ?
+
+    Seul un brouillon jamais soumis se retire (CLAUDE.md) : un dossier
+    rouvert revient au brouillon, mais il a été déclaré, et ses lignes avec
+    lui. Un dossier le dit par son motif de réouverture (``reopen_note``) ;
+    une ligne, par l'entrée ``submitted`` du journal d'audit — lue sur
+    ``expense.declaree`` quand la liste l'a annotée
+    (``ExpenseQuerySet.with_rectification``), par une requête sinon.
+    """
+    if getattr(objet, "pk", None) is None:
+        return False
+    if hasattr(objet, "reopen_note"):
+        return bool(objet.reopen_note)
+    declaree = getattr(objet, "declaree", None)
+    if declaree is None:
+        from .models import AuditLog
+
+        declaree = AuditLog.objects.filter(
+            object_type=type(objet).__name__, object_id=objet.pk,
+            action=AuditLog.Action.SUBMITTED,
+        ).exists()
+    return declaree
 
 
 def a_ete_rectifiee(objet):

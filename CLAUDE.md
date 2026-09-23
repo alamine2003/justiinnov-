@@ -136,8 +136,9 @@ l'application.
   imputation. Un dossier dont une ligne est justifiée ou clôturée ne se
   rouvre pas : le siège a constaté. **La seconde exception, la
   rectification, commence là** : une ligne justifiée ou clôturée à tort se
-  *demande* à rectifier (`rectifications.request`, tous les rôles par
-  défaut, motif obligatoire, une demande en attente par ligne) et un
+  *demande* à rectifier (`rectifications.request` : `manager`,
+  `super_admin` par défaut — l'`admin` ne trancherait pas sa propre
+  demande ; motif obligatoire, une demande en attente par ligne) et un
   administrateur *qui n'est pas le demandeur* approuve ou refuse
   (`rectifications.decide` : `admin` seul, jamais le pays ni le
   `super_admin`).

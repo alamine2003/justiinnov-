@@ -74,6 +74,39 @@ class ReouvertureTests(ReouvertureTestCase):
         self.dossier.refresh_from_db()
         self.assertEqual(self.dossier.status, Status.SUBMITTED)
 
+    def test_rouvert_il_ne_se_supprime_plus(self):
+        """Seul un brouillon jamais soumis se retire : un dossier rouvert a
+        été déclaré, ses lignes aussi. Il se corrige et se resoumet."""
+        self.reopen()
+        self.login(self.owner)
+
+        dossier = self.client.delete(f"/api/dossiers/{self.dossier.pk}/")
+        ligne = self.client.delete(f"/api/expenses/{self.ligne.pk}/")
+        detail = self.client.get(f"/api/dossiers/{self.dossier.pk}/").data
+
+        self.assertEqual(dossier.status_code, status.HTTP_400_BAD_REQUEST, dossier.data)
+        self.assertEqual(ligne.status_code, status.HTTP_400_BAD_REQUEST, ligne.data)
+        self.assertNotIn("delete", detail["allowed_actions"])
+        for ligne_api in detail["expenses"]:
+            self.assertNotIn("delete", ligne_api["allowed_actions"])
+        self.assertTrue(Dossier.objects.filter(pk=self.dossier.pk).exists())
+
+    def test_une_ligne_ajoutee_apres_la_reouverture_se_retire(self):
+        """Elle n'a jamais été déclarée : c'est un brouillon comme un autre."""
+        self.reopen()
+        self.login(self.owner)
+        nouvelle = self.client.post(
+            "/api/expenses/",
+            {"dossier": self.dossier.pk, "country": self.togo.pk,
+             "date": "2026-03-16T10:00:00Z", "title": "Oubli", "amount": "1000.00"},
+            format="json",
+        )
+        self.assertEqual(nouvelle.status_code, status.HTTP_201_CREATED, nouvelle.data)
+
+        response = self.client.delete(f"/api/expenses/{nouvelle.data['id']}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
     def test_le_motif_est_obligatoire(self):
         sans = self.reopen(note=None)
         vide = self.reopen(note="   ")

@@ -320,7 +320,7 @@ class ProofSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
         # ``is_complete`` ne se modifie que par ``review`` : c'est un constat
-        # de la direction financière, pas une case que le déposant coche.
+        # du contrôle, pas une case que le déposant coche.
         read_only_fields = [
             "original_name", "sha256", "size", "content_type", "version",
             "uploaded_by", "status", "rejection_reason", "is_complete",
@@ -510,7 +510,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
     country_name = serializers.CharField(source="country.name", read_only=True)
     currency = serializers.CharField(source="country.currency", read_only=True)
     # §6 : la date est conservée en UTC, mais doit se lire dans le fuseau du
-    # pays où la dépense a eu lieu. La direction financière verrait sinon
+    # pays où la dépense a eu lieu. Le siège verrait sinon
     # l'heure de son propre fuseau, ce qui fausse le « quand ».
     country_timezone = serializers.CharField(
         source="country.timezone", read_only=True

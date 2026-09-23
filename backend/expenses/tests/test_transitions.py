@@ -14,7 +14,7 @@ from accounts.tests.test_scoping import make_user
 from budget.models import OverrunPolicy
 from core.regles import PermissionRefusee, RegleViolee
 from expenses import transitions
-from expenses.models import AuditLog, Dossier
+from expenses.models import AuditLog, Dossier, Expense
 from expenses.workflow import Status, TransitionError
 
 from core.tests.aides import ADRESSE, trace
@@ -141,9 +141,10 @@ class ServicesDuCircuitTests(ExpenseTestCase):
             transitions.mettre_en_controle(self.dossier, get_access(auteur), trace(auteur))
 
     def test_une_ligne_sans_auteur_ne_se_controle_pas(self):
-        self.ligne.created_by = ""
-        self.ligne.save()
+        """Donnée ancienne : la soumission, elle, donne un auteur."""
         self.soumettre()
+        Expense.objects.filter(pk=self.ligne.pk).update(created_by="")
+        self.ligne.refresh_from_db()
 
         with self.assertRaises(RegleViolee) as refus:
             transitions.mettre_en_controle(

@@ -73,7 +73,7 @@ class ExpenseAdmin(BrouillonSeulementMixin, admin.ModelAdmin):
     list_filter = ("status", "country", "payment_method")
     search_fields = ("title", "dossier__number")
     # Ce que le circuit fixe ne se corrige pas à la main : le statut vient
-    # des transitions, le montant justifié de la direction financière, l'enveloppe de
+    # des transitions, le montant justifié du contrôle, l'enveloppe de
     # l'imputation, l'auteur de la saisie.
     readonly_fields = (
         "status", "amount", "justified_amount", "budget", "created_by",

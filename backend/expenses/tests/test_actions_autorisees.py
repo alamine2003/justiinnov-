@@ -16,7 +16,7 @@ from accounts.tests.test_scoping import make_user
 from core.regles import PermissionRefusee
 from core.tests.aides import trace
 from expenses import transitions
-from expenses.models import Dossier, Proof
+from expenses.models import Dossier, Expense, Proof
 from expenses.workflow import Status
 
 from .base import ExpenseTestCase
@@ -75,17 +75,20 @@ class ActionsDeLigneTests(ExpenseTestCase):
         )
         anonyme = self.make_expense(dossier=dossier, created_by="")
         self.submit_dossier(dossier)
+        # Donnée ancienne : la soumission, elle, donne un auteur.
+        Expense.objects.filter(pk=anonyme.pk).update(created_by="")
 
         self.assertEqual(self._actions(self.controller, anonyme), [])
 
     def test_une_ligne_justifiee_ne_propose_que_la_cloture_et_la_rectification(self):
-        """Constatée, la ligne se clôt (l'administrateur) ; et n'importe qui
-        peut demander à rectifier le constat — le super administrateur
-        aussi, qui ne tranche rien."""
+        """Constatée, la ligne se clôt (l'administrateur) ; le pays et le
+        super administrateur peuvent demander à rectifier le constat.
+        L'administrateur, par défaut, non : il ne trancherait pas sa
+        propre demande."""
         self.login(self.controller)
         self.client.post(f"/api/expenses/{self.ligne.pk}/justify/")
 
-        self.assertEqual(self._actions(self.controller), ["close", "request_rectification"])
+        self.assertEqual(self._actions(self.controller), ["close"])
         self.assertEqual(self._actions(self.doo), ["request_rectification"])
         self.assertEqual(self._actions(self.owner), ["request_rectification"])
 
@@ -246,7 +249,7 @@ class TransitionRenvoieLeDetailTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["expenses"][0]["status"], Status.JUSTIFIED)
         self.assertEqual(
-            response.data["expenses"][0]["allowed_actions"], ["close", "request_rectification"]
+            response.data["expenses"][0]["allowed_actions"], ["close"]
         )
         self.assertEqual(response.data["allowed_actions"], ["close"])
 

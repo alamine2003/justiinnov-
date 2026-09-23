@@ -337,11 +337,19 @@ class ExpenseQuerySet(models.QuerySet):
         ``rectifiee`` — la ligne a-t-elle jamais fait l'objet d'une demande ?
         (``workflow.peut_saisir`` : elle ne se retire plus)."""
         demandes = Rectification.objects.filter(expense=OuterRef("pk"))
+        # ``declaree`` : la ligne a-t-elle jamais été soumise ? Revenue au
+        # brouillon par une réouverture, elle ne se retire plus
+        # (``workflow.a_ete_declare``).
+        soumissions = AuditLog.objects.filter(
+            object_type="Expense", object_id=OuterRef("pk"),
+            action=AuditLog.Action.SUBMITTED,
+        )
         return self.annotate(
             rectification_en_attente=models.Exists(
                 demandes.filter(status=Rectification.Status.PENDING)
             ),
             rectifiee=models.Exists(demandes),
+            declaree=models.Exists(soumissions),
         )
 
 
@@ -546,10 +554,10 @@ class Rectification(TimeStampedModel):
     """Demande de rectification d'un constat : la seconde exception à
     l'irréversibilité (``workflow``).
 
-    Le siège a justifié ou clôturé une ligne, et s'est trompé. N'importe qui
-    peut le dire — avec un motif — ; un administrateur, jamais l'auteur de
-    la demande, tranche. Approuvée, la ligne revient en contrôle
-    (``transitions.approuver_rectification``). La demande garde l'état et le
+    Le siège a justifié ou clôturé une ligne, et s'est trompé. Le pays ou
+    le super administrateur le disent — avec un motif — ; un
+    administrateur, jamais l'auteur de la demande, tranche. Approuvée, la
+    ligne revient en contrôle (``transitions.approuver_rectification``). La demande garde l'état et le
     montant justifié qu'elle a défaits : ce que le journal dit, la fiche le
     dit aussi.
     """

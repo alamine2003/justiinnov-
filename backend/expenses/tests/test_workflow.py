@@ -1106,6 +1106,9 @@ class SeparationOfDutiesTests(ExpenseTestCase):
         )
         ligne = self.make_expense(dossier=dossier, created_by=created_by)
         self.submit_dossier(dossier)
+        # La soumission donne un auteur à une ligne qui n'en a pas : une
+        # ligne anonyme déjà déclarée ne vient que de données anciennes.
+        Expense.objects.filter(pk=ligne.pk).update(created_by=created_by)
         return ligne
 
     def test_un_pays_ne_justifie_pas_ses_propres_depenses(self):
@@ -1172,6 +1175,22 @@ class SeparationOfDutiesTests(ExpenseTestCase):
             self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.expense.refresh_from_db()
         self.assertEqual(self.expense.status, Status.SUBMITTED)
+
+    def test_le_super_administrateur_ne_cloture_pas(self):
+        """La clôture est le dernier geste du contrôle : l'administrateur
+        seul (décision 89)."""
+        self.login(self.controller)
+        justifie = self.client.post(f"/api/expenses/{self.expense.pk}/justify/")
+        self.assertEqual(justifie.status_code, status.HTTP_200_OK, justifie.data)
+        self.login(self.doo)
+
+        ligne = self.client.post(f"/api/expenses/{self.expense.pk}/close/")
+        dossier = self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
+
+        self.assertEqual(ligne.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(dossier.status_code, status.HTTP_403_FORBIDDEN)
+        self.expense.refresh_from_db()
+        self.assertEqual(self.expense.status, Status.JUSTIFIED)
 
     def test_le_siege_ne_declare_pas(self):
         """Ni l'administrateur ni le super administrateur n'ouvrent de

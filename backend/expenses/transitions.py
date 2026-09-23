@@ -71,6 +71,7 @@ from .workflow import (
     RECTIFIABLE_STATUSES,
     REOPEN_BLOCKING_STATUSES,
     Status,
+    a_ete_declare,
     a_ete_rectifiee,
     agit_en_auteur,
     breaks_four_eyes,
@@ -401,6 +402,7 @@ def _soumettre_les_lignes(dossier, acteur, trace, resultat):
     )
     engage = {pk: None for pk in verrouillees}
     depassements = {}
+    reprises = set()
     maintenant = timezone.now()
     for expense in brouillons:
         budget = verrouillees[expense.budget_id]
@@ -418,8 +420,16 @@ def _soumettre_les_lignes(dossier, acteur, trace, resultat):
             depassements[budget.pk] = avertissement
         expense.status = Status.SUBMITTED
         expense.updated_at = maintenant
+        # Même règle que pour le dossier : une ligne sans auteur connu prend
+        # celui qui la déclare, sans quoi elle ne se contrôlerait jamais
+        # (``exiger_un_auteur``) et resterait engagée sans issue.
+        if not expense.created_by:
+            expense.created_by = acteur.username
+            reprises.add(expense.pk)
 
-    Expense.objects.bulk_update(brouillons, ["budget", "status", "updated_at"])
+    Expense.objects.bulk_update(
+        brouillons, ["budget", "status", "updated_at", "created_by"]
+    )
     resultat.audit.extend(
         enregistrer(
             preparer(
@@ -428,7 +438,12 @@ def _soumettre_les_lignes(dossier, acteur, trace, resultat):
                 expense,
                 from_status=Status.DRAFT,
                 to_status=Status.SUBMITTED,
-                note="soumise avec son dossier",
+                note=(
+                    "soumise avec son dossier ; sans auteur connu, elle prend "
+                    "celui qui la déclare"
+                    if expense.pk in reprises
+                    else "soumise avec son dossier"
+                ),
             )
             for expense in brouillons
         )
@@ -496,6 +511,12 @@ def _avant_sur_le_dossier(dossier, action, acteur, note, donnees, trace, resulta
         exiger_l_auteur_du_brouillon(
             dossier, acteur, _("Seul l'auteur d'un brouillon peut le soumettre.")
         )
+        # Un brouillon sans auteur connu — compte disparu, brouillon rendu au
+        # pays (décision 89) — prend pour auteur celui qui le déclare : sans
+        # auteur, la règle des quatre yeux ne pourrait pas se vérifier et
+        # plus personne ne pourrait le contrôler.
+        if not dossier.created_by:
+            dossier.created_by = acteur.username
         return _soumettre_les_lignes(dossier, acteur, trace, resultat)
 
     if action == "reopen":
@@ -792,6 +813,16 @@ def retirer_brouillon(objet, acteur, trace):
             _(
                 "Cet élément est déclaré : il ne peut plus être "
                 "supprimé. Seul un brouillon peut l'être."
+            ),
+        )
+    if a_ete_declare(instance):
+        # Revenu au brouillon par une réouverture, il a été déclaré : il se
+        # corrige et se soumet à nouveau, il ne disparaît pas.
+        raise RegleViolee(
+            "status",
+            _(
+                "Ce brouillon a déjà été déclaré, puis rouvert : il ne se "
+                "supprime pas. Corrigez-le et soumettez-le à nouveau."
             ),
         )
     if instance.created_by and instance.created_by != acteur.username:

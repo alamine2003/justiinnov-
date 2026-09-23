@@ -384,11 +384,17 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         # ligne — au lieu d'une ligne en brouillon dans un dossier déclaré
         # que rien ne soumettrait plus, ou d'un retrait qui bute (§3.7, §4.4).
         with traduire_les_regles():
-            transitions.exiger_un_dossier_ouvert(
-                transitions.verrouiller_le_dossier_vise(
-                    serializer.validated_data.get("dossier"), None
-                )
+            dossier = transitions.verrouiller_le_dossier_vise(
+                serializer.validated_data.get("dossier"), None
             )
+            transitions.exiger_un_dossier_ouvert(dossier)
+            # Une ligne ajoutée modifie le brouillon : son auteur seul
+            # (décision 46), comme l'import.
+            if dossier is not None:
+                transitions.exiger_l_auteur_du_brouillon(
+                    dossier, get_access(self.request.user),
+                    _("Seul l'auteur d'un brouillon peut y ajouter une ligne."),
+                )
         serializer.save(created_by=self.request.user.username)
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
@@ -413,6 +419,13 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
                 serializer.instance, get_access(self.request.user)
             )
             transitions.exiger_un_dossier_ouvert(dossier_vise)
+            # Rejoindre un autre dossier, c'est modifier ce brouillon-là :
+            # son auteur seul (décision 46).
+            if dossier_vise is not None and dossier_vise.pk != serializer.instance.dossier_id:
+                transitions.exiger_l_auteur_du_brouillon(
+                    dossier_vise, get_access(self.request.user),
+                    _("Seul l'auteur d'un brouillon peut y ajouter une ligne."),
+                )
         # Le taux figé et le montant justifié ne s'écrivent pas par la charge
         # utile, mais la modification les fait bouger : ils sont de la trace.
         champs = champs_journalises(serializer, "original_rate", "justified_amount")

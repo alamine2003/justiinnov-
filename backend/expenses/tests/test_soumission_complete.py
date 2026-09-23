@@ -82,7 +82,7 @@ class SoumissionCompleteTests(ExpenseTestCase):
 
 
 class AuteurDeLaSoumissionTests(ExpenseTestCase):
-    """Un brouillon de dossier part par son auteur, ou par le siège.
+    """Un brouillon de dossier part par son auteur, et lui seul (décision 89).
 
     Un collègue du même pays qui soumettrait le dossier d'un autre
     déclarerait au nom de l'auteur ce que celui-ci n'a pas fini de saisir —
@@ -128,3 +128,40 @@ class AuteurDeLaSoumissionTests(ExpenseTestCase):
         self.assertNotIn("submit", self._actions(self.doo))
         self.assertNotIn("submit", self._actions(self.controller))
         self.assertNotIn("submit", self._actions(self.collegue))
+
+
+class AjoutParUnCollegueTests(ExpenseTestCase):
+    """Ajouter une ligne, c'est modifier le brouillon : son auteur seul,
+    par l'API comme par l'import (décision 46)."""
+
+    def setUp(self):
+        super().setUp()
+        self.collegue = make_user("collegue.togo", Role.MANAGER, [self.togo])
+
+    def _actions(self, user):
+        self.login(user)
+        return self.client.get(f"/api/dossiers/{self.dossier.pk}/").data["allowed_actions"]
+
+    def _ligne(self, user):
+        self.login(user)
+        return self.client.post(
+            "/api/expenses/",
+            {"dossier": self.dossier.pk, "country": self.togo.pk,
+             "date": "2026-03-16T10:00:00Z", "title": "Taxi", "amount": "1000.00"},
+            format="json",
+        )
+
+    def test_un_collegue_n_ajoute_pas_de_ligne(self):
+        avant = self.dossier.expenses.count()
+
+        response = self._ligne(self.collegue)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
+        self.assertEqual(self.dossier.expenses.count(), avant)
+        self.assertNotIn("add_line", self._actions(self.collegue))
+
+    def test_l_auteur_ajoute_sa_ligne(self):
+        response = self._ligne(self.owner)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertIn("add_line", self._actions(self.owner))

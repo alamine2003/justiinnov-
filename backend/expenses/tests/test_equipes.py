@@ -49,6 +49,9 @@ class CloisonnementParEquipeTests(ExpenseTestCase):
 
         self.manager_a = make_user("manager.lome", Role.MANAGER, [self.togo])
         self.manager_a.profile.teams.set([self.equipe_a])
+        # Le brouillon de Lomé est le sien : seul l'auteur d'un brouillon y
+        # ajoute une ligne (décision 89).
+        Dossier.objects.filter(pk=self.dossier_a.pk).update(created_by=self.manager_a.username)
         self.manager_sans_equipe = make_user("manager.togo", Role.MANAGER, [self.togo])
 
     def _piece(self, dossier, empreinte):

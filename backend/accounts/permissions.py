@@ -387,14 +387,17 @@ CAPACITES = (
     ),
     # La seconde exception à l'irréversibilité (``expenses.workflow``) : un
     # constat se rectifie sur demande motivée et décision d'un
-    # administrateur. Demander est ouvert à tous — le pays voit l'erreur le
-    # premier ; décider ne l'est jamais au pays, et le service refuse en
-    # outre l'auteur de la demande.
+    # administrateur qui n'est pas le demandeur. Demander est ouvert au pays
+    # — il voit l'erreur le premier — et au super administrateur, qui
+    # supervise. Pas à l'administrateur par défaut (décision 89) : seul à
+    # décider, il ne pourrait pas trancher sa propre demande, qui resterait
+    # en attente pour toujours. La matrice la lui ouvre quand la RH compte
+    # au moins deux administrateurs ; rien n'y est fixe.
     Capacite(
         "rectifications.request", GROUPE_CONTROLE,
         _("Demander la rectification d'un constat"),
         _("Signaler, motif à l'appui, qu'une ligne justifiée ou clôturée l'a été à tort."),
-        _TOUS,
+        frozenset({Role.MANAGER, Role.SUPER_ADMIN}), fixes=frozenset(),
     ),
     _controle(
         "rectifications.decide",
