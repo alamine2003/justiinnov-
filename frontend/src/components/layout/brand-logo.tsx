@@ -1,46 +1,47 @@
-import { EMBLEME } from "@/components/layout/brand-mark"
+import { TracesGH } from "@/components/layout/brand-mark"
 import { BRAND } from "@/lib/brand"
 import { cn } from "@/lib/utils"
 
 /**
- * Logo complet : l'emblème suivi du nom de l'application (`BRAND.name`,
- * « JUSTI GH », décision 92). En attendant le logo de Generic Healthcare,
- * l'emblème reste le « J » de l'application ; le logo du groupe prendra sa
- * place ici même.
+ * Logo complet : « JUSTI » suivi du monogramme de Generic Healthcare, qui
+ * se lit « JUSTI GH » (`BRAND.name`, décision 92) sans répéter « GH ».
  *
- * En `currentColor`, comme l'emblème (`BrandMark`) : il prend la couleur du
- * texte qui l'entoure, dans les deux thèmes et sur le panneau sombre de la
- * connexion. Le composant redit le nom aux lecteurs d'écran par un texte
- * masqué : le dessin, lui, est ignoré (`aria-hidden`).
+ * Le bleu — le mot et le monogramme — suit la couleur du texte : `text-logo`
+ * par défaut (bleu du groupe, clair en thème sombre), et l'écran de
+ * connexion le passe en clair sur son panneau marine. Le rouge et l'orange
+ * restent les leurs. Le composant redit le nom aux lecteurs d'écran par un
+ * texte masqué : le dessin, lui, est ignoré (`aria-hidden`).
  */
 export function BrandLogo({ className }: { className?: string }) {
   return (
     <>
       <svg
-        viewBox="0 0 1240 297"
+        viewBox="0 0 3140 831"
         aria-hidden
         focusable="false"
         fill="currentColor"
-        className={cn("shrink-0", className)}
+        className={cn("shrink-0 text-logo", className)}
       >
-        <path d={EMBLEME} />
         {/*
-          Le nom est du texte, pas un tracé : il suit la police de
+          Le mot est du texte, pas un tracé : il suit la police de
           l'interface. `textLength` fixe sa largeur dans le repère du logo,
           pour que l'ensemble garde ses proportions quelle que soit la
-          police chargée.
+          police chargée ; sa hauteur de capitale rejoint celle du « GH ».
         */}
         <text
-          x="330"
-          y="232"
-          fontSize="200"
+          x="0"
+          y="830"
+          fontSize="750"
           fontWeight="700"
           fontFamily="var(--font-heading)"
-          textLength="900"
+          textLength="2080"
           lengthAdjust="spacingAndGlyphs"
         >
-          {BRAND.name}
+          {BRAND.mot}
         </text>
+        <g transform="translate(2228 0)">
+          <TracesGH />
+        </g>
       </svg>
       <span className="sr-only">{BRAND.name}</span>
     </>

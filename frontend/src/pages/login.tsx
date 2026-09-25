@@ -110,8 +110,8 @@ export function LoginPage() {
         />
 
         <div className="relative space-y-2">
-          {/* Le logo suit la couleur du texte du panneau : clair sur sombre. */}
-          <BrandLogo className="h-9 w-auto" />
+          {/* Sur le marine du panneau, le bleu du logo passe au clair. */}
+          <BrandLogo className="h-9 w-auto text-banniere-foreground" />
           <p className="text-xs text-banniere-muted">{t("app.tagline")}</p>
         </div>
 

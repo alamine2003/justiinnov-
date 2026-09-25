@@ -55,6 +55,9 @@
     --color-marque-fort: var(--marque-fort);
     --color-marque-fort-foreground: var(--marque-fort-foreground);
     --color-marque-clair: var(--marque-clair);
+    --color-logo: var(--logo);
+    --color-logo-rouge: var(--logo-rouge);
+    --color-logo-orange: var(--logo-orange);
     --color-banniere: var(--banniere);
     --color-banniere-foreground: var(--banniere-foreground);
     --color-banniere-muted: var(--banniere-muted);
@@ -135,6 +138,12 @@
     --marque-fort: oklch(0.548 0.121 240.9);
     --marque-fort-foreground: oklch(1 0 0);
     --marque-clair: oklch(0.857 0.063 232.6);
+    /* Couleurs du logo de Generic Healthcare (décision 92), pour le logo
+       seul : jamais une surface, un texte ni un chiffre. Relevées sur le
+       fichier fourni (#204093, #E4211A, #F27A03). */
+    --logo: oklch(0.400 0.142 264.7);
+    --logo-rouge: oklch(0.588 0.226 28.9);
+    --logo-orange: oklch(0.705 0.178 53.2);
     --banniere: oklch(0.315 0.023 228.3);
     --banniere-foreground: oklch(0.981 0.003 247.9);
     --banniere-muted: oklch(0.704 0.028 231.8);
@@ -151,6 +160,9 @@
 .dark {
     --background: oklch(0.13 0.01 260);
     --foreground: oklch(0.95 0.005 250);
+    /* Le bleu du logo se perd sur fond sombre : il y prend la couleur du
+       texte. Le rouge et l'orange restent. */
+    --logo: oklch(0.95 0.005 250);
     --card: oklch(0.17 0.01 260);
     --card-foreground: oklch(0.95 0.005 250);
     --popover: oklch(0.17 0.01 260);

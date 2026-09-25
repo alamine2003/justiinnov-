@@ -1,14 +1,15 @@
 /**
  * Génère l'icône d'onglet et les icônes de l'application installable à
- * partir de `public/favicon.svg` — la tuile : l'emblème blanc sur un carré
- * sombre à coins arrondis (DESIGN.md, « Identité »).
+ * partir de `public/favicon.svg` — la tuile : le monogramme de Generic
+ * Healthcare dans ses couleurs sur un carré blanc à coins arrondis
+ * (DESIGN.md, « Identité »).
  *
  *   npx tsx scripts/generate-icons.mts
  *
  * Les PNG produits sont versionnés dans `public/` et `public/icons/` : le
  * build n'a pas à dépendre de `sharp`, et l'image Docker n'a pas besoin de
- * ses binaires. L'emblème lui-même vit dans `components/layout/brand-mark.tsx`,
- * tracé depuis `docs/identite/logo-justi-innov.png`.
+ * ses binaires. Le monogramme lui-même vit dans `components/layout/brand-mark.tsx`,
+ * vectorisé depuis `docs/identite/logo-gh.png` (`docs/identite/logo-gh.svg`).
  */
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -17,8 +18,8 @@ import sharp from "sharp"
 const racine = join(import.meta.dirname, "../public")
 const source = readFileSync(join(racine, "favicon.svg"))
 
-/** Fond de la tuile (`<rect fill>` de `favicon.svg`, #141418), en sRGB. */
-const FOND = { r: 20, g: 20, b: 24, alpha: 1 }
+/** Fond de la tuile (`<rect fill>` de `favicon.svg`, blanc), en sRGB. */
+const FOND = { r: 255, g: 255, b: 255, alpha: 1 }
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 }
 
 /**
@@ -27,8 +28,8 @@ const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 }
  * @param opaque vrai pour remplir les coins arrondis avec le fond de la
  *   tuile : iOS et les lanceurs « maskable » rognent eux-mêmes
  * @param echelle part du côté que la tuile occupe. Une icône « maskable »
- *   est rognée en cercle par certains lanceurs : réduite à 74 %, l'emblème
- *   (68 % de la tuile) tient dans la zone sûre — le cercle central de 80 % —
+ *   est rognée en cercle par certains lanceurs : réduite à 74 %, le
+ *   monogramme (74 % de la tuile) tient dans la zone sûre — le cercle central de 80 % —
  *   et les bords de la tuile se fondent dans le fond, de même couleur.
  */
 async function icone(chemin: string, taille: number, opaque: boolean, echelle = 1) {
