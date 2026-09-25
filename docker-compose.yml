@@ -23,7 +23,7 @@ services:
     # quand même — la base de données reprend le rôle —, mais chaque lecture
     # d'API réécrit alors le compteur de limitation de débit dans Postgres :
     # 1,5 ko de journal d'écriture par GET, mesuré.
-    image: redis:7.4-alpine
+    image: redis:8.0-alpine
     container_name: justi_redis
     # Aucune persistance : un cache perdu se reconstruit, et un cache qu'on
     # sauvegarde coûte des écritures pour rien. L'éviction se fait sur la
