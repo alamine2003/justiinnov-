@@ -207,8 +207,21 @@ touch "$cible/recovery.signal"
 
 if [ "$MODE" = "essai" ]; then
   journal "démarrage de la base d'essai sur le port $PORT…"
+  # La base d'essai n'est plus là : Postgres a pu s'arrêter pendant le rejeu,
+  # avant même que `pg_ctl -w` rende la main (sur une petite base, c'est
+  # l'affaire d'une fraction de seconde) ou après. Dans les deux cas, le
+  # motif est dans son journal, et c'est lui qu'on donne.
+  arret_du_rejeu() {
+    tail -20 "$cible/reprise.log" >&2
+    if grep -q 'recovery ended before configured recovery target was reached' "$cible/reprise.log"; then
+      rm -rf "$cible"
+      echec "aucune transaction validée après $INSTANT dans l'archive : Postgres a tout rejoué sans trouver où s'arrêter, et s'est arrêté plutôt que d'ouvrir une base d'état incertain. Si la base est restée sans écriture depuis, validez une transaction vide après l'instant visé (« select txid_current() »), forcez l'archivage (« select pg_switch_wal() ») et recommencez ; sinon, l'archive s'arrête avant $INSTANT (deploy/README.md, « Répéter la reprise »)."
+    fi
+    rm -rf "$cible"
+    echec "$1 (journal ci-dessus)"
+  }
   pg_ctl -D "$cible" -o "-p $PORT -c listen_addresses=localhost" -l "$cible/reprise.log" -w start \
-    || { tail -20 "$cible/reprise.log" >&2; echec "la base d'essai n'a pas démarré"; }
+    || arret_du_rejeu "la base d'essai n'a pas démarré"
   base="${PGDATABASE:-justi_innov}"
   requete() { psql -h localhost -p "$PORT" -d "$base" -v ON_ERROR_STOP=1 -qtAX -c "$1"; }
   jeter_l_essai() { pg_ctl -D "$cible" -m fast -w stop >/dev/null 2>&1 || true; rm -rf "$cible"; }
@@ -223,15 +236,8 @@ if [ "$MODE" = "essai" ]; then
   debut="$(date +%s)"
   while :; do
     ecoule=$(( $(date +%s) - debut ))
-    if ! pg_ctl -D "$cible" status >/dev/null 2>&1; then
-      tail -20 "$cible/reprise.log" >&2
-      if grep -q 'recovery ended before configured recovery target was reached' "$cible/reprise.log"; then
-        rm -rf "$cible"
-        echec "aucune transaction validée après $INSTANT dans l'archive : Postgres a tout rejoué sans trouver où s'arrêter, et s'est arrêté plutôt que d'ouvrir une base d'état incertain. Si la base est restée sans écriture depuis, validez une transaction vide après l'instant visé (« select txid_current() »), forcez l'archivage (« select pg_switch_wal() ») et recommencez ; sinon, l'archive s'arrête avant $INSTANT (deploy/README.md, « Répéter la reprise »)."
-      fi
-      rm -rf "$cible"
-      echec "la base d'essai s'est arrêtée pendant le rejeu (journal ci-dessus)"
-    fi
+    pg_ctl -D "$cible" status >/dev/null 2>&1 \
+      || arret_du_rejeu "la base d'essai s'est arrêtée pendant le rejeu"
     [ "$(requete 'select not pg_is_in_recovery()' 2>/dev/null || true)" = "t" ] && break
     if [ "$ecoule" -ge "$attente" ]; then
       tail -20 "$cible/reprise.log" >&2
