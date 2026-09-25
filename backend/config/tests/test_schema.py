@@ -26,7 +26,7 @@ class GenerationDuSchemaTests(APITestCase):
         )
         document = json.loads(sortie.getvalue())
 
-        self.assertEqual(document["info"]["title"], "JUSTI INNOV")
+        self.assertEqual(document["info"]["title"], "JUSTI GH")
         self.assertIn("/api/dossiers/{id}/submit/", document["paths"])
         self.assertNotIn("/api/schema/ui/", document["paths"])
 

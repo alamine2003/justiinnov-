@@ -1,6 +1,6 @@
 {
   "app": {
-    "titre": "JUSTI INNOV — Contrôle budgétaire",
+    "titre": "JUSTI GH — Contrôle budgétaire",
     "tagline": "Application de contrôle budgétaire"
   },
   "commun": {
@@ -125,7 +125,9 @@
     "budget": "Enveloppe",
     "created_by": "Saisi par",
     "is_active": "Actif",
-    "teams": "Équipes"
+    "teams": "Équipes",
+    "phone": "Téléphone",
+    "contact": "Autres coordonnées"
   },
   "libelles": {
     "roles": {
@@ -241,7 +243,7 @@
     "connexion": "Connexion",
     "sous_titre": "Identifiez-vous pour accéder à votre périmètre.",
     "identifiant": "Identifiant",
-    "identifiant_exemple": "prenom.innov",
+    "identifiant_exemple": "prenom.nom",
     "mot_de_passe": "Mot de passe",
     "afficher_mdp": "Afficher le mot de passe",
     "masquer_mdp": "Masquer le mot de passe",
@@ -927,7 +929,15 @@
       "vide": "Aucun bénéficiaire. Ajoutez-en pour pouvoir les rattacher aux dépenses.",
       "contact": "Contact",
       "nom_placeholder": "Station Lomé",
-      "contact_placeholder": "Téléphone ou e-mail"
+      "telephone": "Téléphone",
+      "email": "E-mail",
+      "autres": "Autres coordonnées",
+      "telephone_placeholder": "+221 33 800 00 00",
+      "email_placeholder": "contact@exemple.org",
+      "autres_placeholder": "Nom de la personne à joindre, adresse…",
+      "a_completer": "À compléter",
+      "a_completer_titre": "Ni téléphone ni e-mail : à renseigner à la prochaine modification",
+      "l_un_des_deux": "(l'un des deux)"
     },
     "historique": {
       "indisponible": "Historique indisponible",
@@ -1043,7 +1053,7 @@
         "titre_creer": "Créer un compte",
         "titre_modifier": "Modifier le compte",
         "description": "Le mot de passe défini ici est provisoire : son titulaire sera invité à le remplacer.",
-        "identifiant_exemple": "pays.innov",
+        "identifiant_exemple": "prenom.nom",
         "prenom": "Prénom",
         "role_siege": "{{role}} — siège",
         "role_pays": "{{role}} — pays",

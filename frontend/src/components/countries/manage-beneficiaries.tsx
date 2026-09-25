@@ -66,7 +66,26 @@ export function ManageBeneficiaries({
             header: t("champs.kind"),
             render: (b) => <Badge variant="secondary">{b.kind_display}</Badge>,
           },
-          { key: "contact", header: t("pays.beneficiaires.contact") },
+          {
+            key: "contact",
+            header: t("pays.beneficiaires.contact"),
+            // Décision 93 : téléphone ou e-mail. Un bénéficiaire saisi avant
+            // elle, sans l'un ni l'autre, se signale ici — le serveur le dit
+            // (`contact_manquant`), l'écran ne le déduit pas.
+            render: (b) =>
+              b.contact_manquant ? (
+                <Badge
+                  className={STATUS_TONES.ATTENTE}
+                  title={t("pays.beneficiaires.a_completer_titre")}
+                >
+                  {t("pays.beneficiaires.a_completer")}
+                </Badge>
+              ) : (
+                <span className="text-sm">
+                  {[b.phone, b.email].filter(Boolean).join(" · ")}
+                </span>
+              ),
+          },
           {
             key: "is_active",
             header: t("commun.statut"),
@@ -79,7 +98,7 @@ export function ManageBeneficiaries({
           },
         ]}
         detectActive={(b) => b.is_active}
-        defaultForm={{ name: "", kind: "beneficiary", contact: "" }}
+        defaultForm={{ name: "", kind: "beneficiary", phone: "", email: "", contact: "" }}
         formFields={[
           {
             key: "name",
@@ -92,9 +111,25 @@ export function ManageBeneficiaries({
             options: beneficiaryKinds(t),
           },
           {
+            key: "phone",
+            label: t("pays.beneficiaires.telephone"),
+            placeholder: t("pays.beneficiaires.telephone_placeholder"),
+            type: "tel",
+            optional: true,
+            mention: t("pays.beneficiaires.l_un_des_deux"),
+          },
+          {
+            key: "email",
+            label: t("pays.beneficiaires.email"),
+            placeholder: t("pays.beneficiaires.email_placeholder"),
+            type: "email",
+            optional: true,
+            mention: t("pays.beneficiaires.l_un_des_deux"),
+          },
+          {
             key: "contact",
-            label: t("pays.beneficiaires.contact"),
-            placeholder: t("pays.beneficiaires.contact_placeholder"),
+            label: t("pays.beneficiaires.autres"),
+            placeholder: t("pays.beneficiaires.autres_placeholder"),
             optional: true,
           },
         ]}

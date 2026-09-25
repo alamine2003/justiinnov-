@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Boucle de vérification complète de JUSTI INNOV avant un commit ou une livraison — suite backend sur base privée, migrations, catalogues, typage, lint, tests et build frontend, puis pile livrable et captures Playwright avec comptes jetables enrôlés en 2FA. À utiliser en fin de chantier ou quand on demande « vérifie tout ».
+description: Boucle de vérification complète de JUSTI GH avant un commit ou une livraison — suite backend sur base privée, migrations, catalogues, typage, lint, tests et build frontend, puis pile livrable et captures Playwright avec comptes jetables enrôlés en 2FA. À utiliser en fin de chantier ou quand on demande « vérifie tout ».
 ---
 
 # Vérifier tout

@@ -32,8 +32,8 @@ export default defineConfig(({ mode }) => {
         registerType: "autoUpdate",
         includeAssets: ["favicon.svg", "favicon.png", "icons/apple-touch-icon.png"],
         manifest: {
-          name: "JUSTI INNOV",
-          short_name: "JUSTI INNOV",
+          name: "JUSTI GH",
+          short_name: "JUSTI GH",
           description:
             "Contrôle budgétaire des pays : dépenses, justificatifs et enveloppes, en temps réel.",
           lang: "fr",

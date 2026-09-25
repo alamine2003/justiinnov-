@@ -236,6 +236,42 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
 
+      # Une seule étiquette pour l'image MinIO construite chez nous
+      # (décision 94) : le poste de développement, la CI et le serveur font
+      # tourner le même binaire, et la livraison publie ce que tire le
+      # serveur.
+      - name: Une seule étiquette pour l'image MinIO
+        run: |
+          etiquettes="$(grep -h '^ *image: ghcr\.io/[^ ]*-minio:' docker-compose.yml deploy/docker-compose.prod.yml | sed 's/^ *image: //' | sort -u)"
+          echo "$etiquettes"
+          if [ -z "$etiquettes" ] || [ "$(printf '%s\n' "$etiquettes" | wc -l)" -ne 1 ]; then
+            echo "::error::docker-compose.yml et deploy/docker-compose.prod.yml doivent nommer la même image MinIO"
+            exit 1
+          fi
+          # L'étiquette finit par l'empreinte du Dockerfile : la livraison ne
+          # republie pas une étiquette existante, et un Dockerfile modifié
+          # sous la même étiquette ne partirait jamais en production.
+          empreinte="$(sha256sum deploy/minio/Dockerfile | cut -c1-12)"
+          case "$etiquettes" in
+            *"-$empreinte") ;;
+            *)
+              echo "::error::deploy/minio/Dockerfile a changé : l'étiquette de l'image MinIO doit finir par -$empreinte, dans docker-compose.yml et deploy/docker-compose.prod.yml"
+              exit 1
+              ;;
+          esac
+          if grep -nE '^ *image: *(quay\.io/minio|minio)/' docker-compose.yml deploy/*.yml; then
+            echo "::error::une image MinIO officielle est encore tirée : elles ne sont plus publiées"
+            exit 1
+          fi
+
+      - name: Construire l'image MinIO
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: deploy/minio
+          push: false
+          cache-from: type=gha,scope=minio
+          cache-to: type=gha,scope=minio,mode=max
+
   parcours:
     name: Parcours complet — pile Docker et captures
     runs-on: ubuntu-latest
@@ -326,6 +362,12 @@ jobs:
             ]
           }
           EOF
+
+      # MinIO se compile depuis ses sources (décision 94), deux à trois
+      # minutes : à part, pour que ce temps ne se lise pas comme un
+      # démarrage lent de la pile.
+      - name: Construire l'image MinIO
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml build minio
 
       - name: Démarrer la pile
         run: |

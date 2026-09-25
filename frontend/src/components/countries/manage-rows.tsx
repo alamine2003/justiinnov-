@@ -41,6 +41,11 @@ interface FormField {
   options?: { value: string; label: string }[]
   /** Un champ facultatif ne bloque pas l'enregistrement s'il reste vide. */
   optional?: boolean
+  /**
+   * Mention affichée à la place de « facultatif » — pour deux champs dont
+   * l'un est exigé, règle que le serveur tranche (« l'un des deux »).
+   */
+  mention?: string
   /** Saisie décimale : clavier numérique, virgule acceptée. */
   decimal?: boolean
 }
@@ -245,7 +250,7 @@ function RowDialog<T extends { id: number }>({
                 {f.label}
                 {f.optional && (
                   <span className="ml-1 text-xs text-muted-foreground">
-                    {t("pays.lignes.facultatif")}
+                    {f.mention ?? t("pays.lignes.facultatif")}
                   </span>
                 )}
               </Label>

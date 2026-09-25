@@ -1,6 +1,6 @@
 ---
 name: backend-django
-description: Façon de travailler dans le backend Django de JUSTI INNOV (modèles, serializers, vues, workflow, migrations, traductions, tests sur base privée). À charger avant toute modification sous backend/, y compris un simple correctif.
+description: Façon de travailler dans le backend Django de JUSTI GH (modèles, serializers, vues, workflow, migrations, traductions, tests sur base privée). À charger avant toute modification sous backend/, y compris un simple correctif.
 ---
 
 # Backend Django

@@ -13,7 +13,7 @@ import i18next from "i18next"
  * suffit à la faire changer ; personne n'a à l'écrire deux fois.
  */
 export const BRAND = {
-  name: "JUSTI INNOV",
+  name: "JUSTI GH",
   /** La signature (« Application de contrôle budgétaire ») est traduite : clé `app.tagline`. */
   version: __APP_VERSION__,
   developer: "Al Amine dev",
@@ -22,7 +22,8 @@ export const BRAND = {
 } as const
 
 // L'emblème et le logo sont des composants (`components/layout/brand-mark.tsx`,
-// `brand-logo.tsx`), tracés depuis `docs/identite/logo-justi-innov.png` ;
+// `brand-logo.tsx`) : l'emblème tracé depuis `docs/identite/logo-justi-innov.png`,
+// le nom écrit en texte (décision 92) ;
 // l'icône d'onglet et d'application installée — l'emblème blanc sur un carré
 // sombre — vit dans `public/favicon.svg` et `public/icons/`.
 

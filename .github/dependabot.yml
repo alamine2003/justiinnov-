@@ -50,7 +50,18 @@ updates:
     commit-message:
       prefix: "Met à jour"
 
-  # Les images tierces de la pile de production (Postgres, Redis, MinIO,
+  # L'image MinIO construite chez nous (décision 94) : Go et Alpine y
+  # vieillissent comme ailleurs. Une telle mise à jour change l'image, donc
+  # son étiquette dans les fichiers Compose — la PR ne passe la CI qu'une
+  # fois l'étiquette relevée à la main.
+  - package-ecosystem: docker
+    directory: /deploy/minio
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "Met à jour"
+
+  # Les images tierces de la pile de production (Postgres, Redis,
   # Caddy, rclone, Prometheus, Grafana) ne vivent dans aucun Dockerfile :
   # sans cette entrée, un correctif de sécurité de Postgres 16 n'était
   # signalé à personne.

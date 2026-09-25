@@ -15,7 +15,7 @@ from django.utils.translation import gettext_lazy
 from django.db.models import Prefetch
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, ValidationError
@@ -187,8 +187,21 @@ class BeneficiaryViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     write_capability = "referentiel.update"
     action_write_capabilities = {"create": "referentiel.create"}
     filterset_fields = ["kind", "is_active", "country"]
-    search_fields = ["name", "contact"]
+    search_fields = ["name", "phone", "email", "contact"]
     ordering_fields = ["name", "created_at"]
+
+    @extend_schema(parameters=[OpenApiParameter(
+        "contact_manquant", bool,
+        description="Seulement les bénéficiaires sans téléphone ni e-mail, à compléter (décision 93).",
+    )])
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.query_params.get("contact_manquant") in ("1", "true", "True"):
+            queryset = queryset.filter(phone="", email="")
+        return queryset
 
 
 @extend_schema_view(

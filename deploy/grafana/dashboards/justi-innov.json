@@ -1,6 +1,6 @@
 {
   "uid": "justi-innov",
-  "title": "JUSTI INNOV — supervision",
+  "title": "JUSTI GH — supervision",
   "description": "Plateforme de contrôle budgétaire : trafic et latence de l'API, erreurs, base de données, serveur. Provisionné depuis deploy/grafana/dashboards/justi-innov.json.",
   "tags": [
     "justi-innov"

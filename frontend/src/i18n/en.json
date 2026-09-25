@@ -1,6 +1,6 @@
 {
   "app": {
-    "titre": "JUSTI INNOV — Budget control",
+    "titre": "JUSTI GH — Budget control",
     "tagline": "Budget control application"
   },
   "commun": {
@@ -125,7 +125,9 @@
     "budget": "Budget",
     "created_by": "Entered by",
     "is_active": "Active",
-    "teams": "Teams"
+    "teams": "Teams",
+    "phone": "Phone",
+    "contact": "Other contact details"
   },
   "libelles": {
     "roles": {
@@ -241,7 +243,7 @@
     "connexion": "Sign in",
     "sous_titre": "Sign in to access your scope.",
     "identifiant": "Username",
-    "identifiant_exemple": "firstname.innov",
+    "identifiant_exemple": "firstname.lastname",
     "mot_de_passe": "Password",
     "afficher_mdp": "Show password",
     "masquer_mdp": "Hide password",
@@ -927,7 +929,15 @@
       "vide": "No beneficiary. Add some to be able to link them to expenses.",
       "contact": "Contact",
       "nom_placeholder": "Lome service station",
-      "contact_placeholder": "Phone or email"
+      "telephone": "Phone",
+      "email": "Email",
+      "autres": "Other contact details",
+      "telephone_placeholder": "+221 33 800 00 00",
+      "email_placeholder": "contact@example.org",
+      "autres_placeholder": "Person to reach, address…",
+      "a_completer": "To complete",
+      "a_completer_titre": "No phone and no email: to fill in at the next edit",
+      "l_un_des_deux": "(one of the two)"
     },
     "historique": {
       "indisponible": "History unavailable",
@@ -1043,7 +1053,7 @@
         "titre_creer": "Create an account",
         "titre_modifier": "Edit the account",
         "description": "The password set here is temporary: its holder will be asked to replace it.",
-        "identifiant_exemple": "country.innov",
+        "identifiant_exemple": "firstname.lastname",
         "prenom": "First name",
         "role_siege": "{{role}} — headquarters",
         "role_pays": "{{role}} — country",

@@ -1,4 +1,4 @@
-# Déploiement de JUSTI INNOV
+# Déploiement de JUSTI GH
 
 > La plateforme tourne sur ce type de serveur (Hetzner, domaine gratuit
 > `178-105-215-49.sslip.io`). La livraison par SSH de `cd.yml` ne part que
@@ -22,6 +22,7 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 | Fichier | Rôle |
 |---|---|
 | `docker-compose.prod.yml` | la pile : Postgres, MinIO, backend, ordonnanceur, frontend, Caddy, sauvegardes (base, pièces, copie hors machine) et, sous le profil optionnel `supervision`, Prometheus, exporteurs et Grafana |
+| `minio/Dockerfile` | l'image de MinIO et de son client `mc`, construite depuis les sources aux versions de production ; publiée par la livraison, jamais sous une étiquette existante (décision 94) |
 | `Caddyfile` | entrée publique, TLS automatique, route `/grafana/` quand `SUPERVISION=1`, 404 sinon |
 | `prometheus/prometheus.yml` | cibles de collecte : backend (sous jeton), base, serveur |
 | `grafana/provisioning/` | source de données Prometheus et chargement des tableaux de bord au démarrage de Grafana |
@@ -38,11 +39,11 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 
 1. Une machine Linux avec Docker Engine et le plugin Compose (v2.24 ou plus),
    les ports 80 et 443 ouverts, un enregistrement DNS vers elle. Le serveur
-   tire ses images de trois registres, tous en sortie HTTPS : `ghcr.io`
-   (backend et frontend, avec le jeton de livraison), Docker Hub (Postgres,
-   Caddy, les exporteurs) et `quay.io` (MinIO et son client `mc` — le
-   registre de l'éditeur, sans limite de téléchargement anonyme, là où
-   Docker Hub refuse cette image aux runners de la CI).
+   tire ses images de deux registres, en sortie HTTPS : `ghcr.io`
+   (backend, frontend et MinIO, avec le jeton de livraison) et Docker Hub
+   (Postgres, Caddy, les exporteurs). MinIO ne publiant plus d'images,
+   la nôtre se construit depuis les sources (`minio/Dockerfile`,
+   décision 94).
 2. Un compte de livraison `deploy` **sans le groupe `docker`** (ce groupe
    vaut root), dont la clé SSH ne peut exécuter qu'une commande forcée,
    `justi-livrer` (« Réduire les pouvoirs de la livraison », plus bas), et
@@ -349,6 +350,44 @@ sont ceux de la production. Une livraison de préproduction serait refusée
 par le serveur de toute façon ; mieux vaut qu'elle n'ait pas de quoi
 frapper à sa porte.
 
+### Passer à l'image MinIO construite chez nous (décision 94)
+
+MinIO ne publie plus d'images : `quay.io/minio/minio` et `quay.io/minio/mc`
+refusent le téléchargement, et tout `compose pull` échoue dessus. La
+production en service n'est pas touchée — son image est déjà sur le
+disque —, mais **aucune livraison ne passe** tant que le serveur nomme
+encore `quay.io`. L'ordre compte :
+
+1. Fusionner sur `main` : la livraison de `main` publie
+   `ghcr.io/alamine2003/justiinnov--minio` (travail « Construire et
+   publier les images », étape « Publier l'image MinIO » — trois minutes
+   environ, une fois).
+2. Mettre les fichiers du serveur à jour, en root, **après** cette
+   publication : avant, la pile nommerait une image qui n'existe pas
+   encore.
+   ```bash
+   rsync -a --exclude .env --exclude .deployed deploy/ root@<hôte-production>:/home/deploy/justi-innov/
+   ```
+3. Poser le tag. La livraison tire la nouvelle image et recrée `minio` et
+   `sauvegarde-pieces` : quelques secondes sans dépôt ni lecture de pièce,
+   comme pendant le redémarrage du backend. Le volume `miniodata` n'est
+   pas touché — mêmes versions de minio et de mc qu'avant, construites
+   autrement.
+4. Vérifier, puis retirer les anciennes images :
+   ```bash
+   cd /home/deploy/justi-innov
+   docker compose -f docker-compose.prod.yml exec -T minio minio --version   # → RELEASE.2025-04-22T22-12-26Z
+   docker compose -f docker-compose.prod.yml exec -T minio mc ready local
+   docker compose -f docker-compose.prod.yml run --rm -T sauvegarde-pieces --une-fois
+   docker image rm quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+   ```
+
+Si le serveur ne peut pas lire le paquet (`denied` au `compose pull`), la
+livraison s'arrête **avant** de toucher aux conteneurs : la production
+reste en ligne. Le paquet doit alors être rattaché au dépôt (ghcr.io ›
+paquet `justiinnov--minio` › *Package settings* › *Manage Actions
+access* : ajouter le dépôt, en lecture).
+
 ### Monter la préproduction
 
 1. Une seconde machine, plus petite que la production si l'on veut —
@@ -447,7 +486,7 @@ docker compose -f docker-compose.prod.yml run --rm sauvegarde-distante --une-foi
 
 Si la supervision est activée (`SUPERVISION=1`), vérifiez-la aussi :
 `https://<domaine>/grafana/` demande le compte `GRAFANA_ADMIN_USER` /
-`GRAFANA_ADMIN_PASSWORD`, et le tableau de bord « JUSTI INNOV —
+`GRAFANA_ADMIN_PASSWORD`, et le tableau de bord « JUSTI GH —
 supervision » doit montrer ses quatre cibles « en ligne ». Une cible
 `backend` « hors ligne » alors que l'API répond signifie presque toujours
 un `METRICS_TOKEN` vide ou différent entre `.env` et le conteneur (relancez
@@ -924,7 +963,7 @@ clair nulle part, porte le suffixe `.enc`, et se restaure avec la clé
 # Sur un poste sûr, jamais sur le serveur : la clé privée reste ici.
 openssl req -x509 -newkey rsa:4096 -days 3650 -nodes \
     -keyout sauvegardes-cle-privee.pem -out sauvegardes-cle-publique.pem \
-    -subj "/CN=Sauvegardes JUSTI INNOV"
+    -subj "/CN=Sauvegardes JUSTI GH"
 # Seul le certificat public part sur le serveur.
 scp sauvegardes-cle-publique.pem root@<hôte>:/var/lib/docker/volumes/justi-innov_sauvegardes/_data/cle-publique.pem
 # puis dans .env : SAUVEGARDE_CLE_PUBLIQUE=/sauvegardes/cle-publique.pem
@@ -1196,7 +1235,7 @@ docker compose down -v && cd ~ && rm -rf ~/restauration
 ```
 
 **6. Consigner** dans le journal d'exploitation (`docs/`, ou le projet
-Claude « JUSTI INNOV ») : date, dump restauré (nom, taille), durée réelle
+Claude « JUSTI GH ») : date, dump restauré (nom, taille), durée réelle
 de 2 à 4, sortie complète de `verifier_restauration`, écarts constatés,
 limites restantes. Un écart inexpliqué est un incident, pas une note de
 bas de page.
@@ -1880,7 +1919,7 @@ règle ce qui rend le partage sûr et confortable :
 |---|---|
 | `GF_USERS_VIEWERS_CAN_EDIT=false` | un Viewer ne modifie rien, pas même « pour voir » : la direction lit |
 | `GF_USERS_EDITORS_CAN_ADMIN=false` | un Editor ne gère ni comptes ni organisation |
-| `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH` | le tableau de bord « JUSTI INNOV — supervision » est la page d'accueil de chacun |
+| `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH` | le tableau de bord « JUSTI GH — supervision » est la page d'accueil de chacun |
 | `GF_USERS_DEFAULT_THEME=light` | thème clair par défaut, comme l'application ; chacun change le sien |
 | `GF_USERS_DEFAULT_LANGUAGE=fr-FR` | interface en français par défaut, comme l'application ; chacun change la sienne |
 | `GF_USERS_ALLOW_SIGN_UP=false`, `GF_AUTH_ANONYMOUS_ENABLED=false` | pas d'inscription, pas d'accès anonyme |
@@ -1934,7 +1973,7 @@ transmet le préfixe tel quel : Grafana le sert lui-même
 (`GF_SERVER_SERVE_FROM_SUB_PATH`) ; retirer le préfixe le faisait boucler
 sur sa page de connexion.
 
-Le tableau de bord « JUSTI INNOV — supervision » (`uid` `justi-innov`) est
+Le tableau de bord « JUSTI GH — supervision » (`uid` `justi-innov`) est
 en lecture seule dans Grafana : il vient du dépôt. Pour le modifier, faites
 la modification dans Grafana, exportez le JSON (Share › Export) et
 remplacez `grafana/dashboards/justi-innov.json` ; la livraison suivante — ou

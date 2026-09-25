@@ -138,7 +138,7 @@ const KNOWN_FIELDS = new Set([
   "title", "label", "place", "note", "reason", "number", "country", "countries",
   "team", "teams", "project", "owner", "manager", "beneficiary", "expense_title",
   "marketing_category", "payment_method", "username", "password",
-  "current_password", "new_password", "email", "role", "year", "currency",
+  "current_password", "new_password", "email", "phone", "contact", "role", "year", "currency",
   "timezone", "code", "name", "file", "kind", "source", "target", "rate_to_xof",
   "valid_from", "alert_thresholds", "unjustified_alert_days",
   "unusual_expense_factor", "default_overrun_policy", "language",

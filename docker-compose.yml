@@ -42,12 +42,13 @@ services:
       - "127.0.0.1:6379:6379"
 
   minio:
-    # La même version qu'en production (deploy/docker-compose.prod.yml),
-    # tirée du registre de MinIO (quay.io) : Docker Hub refuse les
-    # téléchargements anonymes de cette image depuis les adresses partagées
-    # des runners de la CI (« pull access denied »), alors que les images
-    # officielles (postgres, caddy) passent par son miroir.
-    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # MinIO ne publie plus d'images (décision 94) : celle-ci se construit
+    # depuis les sources, `deploy/minio/Dockerfile`, aux mêmes versions
+    # qu'en production. Elle ne se tire jamais d'un registre ici : la
+    # production la reçoit de ghcr.io, sous la même étiquette.
+    build: ./deploy/minio
+    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-5c7b4d5b5aab
+    pull_policy: build
     container_name: justi_minio
     command: server /data --console-address ":9001"
     environment:

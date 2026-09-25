@@ -1,7 +1,7 @@
-# JUSTI INNOV — plateforme de contrôle budgétaire
+# JUSTI GH — plateforme de contrôle budgétaire
 
-Suivi des dépenses des filiales africaines du groupe INNOV PHARMA et de leurs
-justificatifs. Le but n'est pas d'autoriser des dépenses, mais de savoir **ce
+Suivi des dépenses des filiales africaines de Generic Healthcare (GH) —
+INNOV PHARMA en est le siège — et de leurs justificatifs. Le but n'est pas d'autoriser des dépenses, mais de savoir **ce
 qui a été dépensé, quand, où, au profit de qui — et où est la preuve**.
 
 L'équipe de développement compte **une seule personne** : la documentation
@@ -295,8 +295,11 @@ l'application.
 - Le code, les commentaires et les messages de commit sont **en français**,
   comme l'interface — dont la version anglaise vient des catalogues de
   traduction, jamais d'un second jeu de composants.
-- Le projet s'appelle **JUSTI INNOV**, pour INNOV PHARMA ; aucune autre
-  marque n'apparaît dans le dépôt.
+- Le projet s'appelle **JUSTI GH** (décision 92) : les filiales sont sous
+  le couvert de Generic Healthcare (GH), INNOV PHARMA en est le siège. Aucune
+  autre marque n'apparaît dans le dépôt. Les noms techniques — conteneurs
+  `justi-innov-*`, répertoire du serveur, dépôt — ne changent pas : Docker y
+  rattache les volumes de la base.
 - Frontend sans point-virgule en fin de ligne, guillemets doubles.
 - Un correctif s'accompagne du test qui l'aurait attrapé.
 

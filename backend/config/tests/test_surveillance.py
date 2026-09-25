@@ -1,6 +1,6 @@
 """Ce que la surveillance des erreurs laisse sortir — et ce qu'elle retient.
 
-JUSTI INNOV suit des dépenses de filiales : qui a déclaré quoi, pour quel
+JUSTI GH suit des dépenses de filiales : qui a déclaré quoi, pour quel
 bénéficiaire, avec quelle pièce. Un rapport d'erreur ne doit pas en devenir
 une seconde copie, hors périmètre et hors journal d'audit. Les réglages qui
 l'empêchent ne sont pas des préférences : ce sont eux qui rendent l'outil
