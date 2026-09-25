@@ -22,6 +22,7 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 | Fichier | Rôle |
 |---|---|
 | `docker-compose.prod.yml` | la pile : Postgres, MinIO, backend, ordonnanceur, frontend, Caddy, sauvegardes (base, pièces, copie hors machine) et, sous le profil optionnel `supervision`, Prometheus, exporteurs et Grafana |
+| `minio/Dockerfile` | l'image de MinIO et de son client `mc`, construite depuis les sources aux versions de production ; publiée par la livraison, jamais sous une étiquette existante (décision 94) |
 | `Caddyfile` | entrée publique, TLS automatique, route `/grafana/` quand `SUPERVISION=1`, 404 sinon |
 | `prometheus/prometheus.yml` | cibles de collecte : backend (sous jeton), base, serveur |
 | `grafana/provisioning/` | source de données Prometheus et chargement des tableaux de bord au démarrage de Grafana |
@@ -38,11 +39,11 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 
 1. Une machine Linux avec Docker Engine et le plugin Compose (v2.24 ou plus),
    les ports 80 et 443 ouverts, un enregistrement DNS vers elle. Le serveur
-   tire ses images de trois registres, tous en sortie HTTPS : `ghcr.io`
-   (backend et frontend, avec le jeton de livraison), Docker Hub (Postgres,
-   Caddy, les exporteurs) et `quay.io` (MinIO et son client `mc` — le
-   registre de l'éditeur, sans limite de téléchargement anonyme, là où
-   Docker Hub refuse cette image aux runners de la CI).
+   tire ses images de deux registres, en sortie HTTPS : `ghcr.io`
+   (backend, frontend et MinIO, avec le jeton de livraison) et Docker Hub
+   (Postgres, Caddy, les exporteurs). MinIO ne publiant plus d'images,
+   la nôtre se construit depuis les sources (`minio/Dockerfile`,
+   décision 94).
 2. Un compte de livraison `deploy` **sans le groupe `docker`** (ce groupe
    vaut root), dont la clé SSH ne peut exécuter qu'une commande forcée,
    `justi-livrer` (« Réduire les pouvoirs de la livraison », plus bas), et
@@ -348,6 +349,44 @@ Puis, dans GitHub, **videz les secrets de l'environnement `staging`** : ce
 sont ceux de la production. Une livraison de préproduction serait refusée
 par le serveur de toute façon ; mieux vaut qu'elle n'ait pas de quoi
 frapper à sa porte.
+
+### Passer à l'image MinIO construite chez nous (décision 94)
+
+MinIO ne publie plus d'images : `quay.io/minio/minio` et `quay.io/minio/mc`
+refusent le téléchargement, et tout `compose pull` échoue dessus. La
+production en service n'est pas touchée — son image est déjà sur le
+disque —, mais **aucune livraison ne passe** tant que le serveur nomme
+encore `quay.io`. L'ordre compte :
+
+1. Fusionner sur `main` : la livraison de `main` publie
+   `ghcr.io/alamine2003/justiinnov--minio` (travail « Construire et
+   publier les images », étape « Publier l'image MinIO » — trois minutes
+   environ, une fois).
+2. Mettre les fichiers du serveur à jour, en root, **après** cette
+   publication : avant, la pile nommerait une image qui n'existe pas
+   encore.
+   ```bash
+   rsync -a --exclude .env --exclude .deployed deploy/ root@<hôte-production>:/home/deploy/justi-innov/
+   ```
+3. Poser le tag. La livraison tire la nouvelle image et recrée `minio` et
+   `sauvegarde-pieces` : quelques secondes sans dépôt ni lecture de pièce,
+   comme pendant le redémarrage du backend. Le volume `miniodata` n'est
+   pas touché — mêmes versions de minio et de mc qu'avant, construites
+   autrement.
+4. Vérifier, puis retirer les anciennes images :
+   ```bash
+   cd /home/deploy/justi-innov
+   docker compose -f docker-compose.prod.yml exec -T minio minio --version   # → RELEASE.2025-04-22T22-12-26Z
+   docker compose -f docker-compose.prod.yml exec -T minio mc ready local
+   docker compose -f docker-compose.prod.yml run --rm -T sauvegarde-pieces --une-fois
+   docker image rm quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+   ```
+
+Si le serveur ne peut pas lire le paquet (`denied` au `compose pull`), la
+livraison s'arrête **avant** de toucher aux conteneurs : la production
+reste en ligne. Le paquet doit alors être rattaché au dépôt (ghcr.io ›
+paquet `justiinnov--minio` › *Package settings* › *Manage Actions
+access* : ajouter le dépôt, en lecture).
 
 ### Monter la préproduction
 

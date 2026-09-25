@@ -64,6 +64,10 @@ champs et décisions numérotées (38 à 41 pour ce qui précède) sont dans
 docker compose up -d          # db, minio, backend, scheduler, frontend
 ```
 
+Le premier démarrage construit l'image MinIO depuis ses sources
+(`deploy/minio/Dockerfile`, deux à trois minutes) : MinIO ne publie plus
+d'images (décision 94).
+
 - Frontend : http://localhost:5173
 - API : http://localhost:8000/api/
 - Admin Django : http://localhost:8000/admin/ — en développement seulement (décision 44), soumis aux mêmes verrous
