@@ -1316,6 +1316,42 @@ docker compose -f docker-compose.prod.yml run --rm reprise \
 était à cet instant. Sans lui, le script compte les tables qui font la
 valeur de la plateforme. La pile continue de servir pendant ce temps.
 
+**La répétition trimestrielle, telle qu'elle a été faite le 25 septembre
+2026** : noter un instant et ce que contient la base à cet instant, puis
+vérifier que la reprise redonne la même chose. Sur le serveur, en root :
+
+```bash
+cd /home/deploy/justi-innov
+C="docker compose -f docker-compose.prod.yml"
+Q="select (select count(*) from expenses_expense) as depenses, (select count(*) from expenses_dossier) as dossiers, (select count(*) from expenses_proof) as pieces, (select count(*) from expenses_beneficiary) as beneficiaires"
+T=$($C exec -T db psql -U justi -d justi_innov -Atc "select now()")
+$C exec -T db psql -U justi -d justi_innov -c "$Q"
+$C exec -T db psql -U justi -d justi_innov -Atc "select txid_current()"
+$C exec -T db psql -U justi -d justi_innov -Atc "select pg_switch_wal()"
+sleep 15
+time $C run --rm reprise --a "$T" --requete "$Q"
+```
+
+`select txid_current()` n'est pas un détail. **Postgres ne s'arrête sur un
+instant qu'en trouvant, dans l'archive, une transaction validée après
+lui** ; sur une plateforme où personne n'a rien saisi depuis, il n'y en a
+pas, il rejoue tout puis s'arrête plutôt que d'ouvrir une base dont il ne
+peut garantir l'état. Cette transaction vide n'écrit aucune donnée et
+lui donne son point d'arrêt ; `pg_switch_wal()` archive le segment qui la
+contient. Le jour d'une vraie reprise, la question ne se pose pas : ce
+qu'on veut défaire est lui-même une transaction postérieure à l'instant.
+
+Le script attend la fin du rejeu — la base ouverte en écriture — avant de
+rien affirmer, et sort en échec, motif à l'appui, sinon. La répétition
+réussie affiche une ligne `arrêt : recovery stopping before commit of
+transaction …`, `en écriture : t` et les mêmes chiffres qu'en production.
+Jusqu'au 25 septembre 2026, il lisait la base au milieu du rejeu et
+concluait « ✔ » même quand Postgres s'était arrêté en route.
+
+| date | base | durée (`real`) | résultat |
+|---|---|---|---|
+| 25 septembre 2026 | 5 dépenses, 5 dossiers, 7 pièces, 3 bénéficiaires | 3,3 s | chiffres identiques ; script corrigé ensuite (rejeu lu trop tôt) |
+
 **Une reprise jamais répétée n'est pas un plan.** Notez la durée à chaque
 répétition : c'est votre RTO réel, et il grandit avec la base. La chaîne
 complète — archivage par la base, sauvegarde physique par le service,

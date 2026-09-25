@@ -577,6 +577,10 @@ jobs:
         run: |
           psql() { docker compose -f docker-compose.prod.yml exec -T db psql -v ON_ERROR_STOP=1 -qtAX -U justi -d justi_innov "$@"; }
           psql -c "create table reprise_ci(id int primary key, note text)"
+          # Aucun vacuum ni analyze automatique sur la table d'essai : leurs
+          # transactions valideraient après l'instant visé et fausseraient le
+          # cas « base restée sans écriture », plus bas.
+          psql -c "alter table reprise_ci set (autovacuum_enabled = false)"
           psql -c "insert into reprise_ci select g, 'ligne ' || g from generate_series(1, 1000) g"
           psql -c "select pg_switch_wal()" >/dev/null
           for _ in $(seq 30); do
@@ -619,8 +623,31 @@ jobs:
             --a "$instant" --requete "select count(*) from reprise_ci" 2>&1)" || { echo "$sortie"; exit 1; }
           echo "$sortie"
           echo "$sortie" | grep -q 'arrêt : ' || { echo "::error::la reprise n'a pas dit où elle s'est arrêtée"; exit 1; }
+          # La reprise n'est finie qu'une fois la base ouverte en écriture :
+          # lue avant, elle est au milieu du rejeu (répétition du 25 septembre
+          # 2026 sur le serveur).
+          echo "$sortie" | grep -q 'en écriture : t' || { echo "::error::la base d'essai n'était pas ouverte en écriture : le rejeu n'était pas fini"; exit 1; }
           echo "$sortie" | grep -qx ' *1000' || { echo "::error::la base rejouée ne contient pas les 1 000 lignes d'avant l'effacement"; exit 1; }
           echo "✔ les 1 000 lignes effacées sont revenues, la pile n'a pas été touchée"
+
+      - name: Une base restée sans écriture après l'instant visé fait échouer la reprise, et dit pourquoi
+        # Postgres ne s'arrête sur un instant qu'en y trouvant une transaction
+        # validée après lui ; sans elle, il rejoue tout puis s'arrête. Le
+        # script concluait « ✔ » et sortait en 0 — la première répétition sur
+        # le serveur, un jour sans saisie. Il doit échouer, et dire quoi faire.
+        run: |
+          psql() { docker compose -f docker-compose.prod.yml exec -T db psql -v ON_ERROR_STOP=1 -qtAX -U justi -d justi_innov "$@"; }
+          instant="$(psql -c "select clock_timestamp()")"
+          psql -c "select pg_switch_wal()" >/dev/null
+          sleep 5
+          if sortie="$(docker compose -f docker-compose.prod.yml run --rm -T reprise --a "$instant" 2>&1)"; then
+            echo "$sortie"
+            echo "::error::la reprise a réussi sans transaction après l'instant visé : elle aurait dû échouer"
+            exit 1
+          fi
+          echo "$sortie"
+          echo "$sortie" | grep -q 'aucune transaction validée après' || { echo "::error::l'échec ne dit pas pourquoi"; exit 1; }
+          echo "✔ échec franc, motif donné"
 
       - name: Journaux de la pile
         if: failure()
