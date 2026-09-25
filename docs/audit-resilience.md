@@ -1,4 +1,4 @@
-# Audit de résilience — JUSTI INNOV
+# Audit de résilience — JUSTI GH
 
 Septembre 2026. **Deux séries.** La première : dix phases d'injection de
 pannes sur un banc dédié, seize scénarios, un rapport (§1 à §8). La seconde,

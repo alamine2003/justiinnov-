@@ -15,7 +15,7 @@ la plateforme part alors chez un tiers.
 
 CE QUI NE SORT PAS, ET POURQUOI C'EST RÉGLÉ ICI PLUTÔT QUE PROMIS
 
-JUSTI INNOV suit des dépenses de filiales : qui a déclaré quoi, pour quel
+JUSTI GH suit des dépenses de filiales : qui a déclaré quoi, pour quel
 bénéficiaire, avec quelle pièce. Un rapport d'erreur ne doit pas en devenir
 une seconde copie, hors du périmètre, hors du journal d'audit, chez un
 hébergeur que personne n'a choisi pour cela.

@@ -1,4 +1,4 @@
-# Recette manuelle de JUSTI INNOV
+# Recette manuelle de JUSTI GH
 
 Ce document sert à deux choses : **comprendre** l'application assez pour la
 présenter et la modifier, et la **tester à la main**, compte par compte, sur un
@@ -15,7 +15,7 @@ le refuse d'elle-même hors du mode debug.
 
 ### Ce qu'elle fait, et ce qu'elle ne fait pas
 
-JUSTI INNOV suit les dépenses des filiales africaines d'INNOV PHARMA et leurs
+JUSTI GH suit les dépenses des filiales africaines de Generic Healthcare (GH) et leurs
 justificatifs. **Elle n'autorise pas une dépense** : l'argent est déjà dépensé
 quand on la déclare. Elle répond à quatre questions : *qu'est-ce qui a été
 dépensé, quand, où, au profit de qui — et où est la preuve ?*

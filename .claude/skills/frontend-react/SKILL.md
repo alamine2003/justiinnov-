@@ -1,6 +1,6 @@
 ---
 name: frontend-react
-description: Façon de travailler dans le frontend React de JUSTI INNOV (i18n obligatoire, composants partagés de DESIGN.md, chargement des données, droits venus du serveur, tests vitest, captures). À charger avant toute modification sous frontend/src, y compris un libellé.
+description: Façon de travailler dans le frontend React de JUSTI GH (i18n obligatoire, composants partagés de DESIGN.md, chargement des données, droits venus du serveur, tests vitest, captures). À charger avant toute modification sous frontend/src, y compris un libellé.
 ---
 
 # Frontend React

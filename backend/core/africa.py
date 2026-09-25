@@ -1,4 +1,4 @@
-"""Périmètre géographique de la plateforme : les filiales d'INNOV PHARMA.
+"""Périmètre géographique de la plateforme : les filiales de Generic Healthcare (GH).
 
 Le contrôle budgétaire porte sur dix-sept pays d'Afrique, ni plus ni moins :
 ce sont les filiales du groupe. Rien dans le modèle ne l'empêchait : la base

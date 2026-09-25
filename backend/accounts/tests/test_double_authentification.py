@@ -87,8 +87,8 @@ class VerrouDeDoubleAuthentificationTests(ScopingTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         uri = response.data["otpauth_uri"]
-        self.assertTrue(uri.startswith("otpauth://totp/JUSTI%20INNOV:nouveau.innov%40innovpharma.net?"))
-        self.assertIn("issuer=JUSTI%20INNOV", uri)
+        self.assertTrue(uri.startswith("otpauth://totp/JUSTI%20GH:nouveau.innov%40innovpharma.net?"))
+        self.assertIn("issuer=JUSTI%20GH", uri)
         self.assertIn(f"secret={response.data['secret']}", uri)
         png = base64.b64decode(response.data["qr_png_base64"])
         self.assertTrue(png.startswith(b"\x89PNG"))

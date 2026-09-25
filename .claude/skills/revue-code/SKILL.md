@@ -1,9 +1,9 @@
 ---
 name: revue-code
-description: Liste de contrôle de revue de code propre à JUSTI INNOV (règles métier de CLAUDE.md, cloisonnement, traçabilité, tests, i18n, interface). À utiliser avant tout commit, à la demande d'une relecture, ou par l'agent relecteur ; complète le skill code-review générique et la revue CodeRabbit sur GitHub.
+description: Liste de contrôle de revue de code propre à JUSTI GH (règles métier de CLAUDE.md, cloisonnement, traçabilité, tests, i18n, interface). À utiliser avant tout commit, à la demande d'une relecture, ou par l'agent relecteur ; complète le skill code-review générique et la revue CodeRabbit sur GitHub.
 ---
 
-# Revue de code JUSTI INNOV
+# Revue de code JUSTI GH
 
 La revue ne juge pas le style : elle cherche ce qui casserait la raison
 d'être de l'application. Lisez `CLAUDE.md` d'abord ; chaque règle ci-dessous

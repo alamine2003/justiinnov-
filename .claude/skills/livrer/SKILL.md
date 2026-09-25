@@ -1,6 +1,6 @@
 ---
 name: livrer
-description: Commiter par lots thématiques en français, pousser sur GitHub et déclencher la livraison de JUSTI INNOV (préproduction sur main, production sur un tag v*), avec les contrôles préalables et les secrets attendus. À utiliser quand on demande de commiter, pousser, publier ou déployer.
+description: Commiter par lots thématiques en français, pousser sur GitHub et déclencher la livraison de JUSTI GH (préproduction sur main, production sur un tag v*), avec les contrôles préalables et les secrets attendus. À utiliser quand on demande de commiter, pousser, publier ou déployer.
 ---
 
 # Livrer

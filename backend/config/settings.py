@@ -379,7 +379,7 @@ REST_FRAMEWORK = {
 # réglages figent la forme du document : la CI compare une génération
 # fraîche au fichier versionné, deux générations doivent être identiques.
 SPECTACULAR_SETTINGS = {
-    "TITLE": "JUSTI INNOV",
+    "TITLE": "JUSTI GH",
     "DESCRIPTION": (
         "Plateforme de contrôle budgétaire : suivi des dépenses de pays "
         "africains et de leurs justificatifs. Le pays déclare, le siège "
@@ -475,7 +475,7 @@ if TOTP_REQUIRED_ROLES - _ROLES_CONNUS:
         + " (rôles : " + ", ".join(sorted(_ROLES_CONNUS)) + ")"
     )
 # Nom affiché par l'application d'authentification à côté du compte.
-TOTP_ISSUER = "JUSTI INNOV"
+TOTP_ISSUER = "JUSTI GH"
 
 # Domaines de messagerie admis pour les comptes (cf. accounts.validators).
 # Plusieurs valeurs séparées par des virgules ; comparés en minuscules.
