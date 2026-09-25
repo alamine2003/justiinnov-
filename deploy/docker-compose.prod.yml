@@ -582,7 +582,7 @@ services:
   # Rien de tout cela n'est exposé : seul Caddy sert Grafana, sur le
   # sous-chemin /grafana/, et Grafana demande un mot de passe.
   prometheus:
-    image: prom/prometheus:v2.53.5
+    image: prom/prometheus:v3.14.0
     profiles: ["supervision"]
     mem_limit: 256m
     command:
