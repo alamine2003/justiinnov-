@@ -1,7 +1,7 @@
 {
     "openapi": "3.0.3",
     "info": {
-        "title": "JUSTI INNOV",
+        "title": "JUSTI GH",
         "version": "1.0.0",
         "description": "Plateforme de contrôle budgétaire : suivi des dépenses de pays africains et de leurs justificatifs. Le pays déclare, le siège constate ; une dépense soumise est irréversible ; rien ne se supprime hors brouillon ; les chiffres se calculent côté serveur.\n\nAuthentification par jeton (`Authorization: Token <jeton>`), obtenu sur `/api/token-auth/`. Toute liste est paginée (`page`, `page_size`) et filtrée par le périmètre du compte : un objet hors périmètre répond 404. Les messages suivent `Accept-Language` (`fr` par défaut, `en`)."
     },
@@ -169,6 +169,14 @@
                 "operationId": "beneficiaries_list",
                 "description": "Prospects, clients, fournisseurs et bénéficiaires d'un pays.\n\nLe référentiel était commun : un pays lisait les fournisseurs et les\nprospects du voisin, de quoi reconstituer qui il démarche et qui il paie.\nIl est cloisonné comme le reste — et tenu par la RH, comme le reste du\nréférentiel : le manager choisit un bénéficiaire, il n'en invente pas.",
                 "parameters": [
+                    {
+                        "in": "query",
+                        "name": "contact_manquant",
+                        "schema": {
+                            "type": "boolean"
+                        },
+                        "description": "Seulement les bénéficiaires sans téléphone ni e-mail, à compléter (décision 93)."
+                    },
                     {
                         "in": "query",
                         "name": "country",
@@ -7758,9 +7766,33 @@
                         "type": "string",
                         "readOnly": true
                     },
+                    "phone": {
+                        "type": "string",
+                        "title": "Téléphone",
+                        "maxLength": 32
+                    },
+                    "email": {
+                        "title": "E-mail",
+                        "oneOf": [
+                            {
+                                "type": "string",
+                                "format": "email",
+                                "maxLength": 254
+                            },
+                            {
+                                "type": "string",
+                                "maxLength": 0
+                            }
+                        ]
+                    },
                     "contact": {
                         "type": "string",
+                        "title": "Autres coordonnées",
                         "maxLength": 180
+                    },
+                    "contact_manquant": {
+                        "type": "boolean",
+                        "readOnly": true
                     },
                     "is_active": {
                         "type": "boolean",
@@ -7786,7 +7818,10 @@
                     "name",
                     "kind",
                     "kind_display",
+                    "phone",
+                    "email",
                     "contact",
+                    "contact_manquant",
                     "is_active",
                     "created_at",
                     "updated_at"
@@ -7824,8 +7859,28 @@
                         ],
                         "title": "Type"
                     },
+                    "phone": {
+                        "type": "string",
+                        "title": "Téléphone",
+                        "maxLength": 32
+                    },
+                    "email": {
+                        "title": "E-mail",
+                        "oneOf": [
+                            {
+                                "type": "string",
+                                "format": "email",
+                                "maxLength": 254
+                            },
+                            {
+                                "type": "string",
+                                "maxLength": 0
+                            }
+                        ]
+                    },
                     "contact": {
                         "type": "string",
+                        "title": "Autres coordonnées",
                         "maxLength": 180
                     },
                     "is_active": {
@@ -12511,8 +12566,28 @@
                         ],
                         "title": "Type"
                     },
+                    "phone": {
+                        "type": "string",
+                        "title": "Téléphone",
+                        "maxLength": 32
+                    },
+                    "email": {
+                        "title": "E-mail",
+                        "oneOf": [
+                            {
+                                "type": "string",
+                                "format": "email",
+                                "maxLength": 254
+                            },
+                            {
+                                "type": "string",
+                                "maxLength": 0
+                            }
+                        ]
+                    },
                     "contact": {
                         "type": "string",
+                        "title": "Autres coordonnées",
                         "maxLength": 180
                     },
                     "is_active": {

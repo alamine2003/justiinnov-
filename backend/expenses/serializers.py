@@ -28,6 +28,7 @@ from core.models import (
 )
 from core.serializers import DetailField
 
+from .contacts import est_un_telephone, normaliser_telephone
 from .models import (
     AuditLog,
     Beneficiary,
@@ -274,12 +275,14 @@ class BeneficiarySerializer(serializers.ModelSerializer):
     country_name = serializers.CharField(
         source="country.name", read_only=True, allow_null=True
     )
+    contact_manquant = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Beneficiary
         fields = [
             "id", "country", "country_name", "name", "kind", "kind_display",
-            "contact", "is_active", "created_at", "updated_at",
+            "phone", "email", "contact", "contact_manquant", "is_active",
+            "created_at", "updated_at",
         ]
         # Le message par défaut de la contrainte d'unicité est illisible ;
         # celui-ci dit ce qu'il faut corriger.
@@ -290,6 +293,44 @@ class BeneficiarySerializer(serializers.ModelSerializer):
                 message=_("Ce bénéficiaire existe déjà pour ce pays."),
             )
         ]
+
+    def validate_phone(self, value):
+        value = normaliser_telephone(value)
+        if value and not est_un_telephone(value):
+            raise serializers.ValidationError(
+                _("Numéro de téléphone invalide : de 6 à 15 chiffres, « + » en tête pour l'indicatif.")
+            )
+        return value
+
+    def validate_email(self, value):
+        return (value or "").strip()
+
+    def validate(self, attrs):
+        """Téléphone ou e-mail : l'un des deux (décision 93).
+
+        Exigé à la création, et à toute modification — sauf une simple
+        activation ou désactivation : un bénéficiaire enregistré avant la
+        décision se retire sans qu'on doive d'abord lui trouver un numéro.
+        """
+        attrs = super().validate(attrs)
+        if self.instance is not None:
+            # Ce qui change vraiment : l'interface renvoie tout le
+            # formulaire, même pour une simple désactivation.
+            changes = {
+                cle for cle, valeur in attrs.items()
+                if getattr(self.instance, cle, None) != valeur
+            }
+            if changes <= {"is_active"}:
+                return attrs
+        telephone = attrs.get("phone", getattr(self.instance, "phone", ""))
+        email = attrs.get("email", getattr(self.instance, "email", ""))
+        if not (telephone or email):
+            # Une erreur générale, pas une par champ : l'exigence porte sur
+            # le couple, et l'écran la dirait sinon deux fois.
+            raise serializers.ValidationError(
+                _("Renseignez un téléphone ou une adresse e-mail.")
+            )
+        return attrs
 
 
 class ProofSerializer(serializers.ModelSerializer):

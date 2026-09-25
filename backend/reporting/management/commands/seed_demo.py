@@ -162,7 +162,8 @@ class Command(BaseCommand):
             )
             nom, kind = BENEFICIAIRES[code]
             Beneficiary.objects.get_or_create(
-                country=country, name=nom, defaults={"kind": kind}
+                country=country, name=nom,
+                defaults={"kind": kind, "email": f"contact.{code.lower()}@exemple.org"},
             )
             Budget.objects.get_or_create(
                 country=country, year=self.annee, project=None, team=None, manager=None,

@@ -1,7 +1,7 @@
-# JUSTI INNOV — plateforme de contrôle budgétaire
+# JUSTI GH — plateforme de contrôle budgétaire
 
-Suivi budgétaire centralisé et traçable des filiales africaines du groupe
-INNOV PHARMA : référentiel pays et organisations, comptes et périmètres,
+Suivi budgétaire centralisé et traçable des filiales africaines de
+Generic Healthcare (GH), dont INNOV PHARMA est le siège : référentiel pays et organisations, comptes et périmètres,
 enveloppes annuelles, dossiers de justification, dépenses, pièces
 justificatives, circuit de justification, tableaux de bord temps réel,
 alertes, imports et exports, supervision.
@@ -160,7 +160,10 @@ par son auteur. La liste des dossiers se filtre par pays (`?country=`).
 Le référentiel d'un pays — équipes, projets, intitulés, catégories,
 bénéficiaires — est tenu par la RH et les super administrateurs pour tous
 les pays (`referentiel.create`, `referentiel.update`) ; le `manager` n'y
-écrit pas par défaut.
+écrit pas par défaut. Un bénéficiaire porte un téléphone (`phone`) ou un
+e-mail (`email`) — l'un des deux est exigé à la création et à chaque
+modification (décision 93) ; ceux saisis avant restent valides et se
+retrouvent par `GET /api/beneficiaries/?contact_manquant=1`.
 
 Le périmètre est porté par le profil : le siège couvre toujours tous les
 pays, et ses pays éventuels sont vidés à l'enregistrement ; un `manager`

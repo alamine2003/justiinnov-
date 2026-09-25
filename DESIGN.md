@@ -1,4 +1,4 @@
-# DESIGN.md — système d'interface de JUSTI INNOV
+# DESIGN.md — système d'interface de JUSTI GH
 
 > Référence unique de l'interface. **À lire avant toute modification d'écran.**
 > Les tokens vivent dans `frontend/src/index.css` ; ce document dit comment
@@ -307,11 +307,16 @@ conformer.
 
 ### Identité : logo, emblème, version
 
-Le logo — l'emblème « J » en document coché, suivi du nom « JUSTI INNOV » —
-est celui fourni par INNOV PHARMA (`docs/identite/logo-justi-innov.png`,
-la source). Dans l'interface il n'existe qu'en vectoriel, tracé en
-`currentColor` : `BrandLogo` (`components/layout/brand-logo.tsx`, emblème et
-nom) et `BrandMark` (`brand-mark.tsx`, l'emblème seul). Il prend la couleur
+Le logo — l'emblème « J » en document coché, suivi du nom « JUSTI GH »
+(décision 92) — part de l'emblème fourni par INNOV PHARMA
+(`docs/identite/logo-justi-innov.png`, la source) ; le nom n'est plus
+tracé mais écrit, en `<text>` dans le même SVG, à largeur fixée
+(`textLength`) pour garder les proportions quelle que soit la police. Le
+logo de Generic Healthcare remplacera l'emblème dans `BrandLogo` quand son
+fichier sera versé dans `docs/identite/`. Dans l'interface il n'existe
+qu'en vectoriel, en `currentColor` : `BrandLogo`
+(`components/layout/brand-logo.tsx`, emblème et nom) et `BrandMark`
+(`brand-mark.tsx`, l'emblème seul). Il prend la couleur
 du texte qui l'entoure, donc le thème — jamais une couleur en dur, jamais
 une image PNG. Le logo complet va dans l'en-tête (`h-7`, lien vers
 l'accueil) et sur l'écran de connexion (`h-9`, clair sur le panneau
@@ -507,6 +512,18 @@ serveur (une dépense imputée entre-temps, `400` sur `budget`) s'affiche en
 `<FormError>` dans le dialogue, qui reste ouvert. Après une suppression, la
 page relit les enveloppes.
 
+### Bénéficiaires : contact à compléter
+
+Dans l'onglet « Bénéficiaires » d'un pays, la colonne « Contact » montre le
+téléphone et l'e-mail, séparés par « · ». Un bénéficiaire sans l'un ni
+l'autre — saisi avant la décision 93 — porte un badge **« À compléter »**
+(`STATUS_TONES.ATTENTE`), lu sur `contact_manquant` : l'écran ne le déduit
+pas. Dans le formulaire, « Téléphone » (`type="tel"`) et « E-mail »
+(`type="email"`) portent la mention « (l'un des deux) » au lieu de
+« (facultatif) » (`FormField.mention` de `ManageRows`) ; la règle est
+tranchée par le serveur, dont le refus s'affiche en un seul message en tête
+du dialogue.
+
 ### Menu d'export
 
 Les exports sont réservés aux administrateurs : le menu n'apparaît que si
@@ -602,7 +619,7 @@ livrable, port 8080.
 
 - L'application est installable comme application de bureau (PWA) :
   manifeste et service worker viennent du build Vite, l'icône et le nom
-  « JUSTI INNOV » y sont fixés. Le service worker ne met en cache que les
+  « JUSTI GH » y sont fixés. Le service worker ne met en cache que les
   fichiers statiques du build, jamais une réponse de `/api/` : un chiffre
   périmé affiché hors ligne serait pire qu'une page vide.
 - Le sélecteur de thème propose « Clair », « Sombre » et « Système ». Le choix

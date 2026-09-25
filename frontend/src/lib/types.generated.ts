@@ -1939,7 +1939,13 @@ export interface components {
             /** Type */
             kind: components["schemas"]["BeneficiaryKindEnum"]
             readonly kind_display: string
+            /** Téléphone */
+            phone: string
+            /** E-mail */
+            email: string
+            /** Autres coordonnées */
             contact: string
+            readonly contact_manquant: boolean
             /** Actif */
             is_active: boolean
             /**
@@ -1969,6 +1975,11 @@ export interface components {
             name: string
             /** Type */
             kind?: components["schemas"]["BeneficiaryKindEnum"]
+            /** Téléphone */
+            phone?: string
+            /** E-mail */
+            email?: string
+            /** Autres coordonnées */
             contact?: string
             /** Actif */
             is_active?: boolean
@@ -3708,6 +3719,11 @@ export interface components {
             name?: string
             /** Type */
             kind?: components["schemas"]["BeneficiaryKindEnum"]
+            /** Téléphone */
+            phone?: string
+            /** E-mail */
+            email?: string
+            /** Autres coordonnées */
             contact?: string
             /** Actif */
             is_active?: boolean
@@ -4765,6 +4781,8 @@ export interface operations {
     beneficiaries_list: {
         parameters: {
             query?: {
+                /** @description Seulement les bénéficiaires sans téléphone ni e-mail, à compléter (décision 93). */
+                contact_manquant?: boolean
                 country?: number
                 is_active?: boolean
                 /**

@@ -78,7 +78,7 @@ class BeneficiaireScopeTests(ExpenseTestCase):
         response = self.client.post(
             "/api/beneficiaries/",
             {"country": self.togo.pk, "name": "Groupe Abidjan",
-             "kind": Beneficiary.Kind.SUPPLIER},
+             "kind": Beneficiary.Kind.SUPPLIER, "phone": "+228 22 21 00 00"},
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -106,3 +106,106 @@ class BeneficiaireScopeTests(ExpenseTestCase):
         self.assertEqual(
             response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
         )
+
+
+class ContactsTests(ExpenseTestCase):
+    """Décision 93 : un bénéficiaire a un téléphone ou un e-mail.
+
+    Exigé à la création et à toute modification ; un bénéficiaire saisi
+    avant la décision reste valide jusqu'à ce qu'on le modifie, et se
+    retrouve dans la liste des bénéficiaires à compléter.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.ancien = Beneficiary.objects.create(
+            country=cls.togo, name="Clinique de Kara", kind=Beneficiary.Kind.PROSPECT
+        )
+        cls.complet = Beneficiary.objects.create(
+            country=cls.togo, name="Pharmacie du Port", phone="+228 90 00 00 00"
+        )
+
+    def creer(self, **champs):
+        self.login(self.doo)
+        return self.client.post(
+            "/api/beneficiaries/", {"country": self.togo.pk, "name": "Station Lomé", **champs}
+        )
+
+    def test_sans_telephone_ni_e_mail_la_creation_est_refusee(self):
+        response = self.creer()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("téléphone ou une adresse e-mail", str(response.data["non_field_errors"]))
+        self.assertFalse(Beneficiary.objects.filter(name="Station Lomé").exists())
+
+    def test_un_telephone_ou_un_e_mail_suffit(self):
+        par_telephone = self.creer(phone="  +228   22 21 00 00 ")
+        par_email = self.creer(name="Station Kara", email="station.kara@exemple.org")
+
+        self.assertEqual(par_telephone.status_code, status.HTTP_201_CREATED, par_telephone.data)
+        self.assertEqual(par_telephone.data["phone"], "+228 22 21 00 00")
+        self.assertFalse(par_telephone.data["contact_manquant"])
+        self.assertEqual(par_email.status_code, status.HTTP_201_CREATED, par_email.data)
+
+    def test_un_contact_mal_forme_est_refuse(self):
+        for champs, cle in (
+            ({"phone": "12"}, "phone"),
+            ({"phone": "appelez Awa"}, "phone"),
+            ({"email": "awa.exemple.org"}, "email"),
+        ):
+            with self.subTest(champs=champs):
+                response = self.creer(**champs)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn(cle, response.data)
+
+    def test_l_ancien_reste_valide_mais_se_complete_a_la_modification(self):
+        self.login(self.doo)
+        url = f"/api/beneficiaries/{self.ancien.pk}/"
+
+        lu = self.client.get(url)
+        renomme = self.client.patch(url, {"name": "Clinique de Kara-Nord"})
+        complete = self.client.patch(url, {"name": "Clinique de Kara-Nord", "email": "clinique@exemple.org"})
+
+        self.assertTrue(lu.data["contact_manquant"])
+        self.assertEqual(renomme.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(complete.status_code, status.HTTP_200_OK, complete.data)
+        self.assertFalse(complete.data["contact_manquant"])
+
+    def test_on_desactive_un_ancien_sans_lui_trouver_de_contact(self):
+        self.login(self.doo)
+
+        response = self.client.patch(
+            f"/api/beneficiaries/{self.ancien.pk}/", {"is_active": False}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_l_ecran_desactive_un_ancien_en_renvoyant_tout_le_formulaire(self):
+        """L'interface renvoie tous les champs, inchangés, avec l'interrupteur."""
+        self.login(self.doo)
+
+        response = self.client.patch(
+            f"/api/beneficiaries/{self.ancien.pk}/",
+            {"country": self.togo.pk, "name": "Clinique de Kara", "kind": "prospect",
+             "phone": "", "email": "", "contact": "", "is_active": False},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_on_ne_retire_pas_le_dernier_contact(self):
+        self.login(self.doo)
+
+        response = self.client.patch(
+            f"/api/beneficiaries/{self.complet.pk}/", {"phone": ""}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_la_liste_retrouve_ceux_a_completer(self):
+        self.login(self.doo)
+
+        response = self.client.get("/api/beneficiaries/", {"contact_manquant": "1"})
+
+        self.assertEqual([b["name"] for b in response.data["results"]], ["Clinique de Kara"])
+

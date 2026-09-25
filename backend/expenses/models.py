@@ -72,7 +72,13 @@ class Beneficiary(TimeStampedModel):
     kind = models.CharField(
         _("Type"), max_length=32, choices=Kind.choices, default=Kind.BENEFICIARY
     )
-    contact = models.CharField(_("Contact"), max_length=180, blank=True)
+    # Téléphone ou e-mail : l'un des deux est exigé à la création et à
+    # chaque modification (décision 93, ``BeneficiarySerializer``). Pas de
+    # contrainte en base : les bénéficiaires enregistrés avant la décision
+    # restent valides jusqu'à ce qu'on les modifie (``contact_manquant``).
+    phone = models.CharField(_("Téléphone"), max_length=32, blank=True)
+    email = models.EmailField(_("E-mail"), max_length=254, blank=True)
+    contact = models.CharField(_("Autres coordonnées"), max_length=180, blank=True)
     is_active = models.BooleanField(_("Actif"), default=True)
 
     class Meta:
@@ -86,6 +92,11 @@ class Beneficiary(TimeStampedModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def contact_manquant(self):
+        """Ni téléphone ni e-mail : à compléter à la prochaine modification."""
+        return not (self.phone or self.email)
 
 
 class DossierQuerySet(models.QuerySet):

@@ -230,9 +230,13 @@ class Command(BaseCommand):
                 defaults={"status": "active", "budget": self._local(5_000_000, country)},
             )[0]
             self.benefs[code] = {
+                # Coordonnées fictives, domaine réservé ``exemple.org``. La
+                # clinique n'en a pas : elle est « à compléter », comme un
+                # bénéficiaire saisi avant la décision 93.
                 "client": Beneficiary.objects.get_or_create(
                     country=country, name=f"Pharmacie centrale de {villes[0]}",
-                    defaults={"kind": Beneficiary.Kind.CLIENT})[0],
+                    defaults={"kind": Beneficiary.Kind.CLIENT,
+                              "email": f"pharmacie.{code.lower()}@exemple.org"})[0],
                 "prospect": Beneficiary.objects.get_or_create(
                     country=country, name=f"Clinique de {villes[1]}",
                     defaults={"kind": Beneficiary.Kind.PROSPECT})[0],
@@ -481,7 +485,7 @@ class Command(BaseCommand):
 
     def _rapport(self):
         lignes = [
-            "# Recette JUSTI INNOV — comptes (fichier local, jamais versionné)",
+            "# Recette JUSTI GH — comptes (fichier local, jamais versionné)",
             "",
             f"Mot de passe de **tous** les comptes : `{self.mot_de_passe}`",
             "",
