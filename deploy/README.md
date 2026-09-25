@@ -1350,7 +1350,8 @@ concluait « ✔ » même quand Postgres s'était arrêté en route.
 
 | date | base | durée (`real`) | résultat |
 |---|---|---|---|
-| 25 septembre 2026 | 5 dépenses, 5 dossiers, 7 pièces, 3 bénéficiaires | 3,3 s | chiffres identiques ; script corrigé ensuite (rejeu lu trop tôt) |
+| 25 septembre 2026, 16 h 20 | 5 dépenses, 5 dossiers, 7 pièces, 3 bénéficiaires | 3,3 s | chiffres identiques, mais conclusion non prouvée : l'ancien script lisait la base au milieu du rejeu (« en écriture : f ») — corrigé par la PR #61 |
+| 25 septembre 2026, 18 h 11 | 5 dépenses, 5 dossiers, 7 pièces, 3 bénéficiaires, 4 enveloppes | 4,8 s (rejeu : 1 s) | **réussie** : arrêt avant la transaction 40956 (`txid_current()`), `en écriture : t`, chiffres identiques ; départ de la sauvegarde physique de 14 h 53 |
 
 **Une reprise jamais répétée n'est pas un plan.** Notez la durée à chaque
 répétition : c'est votre RTO réel, et il grandit avec la base. La chaîne
