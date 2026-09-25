@@ -59,7 +59,7 @@ services:
     # 8080 — le reste du fichier (en-têtes, taille des corps, routes) est
     # celui de la production. Sans Grafana dans cette pile, `/grafana/`
     # répond 404 (profil de supervision inactif) ; rien ne l'appelle.
-    image: caddy:2.8-alpine
+    image: caddy:2.10-alpine
     container_name: justi_caddy
     environment:
       APP_DOMAIN: "http://:8080"
