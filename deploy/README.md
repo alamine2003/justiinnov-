@@ -367,7 +367,12 @@ encore `quay.io`. L'ordre compte :
    encore.
    ```bash
    rsync -a --exclude .env --exclude .deployed deploy/ root@<hôte-production>:/home/deploy/justi-innov/
+   ssh root@<hôte-production> 'chown -R root:root /home/deploy/justi-innov && chmod 755 /home/deploy/justi-innov/*.sh && chmod 600 /home/deploy/justi-innov/.env && install -m 0755 /home/deploy/justi-innov/justi-livrer /usr/local/bin/justi-livrer'
    ```
+   La seconde ligne n'est pas facultative : `rsync -a` garde le
+   propriétaire du poste qui envoie, et `justi-livrer` refuse de lancer un
+   `deploy.sh` qui n'appartient pas à root (« livraison refusée : …
+   n'appartient pas à root », livraison v1.3.0 du 25 septembre 2026).
 3. Poser le tag. La livraison tire la nouvelle image et recrée `minio` et
    `sauvegarde-pieces` : quelques secondes sans dépôt ni lecture de pièce,
    comme pendant le redémarrage du backend. Le volume `miniodata` n'est
