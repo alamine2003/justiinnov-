@@ -62,6 +62,10 @@ Le corail et l'ambre n'ont pas de jeton à eux : ce sont désormais
 aurait dit la même chose deux fois. L'ambre s'encre de marine
 (`--statut-attente-foreground`) : le blanc n'y tenait pas le contraste.
 
+Le logo a ses propres couleurs — bleu, rouge et orange de Generic
+Healthcare (`--logo`, `--logo-rouge`, `--logo-orange`) — qui ne servent
+qu'à lui (« Identité », plus bas).
+
 Les cinq `--chart-*` descendent l'azur : une même famille se lit comme une
 même grandeur à des intensités différentes.
 
@@ -307,28 +311,39 @@ conformer.
 
 ### Identité : logo, emblème, version
 
-Le logo — l'emblème « J » en document coché, suivi du nom « JUSTI GH »
-(décision 92) — part de l'emblème fourni par INNOV PHARMA
-(`docs/identite/logo-justi-innov.png`, la source) ; le nom n'est plus
-tracé mais écrit, en `<text>` dans le même SVG, à largeur fixée
-(`textLength`) pour garder les proportions quelle que soit la police. Le
-logo de Generic Healthcare remplacera l'emblème dans `BrandLogo` quand son
-fichier sera versé dans `docs/identite/`. Dans l'interface il n'existe
-qu'en vectoriel, en `currentColor` : `BrandLogo`
-(`components/layout/brand-logo.tsx`, emblème et nom) et `BrandMark`
-(`brand-mark.tsx`, l'emblème seul). Il prend la couleur
-du texte qui l'entoure, donc le thème — jamais une couleur en dur, jamais
-une image PNG. Le logo complet va dans l'en-tête (`h-7`, lien vers
-l'accueil) et sur l'écran de connexion (`h-9`, clair sur le panneau
-sombre) ; l'emblème seul partout où 40 px ne suffiraient pas à lire le nom
-(titre du panneau replié). Le nom fait partie du dessin : `BrandLogo` le
-redit aux lecteurs d'écran par un texte masqué (`sr-only`), et il n'est
-pas répété en texte visible à côté.
+Le logo est celui de **Generic Healthcare** (décision 92) : « JUSTI »
+écrit, suivi du monogramme « GH », ce qui se lit « JUSTI GH » sans
+répéter « GH ». Le monogramme est vectorisé depuis le fichier fourni
+(`docs/identite/logo-gh.png`, 109 × 120 pixels, flou) : chaque couleur
+séparée, son contour lissé puis tracé en courbes
+(`docs/identite/logo-gh.svg`). Le mot n'est pas tracé mais écrit, en
+`<text>` dans le même SVG, à largeur fixée (`textLength`) pour garder les
+proportions quelle que soit la police. Dans l'interface le logo n'existe
+qu'en vectoriel, jamais en image PNG : `BrandLogo`
+(`components/layout/brand-logo.tsx`, mot et monogramme) et `BrandMark`
+(`brand-mark.tsx`, le monogramme seul).
+
+Il garde ses trois couleurs, par des jetons réservés au logo : le bleu
+(`text-logo`, porté par le mot et le monogramme, en `currentColor`), le
+rouge et l'orange des deux traits (`fill-logo-rouge`, `fill-logo-orange`).
+Le bleu du groupe se perd sur fond sombre : en thème sombre, `--logo`
+prend la couleur du texte ; sur le panneau marine de la connexion, l'écran
+passe `text-banniere-foreground`. Le rouge et l'orange ne changent pas.
+Ces trois couleurs ne servent **qu'au logo** : ni surface, ni texte, ni
+chiffre (« Couleurs de la marque », plus haut).
+
+Le logo complet va dans l'en-tête (`h-7`, lien vers l'accueil) et sur
+l'écran de connexion (`h-9`) ; le monogramme seul partout où 40 px ne
+suffiraient pas à lire le mot (titre du panneau replié). Le nom fait partie
+du dessin : `BrandLogo` le redit aux lecteurs d'écran par un texte masqué
+(`sr-only`), et il n'est pas répété en texte visible à côté.
 
 L'icône d'onglet et d'application installée (`public/favicon.svg`,
-`favicon.png`, `public/icons/`) est l'emblème blanc sur un carré sombre à
-coins arrondis, lisible sur une barre d'onglets claire comme sombre ; la
-version « maskable » garde l'emblème dans la zone sûre.
+`favicon.png`, `public/icons/`) est le monogramme dans ses couleurs sur un
+carré blanc à coins arrondis, lisible sur une barre d'onglets claire comme
+sombre ; la version « maskable » garde le monogramme dans la zone sûre.
+La tuile vectorielle `favicon.svg` fait foi : les PNG s'en déduisent par
+`npx tsx scripts/generate-icons.mts` (dans `frontend/`).
 
 La **version** (pied de page, pastille de l'en-tête, écran de connexion)
 vient de `BRAND.version`, figée à la construction : celle du tag `v*`

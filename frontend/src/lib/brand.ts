@@ -14,6 +14,8 @@ import i18next from "i18next"
  */
 export const BRAND = {
   name: "JUSTI GH",
+  /** Le mot écrit dans le logo, avant le monogramme « GH » qui achève le nom. */
+  mot: "JUSTI",
   /** La signature (« Application de contrôle budgétaire ») est traduite : clé `app.tagline`. */
   version: __APP_VERSION__,
   developer: "Al Amine dev",
@@ -22,10 +24,10 @@ export const BRAND = {
 } as const
 
 // L'emblème et le logo sont des composants (`components/layout/brand-mark.tsx`,
-// `brand-logo.tsx`) : l'emblème tracé depuis `docs/identite/logo-justi-innov.png`,
-// le nom écrit en texte (décision 92) ;
-// l'icône d'onglet et d'application installée — l'emblème blanc sur un carré
-// sombre — vit dans `public/favicon.svg` et `public/icons/`.
+// `brand-logo.tsx`) : le monogramme de Generic Healthcare vectorisé depuis
+// `docs/identite/logo-gh.png`, le mot écrit en texte (décision 92) ;
+// l'icône d'onglet et d'application installée — le monogramme sur un carré
+// blanc — vit dans `public/favicon.svg` et `public/icons/`.
 
 /** Mention de copyright, l'année courante si elle dépasse la mise en service. */
 export function copyright(): string {
