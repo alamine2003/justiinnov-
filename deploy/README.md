@@ -1035,22 +1035,44 @@ décision 51 de `docs/model-de-donnees.md`), pas à pas, dans la console B2 :
    **Private**, *Default Encryption* au choix (le contenu arrive déjà
    chiffré), *Object Lock* non requis. Notez la région de l'endpoint S3
    affiché (`s3.eu-central-003.backblazeb2.com` → région `eu-central-003`).
+   **Un bucket par environnement, sans sous-dossier** dans
+   `SAUVEGARDE_DISTANT_BUCKET` : les préfixes des règles ci-dessous sont
+   alors exactement `quotidien/`, `wal/` et `physique/` (avec un
+   sous-dossier `prod`, ce serait `prod/quotidien/`…).
 2. *Lifecycle Settings* du bucket : **Keep all versions** (le défaut :
    `mensuel/` et `pieces/` ne se suppriment jamais, et un objet écrasé
    garde sa version précédente — ce qui protège aussi d'un serveur qui
    réécrirait des dumps corrompus), puis *Use custom lifecycle rules* avec
-   une seule règle, sur le préfixe `quotidien/` : *Days Till Hide* =
-   `SAUVEGARDE_RETENTION_JOURS` (30), *Days Till Delete* = 1. C'est cette
-   règle qui tient la rétention des quotidiens à la place du serveur.
+   **trois règles**, chacune *Days Till Hide* = `SAUVEGARDE_RETENTION_JOURS`
+   (30) et *Days Till Delete* = 1, sur les préfixes :
+   - `quotidien/` — les dumps quotidiens ;
+   - `wal/` — les segments d'archive, 16 Mo chacun : sans règle, ils
+     s'accumulent sans fin (37 le seul 25 septembre 2026, jour d'essais)
+     et remplissent les 10 Go gratuits en quelques semaines ;
+   - `physique/` — les sauvegardes physiques, une par semaine.
+
+   Ce sont ces règles qui tiennent la rétention à la place du serveur, qui
+   n'a pas le droit d'effacer. `wal/` et `physique/` vont ensemble : une
+   reprise à un instant donné part d'une sauvegarde physique antérieure et
+   rejoue les segments qui la suivent ; à trente jours chacun, tout instant
+   postérieur à la plus ancienne sauvegarde physique encore présente reste
+   atteignable.
 3. *App Keys › Add a New Application Key* : restreinte **à ce bucket**,
    capacités `listBuckets, listFiles, readFiles, writeFiles` — **sans
    `deleteFiles`**. `keyID` → `SAUVEGARDE_DISTANT_CLE`, `applicationKey` →
    `SAUVEGARDE_DISTANT_SECRET` (affiché une seule fois).
-4. Dans `.env` : `SAUVEGARDE_DISTANT_ENDPOINT=https://s3.<région>.backblazeb2.com`,
+4. La clé de chiffrement **se crée hors du serveur**, sur le poste de
+   l'exploitant, et part d'abord au coffre (gestionnaire de mots de passe
+   de la direction) : `openssl rand -base64 48`. Une clé tirée sur le
+   serveur puis « recopiée plus tard » meurt avec lui. Le sel
+   (`SAUVEGARDE_CHIFFREMENT_SEL`) peut rester vide : avec une clé de 48
+   octets tirés au hasard, il n'ajoute rien, et c'est un secret de moins à
+   perdre.
+5. Dans `.env` : `SAUVEGARDE_DISTANT_ENDPOINT=https://s3.<région>.backblazeb2.com`,
    `SAUVEGARDE_DISTANT_BUCKET=<nom du bucket>`,
    `SAUVEGARDE_DISTANT_REGION=<région>`, `SAUVEGARDE_DISTANT_FOURNISSEUR=Other`,
-   et la clé de chiffrement : `SAUVEGARDE_CHIFFREMENT_CLE="$(openssl rand -base64 48)"`,
-   aussitôt recopiée hors du serveur.
+   `SAUVEGARDE_DISTANT_CLE`, `SAUVEGARDE_DISTANT_SECRET` et
+   `SAUVEGARDE_CHIFFREMENT_CLE` (celle du coffre).
 
 Restaurer une version antérieure d'un objet écrasé se fait depuis la
 console B2 (*Browse Files › Show all versions*) ; le service, lui, ne voit
@@ -1350,7 +1372,8 @@ concluait « ✔ » même quand Postgres s'était arrêté en route.
 
 | date | base | durée (`real`) | résultat |
 |---|---|---|---|
-| 25 septembre 2026 | 5 dépenses, 5 dossiers, 7 pièces, 3 bénéficiaires | 3,3 s | chiffres identiques ; script corrigé ensuite (rejeu lu trop tôt) |
+| 25 septembre 2026, 16 h 20 | 5 dépenses, 5 dossiers, 7 pièces, 3 bénéficiaires | 3,3 s | chiffres identiques, mais conclusion non prouvée : l'ancien script lisait la base au milieu du rejeu (« en écriture : f ») — corrigé par la PR #61 |
+| 25 septembre 2026, 18 h 11 | 5 dépenses, 5 dossiers, 7 pièces, 3 bénéficiaires, 4 enveloppes | 4,8 s (rejeu : 1 s) | **réussie** : arrêt avant la transaction 40956 (`txid_current()`), `en écriture : t`, chiffres identiques ; départ de la sauvegarde physique de 14 h 53 |
 
 **Une reprise jamais répétée n'est pas un plan.** Notez la durée à chaque
 répétition : c'est votre RTO réel, et il grandit avec la base. La chaîne
