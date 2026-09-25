@@ -211,20 +211,48 @@ if [ "$MODE" = "essai" ]; then
     || { tail -20 "$cible/reprise.log" >&2; echec "la base d'essai n'a pas démarré"; }
   base="${PGDATABASE:-justi_innov}"
   requete() { psql -h localhost -p "$PORT" -d "$base" -v ON_ERROR_STOP=1 -qtAX -c "$1"; }
+  jeter_l_essai() { pg_ctl -D "$cible" -m fast -w stop >/dev/null 2>&1 || true; rm -rf "$cible"; }
+  # `pg_ctl -w` rend la main dès que la base accepte des connexions — en
+  # reprise, c'est AVANT la fin du rejeu : la première répétition sur le
+  # serveur (25 septembre 2026) lisait la base au milieu du rejeu et
+  # concluait « ✔ » sur une reprise inachevée, voire morte. La reprise
+  # n'est finie que lorsque la base s'ouvre en écriture
+  # (`recovery_target_action = 'promote'`) ; on l'attend, ou l'on constate
+  # que Postgres s'est arrêté, et l'on dit pourquoi.
+  attente="${REPRISE_ATTENTE_SECONDES:-600}"
+  debut="$(date +%s)"
+  while :; do
+    ecoule=$(( $(date +%s) - debut ))
+    if ! pg_ctl -D "$cible" status >/dev/null 2>&1; then
+      tail -20 "$cible/reprise.log" >&2
+      if grep -q 'recovery ended before configured recovery target was reached' "$cible/reprise.log"; then
+        rm -rf "$cible"
+        echec "aucune transaction validée après $INSTANT dans l'archive : Postgres a tout rejoué sans trouver où s'arrêter, et s'est arrêté plutôt que d'ouvrir une base d'état incertain. Si la base est restée sans écriture depuis, validez une transaction vide après l'instant visé (« select txid_current() »), forcez l'archivage (« select pg_switch_wal() ») et recommencez ; sinon, l'archive s'arrête avant $INSTANT (deploy/README.md, « Répéter la reprise »)."
+      fi
+      rm -rf "$cible"
+      echec "la base d'essai s'est arrêtée pendant le rejeu (journal ci-dessus)"
+    fi
+    [ "$(requete 'select not pg_is_in_recovery()' 2>/dev/null || true)" = "t" ] && break
+    if [ "$ecoule" -ge "$attente" ]; then
+      tail -20 "$cible/reprise.log" >&2
+      jeter_l_essai
+      echec "le rejeu n'a pas fini en $attente s (REPRISE_ATTENTE_SECONDES) : la base est-elle plus grosse que prévu ? (journal ci-dessus)"
+    fi
+    sleep 1
+  done
   echo ""
-  journal "✔ base d'essai ouverte, à l'instant $INSTANT"
+  journal "✔ base d'essai ouverte, à l'instant $INSTANT (rejeu terminé en ${ecoule} s)"
   # Là où Postgres s'est arrêté : la ligne du journal qui le dit, mot pour
   # mot. « recovery stopping before commit of transaction … time … » est
-  # l'instant exact ; s'il est absent, la reprise a rejoué tout ce qu'il y
-  # avait, ce qui veut dire que l'instant demandé est postérieur au dernier
-  # segment archivé.
+  # l'instant exact.
   arret="$(grep -E 'recovery stopping (before|after|at)' "$cible/reprise.log" | tail -1 || true)"
   if [ -n "$arret" ]; then
     echo "    arrêt : ${arret#*LOG:  }"
   else
-    echo "    ⚠ aucun arrêt sur l'instant visé : tout ce qui était archivé a été rejoué. L'archive s'arrête AVANT $INSTANT."
+    jeter_l_essai
+    echec "la base s'est ouverte sans dire où elle s'est arrêtée : reprise non conforme, rien n'est prouvé"
   fi
-  echo "    en écriture : $(requete 'select not pg_is_in_recovery()')"
+  echo "    en écriture : t"
   # Ce que la base contient, pour comparer avec la production sans
   # deviner : les tables qui font la valeur de la plateforme.
   for table in expenses_dossier expenses_expense expenses_proof budget_budget accounts_profile; do
@@ -235,11 +263,16 @@ if [ "$MODE" = "essai" ]; then
   if [ -n "$REQUETE" ]; then
     echo ""
     echo "    résultat de --requete :"
-    requete "$REQUETE" | sed 's/^/      /' || echec "la requête a échoué"
+    # Pas de tube : le statut de `sed` masquait celui de la requête, et
+    # une requête en échec finissait sur « ✔ ».
+    if ! resultat="$(requete "$REQUETE")"; then
+      jeter_l_essai
+      echec "la requête a échoué"
+    fi
+    printf '%s\n' "$resultat" | sed 's/^/      /'
   fi
   echo ""
-  pg_ctl -D "$cible" -m fast -w stop >/dev/null 2>&1 || true
-  rm -rf "$cible"
+  jeter_l_essai
   journal "✔ base d'essai jetée. La pile n'a pas été touchée."
 else
   journal "✔ répertoire de données remplacé. Relancez la pile :"
