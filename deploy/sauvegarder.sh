@@ -450,6 +450,14 @@ distant_preparer() {
   export RCLONE_CONFIG_DISTANT_SECRET_ACCESS_KEY="$secret"
   export RCLONE_CONFIG_DISTANT_REGION="${SAUVEGARDE_DISTANT_REGION:-}"
   export RCLONE_CONFIG_DISTANT_ENV_AUTH=false
+  # Cloudflare R2 : une clé « Object Read & Write », la seule qu'on donne au
+  # serveur, ne peut ni vérifier ni créer un bucket, et rclone refuse alors
+  # d'envoyer quoi que ce soit (documentation de rclone 1.72, « Cloudflare
+  # R2 » : « you may also need to add no_check_bucket = true »). Le bucket
+  # est créé à la main dans la console : on ne le vérifie pas.
+  case "${SAUVEGARDE_DISTANT_FOURNISSEUR:-Other}" in
+    Cloudflare) export RCLONE_CONFIG_DISTANT_NO_CHECK_BUCKET=true ;;
+  esac
   # Pas de fichier de configuration : tout vient de l'environnement, et
   # rclone n'a rien à écrire.
   export RCLONE_CONFIG=/dev/null
