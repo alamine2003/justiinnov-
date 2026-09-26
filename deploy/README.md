@@ -1029,7 +1029,21 @@ pièces n'y sont jamais supprimés, les quotidiens le sont par le bucket :
 | `SAUVEGARDE_DISTANT_ROTATION` | `0` (défaut) : le serveur n'efface rien là-bas, le bucket applique la rétention ; `1` : rotation des quotidiens faite d'ici |
 
 **Cloudflare R2, le choix retenu** (décision 95 de `docs/model-de-donnees.md`,
-qui remplace Backblaze B2), pas à pas, dans le tableau de bord Cloudflare :
+qui remplace Backblaze B2). Les étapes 1 à 6 se font dans le tableau de
+bord Cloudflare et sur le poste ; la 7ᵉ — envoyer `deploy/`, le rendre à
+root, remplir le `.env`, lancer une première copie et vérifier — tient en
+**une commande**, depuis le dépôt, sur le poste :
+
+```bash
+deploy/configurer_copie_distante.sh root@<hôte>
+```
+
+Elle demande l'endpoint, le bucket, la clé d'accès, puis le secret et la
+clé de chiffrement **sans les afficher**, garde une copie datée du `.env`,
+et refuse d'écrire quoi que ce soit sur une saisie douteuse ou un serveur
+dont le `sauvegarder.sh` ignore R2 (`deploy/tests/test_configurer_copie_distante.sh`).
+
+Pas à pas :
 
 1. *R2 Object Storage* : activez R2 si ce n'est pas fait (Cloudflare peut
    demander un moyen de paiement, même sous le seuil gratuit).
