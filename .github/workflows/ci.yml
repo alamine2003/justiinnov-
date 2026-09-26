@@ -496,6 +496,12 @@ jobs:
         # déployer sur le serveur de production (décision 90).
         run: sh deploy/tests/test_justi_livrer.sh
 
+      - name: Tests de configurer_copie_distante.sh
+        # La mise en service de la copie hors machine écrit des secrets dans
+        # le .env de la production : elle ne doit rien casser d'autre, rien
+        # afficher, et ne rien écrire sur une saisie invalide (décision 95).
+        run: sh deploy/tests/test_configurer_copie_distante.sh
+
   pile:
     name: Pile de production — archivage et reprise
     runs-on: ubuntu-latest

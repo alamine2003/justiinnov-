@@ -96,6 +96,9 @@ DOUBLURE
 cat > "$DOUBLURES/rclone" <<'DOUBLURE'
 #!/bin/sh
 echo "$*" >> "${JOURNAL_RCLONE:-/dev/null}"
+if [ "${RCLONE_CONFIG_DISTANT_NO_CHECK_BUCKET:-}" = true ]; then
+  echo "bucket-non-verifie" >> "${JOURNAL_RCLONE:-/dev/null}"
+fi
 case "${1:-}" in
   obscure) printf 'obscurci-%s' "${2:-}" ; exit 0 ;;
   check|cryptcheck) exit "${CODE_RCLONE_CHECK:-0}" ;;
@@ -128,6 +131,7 @@ decor() {
   unset SAUVEGARDE_CLE_PUBLIQUE SAUVEGARDE_DISTANT_ENDPOINT SAUVEGARDE_CHIFFREMENT_CLE 2>/dev/null || true
   unset SAUVEGARDE_DISTANT_BUCKET SAUVEGARDE_DISTANT_CLE SAUVEGARDE_DISTANT_SECRET 2>/dev/null || true
   unset SAUVEGARDE_DISTANT_ROTATION SAUVEGARDE_DISTANT_EN_CLAIR 2>/dev/null || true
+  unset SAUVEGARDE_DISTANT_FOURNISSEUR RCLONE_CONFIG_DISTANT_NO_CHECK_BUCKET 2>/dev/null || true
   export PGDATABASE=justi_innov
 }
 
@@ -260,6 +264,20 @@ verifier "  … vers le coffre chiffré, pas le bucket nu" \
 verifier "  … et pose le marqueur" "$(marqueur distant)" "oui"
 verifier "  … sans rien supprimer là-bas (rotation par le bucket)" \
   "$(compte '^delete' "$JOURNAL_RCLONE")" "0"
+verifier "  … et vérifie le bucket, hors Cloudflare" \
+  "$(compte 'bucket-non-verifie' "$JOURNAL_RCLONE")" "0"
+
+decor distant-cloudflare
+export SAUVEGARDE_DISTANT_ENDPOINT="https://compte.eu.r2.cloudflarestorage.com"
+export SAUVEGARDE_DISTANT_BUCKET="seau" SAUVEGARDE_DISTANT_CLE="cle"
+export SAUVEGARDE_DISTANT_SECRET="secret" SAUVEGARDE_CHIFFREMENT_CLE="phrase-longue"
+export SAUVEGARDE_DISTANT_FOURNISSEUR=Cloudflare
+mkdir -p "$DESTINATION/base" && printf 'PGDMP' > "$DESTINATION/base/x.dump"
+lancer distant
+verifier "Cloudflare R2 : la copie part" "$CODE" "0"
+verifier_au_moins_une_fois "  … sans vérifier le bucket, qu'une clé « Object Read & Write » ne peut pas voir" \
+  "$(compte 'bucket-non-verifie' "$JOURNAL_RCLONE")"
+verifier "  … et pose le marqueur" "$(marqueur distant)" "oui"
 
 decor distant-copie-interrompue
 export SAUVEGARDE_DISTANT_ENDPOINT="https://exemple.invalid"
