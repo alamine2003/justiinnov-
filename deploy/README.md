@@ -1024,12 +1024,56 @@ pièces n'y sont jamais supprimés, les quotidiens le sont par le bucket :
 | `SAUVEGARDE_DISTANT_BUCKET` | bucket, ou `bucket/sous-dossier` ; créé par rclone s'il n'existe pas et que le compte en a le droit |
 | `SAUVEGARDE_DISTANT_CLE`, `SAUVEGARDE_DISTANT_SECRET` | le compte ; le secret passe par un secret Compose, pas par l'environnement (« Secrets et variables ») |
 | `SAUVEGARDE_DISTANT_REGION` | si le fournisseur l'exige (`eu-west-3`, `fr-par`) ; vide pour MinIO ou OVH |
-| `SAUVEGARDE_DISTANT_FOURNISSEUR` | nom du fournisseur au sens de rclone (`Other` par défaut ; `AWS`, `Scaleway`, `Wasabi`…) |
+| `SAUVEGARDE_DISTANT_FOURNISSEUR` | nom du fournisseur au sens de rclone (`Other` par défaut ; `Cloudflare` pour R2, **obligatoire** avec lui ; `AWS`, `Scaleway`, `Wasabi`…) |
 | `SAUVEGARDE_CHIFFREMENT_CLE`, `SAUVEGARDE_CHIFFREMENT_SEL` | la clé du coffre (secret Compose, **obligatoire**, gardée aussi hors du serveur) et son sel facultatif |
 | `SAUVEGARDE_DISTANT_ROTATION` | `0` (défaut) : le serveur n'efface rien là-bas, le bucket applique la rétention ; `1` : rotation des quotidiens faite d'ici |
 
-**Backblaze B2, le choix retenu** (10 Go gratuits, sans carte bancaire ;
-décision 51 de `docs/model-de-donnees.md`), pas à pas, dans la console B2 :
+**Cloudflare R2, le choix retenu** (décision 95 de `docs/model-de-donnees.md`,
+qui remplace Backblaze B2), pas à pas, dans le tableau de bord Cloudflare :
+
+1. *R2 Object Storage* : activez R2 si ce n'est pas fait (Cloudflare peut
+   demander un moyen de paiement, même sous le seuil gratuit).
+2. *Create bucket* : `sauvegardes-justi-gh-prod`, **un bucket par
+   environnement, sans sous-dossier** dans `SAUVEGARDE_DISTANT_BUCKET` ;
+   emplacement dans l'Union européenne si la console le propose
+   (*Jurisdiction › European Union*). Dans *Settings* du bucket, notez
+   l'**endpoint S3** affiché : `https://<id-du-compte>.r2.cloudflarestorage.com`,
+   ou `https://<id-du-compte>.eu.r2.cloudflarestorage.com` pour un bucket
+   européen. C'est `SAUVEGARDE_DISTANT_ENDPOINT`.
+3. *Settings › Object lifecycle rules* : trois règles, **suppression après
+   30 jours** (`SAUVEGARDE_RETENTION_JOURS`), sur les préfixes
+   `quotidien/`, `wal/` et `physique/` — pour les mêmes raisons que
+   ci-dessous pour B2 : sans règle, les segments de 16 Mo s'accumulent sans
+   fin. Aucune règle sur `mensuel/` ni `pieces/`, jamais supprimés.
+4. **Ce que R2 ne fait pas comme B2.** Ses droits d'objet ne séparent pas
+   écrire et supprimer : la clé du serveur (« Object Read & Write ») **peut
+   effacer** le distant, et R2 ne garde pas de versions antérieures d'un
+   objet écrasé. La parade est le **verrou de bucket** (*Settings › Bucket
+   lock rules*), qui interdit suppression et écrasement pendant une durée,
+   quelle que soit la clé : une règle sur `mensuel/` et une sur `pieces/`
+   sans limite de durée (*indefinitely*), une sur chacun des trois autres
+   préfixes à 30 jours. Le verrou prime sur le cycle de vie, qui supprime
+   à son expiration. Sans verrou, un serveur compromis peut emporter ses
+   sauvegardes : posez-le avant la première copie.
+5. *Manage R2 API Tokens › Create API token* : permission **Object Read &
+   Write**, limitée **à ce seul bucket**, sans expiration. *Access Key ID*
+   → `SAUVEGARDE_DISTANT_CLE`, *Secret Access Key* →
+   `SAUVEGARDE_DISTANT_SECRET` (affichée une seule fois).
+6. La clé de chiffrement se tire sur le poste de l'exploitant et part
+   d'abord au coffre : `openssl rand -base64 48` (étape 4 de B2
+   ci-dessous, même raison).
+7. Dans `.env` : `SAUVEGARDE_DISTANT_ENDPOINT=<endpoint S3>`,
+   `SAUVEGARDE_DISTANT_BUCKET=sauvegardes-justi-gh-prod`,
+   `SAUVEGARDE_DISTANT_REGION=auto`,
+   **`SAUVEGARDE_DISTANT_FOURNISSEUR=Cloudflare`** — c'est lui qui dit au
+   script de ne pas vérifier le bucket, ce qu'une clé « Object Read &
+   Write » ne peut pas faire (sans lui, rien ne part) —, puis
+   `SAUVEGARDE_DISTANT_CLE`, `SAUVEGARDE_DISTANT_SECRET` et
+   `SAUVEGARDE_CHIFFREMENT_CLE`.
+
+**Backblaze B2, l'alternative** (décision 51, qu'elle remplaçait jusqu'au
+26 septembre 2026 ; 10 Go gratuits, sans carte bancaire, clé sans droit de
+suppression et versions conservées), pas à pas, dans la console B2 :
 
 1. *Buckets › Create a Bucket* : nom unique (`sauvegardes-justi-innov`),
    **Private**, *Default Encryption* au choix (le contenu arrive déjà
