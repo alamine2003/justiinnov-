@@ -1,6 +1,10 @@
 # Mises à jour de dépendances proposées en PR, donc vérifiées par la CI
 # avant d'être fusionnées. Groupées par écosystème pour ne pas noyer la
-# liste des PR sous des bosses de version.
+# liste des PR sous des bosses de version. Un groupe ne rassemble que les
+# versions mineures et correctives : une version majeure arrive seule, pour
+# qu'elle ne fasse pas échouer — et donc bloquer — tout le reste du lot
+# (lot du 25 septembre 2026 : Django 6, TypeScript 7 et Vitest 5 mêlés à des
+# correctifs, CI rouge, rien n'a pu passer).
 version: 2
 updates:
   - package-ecosystem: pip
@@ -13,6 +17,13 @@ updates:
     groups:
       python:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    # Django 5.2 est une version à support long (correctifs de sécurité
+    # jusqu'en avril 2028). Passer à Django 6 est un chantier décidé, pas une
+    # bosse de version : on ne le propose pas.
+    ignore:
+      - dependency-name: django
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "Met à jour"
 
@@ -26,6 +37,7 @@ updates:
     groups:
       javascript:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
     commit-message:
       prefix: "Met à jour"
 
@@ -71,6 +83,15 @@ updates:
       - /
     schedule:
       interval: monthly
+    # Changer de version majeure de Postgres ne se fait pas en changeant
+    # l'image : les fichiers de la base ne se relisent pas d'une majeure à
+    # l'autre (sauvegarde puis restauration, ou pg_upgrade), et la réplique,
+    # l'archivage et la reprise à un instant donné suivent. Dependabot propose
+    # donc les versions correctives de la 16, qui se posent par un simple
+    # redémarrage.
+    ignore:
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "Met à jour"
 

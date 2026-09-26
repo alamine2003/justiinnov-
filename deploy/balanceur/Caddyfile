@@ -59,7 +59,7 @@
 # Vérification, sans rien déployer :
 #   docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
 #       -e MACHINE_PRIMAIRE=10.0.0.1 -e MACHINE_SECONDE=10.0.0.2 \
-#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11-alpine \
 #       caddy validate --config /etc/caddy/Caddyfile
 {
 	# Entre guillemets : vide, un placeholder nu donnerait « email » sans

@@ -171,7 +171,7 @@ services:
   # (pour ses marqueurs), `base/` et `.distant/`. Les pièces restent en root,
   # personne d'autre n'y écrit.
   sauvegardes-init:
-    image: postgres:16.4-alpine
+    image: postgres:16.15-alpine
     user: root
     entrypoint: ["sh", "-ec"]
     command:
@@ -186,7 +186,7 @@ services:
     logging: *journal
 
   db:
-    image: postgres:16.4-alpine
+    image: postgres:16.15-alpine
     # L'image officielle arrête Postgres en mode « fast » : les connexions
     # sont rompues, puis un point de reprise est écrit. C'est rapide sur une
     # base de cette taille, mais un SIGKILL au milieu obligerait au
@@ -317,7 +317,7 @@ services:
     # images officielles d'avant — et la publie sur ghcr.io, à côté du
     # backend. L'étiquette ne bouge pas à chaque livraison : le conteneur
     # n'est recréé que lorsqu'elle change.
-    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-5c7b4d5b5aab
+    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-a6d52fd8badd
     command: server /data
     mem_limit: 512m
     environment:
@@ -445,7 +445,7 @@ services:
   # une seule raison : dire dans leur journal, où l'exploitation regarde,
   # qu'aucune copie hors machine n'est configurée.
   sauvegarde:
-    image: postgres:16.4-alpine
+    image: postgres:16.15-alpine
     mem_limit: 128m
     # Sous `postgres`, comme l'archivage : les dumps, les sauvegardes
     # physiques et la purge des segments se font alors dans des répertoires
@@ -482,7 +482,7 @@ services:
   # démarre à l'intérieur, sous `postgres`, avec ce qu'un Postgres a besoin
   # de mémoire ; 128 Mo ne lui suffiraient pas.
   reprise:
-    image: postgres:16.4-alpine
+    image: postgres:16.15-alpine
     profiles: ["reprise"]
     user: postgres
     mem_limit: 512m
@@ -503,7 +503,7 @@ services:
 
   sauvegarde-pieces:
     # La même image que `minio`, qui porte aussi `mc` (décision 94).
-    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-5c7b4d5b5aab
+    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-a6d52fd8badd
     mem_limit: 128m
     entrypoint: ["/sauvegarder.sh", "pieces"]
     environment:
@@ -617,7 +617,7 @@ services:
     logging: *journal
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.17.1
+    image: prometheuscommunity/postgres-exporter:v0.20.1
     profiles: ["supervision"]
     mem_limit: 64m
     environment:
