@@ -1040,7 +1040,9 @@ deploy/configurer_copie_distante.sh root@<hôte>
 
 Elle demande l'endpoint, le bucket, la clé d'accès, puis le secret et la
 clé de chiffrement **sans les afficher**, garde une copie datée du `.env`,
-et refuse d'écrire quoi que ce soit sur une saisie douteuse ou un serveur
+et refuse d'écrire quoi que ce soit sur une saisie douteuse — une Access
+Key ID qui n'a pas 32 caractères hexadécimaux, un secret qui n'en a pas
+64 — ou sur un serveur
 dont le `sauvegarder.sh` ignore R2 (`deploy/tests/test_configurer_copie_distante.sh`).
 
 Pas à pas :

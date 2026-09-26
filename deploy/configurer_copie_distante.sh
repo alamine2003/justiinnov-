@@ -79,6 +79,14 @@ for valeur in "$ENDPOINT" "$BUCKET" "$CLE" "$SECRET" "$CHIFFREMENT"; do
   case "$valeur" in *"'"*|*"
 "*) refuser "une valeur contient une apostrophe ou un retour à la ligne" ;; esac
 done
+# Une clé R2 a une forme fixe : 32 caractères hexadécimaux pour l'Access Key
+# ID, 64 pour le secret. Deux saisies décalées (le nom du bucket collé
+# devant la clé, puis le secret collé à la place de la clé) n'ont été vues
+# qu'au « 400 Bad Request » de Cloudflare, après écriture du .env
+# (26 septembre 2026).
+hexadecimal() { case "$1" in *[!0-9a-f]*) return 1 ;; esac; [ "${#1}" -eq "$2" ]; }
+hexadecimal "$CLE" 32 || refuser "l'Access Key ID doit faire 32 caractères hexadécimaux (reçu : ${#CLE}) — le secret ou le nom du bucket s'y est-il glissé ?"
+hexadecimal "$SECRET" 64 || refuser "la Secret Access Key doit faire 64 caractères hexadécimaux (reçu : ${#SECRET})"
 [ "${#CHIFFREMENT}" -ge 32 ] || refuser "la clé de chiffrement fait moins de 32 caractères : tirez-la avec « openssl rand -base64 48 »"
 
 echo ""
