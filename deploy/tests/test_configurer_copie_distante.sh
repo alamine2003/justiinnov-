@@ -87,10 +87,13 @@ lancer() {
 
 valeur() { grep -E "^$1=" "$REPERTOIRE/.env" | tail -1 | cut -d= -f2-; }
 
+CLE_ACCES="0123456789abcdef0123456789abcdef"
+SECRET_ACCES="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+
 SAISIE_VALIDE="https://compte.eu.r2.cloudflarestorage.com
 
-cleid123
-acces/avec+signes=
+$CLE_ACCES
+$SECRET_ACCES
 $CLE_CHIFFREMENT"
 
 echo "— Saisie valide"
@@ -99,8 +102,8 @@ lancer "$SAISIE_VALIDE"
 verifier "le script réussit" "$CODE" "0"
 verifier "  … endpoint écrit" "$(valeur SAUVEGARDE_DISTANT_ENDPOINT)" "https://compte.eu.r2.cloudflarestorage.com"
 verifier "  … bucket par défaut" "$(valeur SAUVEGARDE_DISTANT_BUCKET)" "sauvegardes-justi-gh-prod"
-verifier "  … clé d'accès" "$(valeur SAUVEGARDE_DISTANT_CLE)" "cleid123"
-verifier "  … secret intact, signes compris" "$(valeur SAUVEGARDE_DISTANT_SECRET)" "acces/avec+signes="
+verifier "  … clé d'accès" "$(valeur SAUVEGARDE_DISTANT_CLE)" "$CLE_ACCES"
+verifier "  … secret intact" "$(valeur SAUVEGARDE_DISTANT_SECRET)" "$SECRET_ACCES"
 verifier "  … région auto" "$(valeur SAUVEGARDE_DISTANT_REGION)" "auto"
 verifier "  … fournisseur Cloudflare, ajouté" "$(valeur SAUVEGARDE_DISTANT_FOURNISSEUR)" "Cloudflare"
 verifier "  … clé de chiffrement, ajoutée" "$(valeur SAUVEGARDE_CHIFFREMENT_CLE)" "$CLE_CHIFFREMENT"
@@ -111,7 +114,7 @@ verifier "  … chaque clé une seule fois" \
 verifier "  … l'ancien .env est gardé à côté" \
   "$(ls "$REPERTOIRE"/.env.avant-distant-* 2>/dev/null | wc -l | tr -d ' ')" "1"
 verifier "  … aucun secret affiché" \
-  "$(printf '%s' "$SORTIE" | grep -c -e 'acces/avec' -e "$CLE_CHIFFREMENT" || true)" "0"
+  "$(printf '%s' "$SORTIE" | grep -c -e "$SECRET_ACCES" -e "$CLE_CHIFFREMENT" || true)" "0"
 verifier "  … deploy/ envoyé puis rendu à root" \
   "$(grep -c -e "^rsync" -e "^chown -R root:root" "$BAC/journal")" "2"
 verifier "  … service recréé, copie lancée, vérification lancée" \
@@ -128,8 +131,8 @@ echo "— Saisies refusées : rien n'est écrit"
 decor avec-r2
 lancer "https://s3.eu-central-003.backblazeb2.com
 
-cleid123
-secret
+$CLE_ACCES
+$SECRET_ACCES
 $CLE_CHIFFREMENT"
 verifier "un endpoint qui n'est pas R2 est refusé" "$CODE" "1"
 verifier "  … .env intact" "$(cat "$REPERTOIRE/.env")" "$ENV_INITIAL"
@@ -137,8 +140,8 @@ verifier "  … .env intact" "$(cat "$REPERTOIRE/.env")" "$ENV_INITIAL"
 decor avec-r2
 lancer "https://compte.r2.cloudflarestorage.com
 
-cleid123
-secret
+$CLE_ACCES
+$SECRET_ACCES
 courte"
 verifier "une clé de chiffrement trop courte est refusée" "$CODE" "1"
 verifier "  … .env intact" "$(cat "$REPERTOIRE/.env")" "$ENV_INITIAL"
@@ -146,7 +149,7 @@ verifier "  … .env intact" "$(cat "$REPERTOIRE/.env")" "$ENV_INITIAL"
 decor avec-r2
 lancer "https://compte.r2.cloudflarestorage.com
 
-cleid123
+$CLE_ACCES
 
 $CLE_CHIFFREMENT"
 verifier "un secret vide est refusé" "$CODE" "1"
@@ -155,10 +158,30 @@ decor avec-r2
 lancer "https://compte.r2.cloudflarestorage.com
 
 cle'id
-secret
+$SECRET_ACCES
 $CLE_CHIFFREMENT"
 verifier "une apostrophe est refusée" "$CODE" "1"
 verifier "  … .env intact" "$(cat "$REPERTOIRE/.env")" "$ENV_INITIAL"
+
+decor avec-r2
+lancer "https://compte.r2.cloudflarestorage.com
+
+sauvegardes-justi-gh-prod$CLE_ACCES
+$SECRET_ACCES
+$CLE_CHIFFREMENT"
+verifier "le nom du bucket collé devant la clé est refusé" "$CODE" "1"
+verifier "  … .env intact" "$(cat "$REPERTOIRE/.env")" "$ENV_INITIAL"
+
+decor avec-r2
+lancer "https://compte.r2.cloudflarestorage.com
+
+$SECRET_ACCES
+$CLE_ACCES
+$CLE_CHIFFREMENT"
+verifier "le secret saisi à la place de la clé est refusé" "$CODE" "1"
+verifier "  … .env intact" "$(cat "$REPERTOIRE/.env")" "$ENV_INITIAL"
+verifier "  … le secret n'est pas répété à l'écran" \
+  "$(printf '%s' "$SORTIE" | grep -c -e "$SECRET_ACCES" || true)" "0"
 
 echo "— Serveur pas à jour"
 decor sans-r2

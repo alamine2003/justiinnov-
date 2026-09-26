@@ -1040,7 +1040,9 @@ deploy/configurer_copie_distante.sh root@<hôte>
 
 Elle demande l'endpoint, le bucket, la clé d'accès, puis le secret et la
 clé de chiffrement **sans les afficher**, garde une copie datée du `.env`,
-et refuse d'écrire quoi que ce soit sur une saisie douteuse ou un serveur
+et refuse d'écrire quoi que ce soit sur une saisie douteuse — une Access
+Key ID qui n'a pas 32 caractères hexadécimaux, un secret qui n'en a pas
+64 — ou sur un serveur
 dont le `sauvegarder.sh` ignore R2 (`deploy/tests/test_configurer_copie_distante.sh`).
 
 Pas à pas :
@@ -1084,6 +1086,20 @@ Pas à pas :
    Write » ne peut pas faire (sans lui, rien ne part) —, puis
    `SAUVEGARDE_DISTANT_CLE`, `SAUVEGARDE_DISTANT_SECRET` et
    `SAUVEGARDE_CHIFFREMENT_CLE`.
+
+**En service en production depuis le 26 septembre 2026** (bucket
+`sauvegardes-justi-gh-prod`, cinq verrous et trois règles de cycle de vie
+comme ci-dessus). Premier passage : 20 dumps quotidiens, 1 mensuel,
+1 sauvegarde physique, 14 segments et 7 pièces copiés et vérifiés,
+`verifier_sauvegardes` à jour. Ce passage a montré une ligne qui
+**n'est pas une panne** :
+`ERROR : <segment>: Failed to copy: … 409 … ObjectLockedByBucketPolicy`
+suivie de `Attempt 2/3 succeeded`. rclone a réécrit un objet déjà reçu
+— l'explication probable est un envoi arrivé dont la réponse s'est
+perdue —, le verrou a refusé l'écrasement, et la tentative suivante a
+constaté l'objet identique. C'est le verrou qui fait son travail. Ce qui
+compte est la ligne `✔ copie distante` de chaque famille ; sans elle, le
+marqueur n'est pas posé et `verifier_sauvegardes` alerte.
 
 **Backblaze B2, l'alternative** (décision 51, qu'elle remplaçait jusqu'au
 26 septembre 2026 ; 10 Go gratuits, sans carte bancaire, clé sans droit de
