@@ -636,7 +636,7 @@ services:
     logging: *journal
 
   node-exporter:
-    image: prom/node-exporter:v1.9.1
+    image: prom/node-exporter:v1.12.1
     profiles: ["supervision"]
     mem_limit: 64m
     # Lit /proc, /sys et les systèmes de fichiers de l'hôte, en lecture
