@@ -86,6 +86,7 @@ export function ProofPreview({
   const current = source?.proofId === proof.id ? source : null
   const loading = current === null
   const isImage = current?.type.startsWith("image/")
+  const isPdf = current?.type === "application/pdf"
 
   const handleDownload = async () => {
     setDownloading(true)
@@ -132,11 +133,17 @@ export function ProofPreview({
             ) : (
               // Une pièce est un document reçu d'un tiers : le cadre qui
               // l'affiche n'a ni script, ni formulaire, ni origine — `sandbox`
-              // vide. Le lecteur PDF du navigateur n'en a pas besoin.
+              // vide —, sauf pour un PDF. Chrome refuse d'ouvrir son lecteur
+              // PDF dans un cadre en bac à sable et n'affiche qu'une icône de
+              // document triste (production, 27 septembre 2026). Un blob
+              // `application/pdf` — type fixé par le serveur, qui vérifie les
+              // premiers octets (décision 45) — va toujours au lecteur PDF,
+              // jamais à l'analyseur HTML : il ne peut pas parler au nom de
+              // l'application.
               <iframe
                 src={current.url}
                 title={proof.original_name}
-                sandbox=""
+                sandbox={isPdf ? undefined : ""}
                 className="h-[70vh] w-full border-0"
               />
             ))}
