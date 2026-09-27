@@ -535,7 +535,7 @@ services:
   # épinglée, comme les autres. Le secret du distant passe par un secret
   # Compose, pas par l'environnement.
   sauvegarde-distante:
-    image: rclone/rclone:1.72.0
+    image: rclone/rclone:1.75.1
     # rclone : ~50 Mo au repos, plus ~32 Mo de tampons d'envoi
     # (sauvegarder.sh borne transferts, morceaux et concurrence).
     mem_limit: 128m
