@@ -2,10 +2,10 @@
 # vulnérabilité connue. Django 5.2 est une version LTS (corrigée jusqu'en
 # avril 2028) ; DRF 3.17 corrige les avis portés sur 3.15.
 Django==5.2.17
-djangorestframework==3.17.2
+djangorestframework==3.18.1
 django-filter==25.2
 django-cors-headers==4.9.0
-psycopg[binary]==3.2.13
+psycopg[binary]==3.3.6
 gunicorn==23.0.0
 django-storages[s3]==1.14.6
 openpyxl==3.1.5
@@ -15,12 +15,12 @@ apscheduler==3.11.3
 defusedxml==0.7.1
 
 # Double authentification (TOTP) et QR d'enrôlement
-pyotp==2.9.0
-qrcode[pil]==8.0
+pyotp==2.10.0
+qrcode[pil]==8.2
 # Export Word
-python-docx==1.1.2
+python-docx==1.2.0
 # Métriques pour Prometheus / Grafana
-django-prometheus==2.3.1
+django-prometheus==2.5.0
 # Contrat d'API : schéma OpenAPI généré depuis les vues et sérialiseurs
 # (``manage.py spectacular``), dont le frontend tire ses types.
 drf-spectacular==0.30.0
@@ -29,7 +29,7 @@ drf-spectacular==0.30.0
 tblib==3.2.2
 # Surveillance des erreurs (config/surveillance.py). Sans SENTRY_DSN, la
 # bibliothèque est présente mais rien ne s'installe et rien ne sort.
-sentry-sdk==2.69.2
+sentry-sdk==2.70.0
 # Cache principal (config/settings.py, core/cache.py). Le client seul :
 # le serveur est un conteneur de la pile. Sans REDIS_URL, rien ne s'en sert
 # et la base de données reprend le rôle.
