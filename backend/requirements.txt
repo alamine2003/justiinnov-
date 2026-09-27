@@ -9,7 +9,7 @@ psycopg[binary]==3.2.13
 gunicorn==23.0.0
 django-storages[s3]==1.14.6
 openpyxl==3.1.5
-reportlab==4.4.10
+reportlab==5.0.1
 apscheduler==3.11.3
 # Analyse XML durcie (openpyxl et reportlab s'en servent si elle est présente).
 defusedxml==0.7.1
