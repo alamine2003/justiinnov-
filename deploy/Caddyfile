@@ -10,7 +10,7 @@
 # Vérification, sans lancer la pile, avec et sans supervision :
 #   docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
 #       -e SUPERVISION=1 \
-#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11-alpine \
 #       caddy validate --config /etc/caddy/Caddyfile
 {
 	# Entre guillemets, et ce n'est pas une question de style. Un placeholder

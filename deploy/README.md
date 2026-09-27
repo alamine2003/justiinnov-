@@ -1851,7 +1851,7 @@ de santé sur lequel tout repose, lui, est testé
 ```bash
 docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
     -e MACHINE_PRIMAIRE=10.0.0.1 -e MACHINE_SECONDE=10.0.0.2 \
-    -v "$PWD/balanceur/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+    -v "$PWD/balanceur/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11-alpine \
     caddy validate --config /etc/caddy/Caddyfile
 ```
 
@@ -2093,7 +2093,7 @@ dépôt et reste en lecture seule pour tous.
 | Service | Image | Rôle |
 |---|---|---|
 | `prometheus` | `prom/prometheus:v2.53.5` | collecte toutes les 15 s, garde 90 jours ou 2 Go de mesures (`--storage.tsdb.retention.*`) dans le volume `prometheus_data` |
-| `postgres-exporter` | `prometheuscommunity/postgres-exporter:v0.17.1` | connexions, taille, transactions, verrous de la base, avec le rôle applicatif |
+| `postgres-exporter` | `prometheuscommunity/postgres-exporter:v0.20.1` | connexions, taille, transactions, verrous de la base, avec le rôle applicatif |
 | `node-exporter` | `prom/node-exporter:v1.9.1` | processeur, mémoire, disque du serveur (lit `/proc`, `/sys` et `/` de l'hôte, en lecture seule) |
 | `grafana` | `grafana/grafana:12.1.1` | affichage ; source de données et tableau de bord provisionnés depuis `grafana/`, volume `grafana_data` pour le reste |
 
@@ -2144,7 +2144,7 @@ docker run --rm -v "$PWD/prometheus/prometheus.yml:/p.yml:ro" \
     --entrypoint promtool prom/prometheus:v2.53.5 check config /p.yml
 docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
     -e SUPERVISION=1 \
-    -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8-alpine \
+    -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11-alpine \
     caddy validate --config /etc/caddy/Caddyfile                # et avec SUPERVISION=0
 docker compose -f docker-compose.prod.yml config >/dev/null   # avec le .env
 ```

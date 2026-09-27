@@ -29,7 +29,7 @@
 # jamais une étiquette existante (`cd.yml`).
 
 # Go 1.25 : la chaîne 1.24 n'est plus maintenue ; MinIO exige 1.24 ou plus.
-FROM golang:1.25.14-alpine3.24 AS construction
+FROM golang:1.27.1-alpine3.24 AS construction
 
 ARG MINIO_MODULE=github.com/minio/minio@v0.0.0-20250422221226-0d7408fc9969
 ARG MINIO_RELEASE=RELEASE.2025-04-22T22-12-26Z
