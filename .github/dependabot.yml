@@ -38,6 +38,18 @@ updates:
       javascript:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # TypeScript 7 (compilateur réécrit en Go) n'expose plus l'API
+      # JavaScript `ts.factory` dont openapi-typescript tire les types
+      # d'API (`npm run types:api`) : la CI casse dès l'installation (#73,
+      # 27 septembre 2026). À rouvrir quand openapi-typescript le suivra.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # Les types de Node suivent la version qui tourne, Node 24
+      # (frontend/Dockerfile, CI) : des types de Node 26 annonceraient des
+      # API absentes. Ils changent de majeure avec Node, pas avant.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "Met à jour"
 
