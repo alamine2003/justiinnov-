@@ -483,10 +483,12 @@ entier sur le serveur : pile, Caddyfile, scripts de sauvegarde et de
 restauration, configuration Prometheus et provisioning Grafana. **La
 version affichée dans l'interface** (pied de page et en-tête) est figée à
 la construction de l'image frontend (`APP_VERSION`, `frontend/Dockerfile`,
-`vite.config.ts`) : sur un tag `v1.0.6`, elle vaut `1.0.6` ; sur une
-livraison de `main`, celle de `frontend/package.json` suivie du SHA court.
-Un nouveau tag suffit donc à la changer ; `package.json` n'est mis à jour
-qu'à la version suivante, pour que le développement local l'affiche. La
+`vite.config.ts`) : celle de `frontend/package.json` suivie du SHA court
+(`1.3.1+55a5dcbbaa1b`), sur `main` comme sur un tag — les deux livraisons
+d'un même commit publient la même image. **Avant de taguer `vX.Y.Z`,
+relevez `version` à `X.Y.Z` dans `frontend/package.json`** (`npm version
+X.Y.Z --no-git-tag-version`, qui met aussi `package-lock.json` à jour) et
+fusionnez ; la livraison refuse un tag qui ne correspond pas au paquet. La
 préparation du serveur, les secrets attendus, la coupure pendant les
 migrations, le retour arrière, le rôle Postgres à moindre privilège, la
 supervision et les sauvegardes sont décrits dans

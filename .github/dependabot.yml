@@ -35,6 +35,11 @@ updates:
       time: "07:00"
       timezone: Africa/Dakar
     groups:
+      # vitest et @vitest/* s'exigent l'un l'autre à la version près : proposés
+      # séparément (#86, #87, 28 septembre 2026), chacun cassait `npm ci`.
+      # Le premier groupe qui correspond l'emporte : celui-ci passe avant.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
       javascript:
         patterns: ["*"]
         update-types: ["minor", "patch"]
