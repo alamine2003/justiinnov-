@@ -50,6 +50,12 @@ git tag -a v1.0.0 -m "Première mise en service"
 git push origin v1.0.0
 ```
 
+- Si `deploy/` a changé depuis la livraison précédente (versions de
+  Postgres, Redis, MinIO, rclone dans `docker-compose.prod.yml`, scripts
+  de sauvegarde), le copier sur le serveur **avant d'approuver** : la
+  livraison ne touche pas à ces fichiers (`deploy/README.md`, « Ce que la
+  livraison ne met pas à jour »).
+
 Secrets et variables par environnement : `DEPLOY_HOST`, `DEPLOY_USER`,
 `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `APP_DOMAIN`, `DEPLOY_PATH` ; côté
 serveur, le `.env` d'après `deploy/.env.example`. Détail dans

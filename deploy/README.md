@@ -187,6 +187,50 @@ même étiquette recharge la configuration du répertoire d'exploitation
 (Caddyfile, Prometheus, tableaux de bord Grafana), puisque ces fichiers
 sont montés depuis ce dossier et non copiés dans les images.
 
+### Ce que la livraison ne met pas à jour : Postgres, Redis, MinIO, rclone
+
+Une livraison change l'étiquette des images de l'application (`backend`,
+`frontend` et ce qui tourne sur elles) ; elle ne touche pas aux **fichiers
+du répertoire d'exploitation**. Or c'est `docker-compose.prod.yml`, sur le
+serveur, qui fixe les versions de Postgres, Redis, MinIO, rclone, Caddy et
+de la supervision : une PR qui les relève, fusionnée puis livrée, ne change
+rien en production tant que ce fichier n'y est pas copié — à la main, en
+root, la clé de livraison n'en a pas le droit (« Réduire les pouvoirs de
+la livraison »). La v1.3.1 l'a montré le 28 septembre 2026 : livrée avec
+succès, elle tournait encore sur Postgres 16.4, Redis 8.0 et rclone 1.72.
+
+Le plus simple : **envoyer les fichiers avant d'approuver la livraison de
+production**. `deploy.sh` tire alors toute la pile et recrée ce qui a
+changé, base comprise. Depuis le poste, sur le dépôt à l'étiquette livrée :
+
+```bash
+git log -1 --oneline                  # le commit de l'étiquette
+rsync -a --exclude .env --exclude .deployed deploy/ root@<hôte>:/home/deploy/justi-innov/
+ssh root@<hôte> 'chown -R root:root /home/deploy/justi-innov && chmod 755 /home/deploy/justi-innov/*.sh && chmod 600 /home/deploy/justi-innov/.env && install -m 0755 /home/deploy/justi-innov/justi-livrer /usr/local/bin/justi-livrer'
+```
+
+La seconde ligne n'est pas facultative (« Passer à l'image MinIO… », plus
+bas). Si la livraison est déjà passée, le même envoi, puis sur le serveur :
+
+```bash
+cd /home/deploy/justi-innov
+C="docker compose -f docker-compose.prod.yml"
+$C run --rm --no-deps -T sauvegarde --une-fois    # un dump juste avant, sur la base encore en place
+$C pull --quiet && $C up -d --remove-orphans --wait --wait-timeout 240
+$C exec -T db postgres --version                   # la version attendue
+$C run --rm -T sauvegarde-distante --une-fois      # chaque famille : « ✔ copie distante »
+$C exec -T scheduler python manage.py verifier_sauvegardes
+```
+
+`--no-deps` compte : sans lui, `run` démarre d'abord les services dont la
+sauvegarde dépend — il recrée la base à la nouvelle version, *puis* fait
+le dump, qui n'est plus celui d'avant (28 septembre 2026 ; la sauvegarde
+de la nuit et l'archivage continu couvraient l'état d'avant). Une version
+**corrective** de Postgres (16.x) se pose par ce simple redémarrage — les
+notes de version disent si une réindexation est à faire (décision 96) ;
+une version **majeure** ne se pose jamais ainsi : les fichiers de la base
+ne se relisent pas d'une majeure à l'autre.
+
 ### Quand une livraison échoue
 
 Personne ne surveille l'onglet Actions : une livraison cassée après la
