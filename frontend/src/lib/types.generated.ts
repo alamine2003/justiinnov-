@@ -2242,9 +2242,10 @@ export interface components {
          *     * `exchange_rate` - Taux de change
          *     * `workflow_configuration` - Configuration du workflow
          *     * `user` - Compte utilisateur
+         *     * `beneficiary` - Bénéficiaire
          * @enum {string}
          */
-        ChangeLogModelEnum: "country" | "manager" | "team" | "cost_center" | "project" | "expense_title" | "marketing_category" | "budget" | "reallocation" | "exchange_rate" | "workflow_configuration" | "user"
+        ChangeLogModelEnum: "country" | "manager" | "team" | "cost_center" | "project" | "expense_title" | "marketing_category" | "budget" | "reallocation" | "exchange_rate" | "workflow_configuration" | "user" | "beneficiary"
         ChangePasswordRequest: {
             current_password: string
             new_password: string
@@ -6659,8 +6660,9 @@ export interface operations {
                  *     * `exchange_rate` - Taux de change
                  *     * `workflow_configuration` - Configuration du workflow
                  *     * `user` - Compte utilisateur
+                 *     * `beneficiary` - Bénéficiaire
                  */
-                model_name?: "budget" | "cost_center" | "country" | "exchange_rate" | "expense_title" | "manager" | "marketing_category" | "project" | "reallocation" | "team" | "user" | "workflow_configuration"
+                model_name?: "beneficiary" | "budget" | "cost_center" | "country" | "exchange_rate" | "expense_title" | "manager" | "marketing_category" | "project" | "reallocation" | "team" | "user" | "workflow_configuration"
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
                 /** @description Un numéro de page de l'ensemble des résultats. */

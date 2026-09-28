@@ -241,6 +241,7 @@ class ChangeLog(models.Model):
         EXCHANGE_RATE = "exchange_rate", _("Taux de change")
         WORKFLOW_CONFIGURATION = "workflow_configuration", _("Configuration du workflow")
         USER = "user", _("Compte utilisateur")
+        BENEFICIARY = "beneficiary", _("Bénéficiaire")
 
     model_name = models.CharField(
         "Entité", max_length=32, choices=Models.choices
