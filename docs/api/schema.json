@@ -4220,6 +4220,7 @@
                             "type": "string",
                             "title": "Entité",
                             "enum": [
+                                "beneficiary",
                                 "budget",
                                 "cost_center",
                                 "country",
@@ -4234,7 +4235,7 @@
                                 "workflow_configuration"
                             ]
                         },
-                        "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur"
+                        "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur\n* `beneficiary` - Bénéficiaire"
                     },
                     {
                         "name": "ordering",
@@ -8591,10 +8592,11 @@
                     "reallocation",
                     "exchange_rate",
                     "workflow_configuration",
-                    "user"
+                    "user",
+                    "beneficiary"
                 ],
                 "type": "string",
-                "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur"
+                "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur\n* `beneficiary` - Bénéficiaire"
             },
             "ChangePasswordRequest": {
                 "type": "object",

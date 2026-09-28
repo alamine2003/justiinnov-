@@ -6,6 +6,7 @@ prospects du voisin, de quoi reconstituer qui il démarche et qui il paie.
 
 from rest_framework import status
 
+from core.models import ChangeLog
 from expenses.models import Beneficiary
 
 from .base import ExpenseTestCase
@@ -209,3 +210,55 @@ class ContactsTests(ExpenseTestCase):
 
         self.assertEqual([b["name"] for b in response.data["results"]], ["Clinique de Kara"])
 
+
+
+class HistoriqueTests(ExpenseTestCase):
+    """Un bénéficiaire modifié laisse une trace, comme le reste du référentiel.
+
+    Les équipes, projets, intitulés et catégories étaient historisés ; les
+    bénéficiaires, non : renommer un fournisseur, changer son téléphone ou
+    le désactiver ne laissait rien dans ``ChangeLog`` (relevé du
+    28 septembre 2026). Or c'est à eux que l'argent est versé.
+    """
+
+    def entrees(self, **filtres):
+        return ChangeLog.objects.filter(model_name=ChangeLog.Models.BENEFICIARY, **filtres)
+
+    def test_creation_modification_et_desactivation_sont_tracees(self):
+        self.login(self.doo)
+
+        cree = self.client.post(
+            "/api/beneficiaries/",
+            {"country": self.togo.pk, "name": "Station Lomé", "phone": "+228 22 21 00 00"},
+            format="json",
+        )
+        url = f"/api/beneficiaries/{cree.data['id']}/"
+        modifie = self.client.patch(url, {"phone": "+228 22 21 99 99"}, format="json")
+        desactive = self.client.patch(url, {"is_active": False}, format="json")
+
+        self.assertEqual(cree.status_code, status.HTTP_201_CREATED, cree.data)
+        self.assertEqual(modifie.status_code, status.HTTP_200_OK, modifie.data)
+        self.assertEqual(desactive.status_code, status.HTTP_200_OK, desactive.data)
+
+        creation = self.entrees(action=ChangeLog.Actions.CREATED).get()
+        self.assertEqual(creation.object_id, cree.data["id"])
+        self.assertEqual(creation.country, self.togo)
+        self.assertEqual(creation.performed_by, self.doo.username)
+
+        telephone, activite = self.entrees(action=ChangeLog.Actions.UPDATED).order_by("pk")
+        self.assertEqual(telephone.diff, {"phone": ["+228 22 21 00 00", "+228 22 21 99 99"]})
+        self.assertEqual(activite.diff, {"is_active": [True, False]})
+        self.assertEqual(activite.performed_by, self.doo.username)
+
+    def test_l_historique_du_pays_les_montre_au_siege(self):
+        self.login(self.doo)
+        self.client.post(
+            "/api/beneficiaries/",
+            {"country": self.togo.pk, "name": "Station Lomé", "email": "station@exemple.org"},
+            format="json",
+        )
+
+        response = self.client.get("/api/history/", {"model_name": "beneficiary"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([e["label"] for e in response.data["results"]], ["Station Lomé"])
