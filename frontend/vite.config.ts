@@ -18,9 +18,8 @@ export default defineConfig(({ mode }) => {
   const proxyTarget = env.VITE_PROXY_TARGET || "http://localhost:8000"
   return {
     // La version affichée dans l'interface est figée à la construction :
-    // celle du tag livré (`APP_VERSION`, posée par la CI et le Dockerfile),
-    // sinon celle de `package.json` — en développement et en préproduction.
-    // Le code ne la recopie nulle part : un nouveau tag suffit.
+    // `APP_VERSION`, posée par la CI et le Dockerfile (celle de
+    // `package.json` suivie du SHA court), sinon celle de `package.json`.
     define: {
       __APP_VERSION__: JSON.stringify(env.APP_VERSION || versionDuPaquet),
     },

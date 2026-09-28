@@ -8,9 +8,8 @@ import i18next from "i18next"
  * l'onglet les ferait diverger dès la première mise à jour.
  *
  * La version n'est pas écrite ici : elle est figée à la construction
- * (`__APP_VERSION__`, `vite.config.ts`) — celle du tag `v*` livré, posée
- * par la CI dans l'image, sinon celle de `package.json`. Poser un tag
- * suffit à la faire changer ; personne n'a à l'écrire deux fois.
+ * (`__APP_VERSION__`, `vite.config.ts`) — celle de `package.json`, suivie
+ * dans l'image livrée du SHA court du commit (`1.3.1+55a5dcbbaa1b`).
  */
 export const BRAND = {
   name: "JUSTI GH",

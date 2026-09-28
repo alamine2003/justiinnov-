@@ -43,7 +43,15 @@ réécriture d'historique se pousse avec `--force-with-lease`, jamais
   seulement si la variable de dépôt `PREPRODUCTION` vaut `1`
   (décision 90).
 - Un tag `vX.Y.Z` livre en production après approbation dans l'environnement
-  GitHub `production` :
+  GitHub `production`. **Relever d'abord la version du paquet** et la
+  fusionner : la livraison refuse un tag qui ne correspond pas à
+  `frontend/package.json` (la version affichée en vient) :
+
+```bash
+cd frontend && npm version 1.0.0 --no-git-tag-version
+```
+
+  Puis, sur le commit fusionné :
 
 ```bash
 git tag -a v1.0.0 -m "Première mise en service"
