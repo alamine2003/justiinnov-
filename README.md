@@ -159,7 +159,10 @@ celui qui a saisi une dépense ne la contrôle pas.
 **Un dossier appartient à un pays.** Son pays est attribué à la création,
 dans le périmètre de son auteur, et ne change plus. Seul ce pays remplit
 ses lignes et ses pièces ; un brouillon ne se modifie et ne se soumet que
-par son auteur. La liste des dossiers se filtre par pays (`?country=`).
+par son auteur. La liste des dossiers se filtre par pays (`?country=`) ;
+`GET /api/dossiers/par-pays/` donne, pour chaque pays du périmètre, le
+nombre de dossiers visibles avec les mêmes filtres sauf le pays — les
+onglets de la liste (décision 99).
 
 Le référentiel d'un pays — équipes, projets, intitulés, catégories,
 bénéficiaires — est tenu par la RH et les super administrateurs pour tous
