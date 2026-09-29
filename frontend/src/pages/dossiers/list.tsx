@@ -29,11 +29,12 @@ import {
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
-import { createDossier, fetchDossiers } from "@/lib/expenses"
+import { createDossier, fetchDossiers, fetchDossiersParPays } from "@/lib/expenses"
 import { fetchCountries, fetchCountry } from "@/lib/countries"
 import { WORKFLOW_STATUSES, workflowLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
@@ -83,12 +84,23 @@ export function DossiersPage() {
   const dossiers = query.data?.results ?? []
   const count = query.data?.count ?? 0
 
-  // Un dossier appartient à un pays (décision 89) : la liste se filtre par
-  // pays dès que le compte en voit plusieurs — le siège, ou un manager
-  // rattaché à plusieurs pays. Le serveur cloisonne de toute façon.
-  const perimetre = me?.countries ?? []
-  const paysChoisissables = me?.has_global_scope ? (countries.data?.results ?? []) : perimetre
-  const choixPaysVisible = Boolean(me?.has_global_scope) || perimetre.length > 1
+  // Un dossier appartient à un pays (décision 89) : dès que le compte en
+  // voit plusieurs — le siège, ou un manager rattaché à plusieurs pays —,
+  // la liste se sépare en onglets, un par pays, chacun avec le nombre de
+  // dossiers qu'il affichera. Les pays et leurs comptes viennent du serveur
+  // (`/dossiers/par-pays/`), avec les mêmes filtres que la liste sauf le
+  // pays ; le serveur cloisonne de toute façon.
+  const choixPaysVisible = Boolean(me?.has_global_scope) || (me?.countries ?? []).length > 1
+  const parPays = useQuery(
+    JSON.stringify({ search: debouncedSearch, statusFilter }),
+    (signal) => {
+      const requestParams: Record<string, unknown> = {}
+      if (debouncedSearch) requestParams.search = debouncedSearch
+      if (statusFilter) requestParams.status = statusFilter
+      return fetchDossiersParPays(requestParams, signal)
+    },
+    { enabled: choixPaysVisible, fallback: t("dossiers.liste.chargement_impossible") },
+  )
 
   // Un changement de filtre ramène à la première page : rester en page 4
   // d'un résultat qui n'en compte plus qu'une afficherait un tableau vide.
@@ -136,6 +148,32 @@ export function DossiersPage() {
       )}
       <TruncatedNotice page={countries.data} noun={t("dossiers.noms_pays")} />
 
+      {choixPaysVisible && (
+        <Tabs
+          value={countryFilter === "" ? TOUS_LES_PAYS : String(countryFilter)}
+          onValueChange={(value) =>
+            changeFilter("country", value === TOUS_LES_PAYS ? "" : String(value))
+          }
+        >
+          <TabsList
+            variant="line"
+            aria-label={t("dossiers.liste.filtrer_pays")}
+            className="w-full flex-wrap justify-start border-b border-border/60 group-data-horizontal/tabs:h-auto"
+          >
+            <TabsTrigger value={TOUS_LES_PAYS} className="flex-none px-3 py-1.5">
+              {t("dossiers.liste.tous_pays")}{" "}
+              <CompteOnglet valeur={parPays.data?.total} />
+            </TabsTrigger>
+            {(parPays.data?.pays ?? []).map((pays) => (
+              <TabsTrigger key={pays.id} value={String(pays.id)} className="flex-none px-3 py-1.5">
+                {pays.name}{" "}
+                <CompteOnglet valeur={pays.count} />
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+
       {/* Six statuts tiennent en pastilles : les voir tous vaut mieux que les
           dérouler, et le compte du serveur se pose sur celui qui est actif. */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -152,26 +190,6 @@ export function DossiersPage() {
             className="pl-9"
           />
         </div>
-        {choixPaysVisible && (
-          <div className="w-full lg:max-w-56">
-            <Label htmlFor="dossiers-country" className="sr-only">
-              {t("dossiers.liste.filtrer_pays")}
-            </Label>
-            <NativeSelect
-              id="dossiers-country"
-              value={countryFilter}
-              onChange={(e) => changeFilter("country", e.target.value)}
-            >
-              <option value="">{t("dossiers.liste.tous_pays")}</option>
-              {paysChoisissables.map((country) => (
-                <option key={country.id} value={country.id}>
-                  {country.country_ref ? `${country.country_ref} — ` : ""}
-                  {country.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
-        )}
         <FilterChips
           label={t("dossiers.liste.filtrer_statut")}
           value={statusFilter}
@@ -475,4 +493,17 @@ function DossierForm({
       </DialogContent>
     </Dialog>
   )
+}
+
+/** Valeur de l'onglet « Tous les pays » : base-ui ne distingue pas un onglet de valeur vide. */
+const TOUS_LES_PAYS = "tous"
+
+/**
+ * Nombre de dossiers d'un onglet, tel que le serveur l'a compté. L'espace
+ * qui le précède est pour les lecteurs d'écran : sans lui, l'onglet
+ * s'annonçait « Togo2 ».
+ */
+function CompteOnglet({ valeur }: { valeur: number | undefined }) {
+  if (valeur === undefined) return null
+  return <span className="text-xs tabular-nums text-muted-foreground">{valeur}</span>
 }

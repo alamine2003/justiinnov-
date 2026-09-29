@@ -7,8 +7,10 @@ import { invalidateReferentiel } from "@/lib/referentiel"
 const fetchCountries = vi.fn()
 const createDossier = vi.fn()
 const fetchDossiers = vi.fn()
+const fetchDossiersParPays = vi.fn()
 vi.mock("@/lib/expenses", () => ({
   fetchDossiers: (...args: unknown[]) => fetchDossiers(...args),
+  fetchDossiersParPays: (...args: unknown[]) => fetchDossiersParPays(...args),
   createDossier: (...args: unknown[]) => createDossier(...args),
 }))
 vi.mock("@/lib/countries", () => ({
@@ -28,10 +30,20 @@ const togo = { id: 1, name: "Togo", code: "TG", country_ref: "TG", is_active: tr
 const ivoire = { id: 2, name: "Côte d'Ivoire", code: "CI", country_ref: "CI", is_active: true }
 const PAGE_VIDE = { count: 0, next: null, previous: null, results: [] }
 
+const PAR_PAYS = {
+  total: 7,
+  pays: [
+    { id: ivoire.id, name: ivoire.name, code: "CI", country_ref: "CI", count: 5 },
+    { id: togo.id, name: togo.name, code: "TG", country_ref: "TG", count: 2 },
+  ],
+}
+
 beforeEach(() => {
   droits = null
   fetchDossiers.mockReset()
   fetchDossiers.mockResolvedValue(PAGE_VIDE)
+  fetchDossiersParPays.mockReset()
+  fetchDossiersParPays.mockResolvedValue(PAR_PAYS)
 })
 
 /**
@@ -76,30 +88,57 @@ describe("DossiersPage — formulaire ouvert avant les pays", () => {
 
 /**
  * Un dossier appartient à un pays (décision 89) : le siège, qui voit tous
- * les pays, filtre la liste par pays, et le filtre part au serveur.
+ * les pays, lit la liste pays par pays, en onglets. Chaque onglet porte le
+ * nombre de dossiers compté par le serveur, et le pays choisi part au
+ * serveur.
  */
-describe("DossiersPage — filtre par pays", () => {
+describe("DossiersPage — onglets par pays", () => {
   beforeEach(() => {
     invalidateReferentiel("countries")
     fetchCountries.mockResolvedValue({ count: 2, next: null, previous: null, results: [togo, ivoire] })
   })
 
-  it("envoie le pays choisi au serveur", async () => {
+  it("montre un onglet par pays, avec le compte du serveur", async () => {
     render(
       <MemoryRouter>
         <DossiersPage />
       </MemoryRouter>,
     )
-    const filtre = await screen.findByLabelText("Filtrer par pays")
-    await waitFor(() => expect(screen.getAllByRole("option", { name: /Côte d'Ivoire/ }).length).toBeGreaterThan(0))
+    const onglets = await screen.findByRole("tablist", { name: "Filtrer par pays" })
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Togo/ })).toBeInTheDocument())
 
-    fireEvent.change(filtre, { target: { value: String(ivoire.id) } })
+    expect(screen.getByRole("tab", { name: "Tous les pays 7" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByRole("tab", { name: "Côte d'Ivoire 5" })).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: "Togo 2" })).toBeInTheDocument()
+    expect(onglets).toBeInTheDocument()
+  })
+
+  it("envoie le pays de l'onglet choisi au serveur", async () => {
+    render(
+      <MemoryRouter>
+        <DossiersPage />
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole("tab", { name: /Côte d'Ivoire/ }))
 
     await waitFor(() =>
       expect(fetchDossiers).toHaveBeenLastCalledWith(
         expect.objectContaining({ country: ivoire.id, page: 1 }),
         expect.anything(),
       ),
+    )
+    expect(screen.getByRole("tab", { name: /Côte d'Ivoire/ })).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("compte avec les filtres de la liste, sans le pays", async () => {
+    render(
+      <MemoryRouter initialEntries={[`/dossiers?country=${togo.id}&status=submitted`]}>
+        <DossiersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(fetchDossiersParPays).toHaveBeenCalledWith({ status: "submitted" }, expect.anything()),
     )
   })
 
@@ -116,6 +155,7 @@ describe("DossiersPage — filtre par pays", () => {
         expect.anything(),
       ),
     )
+    expect(await screen.findByRole("tab", { name: /Togo/ })).toHaveAttribute("aria-selected", "true")
   })
 })
 

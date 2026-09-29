@@ -506,6 +506,32 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/dossiers/par-pays/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description Nombre de dossiers visibles par pays, pour les onglets de la liste.
+         *
+         *     Les mêmes filtres que la liste (statut, recherche, équipe…) sans le
+         *     pays, que l'onglet choisit : chaque onglet annonce ce qu'il
+         *     affichera. Les pays actifs du périmètre y figurent même sans
+         *     dossier — un manager voit son pays avant d'y avoir rien déclaré — 
+         *     un pays désactivé n'y figure que s'il en a encore. Le compte vient
+         *     de la base, pas de l'interface.
+         */
+        get: operations["dossiers_par_pays_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/exchange-rates/": {
         parameters: {
             query?: never
@@ -2739,6 +2765,11 @@ export interface components {
             readonly proofs: components["schemas"]["Proof"][]
             readonly warning?: string
         }
+        /** @description Répartition des dossiers par pays, pour les onglets de la liste. */
+        DossiersParPays: {
+            readonly total: number
+            readonly pays: components["schemas"]["PaysDesDossiers"][]
+        }
         ExchangeRate: {
             readonly id: number
             /**
@@ -4045,6 +4076,14 @@ export interface components {
          * @enum {string}
          */
         PaymentMethodEnum: "cash" | "transfer" | "mobile" | "card" | "check" | "other"
+        /** @description Un pays du périmètre et le nombre de ses dossiers visibles. */
+        PaysDesDossiers: {
+            readonly id: number
+            readonly name: string
+            readonly code: string
+            readonly country_ref: string | null
+            readonly count: number
+        }
         /** @description Matrice rôle × capacité, telle que ``RolePermission`` l'applique. */
         PermissionMatrix: {
             readonly roles: components["schemas"]["PermissionMatrixRole"][]
@@ -5793,6 +5832,25 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["DossierTransitionResponse"]
+                }
+            }
+        }
+    }
+    dossiers_par_pays_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["DossiersParPays"]
                 }
             }
         }

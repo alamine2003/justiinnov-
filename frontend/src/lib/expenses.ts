@@ -5,6 +5,7 @@ import type {
   Beneficiary,
   Dossier,
   DossierDetail,
+  DossiersParPays,
   Expense,
   ExpenseTransitionName,
   Paginated,
@@ -20,6 +21,11 @@ import type {
 // ---------------------------------------------------------------------------
 export function fetchDossiers(params?: Record<string, unknown>, signal?: AbortSignal) {
   return apiGet<Paginated<Dossier>>("/dossiers/", params, signal)
+}
+
+/** Nombre de dossiers par pays, avec les filtres de la liste sauf le pays. */
+export function fetchDossiersParPays(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<DossiersParPays>("/dossiers/par-pays/", params, signal)
 }
 
 export function fetchDossier(id: number, signal?: AbortSignal) {
