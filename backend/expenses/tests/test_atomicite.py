@@ -60,14 +60,15 @@ class TraceDesDepensesTests(ExpenseTestCase):
             self.client.post(
                 "/api/dossiers/",
                 {
-                    "number": "N-0002", "label": "Sans trace", "country": self.togo.pk,
+                    "project": self.projet.pk, "kind": self.stands.pk,
+                    "label": "Sans trace", "country": self.togo.pk,
                     "team": self.team.pk, "owner": self.manager.pk,
                     "date": f"{self.year}-04-01",
                 },
             )
 
-        self.assertFalse(Dossier.objects.filter(number="N-0002").exists())
-        self.assertFalse(AuditLog.objects.filter(label__contains="N-0002").exists())
+        self.assertFalse(Dossier.objects.filter(label="Sans trace").exists())
+        self.assertFalse(AuditLog.objects.filter(label__contains="Sans trace").exists())
 
 
 class HistoriqueDuReferentielTests(ExpenseTestCase):

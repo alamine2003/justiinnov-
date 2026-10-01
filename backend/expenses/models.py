@@ -828,6 +828,9 @@ class AuditLog(models.Model):
         PROOF_REPLACED = "proof_replaced", _("Remplacement de justificatif")
         DOWNLOADED = "downloaded", _("Téléchargement")
         IMPORTED = "imported", _("Import Excel")
+        # Le titre d'un dossier se renomme à tout moment (décision 104) :
+        # l'entrée porte l'ancien et le nouveau titre.
+        RENAMED = "renamed", _("Renommage")
 
     user = models.CharField(_("Utilisateur"), max_length=180, blank=True)
     action = models.CharField(_("Action"), max_length=32, choices=Action.choices)

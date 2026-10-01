@@ -32,6 +32,7 @@
                                 "rectification_requested",
                                 "rectified",
                                 "rejected",
+                                "renamed",
                                 "reopened",
                                 "reviewed",
                                 "submitted",
@@ -39,7 +40,7 @@
                                 "updated"
                             ]
                         },
-                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
+                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage"
                     },
                     {
                         "in": "query",
@@ -1628,10 +1629,300 @@
                 }
             }
         },
+        "/api/dossier-kinds/": {
+            "get": {
+                "operationId": "dossier_kinds_list",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "is_active",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "ordering",
+                        "required": false,
+                        "in": "query",
+                        "description": "Quel champ utiliser pour classer les résultats.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un numéro de page de l'ensemble des résultats.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page_size",
+                        "required": false,
+                        "in": "query",
+                        "description": "Nombre de résultats à retourner par page.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "project_kind",
+                        "schema": {
+                            "type": "string",
+                            "title": "Type de projet",
+                            "enum": [
+                                "congres",
+                                "soutien_financier",
+                                "voyage"
+                            ]
+                        },
+                        "description": "* `congres` - Congrès\n* `voyage` - Voyage\n* `soutien_financier` - Soutien financier"
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un terme de recherche.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "tags": [
+                    "dossier-kinds"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedDossierKindList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "dossier_kinds_create",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "tags": [
+                    "dossier-kinds"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DossierKindRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DossierKindRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DossierKindRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DossierKind"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/dossier-kinds/{id}/": {
+            "get": {
+                "operationId": "dossier_kinds_retrieve",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Type de dossier.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "dossier-kinds"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DossierKind"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "put": {
+                "operationId": "dossier_kinds_update",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Type de dossier.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "dossier-kinds"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DossierKindRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DossierKindRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DossierKindRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DossierKind"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "dossier_kinds_partial_update",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Type de dossier.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "dossier-kinds"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedDossierKindRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedDossierKindRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedDossierKindRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DossierKind"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/dossiers/": {
             "get": {
                 "operationId": "dossiers_list",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "query",
@@ -1645,6 +1936,13 @@
                         "name": "country__country_ref",
                         "schema": {
                             "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "type": "integer"
                         }
                     },
                     {
@@ -1680,6 +1978,27 @@
                         "schema": {
                             "type": "integer"
                         }
+                    },
+                    {
+                        "in": "query",
+                        "name": "project",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "project__kind",
+                        "schema": {
+                            "type": "string",
+                            "title": "Type de projet",
+                            "enum": [
+                                "congres",
+                                "soutien_financier",
+                                "voyage"
+                            ]
+                        },
+                        "description": "* `congres` - Congrès\n* `voyage` - Voyage\n* `soutien_financier` - Soutien financier"
                     },
                     {
                         "name": "search",
@@ -1741,7 +2060,7 @@
             },
             "post": {
                 "operationId": "dossiers_create",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "tags": [
                     "dossiers"
                 ],
@@ -1790,7 +2109,7 @@
         "/api/dossiers/{id}/": {
             "get": {
                 "operationId": "dossiers_retrieve",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "path",
@@ -1828,7 +2147,7 @@
             },
             "put": {
                 "operationId": "dossiers_update",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "path",
@@ -1886,7 +2205,7 @@
             },
             "patch": {
                 "operationId": "dossiers_partial_update",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "path",
@@ -1943,7 +2262,7 @@
             },
             "delete": {
                 "operationId": "dossiers_destroy",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "path",
@@ -1976,7 +2295,7 @@
         "/api/dossiers/{id}/close/": {
             "post": {
                 "operationId": "dossiers_close_create",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "path",
@@ -2035,7 +2354,7 @@
         "/api/dossiers/{id}/justify/": {
             "post": {
                 "operationId": "dossiers_justify_create",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "path",
@@ -2094,7 +2413,7 @@
         "/api/dossiers/{id}/reject/": {
             "post": {
                 "operationId": "dossiers_reject_create",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "path",
@@ -2142,6 +2461,66 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/DossierTransitionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/dossiers/{id}/rename/": {
+            "post": {
+                "operationId": "dossiers_rename_create",
+                "description": "Change le titre du dossier, à tout moment (décision 104).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Dossier de justification.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "dossiers"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RenommerRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RenommerRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RenommerRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DossierDetail"
                                 }
                             }
                         },
@@ -2212,7 +2591,7 @@
         "/api/dossiers/{id}/review/": {
             "post": {
                 "operationId": "dossiers_review_create",
-                "description": "Dossiers de justification (N°ORDRE).",
+                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
                 "parameters": [
                     {
                         "in": "path",
@@ -5526,7 +5905,7 @@
         "/api/projects/": {
             "get": {
                 "operationId": "projects_list",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
                 "parameters": [
                     {
                         "in": "query",
@@ -5541,6 +5920,27 @@
                         "schema": {
                             "type": "boolean"
                         }
+                    },
+                    {
+                        "in": "query",
+                        "name": "is_historical",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "type": "string",
+                            "title": "Type de projet",
+                            "enum": [
+                                "congres",
+                                "soutien_financier",
+                                "voyage"
+                            ]
+                        },
+                        "description": "* `congres` - Congrès\n* `voyage` - Voyage\n* `soutien_financier` - Soutien financier"
                     },
                     {
                         "name": "ordering",
@@ -5620,7 +6020,7 @@
             },
             "post": {
                 "operationId": "projects_create",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
                 "tags": [
                     "projects"
                 ],
@@ -5669,7 +6069,7 @@
         "/api/projects/{id}/": {
             "get": {
                 "operationId": "projects_retrieve",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
                 "parameters": [
                     {
                         "in": "path",
@@ -5707,7 +6107,7 @@
             },
             "put": {
                 "operationId": "projects_update",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
                 "parameters": [
                     {
                         "in": "path",
@@ -5765,7 +6165,7 @@
             },
             "patch": {
                 "operationId": "projects_partial_update",
-                "description": "Base commune : cloisonnement par pays + droits liés au rôle.",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
                 "parameters": [
                     {
                         "in": "path",
@@ -7656,10 +8056,11 @@
                     "proof_uploaded",
                     "proof_replaced",
                     "downloaded",
-                    "imported"
+                    "imported",
+                    "renamed"
                 ],
                 "type": "string",
-                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel"
+                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage"
             },
             "AuditLog": {
                 "type": "object",
@@ -7924,6 +8325,11 @@
                     "name"
                 ]
             },
+            "BlankEnum": {
+                "enum": [
+                    ""
+                ]
+            },
             "Breakdown": {
                 "type": "object",
                 "properties": {
@@ -7946,6 +8352,20 @@
                         "readOnly": true
                     },
                     "by_project": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BreakdownRow"
+                        },
+                        "readOnly": true
+                    },
+                    "by_project_kind": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BreakdownRow"
+                        },
+                        "readOnly": true
+                    },
+                    "by_dossier_kind": {
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/BreakdownRow"
@@ -7979,6 +8399,8 @@
                     "by_team",
                     "by_owner",
                     "by_project",
+                    "by_project_kind",
+                    "by_dossier_kind",
                     "by_category",
                     "by_expense_title",
                     "by_month"
@@ -9638,6 +10060,7 @@
             },
             "Dossier": {
                 "type": "object",
+                "description": "Un dossier, ouvert dans un projet avec un type (décision 102).\n\nLe numéro est calculé à la création (``expenses.numerotation``) et ne\nse saisit plus. Le pays vient du projet quand la charge utile ne le\ndonne pas. Projet, type, pays et numéro ne changent plus ensuite.",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -9645,8 +10068,8 @@
                     },
                     "number": {
                         "type": "string",
-                        "title": "N° d'ordre",
-                        "maxLength": 50
+                        "readOnly": true,
+                        "title": "N° d'ordre"
                     },
                     "label": {
                         "type": "string",
@@ -9672,6 +10095,50 @@
                     "country_timezone": {
                         "type": "string",
                         "readOnly": true
+                    },
+                    "project": {
+                        "type": "integer",
+                        "title": "Projet"
+                    },
+                    "project_name": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_reference": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_kind": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_kind_display": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "kind": {
+                        "type": "integer",
+                        "title": "Type de dossier"
+                    },
+                    "kind_name": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "sequence": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Rang"
+                    },
+                    "external_ref": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Référence d'origine"
                     },
                     "team": {
                         "type": "integer",
@@ -9767,6 +10234,15 @@
                     "country_ref",
                     "currency",
                     "country_timezone",
+                    "project",
+                    "project_name",
+                    "project_reference",
+                    "project_kind",
+                    "project_kind_display",
+                    "kind",
+                    "kind_name",
+                    "sequence",
+                    "external_ref",
                     "team",
                     "team_name",
                     "owner",
@@ -9787,6 +10263,7 @@
             },
             "DossierDetail": {
                 "type": "object",
+                "description": "Un dossier, ouvert dans un projet avec un type (décision 102).\n\nLe numéro est calculé à la création (``expenses.numerotation``) et ne\nse saisit plus. Le pays vient du projet quand la charge utile ne le\ndonne pas. Projet, type, pays et numéro ne changent plus ensuite.",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -9794,8 +10271,8 @@
                     },
                     "number": {
                         "type": "string",
-                        "title": "N° d'ordre",
-                        "maxLength": 50
+                        "readOnly": true,
+                        "title": "N° d'ordre"
                     },
                     "label": {
                         "type": "string",
@@ -9821,6 +10298,50 @@
                     "country_timezone": {
                         "type": "string",
                         "readOnly": true
+                    },
+                    "project": {
+                        "type": "integer",
+                        "title": "Projet"
+                    },
+                    "project_name": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_reference": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_kind": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_kind_display": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "kind": {
+                        "type": "integer",
+                        "title": "Type de dossier"
+                    },
+                    "kind_name": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "sequence": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Rang"
+                    },
+                    "external_ref": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Référence d'origine"
                     },
                     "team": {
                         "type": "integer",
@@ -9930,6 +10451,15 @@
                     "country_ref",
                     "currency",
                     "country_timezone",
+                    "project",
+                    "project_name",
+                    "project_reference",
+                    "project_kind",
+                    "project_kind_display",
+                    "kind",
+                    "kind_name",
+                    "sequence",
+                    "external_ref",
                     "team",
                     "team_name",
                     "owner",
@@ -9950,15 +10480,97 @@
                     "proofs"
                 ]
             },
-            "DossierRequest": {
+            "DossierKind": {
                 "type": "object",
+                "description": "Un type de dossier de la liste commune (décision 101).\n\nSon type de projet ne change plus dès qu'un dossier l'emploie : les\ndossiers ouverts sous « Stands » resteraient sinon dans un congrès\nsous un type devenu celui d'un voyage.",
                 "properties": {
-                    "number": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "project_kind": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ProjectKindEnum"
+                            }
+                        ],
+                        "title": "Type de projet"
+                    },
+                    "project_kind_display": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "name": {
+                        "type": "string",
+                        "title": "Nom",
+                        "maxLength": 120
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Actif"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Créé le"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Modifié le"
+                    }
+                },
+                "required": [
+                    "id",
+                    "project_kind",
+                    "project_kind_display",
+                    "name",
+                    "description",
+                    "is_active",
+                    "created_at",
+                    "updated_at"
+                ]
+            },
+            "DossierKindRequest": {
+                "type": "object",
+                "description": "Un type de dossier de la liste commune (décision 101).\n\nSon type de projet ne change plus dès qu'un dossier l'emploie : les\ndossiers ouverts sous « Stands » resteraient sinon dans un congrès\nsous un type devenu celui d'un voyage.",
+                "properties": {
+                    "project_kind": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ProjectKindEnum"
+                            }
+                        ],
+                        "title": "Type de projet"
+                    },
+                    "name": {
                         "type": "string",
                         "minLength": 1,
-                        "title": "N° d'ordre",
-                        "maxLength": 50
+                        "title": "Nom",
+                        "maxLength": 120
                     },
+                    "description": {
+                        "type": "string"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Actif"
+                    }
+                },
+                "required": [
+                    "name",
+                    "project_kind"
+                ]
+            },
+            "DossierRequest": {
+                "type": "object",
+                "description": "Un dossier, ouvert dans un projet avec un type (décision 102).\n\nLe numéro est calculé à la création (``expenses.numerotation``) et ne\nse saisit plus. Le pays vient du projet quand la charge utile ne le\ndonne pas. Projet, type, pays et numéro ne changent plus ensuite.",
+                "properties": {
                     "label": {
                         "type": "string",
                         "minLength": 1,
@@ -9967,6 +10579,14 @@
                     },
                     "country": {
                         "type": "integer"
+                    },
+                    "project": {
+                        "type": "integer",
+                        "title": "Projet"
+                    },
+                    "kind": {
+                        "type": "integer",
+                        "title": "Type de dossier"
                     },
                     "team": {
                         "type": "integer",
@@ -9986,10 +10606,7 @@
                     }
                 },
                 "required": [
-                    "country",
-                    "date",
-                    "label",
-                    "number"
+                    "date"
                 ]
             },
             "DossierTotals": {
@@ -10031,8 +10648,8 @@
                     },
                     "number": {
                         "type": "string",
-                        "title": "N° d'ordre",
-                        "maxLength": 50
+                        "readOnly": true,
+                        "title": "N° d'ordre"
                     },
                     "label": {
                         "type": "string",
@@ -10058,6 +10675,50 @@
                     "country_timezone": {
                         "type": "string",
                         "readOnly": true
+                    },
+                    "project": {
+                        "type": "integer",
+                        "title": "Projet"
+                    },
+                    "project_name": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_reference": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_kind": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_kind_display": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "kind": {
+                        "type": "integer",
+                        "title": "Type de dossier"
+                    },
+                    "kind_name": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "sequence": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Rang"
+                    },
+                    "external_ref": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Référence d'origine"
                     },
                     "team": {
                         "type": "integer",
@@ -10171,6 +10832,15 @@
                     "country_ref",
                     "currency",
                     "country_timezone",
+                    "project",
+                    "project_name",
+                    "project_reference",
+                    "project_kind",
+                    "project_kind_display",
+                    "kind",
+                    "kind_name",
+                    "sequence",
+                    "external_ref",
                     "team",
                     "team_name",
                     "owner",
@@ -11388,18 +12058,26 @@
             },
             "ImportRequest": {
                 "type": "object",
-                "description": "Classeur à importer, et le pays d'un classeur sans colonne PAYS.",
+                "description": "Classeur à importer, le projet et le type de ses dossiers (décision 102).",
                 "properties": {
                     "file": {
                         "type": "string",
                         "format": "binary"
+                    },
+                    "project": {
+                        "type": "integer"
+                    },
+                    "kind": {
+                        "type": "integer"
                     },
                     "country": {
                         "type": "integer"
                     }
                 },
                 "required": [
-                    "file"
+                    "file",
+                    "kind",
+                    "project"
                 ]
             },
             "ImportResult": {
@@ -12170,6 +12848,39 @@
                     }
                 }
             },
+            "PaginatedDossierKindList": {
+                "type": "object",
+                "required": [
+                    "count",
+                    "next",
+                    "previous",
+                    "results"
+                ],
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "example": 123
+                    },
+                    "next": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=4"
+                    },
+                    "previous": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=2"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DossierKind"
+                        }
+                    }
+                }
+            },
             "PaginatedDossierList": {
                 "type": "object",
                 "required": [
@@ -12770,15 +13481,37 @@
                     }
                 }
             },
-            "PatchedDossierRequest": {
+            "PatchedDossierKindRequest": {
                 "type": "object",
+                "description": "Un type de dossier de la liste commune (décision 101).\n\nSon type de projet ne change plus dès qu'un dossier l'emploie : les\ndossiers ouverts sous « Stands » resteraient sinon dans un congrès\nsous un type devenu celui d'un voyage.",
                 "properties": {
-                    "number": {
+                    "project_kind": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ProjectKindEnum"
+                            }
+                        ],
+                        "title": "Type de projet"
+                    },
+                    "name": {
                         "type": "string",
                         "minLength": 1,
-                        "title": "N° d'ordre",
-                        "maxLength": 50
+                        "title": "Nom",
+                        "maxLength": 120
                     },
+                    "description": {
+                        "type": "string"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Actif"
+                    }
+                }
+            },
+            "PatchedDossierRequest": {
+                "type": "object",
+                "description": "Un dossier, ouvert dans un projet avec un type (décision 102).\n\nLe numéro est calculé à la création (``expenses.numerotation``) et ne\nse saisit plus. Le pays vient du projet quand la charge utile ne le\ndonne pas. Projet, type, pays et numéro ne changent plus ensuite.",
+                "properties": {
                     "label": {
                         "type": "string",
                         "minLength": 1,
@@ -12787,6 +13520,14 @@
                     },
                     "country": {
                         "type": "integer"
+                    },
+                    "project": {
+                        "type": "integer",
+                        "title": "Projet"
+                    },
+                    "kind": {
+                        "type": "integer",
+                        "title": "Type de dossier"
                     },
                     "team": {
                         "type": "integer",
@@ -13036,7 +13777,7 @@
             },
             "PatchedProjectRequest": {
                 "type": "object",
-                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
+                "description": "Un projet, son type et sa référence (décision 100).\n\nLa référence, l'année et le rang sont attribués à la création\n(``core.numerotation``) et ne se saisissent pas. Le type est exigé à la\ncréation et ne change plus — sauf pour un projet d'avant la 2.0, resté\n« à typer », qui se type une fois. Le projet « Historique » ne se type\npas : il range des dossiers d'avant les projets.",
                 "properties": {
                     "country": {
                         "type": "integer",
@@ -13064,6 +13805,17 @@
                         "format": "decimal",
                         "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$",
                         "nullable": true
+                    },
+                    "kind": {
+                        "title": "Type de projet",
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/ProjectKindEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/BlankEnum"
+                            }
+                        ]
                     },
                     "is_active": {
                         "type": "boolean",
@@ -13446,6 +14198,11 @@
                         "readOnly": true,
                         "description": "Ajouter une équipe, un centre de coûts, un projet, un intitulé, une catégorie, un bénéficiaire."
                     },
+                    "projets.create": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Ouvrir un congrès, un voyage ou un soutien financier dans son pays ; sa référence est attribuée."
+                    },
                     "referentiel.update": {
                         "type": "boolean",
                         "readOnly": true,
@@ -13541,6 +14298,11 @@
                         "readOnly": true,
                         "description": "Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne."
                     },
+                    "dossiers.rename": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Changer le titre d'un dossier de son pays, même soumis ou clôturé ; l'ancien titre reste au journal."
+                    },
                     "data.export": {
                         "type": "boolean",
                         "readOnly": true,
@@ -13564,6 +14326,7 @@
                     "managers.create",
                     "managers.update",
                     "referentiel.create",
+                    "projets.create",
                     "referentiel.update",
                     "budgets.create",
                     "budgets.update",
@@ -13583,13 +14346,14 @@
                     "dossiers.reopen",
                     "rectifications.request",
                     "rectifications.decide",
+                    "dossiers.rename",
                     "data.export",
                     "data.import"
                 ]
             },
             "Project": {
                 "type": "object",
-                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
+                "description": "Un projet, son type et sa référence (décision 100).\n\nLa référence, l'année et le rang sont attribués à la création\n(``core.numerotation``) et ne se saisissent pas. Le type est exigé à la\ncréation et ne change plus — sauf pour un projet d'avant la 2.0, resté\n« à typer », qui se type une fois. Le projet « Historique » ne se type\npas : il range des dossiers d'avant les projets.",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -13629,6 +14393,53 @@
                         "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$",
                         "nullable": true
                     },
+                    "kind": {
+                        "title": "Type de projet",
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/ProjectKindEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/BlankEnum"
+                            }
+                        ]
+                    },
+                    "kind_display": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "year": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Année"
+                    },
+                    "sequence": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Rang"
+                    },
+                    "reference": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Référence"
+                    },
+                    "is_historical": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "title": "Projet historique"
+                    },
+                    "a_typer": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "dossier_count": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "default": 0
+                    },
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
@@ -13655,14 +14466,31 @@
                     "status",
                     "status_display",
                     "budget",
+                    "kind",
+                    "kind_display",
+                    "year",
+                    "sequence",
+                    "reference",
+                    "is_historical",
+                    "a_typer",
+                    "dossier_count",
                     "is_active",
                     "created_at",
                     "updated_at"
                 ]
             },
+            "ProjectKindEnum": {
+                "enum": [
+                    "congres",
+                    "voyage",
+                    "soutien_financier"
+                ],
+                "type": "string",
+                "description": "* `congres` - Congrès\n* `voyage` - Voyage\n* `soutien_financier` - Soutien financier"
+            },
             "ProjectRequest": {
                 "type": "object",
-                "description": "Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.\n\nLes lignes, les dossiers, les enveloppes et les profils qui la portent\nsont cloisonnés par **leur** pays : déplacer l'équipe les laisserait\nderrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On\ncorrige ce qui la porte d'abord, ou l'on en crée une autre.",
+                "description": "Un projet, son type et sa référence (décision 100).\n\nLa référence, l'année et le rang sont attribués à la création\n(``core.numerotation``) et ne se saisissent pas. Le type est exigé à la\ncréation et ne change plus — sauf pour un projet d'avant la 2.0, resté\n« à typer », qui se type une fois. Le projet « Historique » ne se type\npas : il range des dossiers d'avant les projets.",
                 "properties": {
                     "country": {
                         "type": "integer",
@@ -13690,6 +14518,17 @@
                         "format": "decimal",
                         "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$",
                         "nullable": true
+                    },
+                    "kind": {
+                        "title": "Type de projet",
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/ProjectKindEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/BlankEnum"
+                            }
+                        ]
                     },
                     "is_active": {
                         "type": "boolean",
@@ -14102,6 +14941,20 @@
                 "type": "string",
                 "description": "* `pending` - En attente\n* `approved` - Approuvée\n* `refused` - Refusée"
             },
+            "RenommerRequest": {
+                "type": "object",
+                "description": "Le nouveau titre d'un dossier (décision 104).",
+                "properties": {
+                    "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 250
+                    }
+                },
+                "required": [
+                    "label"
+                ]
+            },
             "RoleEnum": {
                 "enum": [
                     "super_admin",
@@ -14436,6 +15289,7 @@
             "TransitionEnum": {
                 "enum": [
                     "edit",
+                    "rename",
                     "add_line",
                     "upload",
                     "delete",
@@ -14448,7 +15302,7 @@
                     "request_rectification"
                 ],
                 "type": "string",
-                "description": "* `edit` - edit\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen\n* `request_rectification` - request_rectification"
+                "description": "* `edit` - edit\n* `rename` - rename\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen\n* `request_rectification` - request_rectification"
             },
             "TransitionRequest": {
                 "type": "object",

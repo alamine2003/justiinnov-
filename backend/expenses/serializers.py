@@ -19,6 +19,7 @@ from accounts.permissions import get_access, roles_pour
 from budget.aggregates import convert
 from core.models import (
     Country,
+    DossierKind,
     ExpenseTitle,
     Manager,
     MarketingCategory,
@@ -38,6 +39,7 @@ from .models import (
     Rectification,
     compute_sha256,
 )
+from .numerotation import refus_d_ouverture
 from .stockage import effacer_sans_bruit, noter_depot
 from .transitions import peut_decider_rectification
 from .workflow import (
@@ -162,7 +164,7 @@ PROOF_FINAL_STATUSES = frozenset(
 TRANSITION_CHOICES = [
     (name, name)
     for name in (
-        "edit", "add_line", "upload", "delete",
+        "edit", "rename", "add_line", "upload", "delete",
         "submit", "review", "justify", "reject", "close", "reopen",
         REQUEST_RECTIFICATION,
     )
@@ -175,6 +177,12 @@ class DossierTotalsSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
     justified = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
     gap = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
+
+
+class RenommerSerializer(serializers.Serializer):
+    """Le nouveau titre d'un dossier (décision 104)."""
+
+    label = serializers.CharField(max_length=250, trim_whitespace=True)
 
 
 class PaysDesDossiersSerializer(serializers.Serializer):
@@ -668,6 +676,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"dossier": _("Le dossier appartient à un autre pays.")}
             )
+        self._suivre_le_projet_du_dossier(attrs, dossier)
         # Les relations déjà portées par la ligne comptent autant que celles
         # de la charge utile : un brouillon qui change de pays garderait
         # sinon une équipe ou un bénéficiaire de l'ancien.
@@ -702,6 +711,24 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
         self._resoudre_la_devise(attrs, country)
         return attrs
+
+    def _suivre_le_projet_du_dossier(self, attrs, dossier):
+        """Une ligne porte le projet de son dossier (décision 102).
+
+        Il se recopie, comme le pays et l'équipe (décision 1) : c'est lui qui
+        impute la ligne sur la sous-enveloppe du projet (``resolve_budget``).
+        Un projet différent dans la charge utile est refusé plutôt
+        qu'ignoré. Les dossiers rangés dans le projet « Historique »
+        (décision 103) gardent les projets que portaient leurs lignes.
+        """
+        if dossier is None or dossier.project_id is None or dossier.project.is_historical:
+            return
+        fourni = attrs.get("project")
+        if fourni is not None and fourni.pk != dossier.project_id:
+            raise serializers.ValidationError(
+                {"project": _("Une ligne porte le projet de son dossier.")}
+            )
+        attrs["project"] = dossier.project
 
     def _resoudre_la_devise(self, attrs, country):
         """Convertit un décaissement fait dans une autre devise (§5.3).
@@ -855,7 +882,33 @@ class ExpenseRegisterSerializer(ExpenseSerializer):
 
 
 class DossierSerializer(serializers.ModelSerializer):
-    country = ChampCloisonne(queryset=Country.objects.all(), chemin_pays="pk")
+    """Un dossier, ouvert dans un projet avec un type (décision 102).
+
+    Le numéro est calculé à la création (``expenses.numerotation``) et ne
+    se saisit plus. Le pays vient du projet quand la charge utile ne le
+    donne pas. Projet, type, pays et numéro ne changent plus ensuite.
+    """
+
+    country = ChampCloisonne(
+        queryset=Country.objects.all(), chemin_pays="pk", required=False
+    )
+    project = ChampCloisonne(
+        queryset=Project.objects.all(), chemin_pays="country", required=False,
+        label=gettext_lazy("Projet"),
+    )
+    kind = serializers.PrimaryKeyRelatedField(
+        queryset=DossierKind.objects.all(), required=False,
+        label=gettext_lazy("Type de dossier"),
+    )
+    project_name = serializers.CharField(source="project.name", read_only=True, allow_null=True)
+    project_reference = serializers.CharField(
+        source="project.reference", read_only=True, allow_null=True
+    )
+    project_kind = serializers.CharField(source="project.kind", read_only=True, allow_null=True)
+    project_kind_display = serializers.CharField(
+        source="project.get_kind_display", read_only=True, allow_null=True
+    )
+    kind_name = serializers.CharField(source="kind.name", read_only=True, allow_null=True)
     team = ChampCloisonne(
         queryset=Team.objects.all(), chemin_pays="country", chemin_equipe="pk",
         required=False, allow_null=True,
@@ -888,25 +941,22 @@ class DossierSerializer(serializers.ModelSerializer):
         model = Dossier
         fields = [
             "id", "number", "label", "country", "country_name", "country_ref",
-            "currency", "country_timezone", "team", "team_name",
+            "currency", "country_timezone",
+            "project", "project_name", "project_reference", "project_kind",
+            "project_kind_display", "kind", "kind_name", "sequence", "external_ref",
+            "team", "team_name",
             "owner", "owner_name", "date",
             "status", "status_display", "note", "reopen_note", "totals",
             "expense_count", "proof_count", "allowed_actions", "created_by",
             "created_at", "updated_at",
         ]
-        # Le motif de réouverture est posé par l'action ``reopen`` seule.
-        read_only_fields = ["status", "created_by", "reopen_note"]
-        # Le N°ORDRE est unique **par pays**. Le pays de la charge utile est
-        # déjà limité au périmètre du demandeur (``ChampCloisonne``) : la
-        # vérification ne porte donc que sur des dossiers qu'il a le droit
-        # de voir, et le message ne révèle rien du voisin.
-        validators = [
-            UniqueTogetherValidator(
-                queryset=Dossier.objects.all(),
-                fields=["country", "number"],
-                message=_("Ce N°ORDRE existe déjà pour ce pays."),
-            )
+        # Le motif de réouverture est posé par l'action ``reopen`` seule ;
+        # le numéro et le rang par ``expenses.numerotation`` ; la référence
+        # d'origine par l'import.
+        read_only_fields = [
+            "status", "created_by", "reopen_note", "number", "sequence", "external_ref",
         ]
+        extra_kwargs = {"label": {"required": False}}
 
     @extend_schema_field(DossierTotalsSerializer)
     def get_totals(self, dossier):
@@ -945,6 +995,8 @@ class DossierSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 _("Ce dossier est déclaré : il ne peut plus être modifié.")
             )
+        if self.instance is None:
+            attrs = self._verifier_le_projet_et_le_type(attrs)
         country = attrs.get("country") or getattr(self.instance, "country", None)
         team = _equipe_effective(self, attrs)
         if team is not None and country is not None and team.country_id != country.pk:
@@ -957,6 +1009,26 @@ class DossierSerializer(serializers.ModelSerializer):
         # Le manager déjà en place compte aussi : un brouillon qui change de
         # pays ne garde pas un manager de l'ancien.
         _verifier_le_manager(_valeur_effective(self, attrs, "owner"), country)
+        return attrs
+
+    def _verifier_le_projet_et_le_type(self, attrs):
+        """Un dossier s'ouvre dans un projet actif et typé, avec un type de
+        ce projet (décision 102, ``numerotation.refus_d_ouverture``). Le
+        pays vient du projet ; le titre, à défaut, du type."""
+        projet = attrs.get("project")
+        kind = attrs.get("kind")
+        refus = refus_d_ouverture(projet, kind)
+        if refus is not None:
+            champ, message = refus
+            raise serializers.ValidationError({champ: message})
+        country = attrs.get("country")
+        if country is not None and country.pk != projet.country_id:
+            raise serializers.ValidationError(
+                {"project": _("Ce projet appartient à un autre pays.")}
+            )
+        attrs["country"] = projet.country
+        if not (attrs.get("label") or "").strip():
+            attrs["label"] = kind.name
         return attrs
 
     def _verifier_le_deplacement(self, attrs):
@@ -973,6 +1045,11 @@ class DossierSerializer(serializers.ModelSerializer):
         autre dossier.
         """
         dossier = self.instance
+        for champ in ("project", "kind"):
+            if champ in attrs and getattr(attrs[champ], "pk", None) != getattr(dossier, f"{champ}_id"):
+                raise serializers.ValidationError(
+                    {champ: _("Le projet et le type d'un dossier ne changent plus après sa création.")}
+                )
         country = attrs.get("country")
         if country is not None and country.pk != dossier.country_id:
             raise serializers.ValidationError(

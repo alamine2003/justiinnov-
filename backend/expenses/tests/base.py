@@ -11,7 +11,8 @@ from rest_framework.test import APITestCase
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget
-from core.models import Country, Manager, Team
+from core.models import Country, DossierKind, Manager, Project, ProjectKind, Team
+from core.numerotation import creer_projet
 from expenses.models import Dossier, Expense
 from expenses.services import resolve_budget
 from expenses.workflow import Status
@@ -54,6 +55,18 @@ class ExpenseTestCase(APITestCase):
             currency="XOF", timezone="Africa/Lome",
         )
         cls.team = Team.objects.create(country=cls.togo, name="Équipe Lomé")
+        # Version 2.0 : un dossier s'ouvre dans un projet typé, sous un type
+        # de dossier (décision 102). ``get_or_create`` : la liste de départ
+        # vient d'une migration, et un ``TransactionTestCase`` vide les tables.
+        cls.stands, _ = DossierKind.objects.get_or_create(
+            project_kind=ProjectKind.CONGRES, name="Stands"
+        )
+        cls.projet = creer_projet(Project(
+            country=cls.togo, name="Congrès de Lomé", kind=ProjectKind.CONGRES,
+        ))
+        cls.projet_ivoire = creer_projet(Project(
+            country=cls.ivoire, name="Congrès d'Abidjan", kind=ProjectKind.CONGRES,
+        ))
         cls.manager = Manager.objects.create(name="Kodjo Mensah")
 
         cls.year = timezone.now().year
@@ -78,6 +91,7 @@ class ExpenseTestCase(APITestCase):
 
         cls.dossier = Dossier.objects.create(
             number="N-0001", label="Mission Lomé", country=cls.togo,
+            project=cls.projet, kind=cls.stands,
             team=cls.team, owner=cls.manager, date=date(cls.year, 3, 15),
             status=cls.dossier_status, created_by=cls.owner.username,
         )
@@ -101,6 +115,8 @@ class ExpenseTestCase(APITestCase):
         defaults = {
             "dossier": self.dossier,
             "country": self.togo,
+            # Une ligne porte le projet de son dossier (décision 102).
+            "project": self.dossier.project,
             "team": self.team,
             "owner": self.manager,
             "date": timezone.now(),

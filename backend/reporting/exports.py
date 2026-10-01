@@ -74,6 +74,11 @@ EXPENSE_COLUMNS = [
     ("ECART", 14),
     ("STATUT", 14),
     ("PIECES JUSTIFICATIVES", 30),
+    # Version 2.0 (décisions 100 à 102) : en fin de classeur, pour que les
+    # colonnes historiques gardent leur place — l'import les lit par nom.
+    ("PROJET", 30),
+    ("TYPE DE PROJET", 18),
+    ("TYPE DE DOSSIER", 20),
 ]
 
 RECONCILIATION_COLUMNS = [
@@ -92,8 +97,16 @@ RECONCILIATION_COLUMNS = [
 DOSSIER_COLUMNS = [
     ("N°ORDRE", 16), ("LIBELLE", 34), ("PAYS", 18), ("DATE", 14),
     ("STATUT", 14), ("DEPENSES", 16), ("JUSTIFIE", 16), ("ECART", 16),
-    ("PIECES", 12),
+    ("PIECES", 12), ("PROJET", 30), ("TYPE DE DOSSIER", 20),
 ]
+
+
+def _projet(dossier):
+    """« TG-P-2026-001 — Congrès de pédiatrie », ou le seul nom sans référence."""
+    projet = dossier.project
+    if projet is None:
+        return ""
+    return f"{projet.reference} — {projet.name}" if projet.reference else projet.name
 
 
 @dataclass
@@ -188,7 +201,9 @@ def lignes_depenses(expenses):
     """
     tableau = Tableau("BASE DE DONNEES ACTIONS", EXPENSE_COLUMNS)
     source = (
-        expenses.select_related("dossier__country", "country", "team", "owner")
+        expenses.select_related(
+            "dossier__country", "dossier__project", "dossier__kind", "country", "team", "owner",
+        )
         .prefetch_related("dossier__proofs")
         .order_by("date", "pk")
     )
@@ -225,12 +240,15 @@ def lignes_depenses(expenses):
             expense.amount - expense.justified_amount,
             expense.get_status_display(),
             pieces[dossier.pk],
+            _projet(dossier),
+            dossier.project.get_kind_display() if dossier.project else "",
+            dossier.kind.name if dossier.kind else "",
         ])
 
     tableau.total = _total_si_devise_unique(devises, [
         None, None, None, None, None, "TOTAL",
         totals["amount"], None, None, totals["justified"],
-        totals["amount"] - totals["justified"], None, None,
+        totals["amount"] - totals["justified"], None, None, None, None, None,
     ])
     return tableau
 
@@ -272,7 +290,7 @@ def tableaux_rapprochement(budgets, dossiers):
     detail = Tableau("Rapprochement dossiers", DOSSIER_COLUMNS)
     totaux = {"amount": ZERO, "justified": ZERO, "gap": ZERO}
     devises = set()
-    for dossier in dossiers.select_related("country"):
+    for dossier in dossiers.select_related("country", "project", "kind"):
         totals = dossier.totals()
         devises.add(dossier.country.currency)
         for cle in totaux:
@@ -287,12 +305,14 @@ def tableaux_rapprochement(budgets, dossiers):
             totals["justified"],
             totals["gap"],
             dossier.counts()["proofs"],
+            _projet(dossier),
+            dossier.kind.name if dossier.kind else "",
         ])
     # Le total se lit dans LIBELLE, N°ORDRE restant vide : comme dans le
     # classeur des dépenses, la colonne des numéros ne porte que des numéros.
     detail.total = _total_si_devise_unique(devises, [
         None, "TOTAL", None, None, None,
-        totaux["amount"], totaux["justified"], totaux["gap"], None,
+        totaux["amount"], totaux["justified"], totaux["gap"], None, None, None,
     ])
     return [enveloppes, detail]
 

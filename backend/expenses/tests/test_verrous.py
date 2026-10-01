@@ -25,7 +25,8 @@ from rest_framework.test import APIClient
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget, OverrunPolicy
-from core.models import Country, Manager, Team
+from core.models import Country, DossierKind, Manager, Project, ProjectKind, Team
+from core.numerotation import creer_projet
 from expenses.models import AuditLog, Dossier, Expense, Proof
 from expenses.services import committed_total
 from expenses.workflow import Status
@@ -46,6 +47,14 @@ class CourseTestCase(TransactionTestCase):
             currency="XOF", timezone="Africa/Lome",
         )
         self.team = Team.objects.create(country=self.togo, name="Équipe Lomé")
+        # Un dossier s'ouvre dans un projet typé (décision 102). La liste des
+        # types vient d'une migration, que ce cas de test vide : on la recrée.
+        self.stands, _ = DossierKind.objects.get_or_create(
+            project_kind=ProjectKind.CONGRES, name="Stands"
+        )
+        self.projet = creer_projet(Project(
+            country=self.togo, name="Congrès de Lomé", kind=ProjectKind.CONGRES,
+        ))
         self.manager = Manager.objects.create(name="Kodjo Mensah")
         self.manager.countries.add(self.togo)
         self.year = timezone.now().year
@@ -83,6 +92,7 @@ class CourseTestCase(TransactionTestCase):
     def _dossier(self, numero, montant, statut=Status.DRAFT):
         dossier = Dossier.objects.create(
             number=numero, label=f"Mission {numero}", country=self.togo,
+            project=self.projet, kind=self.stands,
             team=self.team, owner=self.manager, date=date(self.year, 3, 15),
             status=statut, created_by=self.owner.username,
         )
@@ -367,7 +377,7 @@ class CourseSurLImport(CourseTestCase):
         # L'import est une déclaration : l'auteur des brouillons du pays
         # (décision 89).
         return self._client(self.owner).post(
-            "/api/imports/expenses.xlsx",
+            f"/api/imports/expenses.xlsx?project={self.projet.pk}&kind={self.stands.pk}",
             {"file": SimpleUploadedFile("depenses.xlsx", contenu,
                                         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
             format="multipart",

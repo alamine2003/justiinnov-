@@ -12,6 +12,7 @@ même projet ne tirent pas le même rang. La contrainte
 
 from django.db import transaction
 from django.db.models import Max
+from django.utils.translation import gettext as _
 
 from core.models import Project
 
@@ -44,3 +45,24 @@ def creer_dossier(dossier):
         dossier.number = numero_de_dossier(projet.reference, dossier.sequence)
         dossier.save()
     return dossier
+
+
+def refus_d_ouverture(projet, kind):
+    """Pourquoi un dossier ne s'ouvrirait pas dans ``projet`` sous ``kind``.
+
+    Rend ``(champ, message)``, ou ``None`` si l'ouverture est permise
+    (décision 102) : un projet actif et typé, un type de dossier actif et
+    de ce type de projet. Seule règle, partagée par la saisie
+    (``DossierSerializer``) et l'import (``reporting.imports``).
+    """
+    if projet is None:
+        return "project", _("Choisissez le projet dans lequel ouvrir ce dossier.")
+    if projet.is_historical or not projet.kind:
+        return "project", _("Ce projet n'a pas de type : il n'accepte pas de nouveau dossier.")
+    if not projet.is_active:
+        return "project", _("Ce projet est désactivé : il n'accepte plus de dossier.")
+    if kind is None:
+        return "kind", _("Choisissez le type du dossier : stands, voyages, billets…")
+    if not kind.is_active or kind.project_kind != projet.kind:
+        return "kind", _("Ce type de dossier ne s'ouvre pas dans ce projet.")
+    return None

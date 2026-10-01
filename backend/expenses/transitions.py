@@ -791,6 +791,40 @@ def executer(objet, action, acteur, trace, *, note="", justified_amount=None):
 
 
 @transaction.atomic
+def renommer(dossier, label, acteur, trace):
+    """Change le titre d'un dossier, à tout moment (décision 104).
+
+    Le titre ne porte ni montant ni preuve : le changer ne touche à rien de
+    ce qui a été déclaré, même sur un dossier clôturé. Seule exception
+    écrite à l'irréversibilité d'une déclaration, elle laisse l'ancien et
+    le nouveau titre au journal d'audit.
+    """
+    exiger_la_capacite("dossiers.rename", acteur)
+    instance = (
+        Dossier.objects.select_related("country")
+        .select_for_update(of=("self",))
+        .get(pk=dossier.pk)
+    )
+    nouveau = (label or "").strip()
+    if not nouveau:
+        raise RegleViolee("label", _("Le titre d'un dossier ne peut pas être vide."))
+    ancien = instance.label
+    resultat = Resultat(instance)
+    if nouveau == ancien:
+        return resultat
+    instance.label = nouveau
+    instance.save(update_fields=["label", "updated_at"])
+    resultat.audit.append(
+        record(
+            trace, AuditLog.Action.RENAMED, instance,
+            label=f"{instance.number} — {nouveau}"[:250],
+            avant={"label": ancien}, apres={"label": nouveau},
+        )
+    )
+    return resultat
+
+
+@transaction.atomic
 def retirer_brouillon(objet, acteur, trace):
     """Retire un brouillon — dossier ou ligne — par son auteur.
 

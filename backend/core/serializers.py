@@ -11,6 +11,7 @@ from .models import (
     ChangeLog,
     CostCenter,
     Country,
+    DossierKind,
     ExpenseTitle,
     Manager,
     MarketingCategory,
@@ -162,17 +163,32 @@ class CostCenterSerializer(serializers.ModelSerializer):
 
 
 class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
+    """Un projet, son type et sa référence (décision 100).
+
+    La référence, l'année et le rang sont attribués à la création
+    (``core.numerotation``) et ne se saisissent pas. Le type est exigé à la
+    création et ne change plus — sauf pour un projet d'avant la 2.0, resté
+    « à typer », qui se type une fois. Le projet « Historique » ne se type
+    pas : il range des dossiers d'avant les projets.
+    """
+
     country_name = serializers.CharField(source="country.name", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
-    RELATIONS_QUI_RETIENNENT = ("expenses", "budgets")
+    kind_display = serializers.CharField(source="get_kind_display", read_only=True)
+    a_typer = serializers.SerializerMethodField()
+    dossier_count = serializers.IntegerField(read_only=True, default=0)
+    RELATIONS_QUI_RETIENNENT = ("expenses", "budgets", "dossiers")
 
     class Meta:
         model = Project
         fields = [
             "id", "country", "country_name", "name", "description",
             "status", "status_display", "budget",
+            "kind", "kind_display", "year", "sequence", "reference",
+            "is_historical", "a_typer", "dossier_count",
             "is_active", "created_at", "updated_at",
         ]
+        read_only_fields = ["year", "sequence", "reference", "is_historical"]
         validators = [
             UniqueTogetherValidator(
                 queryset=Project.objects.all(),
@@ -180,6 +196,74 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
                 message=_("Ce projet existe déjà pour ce pays."),
             )
         ]
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_a_typer(self, project):
+        """Un projet d'avant la 2.0 que le siège n'a pas encore typé."""
+        return not project.kind and not project.is_historical
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        instance = self.instance
+        if instance is None:
+            if not attrs.get("kind"):
+                raise serializers.ValidationError(
+                    {"kind": _("Indiquez le type du projet : congrès, voyage ou soutien financier.")}
+                )
+            return attrs
+        if "kind" in attrs and attrs["kind"] != instance.kind:
+            if instance.is_historical:
+                raise serializers.ValidationError(
+                    {"kind": _("Le projet « Historique » ne se type pas.")}
+                )
+            if instance.kind:
+                raise serializers.ValidationError(
+                    {"kind": _("Le type d'un projet ne change plus une fois fixé.")}
+                )
+            if not attrs["kind"]:
+                raise serializers.ValidationError({"kind": _("Indiquez le type du projet.")})
+        return attrs
+
+
+class DossierKindSerializer(serializers.ModelSerializer):
+    """Un type de dossier de la liste commune (décision 101).
+
+    Son type de projet ne change plus dès qu'un dossier l'emploie : les
+    dossiers ouverts sous « Stands » resteraient sinon dans un congrès
+    sous un type devenu celui d'un voyage.
+    """
+
+    project_kind_display = serializers.CharField(
+        source="get_project_kind_display", read_only=True
+    )
+
+    class Meta:
+        model = DossierKind
+        fields = [
+            "id", "project_kind", "project_kind_display", "name", "description",
+            "is_active", "created_at", "updated_at",
+        ]
+        validators = [
+            UniqueTogetherValidator(
+                queryset=DossierKind.objects.all(),
+                fields=["project_kind", "name"],
+                message=_("Ce type de dossier existe déjà pour ce type de projet."),
+            )
+        ]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        instance = self.instance
+        if (
+            instance is not None
+            and "project_kind" in attrs
+            and attrs["project_kind"] != instance.project_kind
+            and instance.dossiers.exists()
+        ):
+            raise serializers.ValidationError(
+                {"project_kind": _("Des dossiers emploient ce type : son type de projet ne change plus.")}
+            )
+        return attrs
 
 
 class ExpenseTitleSerializer(serializers.ModelSerializer):

@@ -84,8 +84,10 @@ class ImportTests(ExpenseTestCase):
         # L'import est une déclaration : le manager du pays (décision 89).
         self.login(user or self.owner)
         url = "/api/imports/expenses.xlsx"
-        if query:
-            url += "?" + urlencode(query)
+        # Depuis la 2.0, un classeur s'importe dans un projet, sous un type
+        # de dossier (décision 102).
+        query = {"project": self.projet.pk, "kind": self.stands.pk, **query}
+        url += "?" + urlencode(query)
         return self.client.post(
             url, {"file": ("depenses.xlsx", contenu, XLSX)}, format="multipart"
         )
@@ -126,12 +128,26 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(Expense.objects.get().created_by, self.owner.username)
 
     def test_un_pays_n_importe_pas_chez_le_voisin(self):
-        """Le manager ivoirien qui charge un classeur togolais ne verse rien :
-        chaque ligne est hors de son périmètre."""
+        """Le manager ivoirien qui charge un classeur dans le projet togolais
+        ne verse rien : le projet du voisin lui est inconnu, comme un projet
+        qui n'existe pas."""
         response = self._importer(self._classeur([self._ligne()]), user=self.rep_ivoire)
 
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("project", response.data)
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_une_ligne_d_un_autre_pays_que_le_projet_est_refusee(self):
+        """Un classeur s'importe dans un projet, donc dans son pays : une
+        cellule PAYS du voisin est une erreur de ligne, même pour qui voit
+        les deux pays."""
+        self.rep_ivoire.profile.countries.add(self.togo)
+        response = self._importer(
+            self._classeur([self._ligne(PAYS="Côte d'Ivoire")]), user=self.rep_ivoire
+        )
+
         self.assertEqual(response.status_code, 200)
-        self.assertIn("hors périmètre", response.data["erreurs"][0]["motif"])
+        self.assertIn("projet d'un autre pays", response.data["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.count(), 0)
 
     def test_sans_droit_sur_le_referentiel_une_equipe_inconnue_est_refusee(self):
@@ -176,7 +192,7 @@ class ImportTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Expense.objects.get().status, Status.DRAFT)
-        self.assertEqual(Dossier.objects.get(number="N-IMPORT-01").status, Status.DRAFT)
+        self.assertEqual(Dossier.objects.get(external_ref="N-IMPORT-01").status, Status.DRAFT)
 
     def test_le_montant_justifie_du_classeur_est_ignore(self):
         """Le pays déclare, le siège constate : un montant justifié ne
@@ -377,11 +393,13 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual([e["ligne"] for e in response.data["erreurs"]], [2, 3, 4, 5])
         self.assertEqual(Expense.objects.count(), 0)
 
-    def test_le_meme_numero_dans_un_autre_pays_ne_gene_pas(self):
-        """Le N°ORDRE est unique par pays : le « N-VOISIN » ivoirien
-        n'empêche pas le Togo d'ouvrir le sien, et n'y reçoit aucune ligne."""
+    def test_le_meme_numero_dans_un_autre_projet_ne_gene_pas(self):
+        """Un N°ORDRE de classeur désigne un dossier **du projet** : le
+        « N-VOISIN » d'un projet ivoirien n'empêche pas le projet togolais
+        d'ouvrir le sien, et n'y reçoit aucune ligne."""
         voisin = Dossier.objects.create(
-            number="N-VOISIN", label="Abidjan", country=self.ivoire,
+            number="N-VOISIN", external_ref="N-VOISIN", label="Abidjan",
+            country=self.ivoire, project=self.projet_ivoire, kind=self.stands,
             date=date(self.year, 1, 10),
         )
 
@@ -389,8 +407,12 @@ class ImportTests(ExpenseTestCase):
 
         self.assertFalse(response.data["erreurs"])
         self.assertEqual(response.data["dossiers_crees"], 1)
-        togolais = Dossier.objects.get(number="N-VOISIN", country=self.togo)
+        togolais = Dossier.objects.get(external_ref="N-VOISIN", project=self.projet)
+        # Numéroté dans son projet, la référence d'origine gardée à part.
+        self.assertEqual(togolais.number, f"{self.projet.reference}-D001")
+        self.assertEqual(togolais.kind, self.stands)
         self.assertEqual(togolais.expenses.count(), 1)
+        self.assertEqual(togolais.expenses.get().project, self.projet)
         self.assertEqual(voisin.expenses.count(), 0)
 
     def test_le_lecteur_xml_protege_est_utilise_quand_il_est_installe(self):
@@ -421,7 +443,7 @@ class ImportTests(ExpenseTestCase):
     def test_l_import_laisse_une_trace_avec_l_adresse_du_client(self):
         self.login(self.owner)
         self.client.post(
-            "/api/imports/expenses.xlsx",
+            f"/api/imports/expenses.xlsx?project={self.projet.pk}&kind={self.stands.pk}",
             {"file": ("depenses.xlsx", self._classeur([self._ligne()]), XLSX)},
             format="multipart",
             REMOTE_ADDR="10.20.30.40",
@@ -439,7 +461,8 @@ class ImportTests(ExpenseTestCase):
         """Le garde-fou vaut aussi hors de la vue : la fonction elle-même
         ne verse pas chez le voisin."""
         resultat = imports.importer_depenses(
-            self._classeur([self._ligne(PAYS="Côte d'Ivoire")]), self.owner, dry_run=True
+            self._classeur([self._ligne(PAYS="Côte d'Ivoire")]), self.owner, dry_run=True,
+            project=self.projet, kind=self.stands,
         )
 
         self.assertEqual(resultat["erreurs"][0]["ligne"], 2)
@@ -543,8 +566,10 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
     def _importer(self, contenu, user=None, **query):
         self.login(user or self.owner)
         url = "/api/imports/expenses.xlsx"
-        if query:
-            url += "?" + urlencode(query)
+        # Depuis la 2.0, un classeur s'importe dans un projet, sous un type
+        # de dossier (décision 102).
+        query = {"project": self.projet.pk, "kind": self.stands.pk, **query}
+        url += "?" + urlencode(query)
         return self.client.post(
             url, {"file": ("historique.xlsx", contenu, XLSX)}, format="multipart"
         )
@@ -556,11 +581,11 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertFalse(response.data["erreurs"])
         self.assertEqual(response.data["dossiers_crees"], 2)
         self.assertEqual(response.data["lignes_creees"], 4)
-        premier = Dossier.objects.get(country=self.togo, number="1")
+        premier = Dossier.objects.get(project=self.projet, external_ref="1")
         self.assertEqual(premier.expenses.count(), 3)
         self.assertEqual(premier.status, Status.DRAFT)
         self.assertEqual(premier.date, date(self.year, 1, 6))
-        second = Dossier.objects.get(country=self.togo, number="2")
+        second = Dossier.objects.get(project=self.projet, external_ref="2")
         self.assertEqual(second.expenses.count(), 1)
         self.assertTrue(
             all(e.country == self.togo for e in Expense.objects.all())
@@ -601,15 +626,22 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertEqual(list(owner.countries.all()), [self.togo])
         self.assertEqual(Expense.objects.filter(team=equipe, owner=owner).count(), 3)
 
-    def test_sans_colonne_pays_le_parametre_country_est_obligatoire(self):
+    def test_sans_colonne_pays_le_pays_est_celui_du_projet(self):
+        """Depuis la 2.0, le classeur s'importe dans un projet : son pays
+        suffit, le paramètre ``country`` n'est plus nécessaire."""
         response = self._importer(self._classeur())
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data["erreurs"])
+        self.assertEqual(set(Expense.objects.values_list("country", flat=True)), {self.togo.pk})
+
+    def test_un_pays_qui_n_est_pas_celui_du_projet_est_refuse(self):
+        self.owner.profile.countries.add(self.ivoire)
+        response = self._importer(self._classeur(), country=self.ivoire.pk)
+
         self.assertEqual(response.data["erreurs"][0]["ligne"], 1)
-        self.assertIn("PAYS", response.data["erreurs"][0]["motif"])
-        self.assertIn("country", response.data["erreurs"][0]["motif"])
+        self.assertIn("autre pays", response.data["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.count(), 0)
-        self.assertEqual(Team.objects.filter(name="Équipe A").count(), 0)
 
     def test_un_pays_inconnu_est_refuse(self):
         inconnu = self._importer(self._classeur(), country=self.ivoire.pk + 1000)
@@ -641,7 +673,10 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",
-            {"file": ("historique.xlsx", self._classeur(), XLSX), "country": self.togo.pk},
+            {
+                "file": ("historique.xlsx", self._classeur(), XLSX), "country": self.togo.pk,
+                "project": self.projet.pk, "kind": self.stands.pk,
+            },
             format="multipart",
         )
 
@@ -704,7 +739,7 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         Par qui l'a importé : le dossier importé porte l'auteur de l'import,
         et un brouillon ne part que par son auteur (décision 46)."""
         self._importer(self._classeur(), country=self.togo.pk)
-        premier = Dossier.objects.get(country=self.togo, number="1")
+        premier = Dossier.objects.get(project=self.projet, external_ref="1")
 
         response = self.submit_dossier(premier, user=self.owner)
 
@@ -738,17 +773,18 @@ class ImportsConcurrentsTests(ImportTests):
 
     def _autre_import_cree_le_dossier(self):
         """Simule l'autre import, validé en même temps et écrit juste avant."""
-        original = Dossier.objects.get_or_create
+        original = imports.creer_dossier
 
-        def concurrent(**kwargs):
+        def concurrent(dossier):
             Dossier.objects.create(
-                country=kwargs["country"], number=kwargs["number"],
+                country=dossier.country, project=dossier.project, kind=dossier.kind,
+                number="AUTRE-IMPORT", external_ref=dossier.external_ref,
                 label="Créé par l'autre import", date=date(self.year, 1, 1),
                 created_by="autre.import",
             )
-            return original(**kwargs)
+            return original(dossier)
 
-        return mock.patch.object(Dossier.objects, "get_or_create", side_effect=concurrent)
+        return mock.patch.object(imports, "creer_dossier", side_effect=concurrent)
 
     def test_un_dossier_cree_entre_temps_est_une_erreur_de_ligne(self):
         with self._autre_import_cree_le_dossier():
@@ -769,7 +805,7 @@ class ImportsConcurrentsTests(ImportTests):
 
     def test_une_violation_d_unicite_est_une_erreur_de_ligne(self):
         with mock.patch.object(
-            Dossier.objects, "get_or_create", side_effect=IntegrityError("doublon")
+            imports, "creer_dossier", side_effect=IntegrityError("doublon")
         ):
             response = self._importer(self._classeur([self._ligne()]))
 
@@ -800,7 +836,10 @@ class ClasseurGonfleTests(ExpenseTestCase):
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",
-            {"file": SimpleUploadedFile("bombe.xlsx", tampon.getvalue(), content_type=XLSX)},
+            {
+                "file": SimpleUploadedFile("bombe.xlsx", tampon.getvalue(), content_type=XLSX),
+                "project": self.projet.pk, "kind": self.stands.pk,
+            },
             format="multipart",
         )
 
@@ -825,7 +864,10 @@ class ReimportDUnExportTests(ExpenseTestCase):
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",
-            {"file": SimpleUploadedFile("export.xlsx", classeur, content_type=XLSX), "country": self.togo.pk},
+            {
+                "file": SimpleUploadedFile("export.xlsx", classeur, content_type=XLSX),
+                "country": self.togo.pk, "project": self.projet.pk, "kind": self.stands.pk,
+            },
             format="multipart",
         )
 

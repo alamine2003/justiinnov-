@@ -316,6 +316,15 @@ CAPACITES = (
         _("Ajouter une équipe, un centre de coûts, un projet, un intitulé, une catégorie, un bénéficiaire."),
         _ADMINISTRATEURS,
     ),
+    # Le projet est la rubrique principale depuis la 2.0 (décision 100) :
+    # le pays ouvre ses congrès et ses voyages sans attendre le siège. Le
+    # siège garde la modification et la désactivation (``referentiel.update``).
+    Capacite(
+        "projets.create", GROUPE_REFERENTIEL,
+        _("Créer un projet"),
+        _("Ouvrir un congrès, un voyage ou un soutien financier dans son pays ; sa référence est attribuée."),
+        frozenset({*COUNTRY_ROLES, *_ADMINISTRATEURS}),
+    ),
     Capacite(
         "referentiel.update", GROUPE_REFERENTIEL,
         _("Modifier le référentiel"),
@@ -427,6 +436,15 @@ CAPACITES = (
         "rectifications.decide",
         _("Décider d'une rectification"),
         _("Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne."),
+    ),
+    # Le titre d'un dossier ne porte ni montant ni preuve : le renommer ne
+    # touche pas à ce qui a été déclaré, et c'est tracé (décision 104). Au
+    # pays par défaut, à tout moment ; rien n'y est fixe ni verrouillé.
+    Capacite(
+        "dossiers.rename", GROUPE_DECLARATION,
+        _("Renommer un dossier"),
+        _("Changer le titre d'un dossier de son pays, même soumis ou clôturé ; l'ancien titre reste au journal."),
+        COUNTRY_ROLES, fixes=frozenset(),
     ),
     Capacite(
         "data.export", GROUPE_FICHIERS,

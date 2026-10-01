@@ -158,6 +158,9 @@ SAISIE_CAPACITES = {
     "add_line": "expenses.create",
     "upload": "proofs.upload",
     "delete": "expenses.delete",
+    # Le titre d'un dossier, à tout moment (décision 104) : seul ce qui ne
+    # porte ni montant ni preuve se modifie après la déclaration.
+    "rename": "dossiers.rename",
 }
 
 #: Actions soumises à la règle des quatre yeux : tout acte de contrôle, de
@@ -282,7 +285,7 @@ EXPENSE_ACTIONS = ("edit", "delete", "review", "justify", "reject", "close")
 
 #: Actions d'un dossier, dans le même ordre que le circuit.
 DOSSIER_ACTIONS = (
-    "edit", "add_line", "upload", "delete",
+    "edit", "rename", "add_line", "upload", "delete",
     "submit", "review", "justify", "reject", "close", "reopen",
 )
 
@@ -318,6 +321,10 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
     if role not in roles_pour(SAISIE_CAPACITES[action], configuration):
         return False
     auteur_ou_anonyme = not objet.created_by or objet.created_by == username
+    if action == "rename":
+        # Quel que soit l'état, même clôturé, et par tout compte qui a la
+        # capacité — pas seulement l'auteur (décision 104).
+        return True
     if action == "delete":
         return (
             objet.status in DELETABLE_STATUSES

@@ -240,7 +240,9 @@ class RolePermissionTests(ScopingTestCase):
                 "timezone": "Africa/Porto-Novo",
             }),
             ("/api/managers/", {"name": "Awa Diop"}),
-            ("/api/projects/", {"country": self.togo.pk, "name": "Projet X"}),
+            # Le projet, lui, s'ouvre au pays depuis la 2.0 (``projets.create``,
+            # décision 100) : ``accounts/tests/test_projets.py``.
+            ("/api/teams/", {"country": self.togo.pk, "name": "Équipe X"}),
             ("/api/beneficiaries/", {
                 "country": self.togo.pk, "name": "Pharmacie X", "kind": "supplier",
             }),

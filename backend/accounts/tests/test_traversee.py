@@ -27,6 +27,7 @@ from core.models import (
     ChangeLog,
     CostCenter,
     Country,
+    DossierKind,
     ExpenseTitle,
     Manager,
     MarketingCategory,
@@ -39,8 +40,9 @@ from expenses.tests.base import in_memory_storage
 from notifications.models import Notification
 
 #: Modèles exposés par un viewset sans périmètre de pays : un taux de change
-#: vaut pour tout le monde. Tout autre modèle doit figurer dans le décor.
-SANS_PERIMETRE = {ExchangeRate}
+#: vaut pour tout le monde, la liste des types de dossiers est commune aux
+#: filiales (décision 101). Tout autre modèle doit figurer dans le décor.
+SANS_PERIMETRE = {ExchangeRate, DossierKind}
 
 #: Réponses acceptables pour un objet hors périmètre : introuvable, ou
 #: refusé par le rôle avant même d'être cherché. Jamais 200, jamais 400 —

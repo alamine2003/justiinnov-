@@ -23,7 +23,8 @@ from .base import ExpenseTestCase
 from .test_workflow import configurer
 
 #: Actions de saisie d'un brouillon, pour son auteur : avant le circuit.
-SAISIE = ["edit", "add_line", "upload", "delete"]
+#: Le renommage est ouvert au pays à tout moment (décision 104).
+SAISIE = ["edit", "rename", "add_line", "upload", "delete"]
 
 
 class ActionsDeLigneTests(ExpenseTestCase):
@@ -144,7 +145,7 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.assertEqual(self._actions(self.doo), [])
         self.assertEqual(self._actions(self.controller), ["review", "reopen"])
         self.assertEqual(self._actions(self.admin), ["review", "reopen"])
-        self.assertEqual(self._actions(self.owner), ["upload"])
+        self.assertEqual(self._actions(self.owner), ["rename", "upload"])
 
     def test_les_lignes_tranchees_ouvrent_le_constat(self):
         ligne = self.make_expense()
@@ -209,7 +210,7 @@ class ActionsDeDossierTests(ExpenseTestCase):
 
         self.assertEqual(self._actions(self.controller), ["close"])
         # Une pièce peut encore arriver avant la clôture — par le pays.
-        self.assertEqual(self._actions(self.owner), ["upload"])
+        self.assertEqual(self._actions(self.owner), ["rename", "upload"])
 
 
 class TransitionRenvoieLeDetailTests(ExpenseTestCase):
@@ -232,7 +233,7 @@ class TransitionRenvoieLeDetailTests(ExpenseTestCase):
         self.assertEqual(len(response.data["proofs"]), 1)
         self.assertEqual(response.data["expense_count"], 1)
         # Déclaré, le dossier ne se modifie plus ; une pièce peut encore arriver.
-        self.assertEqual(response.data["allowed_actions"], ["upload"])
+        self.assertEqual(response.data["allowed_actions"], ["rename", "upload"])
 
     def test_la_justification_renvoie_le_detail_avec_les_actions(self):
         ligne = self.make_expense()
@@ -314,14 +315,15 @@ class ActionsDeSaisieTests(ExpenseTestCase):
             original_name="facture.pdf", sha256="a" * 64,
         )
         self.submit_dossier()
-        self.assertEqual(self._dossier(self.owner), ["upload"])
+        self.assertEqual(self._dossier(self.owner), ["rename", "upload"])
 
         self.login(self.controller)
         self.client.post(f"/api/expenses/{ligne.pk}/justify/")
         self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
         self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
 
-        self.assertEqual(self._dossier(self.owner), [])
+        # Clôturé, plus de pièce ; le titre, lui, se renomme encore (décision 104).
+        self.assertEqual(self._dossier(self.owner), ["rename"])
 
     def test_la_matrice_retire_la_rectification_au_pays(self):
         """Un droit retiré dans la configuration disparaît des actions
