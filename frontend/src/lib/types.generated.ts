@@ -378,6 +378,10 @@ export interface paths {
          *
          *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
          *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
          */
         get: operations["dossier_kinds_list"]
         put?: never
@@ -386,6 +390,10 @@ export interface paths {
          *
          *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
          *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
          */
         post: operations["dossier_kinds_create"]
         delete?: never
@@ -406,6 +414,10 @@ export interface paths {
          *
          *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
          *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
          */
         get: operations["dossier_kinds_retrieve"]
         /**
@@ -413,6 +425,10 @@ export interface paths {
          *
          *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
          *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
          */
         put: operations["dossier_kinds_update"]
         post?: never
@@ -424,6 +440,10 @@ export interface paths {
          *
          *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
          *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
          */
         patch: operations["dossier_kinds_partial_update"]
         trace?: never

@@ -1632,7 +1632,7 @@
         "/api/dossier-kinds/": {
             "get": {
                 "operationId": "dossier_kinds_list",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
                 "parameters": [
                     {
                         "in": "query",
@@ -1718,7 +1718,7 @@
             },
             "post": {
                 "operationId": "dossier_kinds_create",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
                 "tags": [
                     "dossier-kinds"
                 ],
@@ -1767,7 +1767,7 @@
         "/api/dossier-kinds/{id}/": {
             "get": {
                 "operationId": "dossier_kinds_retrieve",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
                 "parameters": [
                     {
                         "in": "path",
@@ -1805,7 +1805,7 @@
             },
             "put": {
                 "operationId": "dossier_kinds_update",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
                 "parameters": [
                     {
                         "in": "path",
@@ -1863,7 +1863,7 @@
             },
             "patch": {
                 "operationId": "dossier_kinds_partial_update",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
                 "parameters": [
                     {
                         "in": "path",
