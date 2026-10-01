@@ -177,6 +177,23 @@ class DossierTotalsSerializer(serializers.Serializer):
     gap = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True, read_only=True)
 
 
+class PaysDesDossiersSerializer(serializers.Serializer):
+    """Un pays du périmètre et le nombre de ses dossiers visibles."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    code = serializers.CharField(read_only=True)
+    country_ref = serializers.CharField(read_only=True, allow_null=True)
+    count = serializers.IntegerField(read_only=True)
+
+
+class DossiersParPaysSerializer(serializers.Serializer):
+    """Répartition des dossiers par pays, pour les onglets de la liste."""
+
+    total = serializers.IntegerField(read_only=True)
+    pays = PaysDesDossiersSerializer(many=True, read_only=True)
+
+
 def _jour_local(date, country):
     """Jour d'une dépense dans le fuseau de son pays, pour y chercher le taux.
 

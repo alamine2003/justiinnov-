@@ -108,6 +108,8 @@ export type ExpenseTransitionName = Exclude<TransitionName, "submit">
 
 export type Dossier = Schema<"Dossier">
 export type DossierDetail = Schema<"DossierDetail">
+/** Dossiers visibles par pays, pour les onglets de la liste. */
+export type DossiersParPays = Schema<"DossiersParPays">
 export type Expense = Schema<"Expense">
 export type PaymentMethod = Schema<"PaymentMethodEnum">
 export type ProofStatus = Schema<"ProofStatusEnum">

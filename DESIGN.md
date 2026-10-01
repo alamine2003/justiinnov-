@@ -571,14 +571,19 @@ avec son `PageHeader` et le bouton « Retour » commun. Elle propose la
 simulation (`dry_run`) avant l'écriture ; les erreurs se lisent au numéro
 de ligne du classeur. Le siège ne voit pas le bouton.
 
-### Filtre par pays des dossiers
+### Onglets par pays des dossiers
 
-Un dossier appartient à un pays (décision 89). La liste des dossiers
-porte un `NativeSelect` « Tous les pays », à côté de la recherche, dès que
-le compte voit plusieurs pays — le siège, ou un manager rattaché à
-plusieurs pays ; un manager d'un seul pays n'en a pas besoin. Le pays vit
-dans l'URL (`?country=`), comme le statut, et part aussi au menu
-d'export.
+Un dossier appartient à un pays (décision 89). Dès que le compte voit
+plusieurs pays — le siège, ou un manager rattaché à plusieurs pays —, la
+liste des dossiers se sépare en **onglets**, au-dessus de la recherche :
+« Tous les pays », puis un onglet par pays, chacun suivi du nombre de
+dossiers qu'il affichera (décision 99). Un manager d'un seul pays n'en a
+pas. Les onglets sont `Tabs` en variante `line`, qui passent à la ligne
+quand les dix-sept filiales sont ouvertes — jamais une barre qui défile.
+Les pays et leurs comptes viennent de `GET /api/dossiers/par-pays/`, avec
+les filtres de la liste (statut, recherche) sauf le pays : l'interface ne
+compte rien. Le pays vit dans l'URL (`?country=`), comme le statut, et part
+aussi au menu d'export.
 
 ---
 
