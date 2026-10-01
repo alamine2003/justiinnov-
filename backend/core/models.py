@@ -130,7 +130,26 @@ class CostCenter(TimeStampedModel):
         return f"{self.code} — {self.name}"
 
 
+class ProjectKind(models.TextChoices):
+    """Type d'un projet (décision 100) : il fixe les types de dossiers qu'on y ouvre."""
+
+    CONGRES = "congres", _("Congrès")
+    VOYAGE = "voyage", _("Voyage")
+    SOUTIEN_FINANCIER = "soutien_financier", _("Soutien financier")
+
+
 class Project(TimeStampedModel):
+    """Projet d'un pays : la rubrique principale, qui contient des dossiers typés.
+
+    Depuis la version 2.0 (décision 100), un projet a un **type** et une
+    **référence** calculée — ``TG-P-2026-001`` : code du pays, année, rang
+    dans le pays et l'année —, attribuée à sa création et jamais changée
+    (``core.numerotation``). Un projet sans type est soit le projet
+    « Historique » d'un pays, où la reprise a rangé les dossiers d'avant la
+    2.0, soit un projet d'avant la 2.0 que le siège n'a pas encore typé : ni
+    l'un ni l'autre n'accepte de nouveau dossier.
+    """
+
     STATUS_CHOICES = [
         ("planned", _("Planifié")),
         ("active", _("En cours")),
@@ -148,15 +167,70 @@ class Project(TimeStampedModel):
         "Budget", max_digits=14, decimal_places=2, null=True, blank=True
     )
     is_active = models.BooleanField(_("Actif"), default=True)
+    kind = models.CharField(
+        _("Type de projet"), max_length=24, choices=ProjectKind.choices, blank=True
+    )
+    #: Année et rang de la référence : le rang repart de 1 chaque année,
+    #: dans chaque pays. Vides pour le projet « Historique ».
+    year = models.PositiveSmallIntegerField(_("Année"), null=True, blank=True)
+    sequence = models.PositiveIntegerField(_("Rang"), null=True, blank=True)
+    reference = models.CharField(
+        _("Référence"), max_length=32, unique=True, null=True, blank=True
+    )
+    #: Le projet où la reprise de la 2.0 a rangé les dossiers qui n'en
+    #: avaient pas (décision 103). Un seul par pays ; il n'accepte pas de
+    #: nouveau dossier.
+    is_historical = models.BooleanField(_("Projet historique"), default=False)
 
     class Meta:
         ordering = ["-created_at"]
         verbose_name = _("Projet")
-        # Même raison que pour l'équipe : une sous-enveloppe se rattache à
-        # un projet par son nom, il doit désigner un seul projet du pays.
         constraints = [
+            # Même raison que pour l'équipe : une sous-enveloppe se rattache
+            # à un projet par son nom, il doit désigner un seul projet du pays.
             models.UniqueConstraint(
                 fields=["country", "name"], name="unique_projet_par_pays"
+            ),
+            models.UniqueConstraint(
+                fields=["country", "year", "sequence"],
+                condition=models.Q(sequence__isnull=False),
+                name="unique_rang_de_projet",
+            ),
+            models.UniqueConstraint(
+                fields=["country"],
+                condition=models.Q(is_historical=True),
+                name="un_projet_historique_par_pays",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class DossierKind(TimeStampedModel):
+    """Type de dossier ouvert dans un projet : Stands, Voyages, Billets…
+
+    La liste est **commune à toutes les filiales** et tenue par le siège
+    (décision 101) : les consolidations par type de dossier se comparent
+    d'un pays à l'autre. Chaque type appartient à un type de projet ; on ne
+    l'ouvre que dans un projet de ce type. Il se désactive, ne se supprime
+    pas.
+    """
+
+    project_kind = models.CharField(
+        _("Type de projet"), max_length=24, choices=ProjectKind.choices
+    )
+    name = models.CharField(_("Nom"), max_length=120)
+    description = models.TextField(_("Description"), blank=True)
+    is_active = models.BooleanField(_("Actif"), default=True)
+
+    class Meta:
+        ordering = ["project_kind", "name", "pk"]
+        verbose_name = _("Type de dossier")
+        verbose_name_plural = _("Types de dossiers")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project_kind", "name"], name="unique_type_de_dossier"
             )
         ]
 
@@ -242,6 +316,7 @@ class ChangeLog(models.Model):
         WORKFLOW_CONFIGURATION = "workflow_configuration", _("Configuration du workflow")
         USER = "user", _("Compte utilisateur")
         BENEFICIARY = "beneficiary", _("Bénéficiaire")
+        DOSSIER_KIND = "dossier_kind", _("Type de dossier")
 
     model_name = models.CharField(
         "Entité", max_length=32, choices=Models.choices

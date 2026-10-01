@@ -20,6 +20,7 @@ from django.utils.translation import pgettext_lazy
 from budget.models import Budget
 from core.models import (
     Country,
+    DossierKind,
     ExpenseTitle,
     Manager,
     MarketingCategory,
@@ -161,14 +162,21 @@ class DossierQuerySet(models.QuerySet):
 
 
 class Dossier(TimeStampedModel):
-    """Le **N°ORDRE** : ensemble documentaire d'une opération."""
+    """Dossier d'un projet : Stands, Voyages, Billets… et ses lignes.
+
+    Depuis la version 2.0 (décision 102), un dossier s'ouvre **dans un
+    projet**, avec un **type** pris parmi ceux du type de projet, et son
+    numéro est calculé : la référence du projet suivie de son rang dans le
+    projet — ``TG-P-2026-001-D001`` (``core.numerotation``). Les dossiers
+    d'avant la 2.0 gardent leur N°ORDRE, sans type ni rang (décision 103).
+    """
 
     objects = DossierQuerySet.as_manager()
 
-    # Le N°ORDRE est numéroté **par pays** : le classeur du client repart de
-    # 1 dans chaque pays. Une unicité globale refusait donc le « 12 » du
-    # Togo dès que la Côte d'Ivoire avait le sien — et trahissait au passage
-    # l'existence du dossier voisin. L'unicité vaut sur (pays, numéro).
+    # Le numéro est unique **par pays** : le N°ORDRE d'avant la 2.0 repartait
+    # de 1 dans chaque pays, et une unicité globale refusait le « 12 » du
+    # Togo dès que la Côte d'Ivoire avait le sien. Les numéros calculés de
+    # la 2.0 portent le code du pays et ne se croisent plus.
     number = models.CharField(_("N° d'ordre"), max_length=50)
     label = models.CharField(_("Libellé"), max_length=250)
     country = models.ForeignKey(
@@ -185,6 +193,23 @@ class Dossier(TimeStampedModel):
     owner = models.ForeignKey(
         Manager, null=True, blank=True, on_delete=models.PROTECT,
         related_name="dossiers", verbose_name=_("Propriétaire"),
+    )
+    # Facultatifs en base le temps de la reprise : tout dossier en reçoit
+    # un (décision 103), et l'API l'exige à la création (décision 102).
+    project = models.ForeignKey(
+        Project, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="dossiers", verbose_name=_("Projet"),
+    )
+    kind = models.ForeignKey(
+        DossierKind, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="dossiers", verbose_name=_("Type de dossier"),
+    )
+    #: Rang du dossier dans son projet (le « D001 » de son numéro).
+    sequence = models.PositiveIntegerField(_("Rang"), null=True, blank=True)
+    #: Numéro d'origine d'un dossier importé (le N°ORDRE du classeur) : un
+    #: classeur importé deux fois ne crée pas deux fois le même dossier.
+    external_ref = models.CharField(
+        _("Référence d'origine"), max_length=50, blank=True
     )
     date = models.DateField(_("Date"))
     status = models.CharField(
@@ -209,7 +234,17 @@ class Dossier(TimeStampedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["country", "number"], name="unique_dossier_par_pays"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["project", "sequence"],
+                condition=models.Q(sequence__isnull=False),
+                name="unique_rang_de_dossier",
+            ),
+            models.UniqueConstraint(
+                fields=["project", "external_ref"],
+                condition=~models.Q(external_ref=""),
+                name="unique_reference_d_origine_par_projet",
+            ),
         ]
         indexes = [
             models.Index(fields=["country", "status"], name="dossier_pays_statut"),

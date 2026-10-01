@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JUSTI GH\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-25 12:14+0000\n"
+"POT-Creation-Date: 2026-10-01 21:26+0000\n"
 "PO-Revision-Date: 2026-09-05 00:00+0000\n"
 "Last-Translator: Équipe JUSTI GH\n"
 "Language-Team: English\n"
@@ -194,7 +194,7 @@ msgstr "Configure the platform"
 msgid "Lire la configuration, régler la politique du circuit et cette matrice. Réservé aux administrateurs, sans exception."
 msgstr "Read the configuration, set the workflow policy and this matrix. Administrators only, without exception."
 
-#: accounts/permissions.py:271 expenses/models.py:817 expenses/models.py:818
+#: accounts/permissions.py:271 expenses/models.py:852 expenses/models.py:853
 msgid "Journal d'audit"
 msgstr "Audit log"
 
@@ -422,7 +422,13 @@ msgstr "Load an expense workbook of one's own country as drafts."
 msgid "Votre rôle ne permet pas cette action."
 msgstr "Your role does not allow this action."
 
-#: accounts/referentiel.py:79 accounts/referentiel.py:154 budget/models.py:136 budget/serializers.py:104 core/models.py:72 core/models.py:92 core/models.py:118 core/models.py:142 core/models.py:171 core/models.py:191 core/models.py:232 core/models.py:258 expenses/models.py:69 expenses/models.py:175 expenses/models.py:390 expenses/models.py:736 expenses/models.py:808 expenses/serializers.py:272 reporting/exports.py:461 reporting/exports.py:482
+#: accounts/referentiel.py:79 accounts/referentiel.py:154 budget/models.py:136
+#: budget/serializers.py:104 core/models.py:72 core/models.py:92
+#: core/models.py:118 core/models.py:161 core/models.py:245 core/models.py:265
+#: core/models.py:306 core/models.py:334 expenses/models.py:70
+#: expenses/models.py:183 expenses/models.py:425 expenses/models.py:771
+#: expenses/models.py:843 expenses/serializers.py:289 reporting/exports.py:461
+#: reporting/exports.py:482
 msgid "Pays"
 msgstr "Country"
 
@@ -546,31 +552,33 @@ msgstr "You cannot remove your own administration rights."
 msgid "Les droits s'appliquent à chaque requête, dès l'enregistrement. Le pays seul déclare, l'administrateur seul contrôle ; les administrateurs gardent l'administration, et un pays n'arbitre jamais ses enveloppes."
 msgstr "Rights apply to every request as soon as they are saved. Only the country declares, only the administrator reviews; administrators keep administration, and a country never arbitrates its own envelopes."
 
-#: budget/models.py:29 core/models.py:315
+#: budget/models.py:29 core/models.py:391
 msgid "Bloquer"
 msgstr "Block"
 
-#: budget/models.py:30 core/models.py:316
+#: budget/models.py:30 core/models.py:392
 msgid "Alerter"
 msgstr "Warn"
 
-#: budget/models.py:31 core/models.py:317
+#: budget/models.py:31 core/models.py:393
 msgid "Soumettre à approbation"
 msgstr "Require approval"
 
-#: budget/models.py:138
+#: budget/models.py:138 core/models.py:175
 msgid "Année"
 msgstr "Year"
 
-#: budget/models.py:148 budget/serializers.py:108 core/models.py:154 core/models.py:236 expenses/models.py:407
+#: budget/models.py:148 budget/serializers.py:108 core/models.py:187
+#: core/models.py:310 expenses/models.py:201 expenses/models.py:442
 msgid "Projet"
 msgstr "Project"
 
-#: budget/models.py:156 budget/serializers.py:112 core/models.py:100 core/models.py:234 expenses/models.py:183 expenses/models.py:394
+#: budget/models.py:156 budget/serializers.py:112 core/models.py:100
+#: core/models.py:308 expenses/models.py:191 expenses/models.py:429
 msgid "Équipe"
 msgstr "Team"
 
-#: budget/models.py:164 budget/serializers.py:116 core/models.py:233
+#: budget/models.py:164 budget/serializers.py:116 core/models.py:307
 msgid "Manager"
 msgstr "Manager"
 
@@ -582,7 +590,9 @@ msgstr "Amount"
 msgid "Politique de dépassement"
 msgstr "Overrun policy"
 
-#: budget/models.py:178 core/models.py:28 core/models.py:65 core/models.py:96 core/models.py:122 core/models.py:150 core/models.py:175 core/models.py:195 expenses/models.py:82
+#: budget/models.py:178 core/models.py:28 core/models.py:65 core/models.py:96
+#: core/models.py:122 core/models.py:169 core/models.py:225 core/models.py:249
+#: core/models.py:269 expenses/models.py:83
 msgid "Actif"
 msgstr "Active"
 
@@ -600,15 +610,15 @@ msgstr "Team {name}"
 msgid "Manager {name}"
 msgstr "Manager {name}"
 
-#: budget/models.py:263 expenses/models.py:577
+#: budget/models.py:263 expenses/models.py:612
 msgid "En attente"
 msgstr "Pending"
 
-#: budget/models.py:264 expenses/models.py:578
+#: budget/models.py:264 expenses/models.py:613
 msgid "Approuvée"
 msgstr "Approved"
 
-#: budget/models.py:265 expenses/models.py:579
+#: budget/models.py:265 expenses/models.py:614
 msgid "Refusée"
 msgstr "Refused"
 
@@ -620,31 +630,33 @@ msgstr "Source envelope"
 msgid "Enveloppe destinataire"
 msgstr "Target envelope"
 
-#: budget/models.py:281 expenses/models.py:769
+#: budget/models.py:281 expenses/models.py:804
 msgid "Justification"
 msgstr "Justification"
 
-#: budget/models.py:283 core/models.py:146 expenses/models.py:191 expenses/models.py:470 expenses/models.py:586 expenses/models.py:661 reporting/exports.py:482
+#: budget/models.py:283 core/models.py:165 expenses/models.py:216
+#: expenses/models.py:505 expenses/models.py:621 expenses/models.py:696
+#: reporting/exports.py:482
 msgid "Statut"
 msgstr "Status"
 
-#: budget/models.py:285 expenses/models.py:589
+#: budget/models.py:285 expenses/models.py:624
 msgid "Demandée par"
 msgstr "Requested by"
 
-#: budget/models.py:286 expenses/models.py:590
+#: budget/models.py:286 expenses/models.py:625
 msgid "Décidée par"
 msgstr "Decided by"
 
-#: budget/models.py:287 expenses/models.py:591
+#: budget/models.py:287 expenses/models.py:626
 msgid "Décidée le"
 msgstr "Decided on"
 
-#: budget/models.py:288 expenses/models.py:592
+#: budget/models.py:288 expenses/models.py:627
 msgid "Motif de la décision"
 msgstr "Decision reason"
 
-#: budget/models.py:292 core/models.py:240
+#: budget/models.py:292 core/models.py:314
 msgid "Réallocation budgétaire"
 msgstr "Budget reallocation"
 
@@ -676,7 +688,7 @@ msgstr "Effective from"
 msgid "Créé le"
 msgstr "Created on"
 
-#: budget/models.py:334 core/models.py:241
+#: budget/models.py:334 core/models.py:315
 msgid "Taux de change"
 msgstr "Exchange rate"
 
@@ -756,7 +768,8 @@ msgstr "A justification is required."
 msgid "La source et la destination doivent différer."
 msgstr "Source and target must differ."
 
-#: budget/serializers.py:418 budget/transitions.py:171 budget/transitions.py:223
+#: budget/serializers.py:418 budget/transitions.py:171
+#: budget/transitions.py:223
 #, python-brace-format
 msgid "Les deux enveloppes doivent être dans la même devise ({source} → {target})."
 msgstr "Both envelopes must be in the same currency ({source} → {target})."
@@ -852,11 +865,12 @@ msgstr "Resource not found."
 msgid "Erreur interne du serveur."
 msgstr "Internal server error."
 
-#: core/models.py:16 core/models.py:347
+#: core/models.py:16 core/models.py:423
 msgid "Modifié le"
 msgstr "Updated on"
 
-#: core/models.py:25 core/models.py:40 core/models.py:94 core/models.py:144 core/models.py:193 expenses/models.py:71
+#: core/models.py:25 core/models.py:40 core/models.py:94 core/models.py:163
+#: core/models.py:223 core/models.py:267 expenses/models.py:72
 msgid "Nom"
 msgstr "Name"
 
@@ -888,7 +902,8 @@ msgstr "IANA identifier, e.g. Africa/Abidjan."
 msgid "Manager(s)"
 msgstr "Manager(s)"
 
-#: core/models.py:95 core/models.py:145 core/models.py:174 core/models.py:194 expenses/models.py:403
+#: core/models.py:95 core/models.py:164 core/models.py:224 core/models.py:248
+#: core/models.py:268 expenses/models.py:438
 msgid "Description"
 msgstr "Description"
 
@@ -896,155 +911,196 @@ msgstr "Description"
 msgid "Code"
 msgstr "Code"
 
-#: core/models.py:121 core/models.py:251 expenses/models.py:173 expenses/models.py:803 reporting/exports.py:482
+#: core/models.py:121 core/models.py:327 expenses/models.py:181
+#: expenses/models.py:838 reporting/exports.py:482
 msgid "Libellé"
 msgstr "Label"
 
-#: core/models.py:126 core/models.py:235
+#: core/models.py:126 core/models.py:309
 msgid "Centre de coûts"
 msgstr "Cost centre"
 
-#: core/models.py:135
+#: core/models.py:136
+msgid "Congrès"
+msgstr "Congress"
+
+#: core/models.py:137
+msgid "Voyage"
+msgstr "Trip"
+
+#: core/models.py:138
+msgid "Soutien financier"
+msgstr "Financial support"
+
+#: core/models.py:154
 msgid "Planifié"
 msgstr "Planned"
 
-#: core/models.py:136
+#: core/models.py:155
 msgid "En cours"
 msgstr "In progress"
 
-#: core/models.py:137
+#: core/models.py:156
 msgid "En pause"
 msgstr "On hold"
 
-#: core/models.py:138
+#: core/models.py:157
 msgid "Terminé"
 msgstr "Completed"
 
-#: core/models.py:173
+#: core/models.py:171 core/models.py:221
+msgid "Type de projet"
+msgstr "Project type"
+
+#: core/models.py:176 expenses/models.py:208
+msgid "Rang"
+msgstr "Rank"
+
+#: core/models.py:178
+msgid "Référence"
+msgstr "Reference"
+
+#: core/models.py:183
+msgid "Projet historique"
+msgstr "Historical project"
+
+#: core/models.py:229 core/models.py:319 expenses/models.py:205
+msgid "Type de dossier"
+msgstr "File type"
+
+#: core/models.py:230
+msgid "Types de dossiers"
+msgstr "File types"
+
+#: core/models.py:247
 msgid "Intitulé"
 msgstr "Title"
 
-#: core/models.py:179 core/models.py:237 expenses/models.py:411
+#: core/models.py:253 core/models.py:311 expenses/models.py:446
 msgid "Intitulé de dépenses"
 msgstr "Expense title"
 
-#: core/models.py:199 core/models.py:238 expenses/models.py:415
+#: core/models.py:273 core/models.py:312 expenses/models.py:450
 msgid "Catégorie marketing"
 msgstr "Marketing category"
 
-#: core/models.py:215 expenses/models.py:765
+#: core/models.py:289 expenses/models.py:800
 msgid "Création"
 msgstr "Creation"
 
-#: core/models.py:216
+#: core/models.py:290
 msgid "Mise à jour"
 msgstr "Update"
 
-#: core/models.py:217
+#: core/models.py:291
 msgid "Changement de rattachement"
 msgstr "Reassignment"
 
-#: core/models.py:218
+#: core/models.py:292
 msgid "Désactivation"
 msgstr "Deactivation"
 
-#: core/models.py:219
+#: core/models.py:293
 msgid "Réactivation"
 msgstr "Reactivation"
 
-#: core/models.py:220
+#: core/models.py:294
 msgid "Suppression"
 msgstr "Deletion"
 
-#: core/models.py:221
+#: core/models.py:295
 msgid "Réinitialisation du mot de passe"
 msgstr "Password reset"
 
-#: core/models.py:222
+#: core/models.py:296
 msgid "Changement de mot de passe"
 msgstr "Password change"
 
-#: core/models.py:223
+#: core/models.py:297
 msgid "Connexion"
 msgstr "Sign-in"
 
-#: core/models.py:224
+#: core/models.py:298
 msgid "Échec de connexion"
 msgstr "Failed sign-in"
 
-#: core/models.py:225
+#: core/models.py:299
 msgid "Déconnexion"
 msgstr "Sign-out"
 
-#: core/models.py:228
+#: core/models.py:302
 msgid "Double authentification activée"
 msgstr "Two-factor authentication enabled"
 
-#: core/models.py:229
+#: core/models.py:303
 msgid "Double authentification réinitialisée"
 msgstr "Two-factor authentication reset"
 
-#: core/models.py:239
+#: core/models.py:313
 msgid "Enveloppe budgétaire"
 msgstr "Budget envelope"
 
-#: core/models.py:242 core/models.py:350
+#: core/models.py:316 core/models.py:426
 msgid "Configuration du workflow"
 msgstr "Workflow configuration"
 
-#: core/models.py:243
+#: core/models.py:317
 msgid "Compte utilisateur"
 msgstr "User account"
 
-#: core/models.py:252 expenses/models.py:798
+#: core/models.py:318 expenses/models.py:63 expenses/models.py:87
+msgid "Bénéficiaire"
+msgstr "Beneficiary"
+
+#: core/models.py:328 expenses/models.py:833
 msgid "Action"
 msgstr "Action"
 
-#: core/models.py:260
+#: core/models.py:336
 msgid "Valeur précédente"
 msgstr "Previous value"
 
-#: core/models.py:261
+#: core/models.py:337
 msgid "Nouvelle valeur"
 msgstr "New value"
 
-#: core/models.py:262
+#: core/models.py:338
 msgid "Champs modifiés"
 msgstr "Changed fields"
 
-#: core/models.py:265
+#: core/models.py:341
 msgid "Différences"
 msgstr "Differences"
 
-#: core/models.py:266
+#: core/models.py:342
 msgid "Par"
 msgstr "By"
 
-#: core/models.py:267 expenses/models.py:811
+#: core/models.py:343 expenses/models.py:846
 msgid "Adresse IP"
 msgstr "IP address"
 
-#: core/models.py:268 expenses/models.py:813
+#: core/models.py:344 expenses/models.py:848
 msgid "Le"
 msgstr "On"
 
-#: core/models.py:275
+#: core/models.py:351
 msgid "Historique"
 msgstr "History entry"
 
-#: core/models.py:276
+#: core/models.py:352
 msgid "Historiques"
 msgstr "History entries"
 
-#: core/models.py:326
+#: core/models.py:402
 msgid "Seuils d'alerte"
 msgstr "Alert thresholds"
 
-#: core/models.py:346
+#: core/models.py:422
 msgid "Matrice des droits"
 msgstr "Rights matrix"
 
-#: core/models.py:385
+#: core/models.py:461
 msgid "La configuration du workflow est un singleton et ne peut pas être supprimée."
 msgstr "The workflow configuration is a singleton and cannot be deleted."
 
@@ -1113,421 +1169,422 @@ msgstr "Closed"
 msgid "Fuseau horaire inconnu : %(value)s (identifiant IANA attendu, ex. Africa/Abidjan)."
 msgstr "Unknown time zone: %(value)s (IANA identifier expected, e.g. Africa/Abidjan)."
 
-#: expenses/models.py:59
+#: expenses/models.py:60
 msgid "Prospect"
 msgstr "Prospect"
 
-#: expenses/models.py:60
+#: expenses/models.py:61
 msgid "Client"
 msgstr "Client"
 
-#: expenses/models.py:61
+#: expenses/models.py:62
 msgid "Fournisseur"
 msgstr "Supplier"
 
-#: expenses/models.py:62 expenses/models.py:86
-msgid "Bénéficiaire"
-msgstr "Beneficiary"
-
-#: expenses/models.py:63 expenses/models.py:378 expenses/models.py:641
+#: expenses/models.py:64 expenses/models.py:413 expenses/models.py:676
 msgid "Autre"
 msgstr "Other"
 
-#: expenses/models.py:73 expenses/models.py:658
+#: expenses/models.py:74 expenses/models.py:693
 msgid "Type"
 msgstr "Type"
 
-#: expenses/models.py:79
+#: expenses/models.py:80
 msgid "Téléphone"
 msgstr "Phone"
 
-#: expenses/models.py:80
+#: expenses/models.py:81
 msgid "E-mail"
 msgstr "Email"
 
-#: expenses/models.py:81
+#: expenses/models.py:82
 msgid "Autres coordonnées"
 msgstr "Other contact details"
 
-#: expenses/models.py:172
+#: expenses/models.py:180
 msgid "N° d'ordre"
 msgstr "Order no."
 
-#: expenses/models.py:187 expenses/models.py:398
+#: expenses/models.py:195 expenses/models.py:433
 msgid "Propriétaire"
 msgstr "Owner"
 
-#: expenses/models.py:189 reporting/exports.py:482
+#: expenses/models.py:212
+msgid "Référence d'origine"
+msgstr "Original reference"
+
+#: expenses/models.py:214 reporting/exports.py:482
 msgid "Date"
 msgstr "Date"
 
-#: expenses/models.py:193
+#: expenses/models.py:218
 msgid "Remarque de contrôle"
 msgstr "Review remark"
 
-#: expenses/models.py:198
+#: expenses/models.py:223
 msgid "Motif de la réouverture"
 msgstr "Reopening reason"
 
-#: expenses/models.py:201
+#: expenses/models.py:226
 msgid "Ouvert par"
 msgstr "Opened by"
 
-#: expenses/models.py:207
+#: expenses/models.py:232
 msgid "Dossier de justification"
 msgstr "Justification file"
 
-#: expenses/models.py:208 reporting/exports.py:502
+#: expenses/models.py:233 reporting/exports.py:502
 msgid "Dossiers de justification"
 msgstr "Justification dossiers"
 
-#: expenses/models.py:373
+#: expenses/models.py:408
 msgid "Espèces"
 msgstr "Cash"
 
-#: expenses/models.py:374
+#: expenses/models.py:409
 msgid "Virement"
 msgstr "Bank transfer"
 
-#: expenses/models.py:375
+#: expenses/models.py:410
 msgid "Mobile money"
 msgstr "Mobile money"
 
-#: expenses/models.py:376
+#: expenses/models.py:411
 msgid "Carte"
 msgstr "Card"
 
-#: expenses/models.py:377
+#: expenses/models.py:412
 msgid "Chèque"
 msgstr "Cheque"
 
-#: expenses/models.py:386 expenses/models.py:653
+#: expenses/models.py:421 expenses/models.py:688
 msgid "Dossier"
 msgstr "File"
 
-#: expenses/models.py:400
+#: expenses/models.py:435
 msgid "Date et heure"
 msgstr "Date and time"
 
-#: expenses/models.py:401
+#: expenses/models.py:436
 msgid "Lieu"
 msgstr "Place"
 
-#: expenses/models.py:402
+#: expenses/models.py:437
 msgid "Libellé de la transaction"
 msgstr "Transaction label"
 
-#: expenses/models.py:419
+#: expenses/models.py:454
 msgid "Prospect / bénéficiaire"
 msgstr "Prospect / beneficiary"
 
-#: expenses/models.py:423
+#: expenses/models.py:458
 msgid "Enveloppe imputée"
 msgstr "Charged envelope"
 
-#: expenses/models.py:424
+#: expenses/models.py:459
 msgid "Résolue automatiquement ; obligatoire avant validation."
 msgstr "Resolved automatically; required before validation."
 
-#: expenses/models.py:428 expenses/models.py:491 expenses/models.py:583 expenses/serializers.py:1043
+#: expenses/models.py:463 expenses/models.py:526 expenses/models.py:618
+#: expenses/serializers.py:1060
 msgid "Dépense"
 msgstr "Expense"
 
-#: expenses/models.py:430
+#: expenses/models.py:465
 msgid "Dans la devise du pays ; c'est ce montant qui pèse sur l'enveloppe."
 msgstr "In the country's currency; this is the amount that counts against the envelope."
 
-#: expenses/models.py:433
+#: expenses/models.py:468
 msgid "Montant justifié"
 msgstr "Justified amount"
 
-#: expenses/models.py:449
+#: expenses/models.py:484
 msgid "Devise du décaissement"
 msgstr "Disbursement currency"
 
-#: expenses/models.py:450
+#: expenses/models.py:485
 msgid "Vide si la dépense a été faite dans la devise du pays."
 msgstr "Empty if the expense was paid in the country's currency."
 
-#: expenses/models.py:453
+#: expenses/models.py:488
 msgid "Montant décaissé"
 msgstr "Disbursed amount"
 
-#: expenses/models.py:456
+#: expenses/models.py:491
 msgid "Tel qu'il figure sur la pièce, dans sa devise d'origine."
 msgstr "As shown on the supporting document, in its original currency."
 
-#: expenses/models.py:459
+#: expenses/models.py:494
 msgid "Taux appliqué"
 msgstr "Applied rate"
 
-#: expenses/models.py:461
+#: expenses/models.py:496
 msgid "Figé à la saisie. Le conserver permet de refaire le calcul plus tard, même si la table des taux a depuis été corrigée."
 msgstr "Frozen at entry time. Keeping it makes it possible to redo the calculation later, even if the rate table has since been corrected."
 
-#: expenses/models.py:466
+#: expenses/models.py:501
 msgid "Mode de paiement"
 msgstr "Payment method"
 
-#: expenses/models.py:472
+#: expenses/models.py:507
 msgid "Remarque"
 msgstr "Remark"
 
-#: expenses/models.py:476
+#: expenses/models.py:511
 msgid "Motif du contrôle"
 msgstr "Review reason"
 
-#: expenses/models.py:477
+#: expenses/models.py:512
 msgid "Saisie par"
 msgstr "Entered by"
 
-#: expenses/models.py:486
+#: expenses/models.py:521
 msgid "Empreinte d'import"
 msgstr "Import fingerprint"
 
-#: expenses/models.py:588
+#: expenses/models.py:623
 msgid "Motif de la demande"
 msgstr "Reason for the request"
 
-#: expenses/models.py:599
+#: expenses/models.py:634
 msgid "État avant rectification"
 msgstr "Status before rectification"
 
-#: expenses/models.py:603
+#: expenses/models.py:638
 msgid "Montant justifié avant rectification"
 msgstr "Justified amount before rectification"
 
-#: expenses/models.py:608 expenses/models.py:789 notifications/models.py:50
+#: expenses/models.py:643 expenses/models.py:824 notifications/models.py:50
 msgid "Demande de rectification"
 msgstr "Rectification request"
 
-#: expenses/models.py:609
+#: expenses/models.py:644
 msgid "Demandes de rectification"
 msgstr "Rectification requests"
 
-#: expenses/models.py:637
+#: expenses/models.py:672
 msgctxt "type de pièce"
 msgid "Reçu"
 msgstr "Receipt"
 
-#: expenses/models.py:638
+#: expenses/models.py:673
 msgid "Facture"
 msgstr "Invoice"
 
-#: expenses/models.py:639
+#: expenses/models.py:674
 msgid "Décharge"
 msgstr "Discharge"
 
-#: expenses/models.py:640
+#: expenses/models.py:675
 msgid "Livrable"
 msgstr "Deliverable"
 
-#: expenses/models.py:644
+#: expenses/models.py:679
 msgctxt "état d'une pièce"
 msgid "Reçu"
 msgstr "Received"
 
-#: expenses/models.py:645
+#: expenses/models.py:680
 msgid "Incomplet"
 msgstr "Incomplete"
 
-#: expenses/models.py:646
+#: expenses/models.py:681
 msgid "À contrôler"
 msgstr "To review"
 
-#: expenses/models.py:647
+#: expenses/models.py:682
 msgid "Validé"
 msgstr "Validated"
 
-#: expenses/models.py:648
+#: expenses/models.py:683
 msgid "Rejeté"
 msgstr "Rejected"
 
-#: expenses/models.py:649
+#: expenses/models.py:684
 msgid "Archivé"
 msgstr "Archived"
 
-#: expenses/models.py:655
+#: expenses/models.py:690
 msgid "Fichier"
 msgstr "File"
 
-#: expenses/models.py:656
+#: expenses/models.py:691
 msgid "Nom d'origine"
 msgstr "Original name"
 
-#: expenses/models.py:665
+#: expenses/models.py:700
 msgid "Justificatif complet"
 msgstr "Complete supporting document"
 
-#: expenses/models.py:666
+#: expenses/models.py:701
 msgid "Reprend la nuance « reçu (justif incomplet) » du fichier source."
 msgstr "Carries over the “received (incomplete proof)” nuance from the source workbook."
 
-#: expenses/models.py:669 expenses/models.py:732
+#: expenses/models.py:704 expenses/models.py:767
 msgid "Empreinte SHA-256"
 msgstr "SHA-256 fingerprint"
 
-#: expenses/models.py:670
+#: expenses/models.py:705
 msgid "Détecte toute modification ultérieure et les doublons."
 msgstr "Detects any later modification, as well as duplicates."
 
-#: expenses/models.py:672
+#: expenses/models.py:707
 msgid "Taille (octets)"
 msgstr "Size (bytes)"
 
-#: expenses/models.py:673
+#: expenses/models.py:708
 msgid "Type MIME"
 msgstr "MIME type"
 
-#: expenses/models.py:674
+#: expenses/models.py:709
 msgid "Version"
 msgstr "Version"
 
-#: expenses/models.py:678
+#: expenses/models.py:713
 msgid "Remplace"
 msgstr "Replaces"
 
-#: expenses/models.py:680
+#: expenses/models.py:715
 msgid "Déposé par"
 msgstr "Uploaded by"
 
-#: expenses/models.py:681
+#: expenses/models.py:716
 msgid "Motif de rejet"
 msgstr "Rejection reason"
 
-#: expenses/models.py:685
+#: expenses/models.py:720
 msgid "Pièce justificative"
 msgstr "Supporting document"
 
-#: expenses/models.py:686
+#: expenses/models.py:721
 msgid "Pièces justificatives"
 msgstr "Supporting documents"
 
-#: expenses/models.py:731
+#: expenses/models.py:766
 msgid "Chemin dans le stockage"
 msgstr "Storage path"
 
-#: expenses/models.py:733
+#: expenses/models.py:768
 msgid "N° d'ordre du dossier"
 msgstr "Dossier order number"
 
-#: expenses/models.py:738
+#: expenses/models.py:773
 msgid "Demandé par"
 msgstr "Requested by"
 
-#: expenses/models.py:739
+#: expenses/models.py:774
 msgid "Demandé le"
 msgstr "Requested on"
 
-#: expenses/models.py:740
+#: expenses/models.py:775
 msgid "Dernier essai le"
 msgstr "Last attempt on"
 
-#: expenses/models.py:741
+#: expenses/models.py:776
 msgid "Essais"
 msgstr "Attempts"
 
-#: expenses/models.py:742
+#: expenses/models.py:777
 msgid "Effacé le"
 msgstr "Deleted on"
 
-#: expenses/models.py:743
+#: expenses/models.py:778
 msgid "Dernière erreur"
 msgstr "Last error"
 
-#: expenses/models.py:747
+#: expenses/models.py:782
 msgid "Fichier à supprimer"
 msgstr "File to delete"
 
-#: expenses/models.py:748
+#: expenses/models.py:783
 msgid "Fichiers à supprimer"
 msgstr "Files to delete"
 
-#: expenses/models.py:766
+#: expenses/models.py:801
 msgid "Modification"
 msgstr "Modification"
 
-#: expenses/models.py:767
+#: expenses/models.py:802
 msgid "Soumission"
 msgstr "Submission"
 
-#: expenses/models.py:768
+#: expenses/models.py:803
 msgid "Mise en contrôle"
 msgstr "Put under review"
 
-#: expenses/models.py:770
+#: expenses/models.py:805
 msgid "Constat de non-justification"
 msgstr "Finding of non-justification"
 
-#: expenses/models.py:773
+#: expenses/models.py:808
 msgid "Validation d'un justificatif"
 msgstr "Supporting document validated"
 
-#: expenses/models.py:774
+#: expenses/models.py:809
 msgid "Rejet d'un justificatif"
 msgstr "Supporting document rejected"
 
-#: expenses/models.py:777
+#: expenses/models.py:812
 msgid "Justificatif signalé incomplet"
 msgstr "Supporting document flagged as incomplete"
 
-#: expenses/models.py:778
+#: expenses/models.py:813
 msgid "Justificatif remis à contrôler"
 msgstr "Supporting document sent back for review"
 
-#: expenses/models.py:779
+#: expenses/models.py:814
 msgid "Suppression d'un brouillon"
 msgstr "Draft deleted"
 
-#: expenses/models.py:780
+#: expenses/models.py:815
 msgid "Clôture"
 msgstr "Closure"
 
-#: expenses/models.py:784
+#: expenses/models.py:819
 msgid "Réouverture"
 msgstr "Reopening"
 
-#: expenses/models.py:790 notifications/models.py:51
+#: expenses/models.py:825 notifications/models.py:51
 msgid "Décision sur une rectification"
 msgstr "Decision on a rectification"
 
-#: expenses/models.py:791
+#: expenses/models.py:826
 msgid "Rectification d'un constat"
 msgstr "Rectification of a finding"
 
-#: expenses/models.py:792
+#: expenses/models.py:827
 msgid "Dépôt de justificatif"
 msgstr "Supporting document uploaded"
 
-#: expenses/models.py:793
+#: expenses/models.py:828
 msgid "Remplacement de justificatif"
 msgstr "Supporting document replaced"
 
-#: expenses/models.py:794
+#: expenses/models.py:829
 msgid "Téléchargement"
 msgstr "Download"
 
-#: expenses/models.py:795
+#: expenses/models.py:830
 msgid "Import Excel"
 msgstr "Excel import"
 
-#: expenses/models.py:797
+#: expenses/models.py:832
 msgid "Utilisateur"
 msgstr "User"
 
-#: expenses/models.py:799
+#: expenses/models.py:834
 msgid "Type d'objet"
 msgstr "Object type"
 
-#: expenses/models.py:802
+#: expenses/models.py:837
 msgid "Identifiant"
 msgstr "Identifier"
 
-#: expenses/models.py:810
+#: expenses/models.py:845
 msgid "Détail"
 msgstr "Detail"
 
-#: expenses/models.py:812
+#: expenses/models.py:847
 msgid "Appareil / session"
 msgstr "Device / session"
 
@@ -1535,135 +1592,135 @@ msgstr "Device / session"
 msgid "Le dossier est déclaré : le type de ses pièces ne se modifie plus."
 msgstr "This file has been declared: the type of its supporting documents can no longer be changed."
 
-#: expenses/serializers.py:204
+#: expenses/serializers.py:221
 msgid "Ce manager n'est pas rattaché à ce pays."
 msgstr "This manager is not attached to this country."
 
-#: expenses/serializers.py:250
+#: expenses/serializers.py:267
 msgid "Choisissez une de vos équipes."
 msgstr "Choose one of your teams."
 
-#: expenses/serializers.py:293
+#: expenses/serializers.py:310
 msgid "Ce bénéficiaire existe déjà pour ce pays."
 msgstr "This beneficiary already exists for this country."
 
-#: expenses/serializers.py:301
+#: expenses/serializers.py:318
 msgid "Numéro de téléphone invalide : de 6 à 15 chiffres, « + » en tête pour l'indicatif."
 msgstr "Invalid phone number: 6 to 15 digits, with a leading “+” for the country code."
 
-#: expenses/serializers.py:331
+#: expenses/serializers.py:348
 msgid "Renseignez un téléphone ou une adresse e-mail."
 msgstr "Enter a phone number or an email address."
 
-#: expenses/serializers.py:402
+#: expenses/serializers.py:419
 #, python-brace-format
 msgid "Fichier trop volumineux (maximum {limit} Mo)."
 msgstr "File too large (maximum {limit} MB)."
 
-#: expenses/serializers.py:409
+#: expenses/serializers.py:426
 #, python-brace-format
 msgid "Format non accepté ({extension}). Formats autorisés : {accepted}."
 msgstr "Format not accepted ({extension}). Allowed formats: {accepted}."
 
-#: expenses/serializers.py:412
+#: expenses/serializers.py:429
 msgid "sans extension"
 msgstr "no extension"
 
-#: expenses/serializers.py:418
+#: expenses/serializers.py:435
 #, python-brace-format
 msgid "Le contenu du fichier ne correspond pas à son extension ({extension})."
 msgstr "The file content does not match its extension ({extension})."
 
-#: expenses/serializers.py:432 expenses/views.py:520
+#: expenses/serializers.py:449 expenses/views.py:560
 msgid "Le dossier est clôturé : plus aucun justificatif ne peut y être ajouté."
 msgstr "The file is closed: no further supporting document can be added to it."
 
-#: expenses/serializers.py:478
+#: expenses/serializers.py:495
 #, python-brace-format
 msgid "Ce justificatif est {status} : il ne se modifie plus. Déposez une nouvelle version s'il doit être corrigé."
 msgstr "This supporting document is {status}: it can no longer be modified. Upload a new version if it needs correcting."
 
-#: expenses/serializers.py:487
+#: expenses/serializers.py:504
 msgid "Ce champ est fixé au dépôt : déposez une nouvelle version plutôt que de modifier celle-ci."
 msgstr "This field is fixed at upload time: upload a new version rather than modifying this one."
 
-#: expenses/serializers.py:505
+#: expenses/serializers.py:522
 msgid "Pièce invalide pour ce dossier."
 msgstr "Invalid document for this file."
 
-#: expenses/serializers.py:509
+#: expenses/serializers.py:526
 msgid "Cette pièce a déjà été remplacée."
 msgstr "This document has already been replaced."
 
-#: expenses/serializers.py:525 expenses/views.py:537
+#: expenses/serializers.py:542 expenses/views.py:577
 msgid "Ce fichier est déjà rattaché à ce dossier (doublon)."
 msgstr "This file is already attached to this justification file (duplicate)."
 
-#: expenses/serializers.py:581
+#: expenses/serializers.py:598
 msgid "Toujours calculé : dépense − montant justifié."
 msgstr "Always computed: expense − justified amount."
 
-#: expenses/serializers.py:643 expenses/transitions.py:156
+#: expenses/serializers.py:660 expenses/transitions.py:156
 msgid "Cette dépense est déclarée : elle ne peut plus être modifiée. Seul un brouillon reste modifiable."
 msgstr "This expense has been declared: it can no longer be modified. Only a draft remains editable."
 
-#: expenses/serializers.py:652
+#: expenses/serializers.py:669
 msgid "Le dossier appartient à un autre pays."
 msgstr "The file belongs to another country."
 
-#: expenses/serializers.py:663
+#: expenses/serializers.py:680
 msgid "Cette entité appartient à un autre pays."
 msgstr "This entity belongs to another country."
 
-#: expenses/serializers.py:679
+#: expenses/serializers.py:696
 #, python-brace-format
 msgid "Cette ligne doit porter l'équipe de son dossier ({team})."
 msgstr "This line must carry its dossier's team ({team})."
 
-#: expenses/serializers.py:713
+#: expenses/serializers.py:730
 #, python-brace-format
 msgid "Cette dépense a été décaissée en {currency} : son montant se calcule à partir du montant décaissé. Modifiez celui-ci plutôt que la conversion."
 msgstr "This expense was disbursed in {currency}: its amount is computed from the disbursed amount. Modify that rather than the conversion."
 
-#: expenses/serializers.py:746
+#: expenses/serializers.py:763
 msgid "Le montant de la dépense est requis."
 msgstr "The expense amount is required."
 
-#: expenses/serializers.py:752
+#: expenses/serializers.py:769
 msgid "Indiquez à la fois la devise et le montant décaissés, ou aucun des deux."
 msgstr "Provide both the disbursement currency and amount, or neither."
 
-#: expenses/serializers.py:780
+#: expenses/serializers.py:797
 #, python-brace-format
 msgid "Aucun taux connu pour convertir {source} en {target} à cette date. Publiez-le dans Configuration › Taux de change."
 msgstr "No known rate to convert {source} to {target} on that date. Publish it under Configuration › Exchange rates."
 
-#: expenses/serializers.py:890
+#: expenses/serializers.py:907
 msgid "Ce N°ORDRE existe déjà pour ce pays."
 msgstr "This order number already exists for this country."
 
-#: expenses/serializers.py:929 expenses/transitions.py:159
+#: expenses/serializers.py:946 expenses/transitions.py:159
 msgid "Ce dossier est déclaré : il ne peut plus être modifié."
 msgstr "This file has been declared: it can no longer be modified."
 
-#: expenses/serializers.py:935
+#: expenses/serializers.py:952
 msgid "Cette équipe appartient à un autre pays."
 msgstr "This team belongs to another country."
 
-#: expenses/serializers.py:964
+#: expenses/serializers.py:981
 msgid "Un dossier ne change pas de pays : ouvrez un nouveau dossier dans l'autre pays."
 msgstr "A dossier does not change country: open a new dossier in the other country."
 
-#: expenses/serializers.py:983
+#: expenses/serializers.py:1000
 #, python-brace-format
 msgid "{count} ligne(s) de ce dossier portent une autre équipe ({team}). Corrigez-les avant de changer l'équipe du dossier."
 msgstr "{count} line(s) of this dossier carry another team ({team}). Correct them before changing the dossier's team."
 
-#: expenses/serializers.py:1092 expenses/transitions.py:90
+#: expenses/serializers.py:1109 expenses/transitions.py:90
 msgid "Une rectification doit être motivée : le siège doit savoir ce qu'il a constaté à tort."
 msgstr "A rectification must be motivated: head office must know what it ruled on by mistake."
 
-#: expenses/serializers.py:1112 expenses/transitions.py:84
+#: expenses/serializers.py:1129 expenses/transitions.py:84
 msgid "Un rejet doit être motivé."
 msgstr "A rejection must state a reason."
 
@@ -1832,15 +1889,15 @@ msgstr "Only a justified or closed line can be rectified: this one is “{status
 msgid "Une demande de rectification est déjà en attente sur cette ligne."
 msgstr "A rectification request is already pending on this line."
 
-#: expenses/views.py:70
+#: expenses/views.py:72
 msgid "Le fichier de ce justificatif est introuvable dans le stockage : l'anomalie est journalisée, prévenez l'administrateur."
 msgstr "The file of this supporting document cannot be found in storage: the anomaly has been logged, notify the administrator."
 
-#: expenses/views.py:98
+#: expenses/views.py:100
 msgid "Le stockage des justificatifs ne répond pas : réessayez dans un instant."
 msgstr "The supporting document storage is not responding: try again in a moment."
 
-#: expenses/views.py:409 expenses/views.py:440
+#: expenses/views.py:449 expenses/views.py:480
 msgid "Seul l'auteur d'un brouillon peut y ajouter une ligne."
 msgstr "Only the author of a draft can add a line to it."
 
