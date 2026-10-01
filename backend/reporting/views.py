@@ -288,9 +288,11 @@ class BreakdownView(APIView):
                 "year": year,
                 "by_team": self._group(counted, "team__name", _("Sans équipe")),
                 "by_owner": self._group(counted, "owner__name", _("Sans propriétaire")),
-                # Le projet est celui du dossier depuis la 2.0 (décision 102) ;
-                # les dossiers d'avant sont sous « Historique ».
-                "by_project": self._group(counted, "dossier__project__name", _("Hors projet")),
+                # Le projet de la ligne : celui de son dossier depuis la 2.0
+                # (décision 102), celui qu'elle portait pour un dossier rangé
+                # sous « Historique » (décision 103) — comme la consommation
+                # des sous-enveloppes par projet.
+                "by_project": self._group(counted, "project__name", _("Hors projet")),
                 "by_project_kind": self._group(
                     counted, "dossier__project__kind", _("Sans type de projet"),
                     libelles=dict(ProjectKind.choices),
@@ -520,7 +522,10 @@ class ExpensesImportView(APIView):
             # Une prévisualisation ne verse rien : elle ne laisse pas une
             # trace « importé » qui ferait croire le contraire.
             if not dry_run:
-                audit_import(request, resultat, country=country)
+                audit_import(
+                    request, resultat, country=project.country,
+                    project=project.reference or project.name, kind=kind.name,
+                )
         return Response(resultat)
 
     def _projet_de_l_import(self, request):

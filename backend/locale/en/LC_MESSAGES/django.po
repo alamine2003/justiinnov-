@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JUSTI GH\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-01 21:59+0000\n"
+"POT-Creation-Date: 2026-10-01 22:13+0000\n"
 "PO-Revision-Date: 2026-09-05 00:00+0000\n"
 "Last-Translator: Équipe JUSTI GH\n"
 "Language-Team: English\n"
@@ -1634,23 +1634,23 @@ msgstr "Detail"
 msgid "Appareil / session"
 msgstr "Device / session"
 
-#: expenses/numerotation.py:59
+#: expenses/numerotation.py:62
 msgid "Choisissez le projet dans lequel ouvrir ce dossier."
 msgstr "Choose the project in which to open this file."
 
-#: expenses/numerotation.py:61
+#: expenses/numerotation.py:64
 msgid "Ce projet n'a pas de type : il n'accepte pas de nouveau dossier."
 msgstr "This project has no type: it does not accept new files."
 
-#: expenses/numerotation.py:63
+#: expenses/numerotation.py:66
 msgid "Ce projet est désactivé : il n'accepte plus de dossier."
 msgstr "This project is deactivated: it no longer accepts files."
 
-#: expenses/numerotation.py:65
+#: expenses/numerotation.py:68
 msgid "Choisissez le type du dossier : stands, voyages, billets…"
 msgstr "Choose the file type: stands, trips, tickets…"
 
-#: expenses/numerotation.py:67
+#: expenses/numerotation.py:70
 msgid "Ce type de dossier ne s'ouvre pas dans ce projet."
 msgstr "This file type cannot be opened in this project."
 
@@ -2304,78 +2304,83 @@ msgstr "Provide both the original currency and the original amount, or neither."
 msgid "Aucun taux connu pour convertir %(devise)s en %(cible)s au %(date)s."
 msgstr "No known rate to convert %(devise)s into %(cible)s on %(date)s."
 
-#: reporting/imports.py:409
+#: reporting/imports.py:432
 msgid "Pays obligatoire : la colonne PAYS est vide."
 msgstr "Country is required: the PAYS column is empty."
 
-#: reporting/imports.py:413
+#: reporting/imports.py:436
 #, python-format
 msgid "Pays « %(pays)s » inconnu"
 msgstr "Unknown country “%(pays)s”"
 
-#: reporting/imports.py:415
+#: reporting/imports.py:438
 #, python-format
 msgid "Pays « %(pays)s » hors périmètre"
 msgstr "Country “%(pays)s” is outside your scope"
 
-#: reporting/imports.py:441
+#: reporting/imports.py:464
 msgid "Ce projet appartient à un autre pays que celui de l'import."
 msgstr "This project belongs to a country other than the import's."
 
-#: reporting/imports.py:451
+#: reporting/imports.py:474
 msgid "Le classeur n'a pas de colonne PAYS : indiquez le pays de l'import (paramètre « country »)."
 msgstr "The workbook has no PAYS column: specify the import country (“country” parameter)."
 
-#: reporting/imports.py:490
+#: reporting/imports.py:514
 #, python-format
 msgid "La ligne relève de « %(pays)s », le projet d'un autre pays."
 msgstr "The line belongs to “%(pays)s”, the project to another country."
 
-#: reporting/imports.py:507
+#: reporting/imports.py:531
 #, python-format
 msgid "Équipe « %(team)s » inconnue du pays : demandez à l'administrateur de la créer."
 msgstr "Team “%(team)s” is unknown in this country: ask the administrator to create it."
 
-#: reporting/imports.py:513
+#: reporting/imports.py:537
 msgid "La ligne doit porter l'une de vos équipes."
 msgstr "The line must carry one of your teams."
 
-#: reporting/imports.py:521
+#: reporting/imports.py:545
 #, python-format
 msgid "Responsable « %(owner)s » inconnu du pays : demandez à l'administrateur de l'inscrire."
 msgstr "Manager “%(owner)s” is unknown in this country: ask the administrator to register them."
 
-#: reporting/imports.py:542 reporting/imports.py:747
+#: reporting/imports.py:566 reporting/imports.py:780
 #, python-format
 msgid "Le dossier « %(number)s » est déjà déclaré"
 msgstr "Dossier “%(number)s” has already been declared"
 
-#: reporting/imports.py:547
+#: reporting/imports.py:571
 #, python-format
 msgid "Le dossier « %(number)s » est le brouillon d'un autre compte"
 msgstr "Dossier “%(number)s” is another account's draft"
 
-#: reporting/imports.py:561
+#: reporting/imports.py:585
 #, python-format
 msgid "Le dossier « %(number)s » porte l'équipe « %(team)s » : la ligne doit porter la même."
 msgstr "File \"%(number)s\" carries team \"%(team)s\": the line must carry the same one."
 
-#: reporting/imports.py:569
+#: reporting/imports.py:593
 #, python-format
 msgid "Ligne identique à la ligne %(ligne)s du classeur"
 msgstr "Identical to row %(ligne)s of the workbook"
 
-#: reporting/imports.py:575
+#: reporting/imports.py:599
 #, python-format
 msgid "Ligne déjà présente dans le dossier « %(number)s » : même date, même libellé, même montant"
 msgstr "Row already present in dossier “%(number)s”: same date, same label, same amount"
 
-#: reporting/imports.py:645
+#: reporting/imports.py:608
+#, python-format
+msgid "Ligne déjà présente dans le dossier « %(number)s » d'un autre projet du pays : même date, même libellé, même montant"
+msgstr "Row already present in dossier “%(number)s” of another project of the country: same date, same label, same amount"
+
+#: reporting/imports.py:678
 #, python-format
 msgid "Le dossier « %(number)s » vient d'être créé par un autre import : relancez l'import."
 msgstr "Dossier “%(number)s” has just been created by another import: run the import again."
 
-#: reporting/imports.py:730
+#: reporting/imports.py:763
 msgid "Un autre import vient d'écrire une ou plusieurs de ces lignes : relancez l'import, les lignes déjà présentes seront signalées."
 msgstr "Another import has just written one or more of these lines: run the import again, the lines already present will be reported."
 
@@ -2597,63 +2602,63 @@ msgstr "No team"
 msgid "Sans propriétaire"
 msgstr "No owner"
 
-#: reporting/views.py:293
+#: reporting/views.py:295
 msgid "Hors projet"
 msgstr "Outside any project"
 
-#: reporting/views.py:295
+#: reporting/views.py:297
 msgid "Sans type de projet"
 msgstr "No project type"
 
-#: reporting/views.py:299
+#: reporting/views.py:301
 msgid "Sans type de dossier"
 msgstr "No file type"
 
-#: reporting/views.py:302
+#: reporting/views.py:304
 msgid "Sans catégorie"
 msgstr "No category"
 
-#: reporting/views.py:305
+#: reporting/views.py:307
 msgid "Sans intitulé"
 msgstr "No expense title"
 
-#: reporting/views.py:378
+#: reporting/views.py:380
 msgid "Export"
 msgstr "Export"
 
-#: reporting/views.py:413
+#: reporting/views.py:415
 msgid "Tous les pays du périmètre"
 msgstr "All countries within scope"
 
-#: reporting/views.py:446
+#: reporting/views.py:448
 msgid "Export des dépenses"
 msgstr "Expense export"
 
-#: reporting/views.py:459
+#: reporting/views.py:461
 msgid "Rapport de rapprochement"
 msgstr "Reconciliation report"
 
-#: reporting/views.py:472
+#: reporting/views.py:474
 msgid "Rapport PDF"
 msgstr "PDF report"
 
-#: reporting/views.py:511
+#: reporting/views.py:513
 msgid "Le champ file est obligatoire."
 msgstr "The file field is required."
 
-#: reporting/views.py:538
+#: reporting/views.py:543
 #, python-format
 msgid "Le champ %(champ)s est obligatoire."
 msgstr "The %(champ)s field is required."
 
-#: reporting/views.py:545
+#: reporting/views.py:550
 msgid "Projet inconnu."
 msgstr "Unknown project."
 
-#: reporting/views.py:548
+#: reporting/views.py:553
 msgid "Type de dossier inconnu."
 msgstr "Unknown file type."
 
-#: reporting/views.py:567
+#: reporting/views.py:572
 msgid "Pays inconnu."
 msgstr "Unknown country."

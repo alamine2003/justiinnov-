@@ -4,6 +4,7 @@ from rest_framework import status
 
 from core.models import ChangeLog, DossierKind, Project, ProjectKind
 from expenses.tests.base import ExpenseTestCase
+from expenses.tests.test_workflow import configurer
 
 
 class ProjetsTests(ExpenseTestCase):
@@ -153,6 +154,27 @@ class TypesDeDossiersTests(ExpenseTestCase):
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_le_pays_ne_la_tient_pas_meme_avec_le_referentiel_ouvert(self):
+        """Le référentiel d'un pays peut s'ouvrir au pays ; la liste commune
+        aux dix-sept filiales, non : elle se tient comme la configuration."""
+        configurer(capability_roles={
+            "referentiel.create": ["super_admin", "admin", "manager"],
+            "referentiel.update": ["super_admin", "admin", "manager"],
+        })
+        self.login(self.owner)
+
+        creation = self.client.post(
+            "/api/dossier-kinds/", {"project_kind": "congres", "name": "Goodies"}, format="json"
+        )
+        desactivation = self.client.patch(
+            f"/api/dossier-kinds/{self.stands.pk}/", {"is_active": False}, format="json"
+        )
+
+        self.assertEqual(creation.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(desactivation.status_code, status.HTTP_403_FORBIDDEN)
+        self.stands.refresh_from_db()
+        self.assertTrue(self.stands.is_active)
 
     def test_un_type_ne_se_supprime_pas(self):
         self.login(self.controller)

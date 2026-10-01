@@ -252,6 +252,33 @@ class BreakdownTests(DashboardTestCase):
         self.assertIn("Congrès", {row["label"] for row in response.data["by_project_kind"]})
         self.assertIn("Billets", {row["label"] for row in response.data["by_dossier_kind"]})
 
+    def test_une_ligne_rangee_sous_historique_garde_son_projet(self):
+        """La reprise range un dossier d'avant la 2.0 sous « Historique » sans
+        toucher à ses lignes (décision 103) : la répartition par projet suit
+        la ligne, comme la consommation de la sous-enveloppe du projet."""
+        campagne = Project.objects.create(country=self.togo, name="Campagne 2025")
+        historique = Project.objects.create(
+            country=self.togo, name="Historique (avant 2.0)", is_historical=True,
+            reference="TG-P-HIST",
+        )
+        ancien = Dossier.objects.create(
+            number="N-ANCIEN", label="Ancien", country=self.togo, project=historique,
+            date=date(self.year, 2, 1),
+        )
+        self.make_expense(
+            dossier=ancien, project=campagne, amount="40000.00",
+            status=Status.SUBMITTED, budget=self.budget,
+        )
+        self.login(self.doo)
+
+        response = self.client.get(
+            "/api/dashboard/breakdown/", {"year": self.year, "country": self.togo.pk}
+        )
+
+        labels = {row["label"] for row in response.data["by_project"]}
+        self.assertIn("Campagne 2025", labels)
+        self.assertNotIn("Historique (avant 2.0)", labels)
+
 
 class AlertTests(DashboardTestCase):
     def test_seuil_franchi(self):

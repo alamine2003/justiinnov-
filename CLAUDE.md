@@ -160,7 +160,11 @@ l'application.
   `rectify` : un constat ne se défait qu'en approuvant une demande
   (`transitions.approuver_rectification`). Une ligne contestée un jour ne
   se retire plus, même rouverte au brouillon : elle se corrige et se
-  resoumet.
+  resoumet. **Le titre d'un dossier, lui, se renomme à tout moment**,
+  même clôturé (`POST /api/dossiers/{id}/rename/`, capacité
+  `dossiers.rename` : `manager` par défaut, auteur ou non) : il ne porte
+  ni montant ni preuve, rien d'autre ne bouge, et l'ancien titre reste au
+  journal (`AuditLog` `renamed`, décision 104).
 - **Un brouillon appartient à son auteur.** Il ne se retire, ne se
   modifie et ne se soumet que par lui — jamais par un collègue du pays,
   jamais par le siège, qui ne déclare pas
@@ -168,6 +172,19 @@ l'application.
   brouillon sans auteur connu se complète par le pays : c'est le cas de
   ceux que le siège avait ouverts, rendus au pays par la migration
   `expenses.0017`.
+- **Le projet est la rubrique principale** (version 2.0, décisions 100 à
+  103) : Pays › Projet › Dossier › Lignes. Un projet a un type (congrès,
+  voyage, soutien financier) et une référence calculée, `TG-P-2026-001`
+  (`core.numerotation`). Le pays l'ouvre (`projets.create`) ; le siège le
+  modifie, le type et le désactive (`referentiel.update`). Un dossier
+  s'ouvre **dans un projet** actif et typé, sous un type de dossier de ce
+  type de projet (`DossierKind`, liste commune aux filiales tenue par le
+  siège avec `configuration.manage`) ; son numéro est calculé,
+  `TG-P-2026-001-D001` (`expenses.numerotation`), et ne se saisit plus ;
+  projet et type ne changent plus ; ses lignes portent son projet. Les
+  dossiers d'avant la 2.0 sont rangés sous le projet « Historique » de
+  leur pays, leurs lignes intactes. Un classeur s'importe dans un projet,
+  sous un type de dossier.
 - **Un dossier appartient à un pays** (décision 89). Son pays est
   attribué à la création, dans le périmètre de son auteur, et ne change
   plus jamais — même vide. Seul ce pays remplit ses lignes et ses pièces :
@@ -212,7 +229,8 @@ l'application.
 - **La RH gère tous les pays.** Le référentiel d'un pays (équipes, projets,
   intitulés, catégories, bénéficiaires) est tenu par `admin` et
   `super_admin` sur tous les pays (`referentiel.create`,
-  `referentiel.update`) ; le `manager` ne le modifie pas par défaut.
+  `referentiel.update`) ; le `manager` ne le modifie pas par défaut — sauf
+  pour **ouvrir un projet** de son pays (`projets.create`, décision 100).
   `admin` et `super_admin` sont toujours globaux.
 - **Déclarer tient en une action.** Le manager remplit ses lignes, joint la
   pièce et soumet le dossier : ses lignes partent avec lui. Un dossier vide ne

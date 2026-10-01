@@ -401,6 +401,29 @@ def _lignes_en_base(dossier, cache, number):
     return cache[dossier.pk]
 
 
+def _lignes_hors_du_projet(country, project, number, cache):
+    """Empreintes des lignes que le même N°ORDRE porte **ailleurs** dans le pays.
+
+    Un classeur se rattache à un projet, mais ses lignes existent peut-être
+    déjà dans un dossier d'un autre projet du pays — le même classeur
+    importé deux fois dans deux projets, ou un classeur d'avant la 2.0 dont
+    les dossiers sont rangés sous « Historique ». Les réimporter
+    consommerait deux fois l'enveloppe. Le dossier se désigne par son
+    numéro ou sa référence d'origine, comme dans le projet visé.
+    """
+    cle = (country.pk, project.pk, number)
+    if cle not in cache:
+        fuseau = fuseau_de(country)
+        lignes = Expense.objects.filter(dossier__country=country).exclude(
+            dossier__project=project
+        ).filter(Q(dossier__external_ref=number) | Q(dossier__number=number))
+        cache[cle] = {
+            _empreinte(number, timezone.localtime(instant, fuseau).date(), title, amount)
+            for instant, title, amount in lignes.values_list("date", "title", "amount")
+        }
+    return cache[cle]
+
+
 def _resoudre_le_pays(row, avec_colonne_pays, pays_par_nom, pays_impose, access):
     """Le pays de la ligne : la colonne PAYS, à défaut celui de la requête."""
     pays_nom = _texte(row["PAYS"]) if avec_colonne_pays else ""
@@ -478,6 +501,7 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
     # fichier — ou le même classeur collé deux fois — ne doit rien créer.
     empreintes_vues = {}
     lignes_en_base = {}
+    lignes_hors_projet = {}
 
     for numero_ligne, row in lignes:
         try:
@@ -574,6 +598,15 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
                     _(
                         "Ligne déjà présente dans le dossier « %(number)s » : "
                         "même date, même libellé, même montant"
+                    ) % {"number": number}
+                )
+            if _empreinte(number, date_ligne.date(), title, amount) in _lignes_hors_du_projet(
+                pays_ligne, project, number, lignes_hors_projet
+            ):
+                raise ValueError(
+                    _(
+                        "Ligne déjà présente dans le dossier « %(number)s » d'un autre "
+                        "projet du pays : même date, même libellé, même montant"
                     ) % {"number": number}
                 )
             empreintes_vues[empreinte] = numero_ligne
@@ -760,8 +793,12 @@ def _resultat(dossiers, lignes, erreurs, dry_run, *, equipes_creees=0, managers_
     }
 
 
-def audit_import(request, resultat, country=None):
-    """Un import verse des lignes dans le système : il laisse une trace."""
+def audit_import(request, resultat, country=None, **contexte):
+    """Un import verse des lignes dans le système : il laisse une trace.
+
+    ``country`` est le pays du projet de l'import ; ``contexte`` nomme le
+    projet et le type de dossier dans le détail de l'entrée.
+    """
     tracer(
         request,
         AuditLog.Action.IMPORTED,
@@ -771,5 +808,6 @@ def audit_import(request, resultat, country=None):
         # Le pays de l'import, quand il vient de la requête : le journal
         # d'un pays doit montrer ce qui y a été versé.
         country=country,
+        **contexte,
         **resultat,
     )

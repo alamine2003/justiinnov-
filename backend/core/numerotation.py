@@ -43,7 +43,9 @@ def creer_projet(project):
     if project.pk is not None:
         raise ValueError("Un projet ne se numérote qu'à sa création.")
     with transaction.atomic():
-        country = Country.objects.select_for_update().get(pk=project.country_id)
+        # ``no_key`` : il sérialise les numérotations sans bloquer les
+        # écritures qui ne font que référencer le pays.
+        country = Country.objects.select_for_update(no_key=True).get(pk=project.country_id)
         annee = annee_locale(country)
         dernier = (
             Project.objects.filter(country=country, year=annee)

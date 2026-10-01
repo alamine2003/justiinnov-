@@ -16,7 +16,8 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import ExchangeRate
-from core.models import ChangeLog, Manager, Team, WorkflowConfiguration
+from core.models import ChangeLog, Manager, Project, ProjectKind, Team, WorkflowConfiguration
+from core.numerotation import creer_projet
 from expenses.models import AuditLog, Dossier, Expense
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
@@ -186,6 +187,24 @@ class ImportTests(ExpenseTestCase):
 
         self.assertIn("brouillon d'un autre compte", response.data["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.count(), 1)
+
+    def test_le_meme_classeur_dans_un_autre_projet_est_refuse(self):
+        """Importé dans un projet, puis par erreur dans un autre du même
+        pays : ses lignes existent déjà, les réimporter consommerait deux
+        fois l'enveloppe."""
+        autre = creer_projet(Project(
+            country=self.togo, name="Congrès de Kara", kind=ProjectKind.CONGRES,
+        ))
+        classeur = self._classeur([self._ligne()])
+        self._importer(classeur)
+        classeur.seek(0)
+
+        response = self._importer(classeur, project=autre.pk)
+
+        self.assertEqual(response.data["lignes_creees"], 0)
+        self.assertIn("autre projet", response.data["erreurs"][0]["motif"])
+        self.assertEqual(Expense.objects.count(), 1)
+        self.assertFalse(Dossier.objects.filter(project=autre).exists())
 
     def test_tout_arrive_en_brouillon(self):
         response = self._importer(self._classeur([self._ligne(STATUT="Justifié")]))
@@ -454,6 +473,11 @@ class ImportTests(ExpenseTestCase):
         entry = AuditLog.objects.get(object_type="ExpenseImport")
         self.assertEqual(entry.action, AuditLog.Action.IMPORTED)
         self.assertEqual(entry.ip_address, "10.20.30.40")
+        # Le pays est celui du projet, et l'entrée nomme projet et type :
+        # le journal d'un pays montre ce qui y a été versé.
+        self.assertEqual(entry.country, self.togo)
+        self.assertEqual(entry.detail["project"], self.projet.reference)
+        self.assertEqual(entry.detail["kind"], "Stands")
 
     # -- Comportements conservés -------------------------------------------
 

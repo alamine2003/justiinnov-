@@ -335,6 +335,10 @@ class DossierKindViewSet(NoDestroyModelViewSet):
 
     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+    Elle s'écrit comme la configuration (``configuration.manage``,
+    administrateurs, verrouillé au pays) et non comme le référentiel d'un
+    pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+    sinon « Stands » pour les dix-sept filiales.
     """
 
     queryset = DossierKind.objects.all()
@@ -342,8 +346,7 @@ class DossierKindViewSet(NoDestroyModelViewSet):
     permission_classes = [RolePermission]
     filterset_fields = ["project_kind", "is_active"]
     search_fields = ["name"]
-    write_capability = "referentiel.update"
-    action_write_capabilities = {"create": "referentiel.create"}
+    write_capability = "configuration.manage"
 
 
 class ExpenseTitleViewSet(ScopedViewSet):

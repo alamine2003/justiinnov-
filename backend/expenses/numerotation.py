@@ -33,7 +33,10 @@ def creer_dossier(dossier):
     if dossier.pk is not None:
         raise ValueError("Un dossier ne se numérote qu'à sa création.")
     with transaction.atomic():
-        projet = Project.objects.select_for_update().get(pk=dossier.project_id)
+        # ``no_key`` : le verrou sérialise les numérotations sans bloquer
+        # les écritures qui ne font que référencer le projet (une ligne
+        # enregistrée par un collègue prend un FOR KEY SHARE sur lui).
+        projet = Project.objects.select_for_update(no_key=True).get(pk=dossier.project_id)
         if not projet.reference:
             raise ValueError("Le projet n'a pas de référence : il ne se numérote pas.")
         dernier = (
