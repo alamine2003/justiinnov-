@@ -35,6 +35,7 @@ class OuvertureDansUnProjetTests(ExpenseTestCase):
         self.assertEqual(second.data["label"], "Stands du hall B")
         self.assertEqual(premier.data["project_reference"], self.projet.reference)
         self.assertEqual(premier.data["kind_name"], "Stands")
+        self.assertFalse(premier.data["project_is_historical"])
         self.assertTrue(
             AuditLog.objects.filter(
                 object_type="Dossier", object_id=premier.data["id"], action=AuditLog.Action.CREATED
@@ -165,3 +166,5 @@ class LignesQuiSuiventLeProjetTests(ExpenseTestCase):
 
         self.assertEqual(reponse.status_code, status.HTTP_201_CREATED, reponse.data)
         self.assertEqual(Expense.objects.get(pk=reponse.data["id"]).project, self.projet)
+        # L'interface le lit pour garder le choix du projet sur la ligne.
+        self.assertTrue(self.client.get(f"/api/dossiers/{ancien.pk}/").data["project_is_historical"])

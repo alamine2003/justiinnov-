@@ -38,13 +38,14 @@ from core.serializers import (
     ExpenseTitleSerializer,
     ManagerSerializer,
     MarketingCategorySerializer,
+    ParPaysSerializer,
     ProjectSerializer,
     TeamSerializer,
 )
 
 from core.numerotation import creer_projet
 
-from .perimetre import ChampCloisonne
+from .perimetre import ChampCloisonne, compter_par_pays
 from .permissions import RolePermission, get_access, roles_pour
 from .scoping import CountryScopedMixin
 
@@ -328,6 +329,17 @@ class ProjectViewSet(ScopedViewSet):
     def perform_create(self, serializer):
         self._check_country_scope(serializer)
         serializer.instance = creer_projet(Project(**serializer.validated_data))
+
+    @extend_schema(responses=ParPaysSerializer)
+    @action(detail=False, methods=["get"], url_path="par-pays")
+    def par_pays(self, request):
+        """Nombre de projets visibles par pays, pour les onglets de la liste.
+
+        Les mêmes filtres que la liste (type, recherche…) sans le pays, que
+        l'onglet choisit — comme les dossiers (décision 99).
+        """
+        projets = self.filter_queryset(self.get_queryset())
+        return Response(compter_par_pays(projets, get_access(request.user)))
 
 
 class DossierKindViewSet(NoDestroyModelViewSet):

@@ -12,7 +12,7 @@ import logging
 from django.db import IntegrityError, transaction
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Prefetch, Q
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
@@ -22,10 +22,10 @@ from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import RolePermission, get_access
-from accounts.perimetre import filtrer
+from accounts.perimetre import compter_par_pays, filtrer
 from accounts.scoping import CountryScopedMixin
 from core.journal import Trace
-from core.models import Country
+from core.serializers import ParPaysSerializer
 from core.mixins import NoDestroyModelViewSet
 from core.regles import traduire_les_regles
 
@@ -46,7 +46,6 @@ from .serializers import (
     BeneficiarySerializer,
     DossierDetailSerializer,
     DossierSerializer,
-    DossiersParPaysSerializer,
     RenommerSerializer,
     ExpenseRegisterSerializer,
     ExpenseSerializer,
@@ -293,7 +292,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         complet = self._avec_le_contenu(self.get_queryset()).get(pk=dossier.pk)
         return self.get_serializer(complet).data
 
-    @extend_schema(responses=DossiersParPaysSerializer)
+    @extend_schema(responses=ParPaysSerializer)
     @action(detail=False, methods=["get"], url_path="par-pays")
     def par_pays(self, request):
         """Nombre de dossiers visibles par pays, pour les onglets de la liste.
@@ -306,30 +305,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         de la base, pas de l'interface.
         """
         dossiers = self.filter_queryset(self.get_queryset())
-        comptes = dict(
-            Dossier.objects.filter(pk__in=dossiers.values("pk"))
-            .order_by()
-            .values_list("country")
-            .annotate(n=Count("pk"))
-        )
-        pays = filtrer(
-            Country.objects.filter(Q(is_active=True) | Q(pk__in=comptes)),
-            get_access(request.user),
-            pays="pk",
-        ).order_by("name", "pk")
-        return Response({
-            "total": sum(comptes.values()),
-            "pays": [
-                {
-                    "id": c.pk,
-                    "name": c.name,
-                    "code": c.code,
-                    "country_ref": c.country_ref,
-                    "count": comptes.get(c.pk, 0),
-                }
-                for c in pays
-            ],
-        })
+        return Response(compter_par_pays(dossiers, get_access(request.user)))
 
     @extend_schema(request=RenommerSerializer, responses=DossierDetailSerializer)
     @action(detail=True, methods=["post"])

@@ -1567,6 +1567,28 @@ export interface paths {
         patch: operations["projects_partial_update"]
         trace?: never
     }
+    "/api/projects/par-pays/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description Nombre de projets visibles par pays, pour les onglets de la liste.
+         *
+         *     Les mêmes filtres que la liste (type, recherche…) sans le pays, que
+         *     l'onglet choisit — comme les dossiers (décision 99).
+         */
+        get: operations["projects_par_pays_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/proofs/": {
         parameters: {
             query?: never
@@ -2768,6 +2790,7 @@ export interface components {
             readonly project_reference: string | null
             readonly project_kind: string | null
             readonly project_kind_display: string | null
+            readonly project_is_historical: boolean | null
             /** Type de dossier */
             kind: number
             readonly kind_name: string | null
@@ -2829,6 +2852,7 @@ export interface components {
             readonly project_reference: string | null
             readonly project_kind: string | null
             readonly project_kind_display: string | null
+            readonly project_is_historical: boolean | null
             /** Type de dossier */
             kind: number
             readonly kind_name: string | null
@@ -2966,6 +2990,7 @@ export interface components {
             readonly project_reference: string | null
             readonly project_kind: string | null
             readonly project_kind_display: string | null
+            readonly project_is_historical: boolean | null
             /** Type de dossier */
             kind: number
             readonly kind_name: string | null
@@ -3005,11 +3030,6 @@ export interface components {
             readonly expenses: components["schemas"]["Expense"][]
             readonly proofs: components["schemas"]["Proof"][]
             readonly warning?: string
-        }
-        /** @description Répartition des dossiers par pays, pour les onglets de la liste. */
-        DossiersParPays: {
-            readonly total: number
-            readonly pays: components["schemas"]["PaysDesDossiers"][]
         }
         ExchangeRate: {
             readonly id: number
@@ -4002,6 +4022,11 @@ export interface components {
             previous: string | null
             results: components["schemas"]["User"][]
         }
+        /** @description Répartition d'une liste par pays, pour ses onglets (décision 99). */
+        ParPays: {
+            readonly total: number
+            readonly pays: components["schemas"]["PaysCompte"][]
+        }
         PatchedBeneficiaryRequest: {
             /** Pays */
             country?: number
@@ -4362,8 +4387,8 @@ export interface components {
          * @enum {string}
          */
         PaymentMethodEnum: "cash" | "transfer" | "mobile" | "card" | "check" | "other"
-        /** @description Un pays du périmètre et le nombre de ses dossiers visibles. */
-        PaysDesDossiers: {
+        /** @description Un pays du périmètre et le nombre de ses objets visibles. */
+        PaysCompte: {
             readonly id: number
             readonly name: string
             readonly code: string
@@ -4500,6 +4525,7 @@ export interface components {
             readonly a_typer: boolean
             /** @default 0 */
             readonly dossier_count: number
+            readonly accepte_des_dossiers: boolean
             /** Actif */
             is_active: boolean
             /**
@@ -6345,7 +6371,7 @@ export interface operations {
                     [name: string]: unknown
                 }
                 content: {
-                    "application/json": components["schemas"]["DossiersParPays"]
+                    "application/json": components["schemas"]["ParPays"]
                 }
             }
         }
@@ -8004,6 +8030,25 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["Project"]
+                }
+            }
+        }
+    }
+    projects_par_pays_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ParPays"]
                 }
             }
         }
