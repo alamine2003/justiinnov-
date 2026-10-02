@@ -133,6 +133,15 @@ describe("ProofPanel — la pièce d'une ligne (décision 107)", () => {
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toContain("Nouveau justificatif")
   })
 
+  it("montre au pays le motif du rejet de la pièce de sa ligne", () => {
+    afficher(
+      [piece({ status: "rejected", status_display: "Rejeté", rejection_reason: "Illisible" })],
+      { compact: true },
+    )
+
+    expect(screen.getByText("Rejetée : Illisible")).toBeInTheDocument()
+  })
+
   it("ne propose pas le dépôt sans `upload` sur la ligne", () => {
     afficher([piece({})], { canUpload: false, compact: true })
 

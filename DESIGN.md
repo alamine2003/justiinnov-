@@ -683,7 +683,10 @@ au journal déjà filtré, et l'adresse se partage.
 - **Vue d'ensemble** (`pages/audit/overview.tsx`), lue sur
   `/api/audit/synthese/` : une phrase de période avec les totaux du
   serveur ; deux rangées de `StatCard` — circuit, puis référentiel et
-  comptes —, chacune un lien vers le journal filtré, bordée `danger`
+  comptes —, chacune un lien vers le journal filtré **quand un filtre
+  reproduit exactement son compte**, sur la période que le serveur a
+  comptée (« Lignes tranchées », « Refus », « Justificatifs déposés »
+  réunissent plusieurs actions : pas de lien), bordée `danger`
   quand un compteur sensible (réouvertures, refus, retraits, sorties,
   échecs de connexion, droits…) n'est pas nul ; l'activité par jour en
   `BarresParJour` avec sa `Legende` et les chiffres jour par jour en texte

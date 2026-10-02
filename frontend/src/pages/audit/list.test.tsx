@@ -97,8 +97,29 @@ describe("Audit — vue d'ensemble", () => {
     expect(screen.getByText("Facture illisible")).toBeInTheDocument()
   })
 
-  it("une tuile mène au journal filtré, période comprise", async () => {
+  it("sans période dans l'adresse, la tuile emporte celle que le serveur a comptée", async () => {
     fetchAuditSynthese.mockResolvedValue(synthese())
+
+    afficher("/audit")
+
+    const tuile = (await screen.findByText("Réouvertures")).closest("a")
+    const lien = new URL(tuile!.getAttribute("href")!, "http://x")
+    expect(lien.searchParams.get("debut")).toBe("2026-09-03")
+    expect(lien.searchParams.get("fin")).toBe("2026-10-02")
+  })
+
+  it("une tuile qui réunit plusieurs actions n'ouvre pas un journal au chiffre différent", async () => {
+    fetchAuditSynthese.mockResolvedValue(synthese())
+
+    afficher("/audit")
+
+    expect((await screen.findByText("Refus")).closest("a")).toBeNull()
+    expect(screen.getByText("Justificatifs déposés").closest("a")).toBeNull()
+  })
+
+  it("une tuile mène au journal filtré, période comprise", async () => {
+    // Le serveur renvoie la période qu'on lui a demandée.
+    fetchAuditSynthese.mockResolvedValue({ ...synthese(), debut: "2026-09-01", fin: "2026-09-30" })
 
     afficher("/audit?debut=2026-09-01&fin=2026-09-30")
 

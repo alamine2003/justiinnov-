@@ -159,6 +159,7 @@ export function CarteDeLigne({
         </p>
         <ProofPanel
           compact
+          ligne={expense.title}
           expenseId={expense.id}
           proofs={proofs}
           canUpload={expense.allowed_actions.includes("upload")}

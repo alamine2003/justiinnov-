@@ -27,15 +27,19 @@ type Compteur = keyof SyntheseAudit["compteurs"]
 /**
  * Les tuiles de la vue d'ensemble, et l'onglet filtré qu'ouvre chacune.
  * Les chiffres viennent tous du serveur (décision 111) : la page ne
- * compte rien.
+ * compte rien. Une tuile n'a de lien que si un filtre du journal reproduit
+ * exactement son compte (`expenses.synthese_audit.COMPTEURS_CIRCUIT`) :
+ * « Lignes tranchées », « Refus » et « Justificatifs déposés » réunissent
+ * plusieurs actions, elles restent sans lien plutôt que d'ouvrir une liste
+ * qui ne dirait pas le même chiffre.
  */
 const TUILES_CIRCUIT: { cle: Compteur; filtre?: Record<string, string>; sensible?: boolean }[] = [
   { cle: "declarations", filtre: { action: "submitted", object_type: "Dossier" } },
   { cle: "decisions" },
   { cle: "reouvertures", filtre: { action: "reopened", object_type: "Dossier" }, sensible: true },
   { cle: "rectifications", filtre: { action: "rectification_requested" }, sensible: true },
-  { cle: "refus", filtre: { action: "unjustified", object_type: "Expense" }, sensible: true },
-  { cle: "pieces", filtre: { action: "proof_uploaded" } },
+  { cle: "refus", sensible: true },
+  { cle: "pieces" },
   { cle: "renommages", filtre: { action: "renamed" } },
   { cle: "suppressions", filtre: { action: "deleted" }, sensible: true },
   { cle: "imports", filtre: { action: "imported" } },
@@ -75,9 +79,18 @@ export function VueDEnsemble() {
   )
   const synthese = query.data
 
-  /** L'adresse du journal filtré, période et pays compris. */
+  /**
+   * L'adresse du journal filtré : la période est celle que le serveur a
+   * comptée — les trente derniers jours quand l'adresse n'en dit rien —,
+   * pour que la liste ouverte dise le même chiffre que la tuile.
+   */
   const lien = (onglet: string, filtre: Record<string, string>) =>
-    `/audit?${new URLSearchParams({ ...filtres, onglet, ...filtre }).toString()}`
+    `/audit?${new URLSearchParams({
+      ...filtres,
+      ...(synthese ? { debut: synthese.debut, fin: synthese.fin } : {}),
+      onglet,
+      ...filtre,
+    }).toString()}`
 
   return (
     <div className="space-y-6">

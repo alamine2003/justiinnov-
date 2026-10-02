@@ -46,6 +46,8 @@ interface UploadRules {
 }
 
 interface ProofPanelProps {
+  /** Le titre de la ligne, pour nommer son bouton de dépôt aux lecteurs d'écran. */
+  ligne?: string
   /**
    * La ligne que les pièces prouvent (décision 107) : un dépôt s'y
    * rattache. `null` pour les pièces d'avant la 2.0, déposées sur tout le
@@ -76,6 +78,7 @@ function reviewChoices(proof: Proof): ReviewChoice[] {
 }
 
 export function ProofPanel({
+  ligne,
   expenseId,
   proofs,
   canUpload: peutDeposer,
@@ -197,23 +200,33 @@ export function ProofPanel({
         {proofs.length > 0 && (
           <ul className="space-y-1">
             {proofs.map((proof) => (
-              <li
-                key={proof.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="truncate text-xs font-medium">{proof.original_name}</span>
-                  <span className="text-xs text-muted-foreground">v{proof.version}</span>
-                  <ProofStatusBadge status={proof.status} label={proof.status_display} />
-                </span>
-                {actions(proof)}
+              <li key={proof.id} className="rounded-md border border-border/60 px-2 py-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="truncate text-xs font-medium">{proof.original_name}</span>
+                    <span className="text-xs text-muted-foreground">v{proof.version}</span>
+                    <ProofStatusBadge status={proof.status} label={proof.status_display} />
+                  </span>
+                  {actions(proof)}
+                </div>
+                {/* Un rejet exige un motif : le pays doit pouvoir le lire. */}
+                {proof.rejection_reason && (
+                  <p className="pb-1 text-xs italic text-muted-foreground">
+                    {t("pieces.ligne.motif_rejet", { motif: proof.rejection_reason })}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
         )}
         {canUpload && (
-          <Button size="sm" variant="outline" onClick={() => setUploadOpen(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setUploadOpen(true)}
+            aria-label={ligne ? t("pieces.ligne.deposer_aria", { ligne }) : undefined}
+          >
             <Upload className="mr-1 h-3.5 w-3.5" aria-hidden />
             {proofs.length > 0 ? t("pieces.ligne.remplacer_ou_ajouter") : t("pieces.deposer")}
           </Button>

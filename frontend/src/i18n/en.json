@@ -619,12 +619,14 @@
     "ligne": {
       "justificatif": "Supporting document",
       "sans_justificatif": "No supporting document",
-      "remplacer_ou_ajouter": "Upload another document"
+      "remplacer_ou_ajouter": "Upload another document",
+      "motif_rejet": "Rejected: {{motif}}",
+      "deposer_aria": "Upload the document for “{{ligne}}”"
     },
     "dossier": {
       "sans_justificatif_one": "{{count}} line without supporting document",
       "sans_justificatif_other": "{{count}} lines without supporting document",
-      "sans_justificatif_aide": "Each line has its document: upload it from the line. The dossier cannot be justified while a line lacks one."
+      "sans_justificatif_aide": "Each line has its document, uploaded from the line. The dossier cannot be justified while a line lacks one."
     }
   },
   "registre": {
@@ -1211,7 +1213,8 @@
     },
     "evenement": {
       "motif": "Reason:",
-      "note": "Note:"
+      "note": "Note:",
+      "numero": "{{type}} no. {{id}}"
     },
     "onglets": {
       "aria": "Audit log views",
@@ -1234,7 +1237,8 @@
         "BudgetReallocation": "Reallocations",
         "Export": "Exports",
         "ExpenseImport": "Imports"
-      }
+      },
+      "retirer": "Remove the “{{filtre}}” filter"
     },
     "referentiel": {
       "recherche_placeholder": "User, label or reason…",
@@ -1273,6 +1277,15 @@
       "a_surveiller": "To watch",
       "a_surveiller_aide": "The latest sensitive events of the period: reopenings, corrections, refusals, withdrawals, imports, failed sign-ins, resets, rights changes.",
       "rien_a_surveiller": "No sensitive event over the period."
+    },
+    "objet": {
+      "Dossier": "Dossier",
+      "Expense": "Line",
+      "Proof": "Supporting document",
+      "Rectification": "Correction",
+      "BudgetReallocation": "Reallocation",
+      "Export": "Export",
+      "ExpenseImport": "Import"
     }
   },
   "exports": {

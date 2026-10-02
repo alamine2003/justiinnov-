@@ -170,13 +170,23 @@ export function JournalDuCircuit() {
         {(lire("user") || lire("projet")) && (
           <div className="flex flex-wrap gap-2">
             {lire("user") && (
-              <Button size="sm" variant="outline" onClick={() => changer({ user: "", page: "" })}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => changer({ user: "", page: "" })}
+                aria-label={t("audit.filtres.retirer", { filtre: t("audit.filtres.utilisateur", { nom: lire("user") }) })}
+              >
                 {t("audit.filtres.utilisateur", { nom: lire("user") })}
                 <X className="ml-1 h-3.5 w-3.5" aria-hidden />
               </Button>
             )}
             {lire("projet") && (
-              <Button size="sm" variant="outline" onClick={() => changer({ projet: "", page: "" })}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => changer({ projet: "", page: "" })}
+                aria-label={t("audit.filtres.retirer", { filtre: t("audit.filtres.projet", { id: lire("projet") }) })}
+              >
                 {t("audit.filtres.projet", { id: lire("projet") })}
                 <X className="ml-1 h-3.5 w-3.5" aria-hidden />
               </Button>

@@ -619,12 +619,14 @@
     "ligne": {
       "justificatif": "Justificatif",
       "sans_justificatif": "Sans justificatif",
-      "remplacer_ou_ajouter": "Déposer une autre pièce"
+      "remplacer_ou_ajouter": "Déposer une autre pièce",
+      "motif_rejet": "Rejetée : {{motif}}",
+      "deposer_aria": "Déposer la pièce de « {{ligne}} »"
     },
     "dossier": {
       "sans_justificatif_one": "{{count}} ligne sans justificatif",
       "sans_justificatif_other": "{{count}} lignes sans justificatif",
-      "sans_justificatif_aide": "Chaque ligne a sa pièce : déposez-la depuis la ligne. Le dossier ne se justifie pas tant qu'une ligne en manque."
+      "sans_justificatif_aide": "Chaque ligne a sa pièce, déposée depuis la ligne. Le dossier ne se justifie pas tant qu'une ligne en manque."
     }
   },
   "registre": {
@@ -1211,7 +1213,8 @@
     },
     "evenement": {
       "motif": "Motif :",
-      "note": "Note :"
+      "note": "Note :",
+      "numero": "{{type}} n° {{id}}"
     },
     "onglets": {
       "aria": "Vues du journal d'audit",
@@ -1234,7 +1237,8 @@
         "BudgetReallocation": "Réallocations",
         "Export": "Exports",
         "ExpenseImport": "Imports"
-      }
+      },
+      "retirer": "Retirer le filtre « {{filtre}} »"
     },
     "referentiel": {
       "recherche_placeholder": "Utilisateur, libellé ou motif…",
@@ -1273,6 +1277,15 @@
       "a_surveiller": "À surveiller",
       "a_surveiller_aide": "Les derniers événements sensibles de la période : réouvertures, rectifications, refus, retraits, imports, échecs de connexion, réinitialisations, changements de droits.",
       "rien_a_surveiller": "Aucun événement sensible sur la période."
+    },
+    "objet": {
+      "Dossier": "Dossier",
+      "Expense": "Ligne",
+      "Proof": "Justificatif",
+      "Rectification": "Rectification",
+      "BudgetReallocation": "Réallocation",
+      "Export": "Export",
+      "ExpenseImport": "Import"
     }
   },
   "exports": {

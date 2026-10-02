@@ -373,7 +373,11 @@ function ProjectForm({
             <NativeSelect
               id="projet-country"
               value={country}
-              onChange={(e) => setCountry(e.target.value === "" ? "" : Number(e.target.value))}
+              onChange={(e) => {
+                setCountry(e.target.value === "" ? "" : Number(e.target.value))
+                // Une équipe appartient à un pays : elle ne suit pas le changement.
+                setTeam("")
+              }}
               required
             >
               <option value="">

@@ -38,8 +38,12 @@ function hasDiff(entry: ChangeLogEntry): boolean {
   return Boolean(entry.diff && Object.keys(entry.diff).length > 0)
 }
 
-/** Champs monétaires du journal : ils se lisent formatés, comme partout. */
-const MONTANTS = new Set(["amount", "justified_amount", "budget", "original_amount"])
+/**
+ * Champs monétaires du journal : ils se lisent formatés, comme partout.
+ * Pas `budget` : dans le journal du circuit, c'est l'enveloppe imputée — un
+ * identifiant —, et un identifiant ne se formate pas en montant.
+ */
+const MONTANTS = new Set(["amount", "justified_amount", "original_amount"])
 
 /** Le libellé d'un champ, traduit quand l'interface le connaît. */
 function libelleDuChamp(t: TFunction, champ: string): string {

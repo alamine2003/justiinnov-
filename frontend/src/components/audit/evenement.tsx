@@ -25,12 +25,18 @@ function enDiff(entree: EntreeHistorique): Record<string, [unknown, unknown]> | 
 export function Evenement({ entree }: { entree: EntreeHistorique }) {
   const { t } = useTranslation()
   const diff = enDiff(entree)
+  // Le circuit nomme ses objets par leur classe (« Expense ») : on les
+  // traduit ; le référentiel les nomme déjà, traduits par le serveur.
+  const typeDObjet =
+    entree.source === "circuit"
+      ? t(`audit.objet.${entree.objet}` as "audit.objet.Dossier", { defaultValue: entree.objet })
+      : entree.objet
   const objet = (
     <>
-      {entree.label || entree.objet}
+      {entree.label || typeDObjet}
       {entree.object_id != null && (
-        <span className="ml-1 font-mono text-xs text-muted-foreground">
-          {entree.objet} #{entree.object_id}
+        <span className="ml-1 text-xs text-muted-foreground">
+          {t("audit.evenement.numero", { type: typeDObjet, id: entree.object_id })}
         </span>
       )}
     </>
@@ -46,7 +52,7 @@ export function Evenement({ entree }: { entree: EntreeHistorique }) {
             {entree.source === "circuit" ? t("audit.source.circuit") : t("audit.source.referentiel")}
           </span>
           <span className="font-medium">
-            {entree.objet === "Dossier" && entree.object_id != null ? (
+            {entree.source === "circuit" && entree.objet === "Dossier" && entree.object_id != null ? (
               <Link to={`/dossiers/${entree.object_id}`} className="hover:underline">
                 {objet}
               </Link>

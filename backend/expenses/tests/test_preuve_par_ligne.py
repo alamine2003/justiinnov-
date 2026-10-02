@@ -55,3 +55,23 @@ class PreuveParLigneTests(ExpenseTestCase):
 
         self.assertTrue(detail["expenses"][0]["has_proof"])
         self.assertEqual(detail["lignes_sans_preuve"], 0)
+
+    def test_une_piece_archivee_ne_prouve_rien(self):
+        ligne = self.make_expense(title="Taxi")
+        self._piece(ligne, Proof.ProofStatus.ARCHIVED)
+
+        detail = self._detail()
+
+        self.assertFalse(detail["expenses"][0]["has_proof"])
+        self.assertEqual(detail["lignes_sans_preuve"], 1)
+
+    def test_la_reponse_a_une_modification_dit_aussi_la_preuve(self):
+        """Sans l'annotation de la liste, le sérialiseur relit la règle."""
+        ligne = self.make_expense(title="Taxi")
+        self._piece(ligne)
+        self.login(self.owner)
+
+        reponse = self.client.patch(f"/api/expenses/{ligne.pk}/", {"title": "Taxi aéroport"}, format="json")
+
+        self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
+        self.assertTrue(reponse.data["has_proof"])

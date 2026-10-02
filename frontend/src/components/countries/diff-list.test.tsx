@@ -24,7 +24,14 @@ describe("DiffList", () => {
     expect(screen.getByText(/100 000/)).toBeInTheDocument()
     expect(screen.queryByText("submitted")).toBeNull()
     expect(screen.queryByText(/justified_amount/)).toBeNull()
-    expect(screen.queryByText(/^Note/)).toBeNull()
+    expect(screen.queryByText(/^Motif/)).toBeNull()
+  })
+
+  it("ne formate pas l'enveloppe imputée en montant : c'est un identifiant", () => {
+    render(<DiffList diff={{ budget: [1200, null] }} />)
+
+    expect(screen.getByText("1200")).toBeInTheDocument()
+    expect(screen.queryByText(/1 200/)).toBeNull()
   })
 
   it("ne rend rien quand rien n'a changé", () => {

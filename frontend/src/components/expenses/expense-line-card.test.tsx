@@ -60,10 +60,11 @@ describe("CarteDeLigne — le justificatif de la ligne (décision 107)", () => {
 
   it("propose le dépôt seulement avec `upload` dans les actions de la ligne", () => {
     const { unmount } = afficher(ligne({ allowed_actions: [] }))
-    expect(screen.queryByRole("button", { name: "Déposer" })).toBeNull()
+    expect(screen.queryByRole("button", { name: /Déposer/ })).toBeNull()
     unmount()
 
     afficher(ligne({ allowed_actions: ["upload"] as Expense["allowed_actions"] }))
-    expect(screen.getByRole("button", { name: "Déposer" })).toBeInTheDocument()
+    // Nommé par sa ligne : chaque carte a le sien.
+    expect(screen.getByRole("button", { name: "Déposer la pièce de « Taxi »" })).toBeInTheDocument()
   })
 })
