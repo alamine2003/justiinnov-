@@ -14,14 +14,15 @@ celle de l'ordonnanceur, pour tout le monde.
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
 from budget.aggregates import budget_figures, seuil_d_alerte
 from core.models import Country, WorkflowConfiguration
-from expenses.models import Proof
+from expenses.models import Expense, Proof
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 
 from .scope import fuseau_de
@@ -131,7 +132,12 @@ def budget_alerts(budgets):
 
 
 def proof_alerts(dossiers):
-    """Dossiers engagés sans preuve, ou dont une preuve est incomplète."""
+    """Dossiers engagés dont une ligne est sans preuve, ou dont une preuve est incomplète.
+
+    Chaque ligne a sa pièce (décision 107) : un dossier est signalé dès
+    qu'une de ses lignes n'en a aucune d'exploitable. Une pièce d'avant la
+    2.0, déposée sur tout le dossier, couvre encore toutes ses lignes.
+    """
     alerts = []
     delay = WorkflowConfiguration.charger().unjustified_alert_days
     pending = dossiers.filter(
@@ -149,13 +155,21 @@ def proof_alerts(dossiers):
             aujourd_hui = maintenant.astimezone(fuseau_de(country)).date()
             echus |= Q(country=country, date__lte=aujourd_hui - timedelta(days=delay))
         pending = pending.filter(echus) if echus else pending.none()
+    utilisables = Proof.objects.exclude(
+        status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED]
+    )
+    lignes_sans_preuve = (
+        Expense.objects.filter(dossier=OuterRef("pk"))
+        .exclude(Exists(utilisables.filter(expense=OuterRef("pk"))))
+        .order_by()
+        .values("dossier")
+        .annotate(n=Count("pk"))
+        .values("n")
+    )
     pending = pending.annotate(
-        usable_proofs=Count(
-            "proofs",
-            filter=~Q(proofs__status__in=[
-                Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED
-            ]),
-            distinct=True,
+        piece_d_avant=Exists(utilisables.filter(dossier=OuterRef("pk"), expense=None)),
+        lignes_sans_preuve=Coalesce(
+            Subquery(lignes_sans_preuve, output_field=IntegerField()), Value(0)
         ),
         incomplete_proofs=Count(
             "proofs",
@@ -165,7 +179,7 @@ def proof_alerts(dossiers):
     )
 
     for dossier in pending.select_related("country"):
-        if dossier.usable_proofs == 0:
+        if dossier.lignes_sans_preuve and not dossier.piece_d_avant:
             alerts.append(
                 _alert(
                     "proof_missing",
@@ -174,8 +188,8 @@ def proof_alerts(dossiers):
                         _("Justificatif manquant — {number}"), number=dossier.number
                     ),
                     format_lazy(
-                        _("Le dossier « {label} » est engagé sans aucune preuve."),
-                        label=dossier.label,
+                        _("Le dossier « {label} » est engagé avec {count} ligne(s) sans preuve."),
+                        label=dossier.label, count=dossier.lignes_sans_preuve,
                     ),
                     country=dossier.country,
                     link=f"/dossiers/{dossier.pk}",

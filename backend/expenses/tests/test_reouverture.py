@@ -84,7 +84,8 @@ class ReouvertureTests(ReouvertureTestCase):
         ligne = self.client.delete(f"/api/expenses/{self.ligne.pk}/")
         detail = self.client.get(f"/api/dossiers/{self.dossier.pk}/").data
 
-        self.assertEqual(dossier.status_code, status.HTTP_400_BAD_REQUEST, dossier.data)
+        # Aucun dossier ne se retire depuis la 2.0 (décision 106).
+        self.assertEqual(dossier.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.assertEqual(ligne.status_code, status.HTTP_400_BAD_REQUEST, ligne.data)
         self.assertNotIn("delete", detail["allowed_actions"])
         for ligne_api in detail["expenses"]:

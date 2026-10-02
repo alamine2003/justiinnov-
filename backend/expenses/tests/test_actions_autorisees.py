@@ -23,8 +23,10 @@ from .base import ExpenseTestCase
 from .test_workflow import configurer
 
 #: Actions de saisie d'un brouillon, pour son auteur : avant le circuit.
-#: Le renommage est ouvert au pays à tout moment (décision 104).
-SAISIE = ["edit", "rename", "add_line", "upload", "delete"]
+#: Le dossier ne se retire pas, il naît avec son projet (décision 106) ; la
+#: pièce se dépose sur la ligne (décision 107) ; le renommage est ouvert au
+#: pays jusqu'à la clôture (décision 108).
+SAISIE = ["edit", "rename", "add_line"]
 
 
 class ActionsDeLigneTests(ExpenseTestCase):
@@ -40,7 +42,8 @@ class ActionsDeLigneTests(ExpenseTestCase):
         return response.data["allowed_actions"]
 
     def test_le_pays_n_a_aucune_action_de_controle(self):
-        self.assertEqual(self._actions(self.owner), [])
+        """Il dépose encore la pièce de sa ligne, rien de plus."""
+        self.assertEqual(self._actions(self.owner), ["upload"])
 
     def test_le_super_administrateur_supervise_sans_agir(self):
         """Il voit la ligne, il ne la contrôle pas (décision 89)."""
@@ -91,7 +94,7 @@ class ActionsDeLigneTests(ExpenseTestCase):
 
         self.assertEqual(self._actions(self.controller), ["close"])
         self.assertEqual(self._actions(self.doo), ["request_rectification"])
-        self.assertEqual(self._actions(self.owner), ["request_rectification"])
+        self.assertEqual(self._actions(self.owner), ["upload", "request_rectification"])
 
     def test_le_registre_les_expose_aussi(self):
         self.login(self.controller)
@@ -145,7 +148,7 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.assertEqual(self._actions(self.doo), [])
         self.assertEqual(self._actions(self.controller), ["review", "reopen"])
         self.assertEqual(self._actions(self.admin), ["review", "reopen"])
-        self.assertEqual(self._actions(self.owner), ["rename", "upload"])
+        self.assertEqual(self._actions(self.owner), ["rename"])
 
     def test_les_lignes_tranchees_ouvrent_le_constat(self):
         ligne = self.make_expense()
@@ -209,8 +212,8 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
 
         self.assertEqual(self._actions(self.controller), ["close"])
-        # Une pièce peut encore arriver avant la clôture — par le pays.
-        self.assertEqual(self._actions(self.owner), ["rename", "upload"])
+        # Le titre se renomme encore avant la clôture — par le pays.
+        self.assertEqual(self._actions(self.owner), ["rename"])
 
 
 class TransitionRenvoieLeDetailTests(ExpenseTestCase):
@@ -232,8 +235,10 @@ class TransitionRenvoieLeDetailTests(ExpenseTestCase):
         self.assertEqual(response.data["expenses"][0]["status"], Status.SUBMITTED)
         self.assertEqual(len(response.data["proofs"]), 1)
         self.assertEqual(response.data["expense_count"], 1)
-        # Déclaré, le dossier ne se modifie plus ; une pièce peut encore arriver.
-        self.assertEqual(response.data["allowed_actions"], ["rename", "upload"])
+        # Déclaré, le dossier ne se modifie plus ; son titre, si.
+        self.assertEqual(response.data["allowed_actions"], ["rename"])
+        # Une pièce peut encore arriver, sur la ligne (décision 107).
+        self.assertEqual(response.data["expenses"][0]["allowed_actions"], ["upload"])
 
     def test_la_justification_renvoie_le_detail_avec_les_actions(self):
         ligne = self.make_expense()
@@ -274,7 +279,7 @@ class ActionsDeSaisieTests(ExpenseTestCase):
     def test_un_brouillon_se_modifie_et_se_supprime_par_son_auteur(self):
         ligne = self.make_expense()
 
-        self.assertEqual(self._ligne(self.owner, ligne), ["edit", "delete"])
+        self.assertEqual(self._ligne(self.owner, ligne), ["edit", "upload", "delete"])
         # Le siège ne saisit pas, ni ne corrige un brouillon (décision 89).
         self.assertEqual(self._ligne(self.admin, ligne), [])
         self.assertEqual(self._ligne(self.doo, ligne), [])
@@ -299,31 +304,37 @@ class ActionsDeSaisieTests(ExpenseTestCase):
         le complète ou le retire ; le siège, non."""
         anonyme = self.make_expense(created_by="")
 
-        self.assertEqual(self._ligne(self.owner, anonyme), ["edit", "delete"])
+        self.assertEqual(self._ligne(self.owner, anonyme), ["edit", "upload", "delete"])
         self.assertEqual(self._ligne(self.admin, anonyme), [])
 
     def test_declaree_une_ligne_ne_se_touche_plus(self):
+        """Elle ne se modifie ni ne se retire ; sa pièce peut encore
+        arriver : une ligne soumise sans pièce attend la sienne."""
         ligne = self.make_expense()
         self.submit_dossier()
 
-        self.assertEqual(self._ligne(self.owner, ligne), [])
+        self.assertEqual(self._ligne(self.owner, ligne), ["upload"])
+        # Le siège ne dépose pas de pièce (décision 89).
+        self.assertEqual(self._ligne(self.admin, ligne), ["review", "justify", "reject"])
 
     def test_une_piece_se_depose_jusqu_a_la_cloture(self):
         ligne = self.make_expense()
         Proof.objects.create(
-            dossier=self.dossier, file="justificatifs/f.pdf",
+            dossier=self.dossier, expense=ligne, file="justificatifs/f.pdf",
             original_name="facture.pdf", sha256="a" * 64,
         )
         self.submit_dossier()
-        self.assertEqual(self._dossier(self.owner), ["rename", "upload"])
+        self.assertEqual(self._dossier(self.owner), ["rename"])
+        self.assertEqual(self._ligne(self.owner, ligne), ["upload"])
 
         self.login(self.controller)
         self.client.post(f"/api/expenses/{ligne.pk}/justify/")
         self.client.post(f"/api/dossiers/{self.dossier.pk}/justify/")
         self.client.post(f"/api/dossiers/{self.dossier.pk}/close/")
 
-        # Clôturé, plus de pièce ; le titre, lui, se renomme encore (décision 104).
-        self.assertEqual(self._dossier(self.owner), ["rename"])
+        # Clôturé, plus de pièce ni de nouveau titre (décision 108).
+        self.assertEqual(self._dossier(self.owner), [])
+        self.assertEqual(self._ligne(self.owner, ligne), ["request_rectification"])
 
     def test_la_matrice_retire_la_rectification_au_pays(self):
         """Un droit retiré dans la configuration disparaît des actions
@@ -332,7 +343,7 @@ class ActionsDeSaisieTests(ExpenseTestCase):
         self.submit_dossier()
         self.login(self.controller)
         self.client.post(f"/api/expenses/{ligne.pk}/justify/")
-        self.assertEqual(self._ligne(self.owner, ligne), ["request_rectification"])
+        self.assertEqual(self._ligne(self.owner, ligne), ["upload", "request_rectification"])
         self.login(self.admin)
         response = self.client.patch(
             "/api/permissions/",
@@ -341,7 +352,7 @@ class ActionsDeSaisieTests(ExpenseTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
-        self.assertEqual(self._ligne(self.owner, ligne), [])
+        self.assertEqual(self._ligne(self.owner, ligne), ["upload"])
         self.login(self.owner)
         self.assertEqual(
             self.client.post(

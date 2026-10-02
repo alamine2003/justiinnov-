@@ -14,6 +14,7 @@ DRF : le nombre de sauts de confiance entre le client et Django.
 """
 
 import ipaddress
+from contextlib import contextmanager
 from contextvars import ContextVar
 
 from django.conf import settings
@@ -39,6 +40,26 @@ def set_current_request(request):
 
 def reset_current_request(token):
     _requete_courante.reset(token)
+
+
+#: Motif de l'écriture en cours, quand la règle en exige un (décision 109) :
+#: les signaux du référentiel écrivent l'historique sans voir la requête, la
+#: vue le pose ici le temps de l'enregistrement.
+_motif_courant = ContextVar("motif_courant", default="")
+
+
+@contextmanager
+def motif_du_journal(motif):
+    """Le motif que portera chaque entrée d'historique écrite dans le bloc."""
+    jeton = _motif_courant.set(motif or "")
+    try:
+        yield
+    finally:
+        _motif_courant.reset(jeton)
+
+
+def motif_courant():
+    return _motif_courant.get()
 
 
 def _nombre_de_mandataires():

@@ -1,4 +1,4 @@
-"""Projets typés et numérotés, types de dossiers (décisions 100 et 101)."""
+"""Projets typés et numérotés, types de dossiers (décisions 100, 101, 108 à 110)."""
 
 from rest_framework import status
 
@@ -8,7 +8,8 @@ from expenses.tests.test_workflow import configurer
 
 
 class ProjetsTests(ExpenseTestCase):
-    """Le pays ouvre ses projets ; le siège les type, les modifie, les désactive."""
+    """Le pays ouvre ses projets et en corrige le titre ; le siège les
+    type, les modifie, les désactive — motif à l'appui."""
 
     def creer(self, user, **charge):
         self.login(user)
@@ -52,18 +53,127 @@ class ProjetsTests(ExpenseTestCase):
         self.assertFalse(Project.objects.filter(name="Congrès de cardiologie").exists())
 
     def test_le_manager_ne_modifie_pas_un_projet(self):
-        """Créer est ouvert au pays ; modifier et désactiver restent au siège."""
+        """Créer et renommer sont au pays ; modifier et désactiver restent
+        au siège (décision 108)."""
         self.login(self.owner)
         reponse = self.client.patch(
-            f"/api/projects/{self.projet.pk}/", {"name": "Autre nom"}, format="json"
+            f"/api/projects/{self.projet.pk}/",
+            {"is_active": False, "motif": "Fini"}, format="json",
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_le_manager_renomme_son_projet_motif_a_l_appui(self):
+        self.login(self.owner)
+
+        sans_motif = self.client.post(
+            f"/api/projects/{self.projet.pk}/rename/", {"name": "Congrès de Lomé 2026"}, format="json"
+        )
+        avec_motif = self.client.post(
+            f"/api/projects/{self.projet.pk}/rename/",
+            {"name": "Congrès de Lomé 2026", "motif": "Année oubliée"}, format="json",
+        )
+
+        self.assertEqual(sans_motif.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("motif", sans_motif.data)
+        self.assertEqual(avec_motif.status_code, status.HTTP_200_OK, avec_motif.data)
+        self.assertEqual(avec_motif.data["name"], "Congrès de Lomé 2026")
+        entree = ChangeLog.objects.get(
+            model_name="project", object_id=self.projet.pk, action="updated"
+        )
+        self.assertEqual(entree.diff, {"name": ["Congrès de Lomé", "Congrès de Lomé 2026"]})
+        self.assertEqual(entree.motif, "Année oubliée")
+        self.assertEqual(entree.performed_by, self.owner.username)
+
+    def test_renommer_ne_touche_a_rien_d_autre(self):
+        self.login(self.owner)
+
+        self.client.post(
+            f"/api/projects/{self.projet.pk}/rename/",
+            {"name": "Nouveau", "motif": "Coquille", "kind": "voyage", "is_active": False},
+            format="json",
+        )
+
+        self.projet.refresh_from_db()
+        self.assertEqual(self.projet.kind, ProjectKind.CONGRES)
+        self.assertTrue(self.projet.is_active)
+
+    def test_le_siege_ne_renomme_pas_un_projet_par_cette_route(self):
+        """Le titre est l'affaire du pays (décision 108) ; le siège corrige
+        par la modification, motif à l'appui."""
+        for compte in (self.controller, self.doo):
+            with self.subTest(compte=compte.username):
+                self.login(compte)
+                reponse = self.client.post(
+                    f"/api/projects/{self.projet.pk}/rename/",
+                    {"name": "Titre du siège", "motif": "Essai"}, format="json",
+                )
+                self.assertEqual(reponse.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_un_projet_du_voisin_ne_se_renomme_pas(self):
+        self.login(self.rep_ivoire)
+
+        reponse = self.client.post(
+            f"/api/projects/{self.projet.pk}/rename/", {"name": "X", "motif": "Y"}, format="json"
+        )
+
+        self.assertEqual(reponse.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_le_siege_modifie_et_desactive_avec_un_motif(self):
+        self.login(self.controller)
+
+        sans_motif = self.client.patch(
+            f"/api/projects/{self.projet.pk}/", {"is_active": False}, format="json"
+        )
+        avec_motif = self.client.patch(
+            f"/api/projects/{self.projet.pk}/",
+            {"is_active": False, "motif": "Congrès annulé"}, format="json",
+        )
+
+        self.assertEqual(sans_motif.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("motif", sans_motif.data)
+        self.assertEqual(avec_motif.status_code, status.HTTP_200_OK, avec_motif.data)
+        entree = ChangeLog.objects.get(
+            model_name="project", object_id=self.projet.pk, action="deactivated"
+        )
+        self.assertEqual(entree.motif, "Congrès annulé")
+
+    def test_l_historique_du_projet_reunit_ses_journaux(self):
+        """Le projet, ses dossiers, leurs lignes : une seule chronologie
+        (décision 110), lue par le siège, fermée au pays par défaut."""
+        self.login(self.owner)
+        self.client.post(
+            f"/api/projects/{self.projet.pk}/rename/",
+            {"name": "Congrès de Lomé 2026", "motif": "Année oubliée"}, format="json",
+        )
+        self.dossier.created_by = self.owner.username
+        self.dossier.save()
+        self.client.post(f"/api/dossiers/{self.dossier.pk}/rename/", {"label": "Stands A"}, format="json")
+
+        pays = self.client.get(f"/api/projects/{self.projet.pk}/historique/")
+        self.login(self.controller)
+        siege = self.client.get(f"/api/projects/{self.projet.pk}/historique/")
+        self.login(self.rep_ivoire)
+        voisin = self.client.get(f"/api/projects/{self.projet.pk}/historique/")
+
+        self.assertEqual(pays.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(voisin.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(siege.status_code, status.HTTP_200_OK, siege.data)
+        entrees = siege.data["entrees"]
+        self.assertFalse(siege.data["tronque"])
+        renommage = next(e for e in entrees if e["source"] == "referentiel")
+        self.assertEqual(renommage["motif"], "Année oubliée")
+        self.assertTrue(any(
+            e["source"] == "circuit" and e["objet"] == "Dossier" and e["action"] == "renamed"
+            for e in entrees
+        ))
+        dates = [e["created_at"] for e in entrees]
+        self.assertEqual(dates, sorted(dates, reverse=True))
+
     def test_le_type_d_un_projet_ne_change_plus(self):
         self.login(self.controller)
         reponse = self.client.patch(
-            f"/api/projects/{self.projet.pk}/", {"kind": "voyage"}, format="json"
+            f"/api/projects/{self.projet.pk}/", {"kind": "voyage", "motif": "Erreur"}, format="json"
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
@@ -80,13 +190,15 @@ class ProjetsTests(ExpenseTestCase):
         self.assertTrue(lu["a_typer"])
         self.assertFalse(lu["accepte_des_dossiers"])
         reponse = self.client.patch(
-            f"/api/projects/{ancien.pk}/", {"kind": "voyage"}, format="json"
+            f"/api/projects/{ancien.pk}/", {"kind": "voyage", "motif": "Reprise"}, format="json"
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
         self.assertFalse(reponse.data["a_typer"])
         self.assertEqual(
-            self.client.patch(f"/api/projects/{ancien.pk}/", {"kind": "congres"}, format="json").status_code,
+            self.client.patch(
+                f"/api/projects/{ancien.pk}/", {"kind": "congres", "motif": "Reprise"}, format="json"
+            ).status_code,
             status.HTTP_400_BAD_REQUEST,
         )
 
@@ -98,7 +210,7 @@ class ProjetsTests(ExpenseTestCase):
         self.login(self.controller)
 
         reponse = self.client.patch(
-            f"/api/projects/{historique.pk}/", {"kind": "congres"}, format="json"
+            f"/api/projects/{historique.pk}/", {"kind": "congres", "motif": "Reprise"}, format="json"
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
@@ -157,7 +269,8 @@ class ProjetsTests(ExpenseTestCase):
 
 
 class TypesDeDossiersTests(ExpenseTestCase):
-    """La liste commune, lue par tous, tenue par le siège (décision 101)."""
+    """La liste commune, lue par tous, tenue par le super administrateur
+    seul (décisions 101 et 108)."""
 
     def test_tout_compte_lit_la_liste(self):
         self.login(self.owner)
@@ -170,8 +283,8 @@ class TypesDeDossiersTests(ExpenseTestCase):
             {"Billets", "Carburant", "Hôtellerie", "Repas", "Forfait"},
         )
 
-    def test_le_siege_ajoute_un_type_et_c_est_trace(self):
-        self.login(self.controller)
+    def test_le_super_administrateur_ajoute_un_type_et_c_est_trace(self):
+        self.login(self.doo)
 
         reponse = self.client.post(
             "/api/dossier-kinds/",
@@ -182,6 +295,37 @@ class TypesDeDossiersTests(ExpenseTestCase):
         self.assertEqual(reponse.status_code, status.HTTP_201_CREATED, reponse.data)
         self.assertTrue(
             ChangeLog.objects.filter(model_name="dossier_kind", object_id=reponse.data["id"]).exists()
+        )
+
+    def test_la_rh_ne_tient_pas_la_liste_et_ne_se_l_ouvre_pas(self):
+        """Elle règle la matrice : le verrou l'empêche de se rouvrir la
+        liste qui fixe les dossiers de chaque projet."""
+        self.login(self.controller)
+
+        creation = self.client.post(
+            "/api/dossier-kinds/", {"project_kind": "congres", "name": "Goodies"}, format="json"
+        )
+        ouverture = self.client.patch(
+            "/api/permissions/",
+            {"capabilities": {"dossier_kinds.manage": ["super_admin", "admin"]}},
+            format="json",
+        )
+
+        self.assertEqual(creation.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(ouverture.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_une_modification_exige_un_motif(self):
+        self.login(self.doo)
+        url = f"/api/dossier-kinds/{self.stands.pk}/"
+
+        sans_motif = self.client.patch(url, {"is_active": False}, format="json")
+        avec_motif = self.client.patch(url, {"is_active": False, "motif": "Plus de stands"}, format="json")
+
+        self.assertEqual(sans_motif.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(avec_motif.status_code, status.HTTP_200_OK, avec_motif.data)
+        self.assertEqual(
+            ChangeLog.objects.get(model_name="dossier_kind", action="deactivated").motif,
+            "Plus de stands",
         )
 
     def test_le_pays_ne_tient_pas_la_liste(self):
@@ -215,7 +359,7 @@ class TypesDeDossiersTests(ExpenseTestCase):
         self.assertTrue(self.stands.is_active)
 
     def test_un_type_ne_se_supprime_pas(self):
-        self.login(self.controller)
+        self.login(self.doo)
 
         reponse = self.client.delete(f"/api/dossier-kinds/{self.stands.pk}/")
 
@@ -223,10 +367,11 @@ class TypesDeDossiersTests(ExpenseTestCase):
         self.assertTrue(DossierKind.objects.filter(pk=self.stands.pk).exists())
 
     def test_un_type_employe_ne_change_pas_de_type_de_projet(self):
-        self.login(self.controller)
+        self.login(self.doo)
 
         reponse = self.client.patch(
-            f"/api/dossier-kinds/{self.stands.pk}/", {"project_kind": "voyage"}, format="json"
+            f"/api/dossier-kinds/{self.stands.pk}/",
+            {"project_kind": "voyage", "motif": "Erreur"}, format="json",
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)

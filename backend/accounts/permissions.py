@@ -316,14 +316,40 @@ CAPACITES = (
         _("Ajouter une équipe, un centre de coûts, un projet, un intitulé, une catégorie, un bénéficiaire."),
         _ADMINISTRATEURS,
     ),
-    # Le projet est la rubrique principale depuis la 2.0 (décision 100) :
-    # le pays ouvre ses congrès et ses voyages sans attendre le siège. Le
-    # siège garde la modification et la désactivation (``referentiel.update``).
-    Capacite(
-        "projets.create", GROUPE_REFERENTIEL,
+    # Le projet est la rubrique principale depuis la 2.0 (décision 100). Le
+    # créer, c'est déclarer : il naît avec ses dossiers prédéfinis
+    # (décision 106). Au pays seul, jamais au siège (décision 108).
+    _declaration(
+        "projets.create",
         _("Créer un projet"),
-        _("Ouvrir un congrès, un voyage ou un soutien financier dans son pays ; sa référence est attribuée."),
-        frozenset({*COUNTRY_ROLES, *_ADMINISTRATEURS}),
+        _("Ouvrir un congrès, un voyage ou un soutien financier dans son pays : il reçoit ses dossiers prédéfinis."),
+    ),
+    # Le titre d'un projet — quel congrès, quel voyage — se corrige par le
+    # pays, motif à l'appui et tracé (décisions 108 et 109). Rien d'autre.
+    Capacite(
+        "projets.rename", GROUPE_DECLARATION,
+        _("Renommer un projet"),
+        _("Changer le titre d'un projet de son pays, motif à l'appui ; l'ancien titre reste au journal."),
+        COUNTRY_ROLES, verrouillees=_ADMINISTRATEURS, fixes=frozenset(),
+    ),
+    # Statut, description, désactivation, typage d'un projet d'avant la
+    # 2.0 : le siège, motif à l'appui (décision 109) ; jamais le pays, qui
+    # ne fait que renommer.
+    Capacite(
+        "projets.update", GROUPE_REFERENTIEL,
+        _("Modifier un projet"),
+        _("Changer le statut ou la description d'un projet, le désactiver, typer un projet d'avant la 2.0 ; motif obligatoire."),
+        _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
+    ),
+    # La liste commune des types de dossiers fixe ce que chaque projet
+    # reçoit d'office (décision 106) : au super administrateur seul, comme
+    # les enveloppes — la RH, qui règle la matrice, se la rouvrirait sinon
+    # (décision 108).
+    Capacite(
+        "dossier_kinds.manage", GROUPE_REFERENTIEL,
+        _("Tenir les types de dossiers"),
+        _("Ajouter, renommer ou désactiver un type de dossier de la liste commune aux filiales."),
+        _ALLOCATEUR, verrouillees=frozenset({Role.ADMIN, *COUNTRY_ROLES}), fixes=_ALLOCATEUR,
     ),
     Capacite(
         "referentiel.update", GROUPE_REFERENTIEL,
@@ -371,7 +397,7 @@ CAPACITES = (
     _declaration(
         "expenses.create",
         _("Saisir"),
-        _("Ouvrir un dossier dans son pays, y ajouter des lignes de dépense."),
+        _("Saisir les lignes de dépense dans les dossiers prédéfinis des projets de son pays."),
     ),
     _declaration(
         "expenses.update",
@@ -381,12 +407,12 @@ CAPACITES = (
     _declaration(
         "expenses.delete",
         _("Supprimer un brouillon"),
-        _("Retirer un dossier ou une ligne jamais soumis. Son auteur seulement."),
+        _("Retirer une ligne jamais soumise, avec ses pièces. Son auteur seulement."),
     ),
     _declaration(
         "proofs.upload",
         _("Déposer une pièce"),
-        _("Joindre un justificatif, ou le remplacer, jusqu'à la clôture."),
+        _("Joindre à une ligne son justificatif, ou le remplacer, jusqu'à la clôture."),
     ),
     _declaration(
         "dossiers.submit",
@@ -438,13 +464,13 @@ CAPACITES = (
         _("Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne."),
     ),
     # Le titre d'un dossier ne porte ni montant ni preuve : le renommer ne
-    # touche pas à ce qui a été déclaré, et c'est tracé (décision 104). Au
-    # pays par défaut, à tout moment ; rien n'y est fixe ni verrouillé.
+    # touche pas à ce qui a été déclaré, et c'est tracé (décision 104) —
+    # jusqu'à la clôture (décision 108). Au pays, jamais au siège.
     Capacite(
         "dossiers.rename", GROUPE_DECLARATION,
         _("Renommer un dossier"),
-        _("Changer le titre d'un dossier de son pays, même soumis ou clôturé ; l'ancien titre reste au journal."),
-        COUNTRY_ROLES, fixes=frozenset(),
+        _("Changer le titre d'un dossier de son pays tant qu'il n'est pas clôturé ; l'ancien titre reste au journal."),
+        COUNTRY_ROLES, verrouillees=_ADMINISTRATEURS, fixes=frozenset(),
     ),
     Capacite(
         "data.export", GROUPE_FICHIERS,
@@ -458,7 +484,7 @@ CAPACITES = (
     Capacite(
         "data.import", GROUPE_FICHIERS,
         _("Importer"),
-        _("Charger un classeur de dépenses de son pays en brouillons."),
+        _("Verser un classeur de dépenses de son pays, en brouillons, dans le dossier prédéfini d'un projet."),
         COUNTRY_ROLES, verrouillees=_ADMINISTRATEURS, fixes=frozenset(),
     ),
 )

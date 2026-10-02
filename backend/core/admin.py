@@ -56,6 +56,11 @@ class ProjectAdmin(SansSuppressionAdmin):
     list_display = ("name", "country", "status", "is_active")
     list_filter = ("country", "status", "is_active")
 
+    def has_add_permission(self, request):
+        # Un projet se crée par l'API : sa référence et ses dossiers
+        # prédéfinis en dépendent (décisions 100 et 106).
+        return False
+
 
 @admin.register(ExpenseTitle)
 class ExpenseTitleAdmin(SansSuppressionAdmin):

@@ -96,8 +96,8 @@ MOTIF_MANQUANT = {
 #: bloquer reviendrait à ce qu'une dépense sans reçu ne soit jamais déclarée,
 #: donc à ce que l'argent sorte sans laisser de trace — pire que l'écart.
 SANS_PREUVE = gettext_lazy(
-    "Aucun justificatif n'est joint : la dépense est déclarée sans preuve, "
-    "elle creusera l'écart et sera signalée au siège."
+    "%(count)s ligne(s) sans justificatif : elles sont déclarées sans preuve, "
+    "elles creuseront l'écart et seront signalées au siège."
 )
 
 #: Action de workflow → action d'audit.
@@ -217,10 +217,8 @@ def exiger_une_ligne_jamais_rectifiee(ligne):
 
 
 def sans_preuve(dossier):
-    """Le dossier est-il dépourvu de pièce exploitable ?"""
-    return not dossier.proofs.exclude(
-        status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED]
-    ).exists()
+    """Nombre de lignes du dossier qu'aucune pièce ne prouve (décision 107)."""
+    return dossier.lignes_sans_preuve().count()
 
 
 def exiger_un_dossier_ouvert(dossier):
@@ -450,8 +448,9 @@ def _soumettre_les_lignes(dossier, acteur, trace, resultat):
     )
 
     avertissements = list(depassements.values())
-    if sans_preuve(dossier) and WorkflowConfiguration.charger().warn_without_proof_submission:
-        avertissements.append(str(SANS_PREUVE))
+    manquantes = sans_preuve(dossier)
+    if manquantes and WorkflowConfiguration.charger().warn_without_proof_submission:
+        avertissements.append(str(SANS_PREUVE) % {"count": manquantes})
     return " ".join(avertissements) or None
 
 
@@ -537,12 +536,15 @@ def _avant_sur_le_dossier(dossier, action, acteur, note, donnees, trace, resulta
         )
 
     if action == "justify":
-        if sans_preuve(dossier):
-            # Justifier un dossier sans preuve viderait de son sens
-            # l'ensemble documentaire que le N°ORDRE représente. Une
-            # pièce rejetée ou archivée n'en est pas une.
+        manquantes = sans_preuve(dossier)
+        if manquantes:
+            # Justifier un dossier dont une ligne n'a pas de preuve viderait
+            # de son sens le constat : chaque ligne a sa pièce (décision
+            # 107). Une pièce rejetée ou archivée n'en est pas une.
             raise RegleViolee(
-                "proofs", _("Un dossier ne peut être justifié sans justificatif.")
+                "proofs",
+                _("%(count)s ligne(s) sans justificatif : le dossier ne peut pas être justifié.")
+                % {"count": manquantes},
             )
         _exiger_les_lignes(
             dossier,
@@ -792,12 +794,12 @@ def executer(objet, action, acteur, trace, *, note="", justified_amount=None):
 
 @transaction.atomic
 def renommer(dossier, label, acteur, trace):
-    """Change le titre d'un dossier, à tout moment (décision 104).
+    """Change le titre d'un dossier, jusqu'à sa clôture (décisions 104 et 108).
 
     Le titre ne porte ni montant ni preuve : le changer ne touche à rien de
-    ce qui a été déclaré, même sur un dossier clôturé. Seule exception
-    écrite à l'irréversibilité d'une déclaration, elle laisse l'ancien et
-    le nouveau titre au journal d'audit.
+    ce qui a été déclaré. Une fois le dossier clôturé, plus rien ne bouge,
+    pas même le titre. L'ancien et le nouveau titre restent au journal
+    d'audit.
     """
     exiger_la_capacite("dossiers.rename", acteur)
     instance = (
@@ -805,6 +807,8 @@ def renommer(dossier, label, acteur, trace):
         .select_for_update(of=("self",))
         .get(pk=dossier.pk)
     )
+    if instance.status in PROOF_LOCKED_STATUSES:
+        raise RegleViolee("status", _("Un dossier clôturé ne se renomme plus."))
     nouveau = (label or "").strip()
     if not nouveau:
         raise RegleViolee("label", _("Le titre d'un dossier ne peut pas être vide."))
@@ -865,6 +869,11 @@ def retirer_brouillon(objet, acteur, trace):
     resultat = Resultat(instance)
     if isinstance(instance, Expense):
         exiger_une_ligne_jamais_rectifiee(instance)
+        # Ses pièces d'abord : elles la protègent en base (décision 107).
+        _retirer_les_pieces(
+            instance.proofs, instance.dossier, trace, resultat,
+            _("Justificatif supprimé avec sa ligne"),
+        )
         resultat.audit.append(
             record(
                 trace, AuditLog.Action.DELETED, instance,
@@ -925,6 +934,12 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
             ),
         )
 
+    # Les pièces d'abord : depuis la 2.0, elles protègent leur ligne en base
+    # (décision 107).
+    _retirer_les_pieces(
+        dossier.proofs, dossier, trace, resultat,
+        _("Justificatif supprimé avec son dossier"),
+    )
     for ligne in lignes:
         resultat.audit.append(
             record(
@@ -934,29 +949,33 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
             )
         )
         ligne.delete()
+    return len(lignes)
 
-    # La plus récente d'abord : une nouvelle version référence celle
-    # qu'elle remplace, et cette référence est protégée.
-    pieces = (
-        dossier.proofs.select_for_update(of=("self",))
+
+def _retirer_les_pieces(pieces, dossier, trace, resultat, libelle):
+    """Retire des pièces d'un brouillon, chacune tracée, sous verrou.
+
+    La plus récente d'abord : une nouvelle version référence celle qu'elle
+    remplace, et cette référence est protégée. Le fichier ne doit pas
+    survivre à sa fiche — un stockage qui garde des pièces orphelines finit
+    par en servir à tort —, mais il ne s'efface qu'une fois le retrait
+    acquis, après le commit.
+    """
+    for piece in (
+        pieces.select_for_update(of=("self",))
         .select_related("dossier__country")
         .order_by("-pk")
-    )
-    for piece in pieces:
+    ):
         resultat.audit.append(
             record(
                 trace, AuditLog.Action.DELETED, piece,
-                label=f"Justificatif supprimé avec son dossier — {piece}",
+                label=f"{libelle} — {piece}",
                 country=dossier.country, sha256=piece.sha256, version=piece.version,
                 dossier=dossier.number,
             )
         )
-        # Le fichier ne doit pas survivre à sa fiche : un stockage qui
-        # garde des pièces orphelines finit par en servir à tort. Mais il
-        # ne s'efface qu'une fois le retrait acquis, après le commit.
         stockage.programmer_la_suppression(piece, trace=trace, dossier=dossier)
         piece.delete()
-    return len(lignes)
 
 
 @transaction.atomic

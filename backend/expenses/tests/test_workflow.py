@@ -697,18 +697,6 @@ class DossierWorkflowTests(ExpenseTestCase):
         self.dossier.refresh_from_db()
         self.assertEqual(self.dossier.status, Status.JUSTIFIED)
 
-    def test_le_dossier_porte_son_auteur(self):
-        self.login(self.owner)
-
-        response = self.client.post(
-            "/api/dossiers/",
-            {"project": self.projet.pk, "kind": self.stands.pk, "label": "Salon",
-             "country": self.togo.pk, "date": f"{self.year}-04-01"},
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        self.assertEqual(response.data["created_by"], "owner.togo")
-
     def test_totaux_du_dossier(self):
         self.make_expense(amount="100000.00", justified_amount="70000.00")
         self.make_expense(amount="50000.00", justified_amount="50000.00")
@@ -800,13 +788,14 @@ class ScopingTests(ExpenseTestCase):
         self.manager.countries.clear()
         self.login(self.owner)
 
+        self.dossier.created_by = self.owner.username
+        self.dossier.save()
+
         depense = self.client.post(
             "/api/expenses/", self._payload(owner=self.manager.pk)
         )
-        dossier = self.client.post(
-            "/api/dossiers/",
-            {"project": self.projet.pk, "kind": self.stands.pk, "label": "Salon",
-             "country": self.togo.pk, "date": f"{self.year}-04-01", "owner": self.manager.pk},
+        dossier = self.client.patch(
+            f"/api/dossiers/{self.dossier.pk}/", {"owner": self.manager.pk}, format="json"
         )
 
         self.assertEqual(depense.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1220,7 +1209,7 @@ class SeparationOfDutiesTests(ExpenseTestCase):
                      "title": "Taxi", "amount": "1000", "date": f"{self.year}-04-01"},
                 )
                 piece = self.client.post(
-                    "/api/proofs/", {"dossier": self.dossier.pk, "kind": "invoice"}
+                    "/api/proofs/", {"expense": self.ligne_de_preuve().pk, "kind": "invoice"}
                 )
 
                 for response in (dossier, ligne, piece):

@@ -53,8 +53,12 @@ class UniciteParPaysTests(ApiTestCase):
         self.assertIn("existe déjà pour ce pays", str(response.data))
 
     def test_l_api_refuse_un_projet_homonyme_avec_un_message_clair(self):
-        response = self.client.post(
-            "/api/projects/", {"country": self.country.pk, "name": "Campagne T1"}
+        """Créer un projet est au pays (décision 108) ; le siège le renomme
+        par la modification, motif à l'appui."""
+        autre = Project.objects.create(country=self.country, name="Campagne T2")
+
+        response = self.client.patch(
+            f"/api/projects/{autre.pk}/", {"name": "Campagne T1", "motif": "Doublon"}
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -202,7 +206,8 @@ class PaysFigeTests(ApiTestCase):
         Budget.objects.create(country=self.country, year=2026, project=self.projet, amount=1000)
 
         response = self.client.patch(
-            f"/api/projects/{self.projet.pk}/", {"country": self.country.pk, "name": "Campagne T2"}
+            f"/api/projects/{self.projet.pk}/",
+            {"country": self.country.pk, "name": "Campagne T2", "motif": "Nouveau titre"},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)

@@ -16,9 +16,13 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import ExchangeRate
-from core.models import ChangeLog, Manager, Project, ProjectKind, Team, WorkflowConfiguration
+from core.journal import Trace
+from core.models import (
+    ChangeLog, DossierKind, Manager, Project, ProjectKind, Team, WorkflowConfiguration,
+)
 from core.numerotation import creer_projet
 from expenses.models import AuditLog, Dossier, Expense
+from expenses.predefinis import creer_les_dossiers_predefinis
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
 from reporting import imports
@@ -42,12 +46,19 @@ def ouvrir_le_referentiel_au_pays():
 
 
 class ImportTests(ExpenseTestCase):
+    """Un classeur se verse dans le dossier prédéfini du type choisi
+    (décision 106) : ici le « Stands » du congrès du socle, brouillon du
+    manager togolais. Sans équipe, il reçoit les lignes de toutes les
+    équipes du pays."""
+
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
         # Un manager se résout dans son pays : celui du socle n'y était pas
         # rattaché.
         cls.togo.managers.add(cls.manager)
+        Dossier.objects.filter(pk=cls.dossier.pk).update(team=None)
+        cls.dossier.team = None
 
     def _classeur(self, lignes, entetes=None):
         workbook = Workbook()
@@ -99,8 +110,9 @@ class ImportTests(ExpenseTestCase):
         self.make_expense(amount="1200.00", justified_amount="800.00")
         self.login(self.doo)
         export = self.client.get("/api/exports/expenses.xlsx", {"year": self.year})
+        # Les lignes retirées, le dossier reste : il est prédéfini par son
+        # projet (décision 106). Le classeur exporté porte son numéro.
         Expense.objects.all().delete()
-        Dossier.objects.all().delete()
 
         response = self._importer(BytesIO(export.content), user=self.owner)
 
@@ -168,6 +180,8 @@ class ImportTests(ExpenseTestCase):
         verse rien pour Kara."""
         Team.objects.create(country=self.togo, name="Équipe Kara")
         lome = make_user("lome.togo", Role.MANAGER, [self.togo], teams=[self.team])
+        # Le dossier doit être un brouillon qu'il peut compléter.
+        Dossier.objects.filter(pk=self.dossier.pk).update(created_by="")
 
         refuse = self._importer(self._classeur([self._ligne(TEAM="Équipe Kara")]), user=lome)
         accepte = self._importer(
@@ -179,14 +193,14 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(Expense.objects.get().team, self.team)
 
     def test_un_brouillon_d_un_collegue_ne_recoit_pas_de_lignes(self):
-        """Un brouillon appartient à son auteur (décision 46), import compris."""
+        """Un brouillon appartient à son auteur (décision 46), import compris :
+        le dossier prédéfini est celui du manager qui a ouvert le projet."""
         collegue = make_user("collegue.togo", Role.MANAGER, [self.togo])
-        self._importer(self._classeur([self._ligne()]), user=collegue)
 
-        response = self._importer(self._classeur([self._ligne(DEPENSES=900)]))
+        response = self._importer(self._classeur([self._ligne()]), user=collegue)
 
         self.assertIn("brouillon d'un autre compte", response.data["erreurs"][0]["motif"])
-        self.assertEqual(Expense.objects.count(), 1)
+        self.assertEqual(Expense.objects.count(), 0)
 
     def test_le_meme_classeur_dans_un_autre_projet_est_refuse(self):
         """Importé dans un projet, puis par erreur dans un autre du même
@@ -195,6 +209,9 @@ class ImportTests(ExpenseTestCase):
         autre = creer_projet(Project(
             country=self.togo, name="Congrès de Kara", kind=ProjectKind.CONGRES,
         ))
+        creer_les_dossiers_predefinis(
+            autre, auteur=self.owner.username, trace=Trace.depuis_compte(self.owner)
+        )
         classeur = self._classeur([self._ligne()])
         self._importer(classeur)
         classeur.seek(0)
@@ -204,14 +221,18 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(response.data["lignes_creees"], 0)
         self.assertIn("autre projet", response.data["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.count(), 1)
-        self.assertFalse(Dossier.objects.filter(project=autre).exists())
+        self.assertFalse(Expense.objects.filter(dossier__project=autre).exists())
 
     def test_tout_arrive_en_brouillon(self):
         response = self._importer(self._classeur([self._ligne(STATUT="Justifié")]))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Expense.objects.get().status, Status.DRAFT)
-        self.assertEqual(Dossier.objects.get(external_ref="N-IMPORT-01").status, Status.DRAFT)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.DRAFT)
+        # Aucun dossier n'est ouvert par l'import : les lignes vont au
+        # dossier prédéfini du type (décision 106).
+        self.assertEqual(Expense.objects.get().dossier, self.dossier)
 
     def test_le_montant_justifie_du_classeur_est_ignore(self):
         """Le pays déclare, le siège constate : un montant justifié ne
@@ -250,8 +271,30 @@ class ImportTests(ExpenseTestCase):
         response = self._importer(self._classeur([self._ligne(DEPENSES=900)]))
 
         self.assertFalse(response.data["erreurs"])
-        self.assertEqual(response.data["dossiers_crees"], 0)
         self.assertEqual(Expense.objects.count(), 2)
+        self.assertEqual(self.dossier.expenses.count(), 2)
+
+    def test_deux_numeros_d_ordre_meme_ligne_ne_se_confondent_pas(self):
+        """Tout le classeur va dans un dossier : deux lignes identiques de
+        deux N°ORDRE sont deux dépenses, pas un doublon."""
+        response = self._importer(self._classeur([
+            self._ligne(**{"N°ORDRE": "N-1"}), self._ligne(**{"N°ORDRE": "N-2"}),
+        ]))
+
+        self.assertFalse(response.data["erreurs"], response.data)
+        self.assertEqual(self.dossier.expenses.count(), 2)
+
+    def test_un_type_sans_dossier_dans_le_projet_est_refuse(self):
+        """Un type ajouté au catalogue après la création du projet : le
+        projet n'a pas ce dossier, l'import le dit au lieu d'en ouvrir un."""
+        tshirts = DossierKind.objects.get_or_create(
+            project_kind=ProjectKind.CONGRES, name="T-shirts"
+        )[0]
+
+        response = self._importer(self._classeur([self._ligne()]), kind=tshirts.pk)
+
+        self.assertIn("pas de dossier", response.data["erreurs"][0]["motif"])
+        self.assertEqual(Expense.objects.count(), 0)
 
     # -- Managers -----------------------------------------------------------
 
@@ -413,9 +456,8 @@ class ImportTests(ExpenseTestCase):
         self.assertEqual(Expense.objects.count(), 0)
 
     def test_le_meme_numero_dans_un_autre_projet_ne_gene_pas(self):
-        """Un N°ORDRE de classeur désigne un dossier **du projet** : le
-        « N-VOISIN » d'un projet ivoirien n'empêche pas le projet togolais
-        d'ouvrir le sien, et n'y reçoit aucune ligne."""
+        """Un N°ORDRE porté par un dossier d'un autre pays n'empêche rien,
+        et ce dossier ne reçoit aucune ligne."""
         voisin = Dossier.objects.create(
             number="N-VOISIN", external_ref="N-VOISIN", label="Abidjan",
             country=self.ivoire, project=self.projet_ivoire, kind=self.stands,
@@ -425,13 +467,9 @@ class ImportTests(ExpenseTestCase):
         response = self._importer(self._classeur([self._ligne(**{"N°ORDRE": "N-VOISIN"})]))
 
         self.assertFalse(response.data["erreurs"])
-        self.assertEqual(response.data["dossiers_crees"], 1)
-        togolais = Dossier.objects.get(external_ref="N-VOISIN", project=self.projet)
-        # Numéroté dans son projet, la référence d'origine gardée à part.
-        self.assertEqual(togolais.number, f"{self.projet.reference}-D001")
-        self.assertEqual(togolais.kind, self.stands)
-        self.assertEqual(togolais.expenses.count(), 1)
-        self.assertEqual(togolais.expenses.get().project, self.projet)
+        ligne = Expense.objects.get()
+        self.assertEqual(ligne.dossier, self.dossier)
+        self.assertEqual(ligne.project, self.projet)
         self.assertEqual(voisin.expenses.count(), 0)
 
     def test_le_lecteur_xml_protege_est_utilise_quand_il_est_installe(self):
@@ -504,7 +542,7 @@ class ImportTests(ExpenseTestCase):
         avant = Expense.objects.count()
         response = self._importer(self._classeur([self._ligne()]), dry_run="true")
 
-        self.assertEqual(response.data["dossiers_crees"], 1)
+        self.assertNotIn("dossiers_crees", response.data)
         self.assertEqual(response.data["lignes_creees"], 1)
         self.assertEqual(Expense.objects.count(), avant)
 
@@ -563,6 +601,10 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
     def setUp(self):
         super().setUp()
         ouvrir_le_referentiel_au_pays()
+        # Le dossier « Stands » du congrès reçoit tout le classeur (décision
+        # 106) ; sans équipe, il accepte les équipes A et B du classeur.
+        Dossier.objects.filter(pk=self.dossier.pk).update(team=None)
+        self.dossier.refresh_from_db()
         self.lignes = [
             [1, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Carburant", 15000, 15000, 0, "Reçu"],
             [1, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Péage", 2000, None, 2000, ""],
@@ -603,14 +645,12 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, 200, response.data)
         self.assertFalse(response.data["erreurs"])
-        self.assertEqual(response.data["dossiers_crees"], 2)
         self.assertEqual(response.data["lignes_creees"], 4)
-        premier = Dossier.objects.get(project=self.projet, external_ref="1")
-        self.assertEqual(premier.expenses.count(), 3)
-        self.assertEqual(premier.status, Status.DRAFT)
-        self.assertEqual(premier.date, date(self.year, 1, 6))
-        second = Dossier.objects.get(project=self.projet, external_ref="2")
-        self.assertEqual(second.expenses.count(), 1)
+        # Les deux N°ORDRE vont au dossier prédéfini du type (décision 106).
+        self.assertEqual(self.dossier.expenses.count(), 4)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.DRAFT)
+        self.assertEqual(Dossier.objects.filter(project=self.projet).count(), 1)
         self.assertTrue(
             all(e.country == self.togo for e in Expense.objects.all())
         )
@@ -711,7 +751,6 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         response = self._importer(self._classeur(), country=self.togo.pk, dry_run="true")
 
         self.assertTrue(response.data["dry_run"])
-        self.assertEqual(response.data["dossiers_crees"], 2)
         self.assertEqual(response.data["lignes_creees"], 4)
         self.assertEqual(response.data["equipes_creees"], 2)
         self.assertEqual(response.data["managers_crees"], 2)
@@ -733,20 +772,27 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertIn("DEPENSES", response.data["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.count(), 0)
 
-    def test_un_numero_d_ordre_numerique_rejoint_le_dossier_saisi_a_la_main(self):
-        """Un N°ORDRE lu en flottant donnerait « 1.0 » : il doit rejoindre
-        le dossier « 1 » ouvert à la main."""
+    def test_un_numero_d_ordre_numerique_est_lu_comme_un_texte(self):
+        """Un N°ORDRE lu en flottant donnerait « 1.0 » : il doit se lire
+        « 1 », et reconnaître la ligne saisie à la main dans le dossier qui
+        porte ce numéro."""
         self.dossier.number = "1"
         self.dossier.save()
-        # L'équipe du dossier ouvert à la main : une ligne d'une autre
-        # équipe n'y entrerait pas.
-        lignes = [[1.0, datetime(self.year, 1, 6), "Équipe Lomé", "Owner Un", "Carburant", 15000, 15000, 0, "Reçu"]]
+        self.make_expense(
+            title="Carburant", amount="15000.00", team=None,
+            date=datetime(self.year, 1, 6, 9, tzinfo=self.togo_tz()),
+        )
+        lignes = [[1.0, datetime(self.year, 1, 6), "Équipe A", "Owner Un", "Carburant", 15000, 15000, 0, "Reçu"]]
 
         response = self._importer(self._classeur(lignes), country=self.togo.pk)
 
-        self.assertFalse(response.data["erreurs"])
-        self.assertEqual(response.data["dossiers_crees"], 0)
+        self.assertIn("déjà présente", response.data["erreurs"][0]["motif"])
         self.assertEqual(self.dossier.expenses.count(), 1)
+
+    def togo_tz(self):
+        from zoneinfo import ZoneInfo
+
+        return ZoneInfo(self.togo.timezone)
 
     def test_reimporter_le_classeur_historique_ne_cree_rien(self):
         self._importer(self._classeur(), country=self.togo.pk)
@@ -763,9 +809,8 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         Par qui l'a importé : le dossier importé porte l'auteur de l'import,
         et un brouillon ne part que par son auteur (décision 46)."""
         self._importer(self._classeur(), country=self.togo.pk)
-        premier = Dossier.objects.get(project=self.projet, external_ref="1")
 
-        response = self.submit_dossier(premier, user=self.owner)
+        response = self.submit_dossier(self.dossier, user=self.owner)
 
         self.assertEqual(response.status_code, 200, response.data)
 
@@ -795,48 +840,21 @@ class ImportsConcurrentsTests(ImportTests):
     """Deux imports du même classeur peuvent se croiser : le second ne
     répond jamais 500, il refuse la ligne en la nommant, sans rien écrire."""
 
-    def _autre_import_cree_le_dossier(self):
-        """Simule l'autre import, validé en même temps et écrit juste avant."""
-        original = imports.creer_dossier
-
-        def concurrent(dossier):
-            Dossier.objects.create(
-                country=dossier.country, project=dossier.project, kind=dossier.kind,
-                number="AUTRE-IMPORT", external_ref=dossier.external_ref,
-                label="Créé par l'autre import", date=date(self.year, 1, 1),
-                created_by="autre.import",
-            )
-            return original(dossier)
-
-        return mock.patch.object(imports, "creer_dossier", side_effect=concurrent)
-
-    def test_un_dossier_cree_entre_temps_est_une_erreur_de_ligne(self):
-        with self._autre_import_cree_le_dossier():
+    def test_une_violation_d_unicite_est_une_erreur_de_ligne(self):
+        """L'autre import a écrit les mêmes lignes entre la validation et
+        l'écriture : la contrainte ``ligne_importee_unique_par_dossier`` le
+        tranche, et l'import le dit."""
+        with mock.patch.object(
+            imports.Expense.objects, "bulk_create", side_effect=IntegrityError("doublon")
+        ):
             response = self._importer(self._classeur([self._ligne()]))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["lignes_creees"], 0)
         self.assertEqual(response.data["erreurs"][0]["ligne"], 2)
-        self.assertIn("N-IMPORT-01", response.data["erreurs"][0]["motif"])
         self.assertIn("autre import", response.data["erreurs"][0]["motif"])
-        # Rien de cet import n'est écrit. (L'autre import est simulé dans la
-        # même transaction : son dossier disparaît avec le point de reprise,
-        # alors qu'en réalité il est déjà validé — c'est tout l'objet du test.)
         self.assertEqual(Expense.objects.count(), 0)
-        self.assertTrue(
-            AuditLog.objects.filter(action=AuditLog.Action.IMPORTED).exists()
-        )
-
-    def test_une_violation_d_unicite_est_une_erreur_de_ligne(self):
-        with mock.patch.object(
-            imports, "creer_dossier", side_effect=IntegrityError("doublon")
-        ):
-            response = self._importer(self._classeur([self._ligne()]))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["erreurs"][0]["ligne"], 2)
-        self.assertEqual(Dossier.objects.count(), 1)
-        self.assertEqual(Expense.objects.count(), 0)
+        self.assertTrue(AuditLog.objects.filter(action=AuditLog.Action.IMPORTED).exists())
 
 
 class ClasseurGonfleTests(ExpenseTestCase):
@@ -923,6 +941,7 @@ class EquipeDuDossierExistantTests(ImportTests):
     def test_une_autre_equipe_est_refusee(self):
         Team.objects.create(country=self.togo, name="Équipe Kara")
         self.dossier.number = "N-IMPORT-01"
+        self.dossier.team = self.team
         self.dossier.save()
 
         response = self._importer(self._classeur([self._ligne(TEAM="Équipe Kara")]))
@@ -934,6 +953,7 @@ class EquipeDuDossierExistantTests(ImportTests):
 
     def test_la_meme_equipe_passe(self):
         self.dossier.number = "N-IMPORT-01"
+        self.dossier.team = self.team
         self.dossier.save()
 
         response = self._importer(self._classeur([self._ligne(TEAM="Équipe Lomé")]))
@@ -945,6 +965,7 @@ class EquipeDuDossierExistantTests(ImportTests):
         """Créer une équipe pour la mettre dans un dossier d'une autre serait
         pire : la ligne serait invisible à la sienne."""
         self.dossier.number = "N-IMPORT-01"
+        self.dossier.team = self.team
         self.dossier.save()
 
         response = self._importer(self._classeur([self._ligne(TEAM="Équipe Nouvelle")]))

@@ -15,7 +15,7 @@ from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.aggregates import budget_figures
 from core.models import WorkflowConfiguration
-from expenses.models import AuditLog, Rectification
+from expenses.models import AuditLog, Dossier, Rectification
 from expenses.workflow import REQUEST_RECTIFICATION, Status
 from notifications.models import Notification
 
@@ -511,8 +511,9 @@ class ApresRectificationTests(RectificationTestCase):
 
         supprime = self.client.delete(f"/api/dossiers/{self.dossier.pk}/")
 
-        self.assertEqual(supprime.status_code, status.HTTP_400_BAD_REQUEST, supprime.data)
-        self.assertIn("status", supprime.data)
+        # Aucun dossier ne se retire depuis la 2.0 (décision 106).
+        self.assertEqual(supprime.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Dossier.objects.filter(pk=self.dossier.pk).exists())
         self.ligne.refresh_from_db()
 
     def test_la_ligne_ne_propose_plus_le_retrait(self):

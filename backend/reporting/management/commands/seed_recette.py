@@ -13,7 +13,7 @@ Ce qu'il crée, en une transaction :
 - les **dix-sept pays** de `core/africa.py`, chacun dans **sa** devise
   (FCFA ouest et centre, ariary, franc guinéen, ouguiya, dalasi, franc de
   Djibouti, franc congolais) et son fuseau, avec deux équipes, un manager du
-  référentiel, un projet, un client et un prospect ;
+  référentiel, un client et un prospect ;
 - par pays, une enveloppe et une sous-enveloppe d'équipe, calibrées pour que
   le tableau de bord montre les trois niveaux : la plupart des pays à l'aise,
   le Sénégal, le Cameroun et Madagascar en alerte, la Guinée et la RDC en
@@ -26,16 +26,20 @@ Ce qu'il crée, en une transaction :
   administratrice, qui supervise, et la RH, administratrice, qui contrôle
   (décision 89) — et, par pays, un manager du pays entier et un manager
   restreint à une équipe ;
-- par pays, **huit dossiers** qui couvrent le circuit : deux brouillons (dont
-  un d'un collègue, que le manager du pays ne doit pas pouvoir soumettre),
-  un soumis, un en contrôle, un justifié en partie avec une ligne payée en
-  euros, un non justifié sans pièce, un clôturé avec une **demande de
-  rectification en attente**, un rouvert puis resoumis ;
+- par pays, **trois projets typés** — un congrès, une tournée (voyage), un
+  soutien financier — nés avec leurs **dossiers prédéfinis** (décision 106),
+  dix en tout. Huit sont remplis pour couvrir le circuit : deux brouillons
+  (dont le soutien d'un collègue, que le manager du pays ne doit pas pouvoir
+  soumettre), un soumis, un en contrôle, un justifié en partie avec une
+  ligne payée en euros, un non justifié sans pièce, un clôturé avec une
+  **demande de rectification en attente**, un rouvert puis resoumis ; deux
+  restent vides. Chaque ligne justifiée porte **sa** pièce (décision 107) ;
 - trois **réallocations** au Togo (une en attente, une approuvée, une
   refusée) et une en attente au Sénégal et au Cameroun.
 
-Tout passe par les services de l'application (`expenses.transitions`,
-`budget.transitions`, la vue de dépôt de pièce) : le journal d'audit,
+Tout passe par les services de l'application (`core.numerotation`,
+`expenses.predefinis`, `expenses.transitions`, `budget.transitions`, la vue
+de dépôt de pièce) : le journal d'audit,
 l'historique et les notifications sont ceux que ces actions produisent
 vraiment. Les décisions laissées **en attente** — mise en contrôle,
 justification, rectification, réallocation — sont celles que la recette
@@ -75,12 +79,14 @@ from budget import transitions as enveloppes
 from budget.aggregates import convert
 from budget.models import Budget, ExchangeRate, OverrunPolicy
 from core.journal import Trace
-from core.models import Country, Manager, Project, Team
+from core.models import Country, Manager, Project, ProjectKind, Team
+from core.numerotation import creer_projet
 from core.regles import HorsPerimetre, PermissionRefusee, RegleViolee
 from core.requetes import reset_current_request, set_current_request
 from expenses import transitions
 from expenses.audit import record
 from expenses.models import AuditLog, Beneficiary, Dossier, Expense
+from expenses.predefinis import creer_les_dossiers_predefinis
 from expenses.services import committed_total
 from expenses.views import ProofViewSet
 from expenses.workflow import CONSUMING_STATUSES, Status
@@ -138,32 +144,43 @@ SIEGE = {
     "rh": (Role.ADMIN, None, "Ressources humaines"),
 }
 
-#: Les huit dossiers d'un pays. Montants en FCFA d'équivalent, convertis dans
-#: la devise du pays. `equipe` : 0 ou 1 ; `auteur` : manager du pays ou de
-#: l'équipe. Les lignes en euros portent un montant en EUR.
+#: Les trois projets d'un pays (décision 100) : titre, type, équipe de leurs
+#: dossiers (0 ou 1), auteur — manager du pays ou de l'équipe. Chacun naît
+#: avec un dossier par type de dossier de son type (décision 106).
+PROJETS = {
+    "congres": ("Congrès régional de pédiatrie", ProjectKind.CONGRES, 0, "pays"),
+    "voyage": ("Tournée des officines", ProjectKind.VOYAGE, 1, "pays"),
+    "soutien": ("Soutien à la pharmacie centrale", ProjectKind.SOUTIEN_FINANCIER, 0, "equipe"),
+}
+
+#: Les huit dossiers remplis d'un pays : rang (sa référence d'origine,
+#: ``R-<PAYS>-<rang>``), projet, type de dossier, ancienneté en jours,
+#: lignes. Montants en FCFA d'équivalent, convertis dans la devise du pays ;
+#: les lignes en euros portent un montant en EUR. Les dossiers « T-shirts »
+#: et « Forfait » restent vides.
 DOSSIERS = [
-    ("01", "Tournée des officines", 1, "pays", 5,
+    ("01", "voyage", "Carburant", 5,
      [("Carburant véhicule de tournée", 85000, None), ("Déjeuner avec les pharmaciens", 42500, "client")]),
-    ("02", "Impression des supports de visite", 0, "equipe", 3,
-     [("Impression des plaquettes", 60000, None)]),
-    ("03", "Formation des délégués", 0, "pays", 12,
+    ("02", "soutien", "Soutien financier", 3,
+     [("Prise en charge des frais d'inscription", 60000, "client")]),
+    ("03", "congres", "Collations", 12,
      [("Location de la salle", 250000, None), ("Pause-café des participants", 60000, None)]),
-    ("04", "Congrès régional de pédiatrie", 1, "pays", 18,
-     [("Transport des délégués", 180000, None), ("Hébergement", 95000, None)]),
-    ("05", "Lancement de la gamme pédiatrique", 0, "pays", 40,
-     [("Stand et affichage", 480000, "projet"), ("Échantillons et goodies", 215000, "projet"),
+    ("04", "voyage", "Hôtellerie", 18,
+     [("Hébergement des délégués", 180000, None), ("Hébergement du formateur", 95000, None)]),
+    ("05", "congres", "Stands", 40,
+     [("Stand et affichage", 480000, None), ("Échantillons et goodies", 215000, None),
       ("Hébergement du formateur (payé en euros)", "150.00", "euros")]),
-    ("06", "Frais de représentation", 1, "pays", 70,
+    ("06", "voyage", "Repas", 70,
      [("Réception des grossistes", 320000, "client")]),
-    ("07", "Location de véhicule — trimestre", 0, "pays", 95,
+    ("07", "congres", "Voyages", 95,
      [("Location du véhicule", 140000, None), ("Péages", 75000, None)]),
-    ("08", "Séminaire des prescripteurs", 1, "pays", 30,
-     [("Supports imprimés", 138000, "projet"), ("Traiteur", 90000, "prospect")]),
+    ("08", "voyage", "Billets", 30,
+     [("Billet d'avion du formateur", 138000, None), ("Billets de car des délégués", 90000, "prospect")]),
 ]
 
 
 class Command(BaseCommand):
-    help = "Remplit une base jetable pour la recette : 17 pays, 37 comptes, 136 dossiers."
+    help = "Remplit une base jetable pour la recette : 17 pays, 37 comptes, 51 projets, 170 dossiers."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -184,7 +201,7 @@ class Command(BaseCommand):
                 "la préproduction tournent sans, et un jeu de recette y resterait pour "
                 "toujours. Utilisez la pile locale (docker compose up -d)."
             )
-        if Dossier.objects.filter(number=TEMOIN, country__code="TG").exists():
+        if Dossier.objects.filter(external_ref=TEMOIN, country__code="TG").exists():
             self.stdout.write(self.style.WARNING(
                 f"Jeu de recette déjà en place ({TEMOIN}) : rien à faire. "
                 f"Les comptes et le mot de passe sont dans {FICHIER.name}."
@@ -208,7 +225,7 @@ class Command(BaseCommand):
         self.annee = timezone.now().year
         self.jour = timezone.now().date()
         self._taux()
-        self.pays, self.equipes, self.gens, self.projets, self.benefs = {}, {}, {}, {}, {}
+        self.pays, self.equipes, self.gens, self.benefs = {}, {}, {}, {}
         self.enveloppes = {}
         for code, (nom, devise, symbole, fuseau, villes) in PAYS.items():
             country = Country.objects.filter(code=code).first() or Country.objects.create(
@@ -225,10 +242,6 @@ class Command(BaseCommand):
                 gens = Manager.objects.create(name=f"Responsable {nom}", title="Manager pays")
                 country.managers.add(gens)
             self.gens[code] = gens
-            self.projets[code] = Project.objects.get_or_create(
-                country=country, name=f"Gamme pédiatrique — {nom}",
-                defaults={"status": "active", "budget": self._local(5_000_000, country)},
-            )[0]
             self.benefs[code] = {
                 # Coordonnées fictives, domaine réservé ``exemple.org``. La
                 # clinique n'en a pas : elle est « à compléter », comme un
@@ -306,34 +319,54 @@ class Command(BaseCommand):
 
     # -- Dossiers --------------------------------------------------------------
 
-    def _dossiers(self, code):
+    def _projets(self, code):
+        """Les trois projets du pays, créés comme par l'API : référence
+        calculée, dossiers prédéfinis signés par leur auteur, dans l'équipe
+        du projet (décision 106)."""
         country = self.pays[code]
         cc = code.lower()
-        manager, equipe = self.comptes[f"{cc}.manager"], self.comptes[f"{cc}.equipe"]
+        projets = {}
+        for cle, (titre, kind, idx_equipe, auteur) in PROJETS.items():
+            compte = self.comptes[f"{cc}.{'equipe' if auteur == 'equipe' else 'manager'}"]
+            projet = creer_projet(Project(
+                country=country, name=f"{titre} — {country.name}", kind=kind,
+                status="active", budget=self._local(5_000_000, country),
+            ))
+            creer_les_dossiers_predefinis(
+                projet, auteur=compte.username, equipe=self.equipes[code][idx_equipe],
+                trace=Trace.depuis_compte(compte),
+            )
+            projets[cle] = projet
+        return projets
+
+    def _dossiers(self, code):
+        cc = code.lower()
+        manager = self.comptes[f"{cc}.manager"]
         # Le contrôle, de bout en bout, est à l'administrateur (décision 89).
         rh = self.comptes["rh"]
+        projets = self._projets(code)
         d = {}
-        for rang, titre, idx_equipe, auteur, jours, lignes in DOSSIERS:
+        for rang, cle, type_de_dossier, jours, lignes in DOSSIERS:
             d[rang] = self._dossier(
-                f"R-{code}-{rang}", f"{titre} — {country.name}", country,
-                self.equipes[code][idx_equipe], equipe if auteur == "equipe" else manager,
-                jours, lignes,
+                projets[cle], type_de_dossier, f"R-{code}-{rang}", jours, lignes,
             )
 
-        # 03 — soumis, avec pièce : attend la mise en contrôle.
-        self._piece(d["03"], manager)
+        # 03 — soumis, chaque ligne avec sa pièce : attend la mise en contrôle.
+        self._pieces(d["03"], manager)
         self._action("submit", d["03"], manager)
 
         # 04 — en contrôle : attend la décision de l'administrateur.
-        self._piece(d["04"], manager)
+        self._pieces(d["04"], manager)
         self._action("submit", d["04"], manager)
         self._action("review", d["04"], rh)
 
-        # 05 — justifié en partie ; la ligne en euros reste en contrôle.
-        self._piece(d["05"], manager)
+        # 05 — justifié en partie ; la ligne en euros, sans pièce, reste en
+        # contrôle.
+        stand, echantillons, _euros = d["05"].expenses.order_by("pk")
+        self._piece(stand, manager)
+        self._piece(echantillons, manager)
         self._action("submit", d["05"], manager)
         self._action("review", d["05"], rh)
-        stand, echantillons, _euros = d["05"].expenses.order_by("pk")
         self._action("justify", stand, rh)
         self._action("justify", echantillons, rh,
                      justified_amount=(echantillons.amount / 2).quantize(Decimal("1")),
@@ -348,7 +381,7 @@ class Command(BaseCommand):
                      note="Dossier constaté non justifié : aucune pièce fournie.")
 
         # 07 — clôturé, puis une rectification demandée par le pays.
-        self._piece(d["07"], manager)
+        self._pieces(d["07"], manager)
         self._action("submit", d["07"], manager)
         self._action("review", d["07"], rh)
         for ligne in d["07"].expenses.order_by("pk"):
@@ -365,30 +398,39 @@ class Command(BaseCommand):
             raise CommandError(f"Rectification impossible ({code}) : {exc}") from exc
 
         # 08 — rouvert par la RH pour une pièce illisible, corrigé, resoumis.
-        self._piece(d["08"], manager)
+        self._pieces(d["08"], manager)
         self._action("submit", d["08"], manager)
         self._action("reopen", d["08"], rh,
-                     note="La facture du traiteur est illisible : merci d'en déposer une lisible.")
-        self._piece(d["08"], manager, version=2)
+                     note="La facture du billet d'avion est illisible : merci d'en déposer une lisible.")
+        self._piece(d["08"].expenses.order_by("pk").first(), manager, version=2)
         self._action("submit", d["08"], manager)
         self.dossiers_du_pays = d
 
-    def _dossier(self, number, label, country, team, auteur, jours, lignes):
+    def _dossier(self, projet, type_de_dossier, reference, jours, lignes):
+        """Remplit le dossier prédéfini ``type_de_dossier`` de ``projet``.
+
+        Ses lignes sont celles de son auteur, dans son équipe et son projet.
+        Seuls la date, le responsable et la référence d'origine du
+        brouillon sont posés directement : ce que le pays saisirait en le
+        modifiant.
+        """
+        dossier = projet.dossiers.select_related("team").get(kind__name=type_de_dossier)
+        country, team = projet.country, dossier.team
+        auteur = User.objects.get(username=dossier.created_by)
         fuseau = fuseau_de(country)
         plancher = datetime.combine(date(self.annee, 1, 3), time(9), tzinfo=fuseau)
         quand = max(timezone.now().astimezone(fuseau) - timedelta(days=jours), plancher)
         code = country.code
-        dossier = Dossier.objects.create(
-            number=number, label=label, country=country, team=team, owner=self.gens[code],
-            date=quand.date(), status=Status.DRAFT, created_by=auteur.username,
-        )
-        record(Trace.depuis_compte(auteur), AuditLog.Action.CREATED, dossier)
+        dossier.external_ref = reference
+        dossier.owner = self.gens[code]
+        dossier.date = quand.date()
+        dossier.save(update_fields=["external_ref", "owner", "date", "updated_at"])
         for rang, (titre, montant, genre) in enumerate(lignes):
             champs = {
                 "dossier": dossier, "country": country, "team": team, "owner": self.gens[code],
                 "date": quand + timedelta(hours=rang), "title": titre, "status": Status.DRAFT,
                 "created_by": auteur.username, "place": team.name.removeprefix("Équipe "),
-                "project": self.projets[code] if genre == "projet" else None,
+                "project": projet,
                 "beneficiary": self.benefs[code].get(genre),
             }
             if genre == "euros":
@@ -404,16 +446,23 @@ class Command(BaseCommand):
                    Expense.objects.create(**champs))
         return dossier
 
-    def _piece(self, dossier, user, version=1):
+    def _pieces(self, dossier, user):
+        """Une pièce par ligne (décision 107)."""
+        for ligne in dossier.expenses.order_by("pk"):
+            self._piece(ligne, user)
+
+    def _piece(self, ligne, user, version=1):
+        dossier = ligne.dossier
         donnees = {
-            "dossier": dossier.pk, "kind": "invoice",
+            "expense": ligne.pk, "kind": "invoice",
             "file": SimpleUploadedFile(
-                f"facture-{dossier.number.lower()}-v{version}.pdf",
-                _pdf(f"Justificatif {dossier.number} — version {version}", dossier.label),
+                f"facture-{dossier.number.lower()}-{ligne.pk}-v{version}.pdf",
+                _pdf(f"Justificatif {dossier.number} — {ligne.title} — version {version}",
+                     dossier.label),
                 content_type="application/pdf"),
         }
         if version > 1:
-            donnees["replaces"] = dossier.proofs.order_by("-version").first().pk
+            donnees["replaces"] = ligne.proofs.order_by("-version").first().pk
         requete = APIRequestFactory(SERVER_NAME="127.0.0.1").post(
             "/api/proofs/", donnees, format="multipart")
         force_authenticate(requete, user=user)
@@ -476,7 +525,7 @@ class Command(BaseCommand):
         # Mali : l'enveloppe de l'équipe 2 laisse passer ce qui est déjà
         # engagé, pas le brouillon du manager — sa soumission sera refusée.
         budget = self.enveloppes[BLOQUE]["pays"]
-        brouillon = Dossier.objects.get(number=f"R-{BLOQUE}-01")
+        brouillon = Dossier.objects.get(external_ref=f"R-{BLOQUE}-01")
         total = sum((e.amount for e in brouillon.expenses.all()), Decimal("0"))
         budget.amount = committed_total(budget) + (total / 2).quantize(Decimal("1"))
         budget.save(update_fields=["amount", "updated_at"])
@@ -508,7 +557,8 @@ class Command(BaseCommand):
             ecrit = "Fichier des comptes non écrit : notez le mot de passe ci-dessous."
         self.stdout.write(self.style.SUCCESS(
             f"Jeu de recette créé : {len(PAYS)} pays, {len(self.comptes)} comptes, "
-            f"{Dossier.objects.filter(number__startswith='R-').count()} dossiers."
+            f"{Dossier.objects.count()} dossiers, dont "
+            f"{Dossier.objects.filter(external_ref__startswith='R-').count()} remplis."
         ))
         self.stdout.write(f"Mot de passe de tous les comptes {PREFIXE}.* : {self.mot_de_passe}")
         self.stdout.write(ecrit)

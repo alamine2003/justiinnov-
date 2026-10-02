@@ -245,6 +245,13 @@ class Dossier(TimeStampedModel):
                 condition=~models.Q(external_ref=""),
                 name="unique_reference_d_origine_par_projet",
             ),
+            # Un projet reçoit un dossier par type, et un seul (décision
+            # 106) : deux créations simultanées n'en feraient pas deux.
+            models.UniqueConstraint(
+                fields=["project", "kind"],
+                condition=models.Q(kind__isnull=False),
+                name="unique_type_par_projet",
+            ),
         ]
         indexes = [
             models.Index(fields=["country", "status"], name="dossier_pays_statut"),
@@ -305,6 +312,20 @@ class Dossier(TimeStampedModel):
             "unjustified": self.lines_unjustified,
             "settled": self.lines_settled,
         }
+
+    def lignes_sans_preuve(self):
+        """Les lignes du dossier qu'aucune pièce exploitable ne prouve (décision 107).
+
+        Une ligne est prouvée par une pièce déposée sur elle, ni rejetée ni
+        archivée. Une pièce d'avant la 2.0, déposée sur tout le dossier,
+        prouve encore toutes ses lignes : on ne devine pas laquelle elle
+        visait.
+        """
+        utilisables = ~Q(status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED])
+        if self.proofs.filter(utilisables, expense=None).exists():
+            return self.expenses.none()
+        prouvees = Proof.objects.filter(utilisables, dossier=self).values("expense_id")
+        return self.expenses.exclude(pk__in=prouvees)
 
     def usable_proof_count(self):
         """Pièces qui prouvent encore quelque chose : ni rejetées ni archivées."""
@@ -687,6 +708,14 @@ class Proof(TimeStampedModel):
         Dossier, on_delete=models.PROTECT, related_name="proofs",
         verbose_name=_("Dossier"),
     )
+    #: La ligne que la pièce prouve (décision 107). Vide pour une pièce
+    #: déposée avant la 2.0 sur le dossier entier : on ne devine pas à
+    #: quelle ligne elle se rapportait. ``dossier`` reste, recopié de la
+    #: ligne : le cloisonnement, le rangement et la clôture passent par lui.
+    expense = models.ForeignKey(
+        "Expense", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="proofs", verbose_name=_("Ligne de dépense"),
+    )
     file = models.FileField(_("Fichier"), upload_to=proof_upload_path)
     original_name = models.CharField(_("Nom d'origine"), max_length=255, blank=True)
     kind = models.CharField(
@@ -723,13 +752,20 @@ class Proof(TimeStampedModel):
             models.Index(fields=["dossier", "status"], name="piece_dossier_statut"),
         ]
         constraints = [
-            # Deux dépôts simultanés du même fichier sur le même dossier : la
+            # Deux dépôts simultanés du même fichier sur la même ligne : la
             # vérification du sérialiseur ne voit pas l'autre transaction, la
             # base, si. Un remplacement explicite garde le droit de redéposer
-            # le même contenu (§5.4).
+            # le même contenu (§5.4). Depuis la 2.0, l'unicité est par ligne
+            # (décision 107) ; les pièces d'avant, sans ligne, la gardent par
+            # dossier.
+            models.UniqueConstraint(
+                fields=["expense", "sha256"],
+                condition=Q(replaces__isnull=True, expense__isnull=False),
+                name="piece_unique_par_ligne",
+            ),
             models.UniqueConstraint(
                 fields=["dossier", "sha256"],
-                condition=Q(replaces__isnull=True),
+                condition=Q(replaces__isnull=True, expense__isnull=True),
                 name="piece_unique_par_dossier",
             ),
         ]

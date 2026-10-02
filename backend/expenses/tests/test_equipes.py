@@ -157,29 +157,17 @@ class CloisonnementParEquipeTests(ExpenseTestCase):
 
     def test_un_manager_cloisonne_declare_dans_une_de_ses_equipes(self):
         """Sans équipe, il créerait quelque chose qu'il ne peut plus relire :
-        le dossier et la ligne exigent une de ses équipes."""
+        la ligne exige une de ses équipes — le projet aussi, pour ses
+        dossiers (``test_dossiers_dans_un_projet``)."""
         self.login(self.manager_a)
-        dossier_payload = {
-            "project": self.projet.pk, "kind": self.stands.pk,
-            "label": "Salon", "country": self.togo.pk, "date": f"{self.year}-04-01",
-        }
 
-        dossier_sans = self.client.post("/api/dossiers/", dossier_payload)
         ligne_sans = self.client.post("/api/expenses/", self._payload(team=None), format="json")
-        dossier_avec = self.client.post(
-            "/api/dossiers/", {**dossier_payload, "team": self.equipe_a.pk}
-        )
         ligne_avec = self.client.post("/api/expenses/", self._payload())
 
-        self.assertEqual(dossier_sans.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Choisissez", str(dossier_sans.data["team"]))
         self.assertEqual(ligne_sans.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Choisissez", str(ligne_sans.data["team"]))
-        self.assertEqual(dossier_avec.status_code, status.HTTP_201_CREATED, dossier_avec.data)
         self.assertEqual(ligne_avec.status_code, status.HTTP_201_CREATED, ligne_avec.data)
-        relu_dossier = self.client.get(f"/api/dossiers/{dossier_avec.data['id']}/")
         relue_ligne = self.client.get(f"/api/expenses/{ligne_avec.data['id']}/")
-        self.assertEqual(relu_dossier.status_code, status.HTTP_200_OK)
         self.assertEqual(relue_ligne.status_code, status.HTTP_200_OK)
 
     def test_un_manager_sans_equipe_voit_tout_son_pays(self):

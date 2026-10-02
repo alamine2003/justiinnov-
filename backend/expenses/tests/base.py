@@ -131,6 +131,18 @@ class ExpenseTestCase(APITestCase):
         expense.save()
         return expense
 
+    def ligne_de_preuve(self, dossier=None):
+        """La ligne qui portera une pièce (décision 107) : la première du
+        dossier, créée au besoin, dans son pays et son équipe."""
+        dossier = dossier or self.dossier
+        ligne = dossier.expenses.order_by("pk").first()
+        if ligne is None:
+            ligne = self.make_expense(
+                dossier=dossier, country=dossier.country, project=dossier.project,
+                team=dossier.team,
+            )
+        return ligne
+
     def submit_dossier(self, dossier=None, user=None):
         """Le chemin réel du pays : le dossier emporte ses lignes."""
         self.login(user or self.owner)

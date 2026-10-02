@@ -126,7 +126,6 @@ class ImportErrorSerializer(serializers.Serializer):
 
 
 class ImportResultSerializer(serializers.Serializer):
-    dossiers_crees = serializers.IntegerField(read_only=True)
     lignes_creees = serializers.IntegerField(read_only=True)
     equipes_creees = serializers.IntegerField(read_only=True)
     managers_crees = serializers.IntegerField(read_only=True)

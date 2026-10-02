@@ -13,8 +13,8 @@ from unittest import mock
 from django.db import DatabaseError
 from django.utils import timezone
 
-from core.models import ChangeLog, Team
-from expenses.models import AuditLog, Dossier, Expense
+from core.models import ChangeLog, Project, Team
+from expenses.models import Dossier, Expense
 from expenses.tests.base import ExpenseTestCase
 
 JOURNAL_INDISPONIBLE = DatabaseError("journal indisponible")
@@ -52,23 +52,25 @@ class TraceDesDepensesTests(ExpenseTestCase):
         expense.refresh_from_db()
         self.assertEqual(expense.title, "Carburant")
 
-    def test_une_creation_de_dossier_dont_la_trace_echoue_n_est_pas_creee(self):
+    def test_un_projet_dont_un_dossier_ne_se_trace_pas_n_est_pas_cree(self):
+        """Le projet et ses dossiers prédéfinis naissent ensemble, tracés,
+        ou pas du tout (décision 106)."""
         self.login(self.owner)
 
-        with mock.patch("expenses.views.record", side_effect=JOURNAL_INDISPONIBLE), \
+        with mock.patch("expenses.predefinis.record", side_effect=JOURNAL_INDISPONIBLE), \
                 self.assertRaises(DatabaseError):
             self.client.post(
-                "/api/dossiers/",
-                {
-                    "project": self.projet.pk, "kind": self.stands.pk,
-                    "label": "Sans trace", "country": self.togo.pk,
-                    "team": self.team.pk, "owner": self.manager.pk,
-                    "date": f"{self.year}-04-01",
-                },
+                "/api/projects/",
+                {"country": self.togo.pk, "name": "Sans trace", "kind": "congres",
+                 "team": self.team.pk},
+                format="json",
             )
 
-        self.assertFalse(Dossier.objects.filter(label="Sans trace").exists())
-        self.assertFalse(AuditLog.objects.filter(label__contains="Sans trace").exists())
+        self.assertFalse(Project.objects.filter(name="Sans trace").exists())
+        self.assertFalse(Dossier.objects.filter(project__name="Sans trace").exists())
+        self.assertFalse(
+            ChangeLog.objects.filter(model_name=ChangeLog.Models.PROJECT, label="Sans trace").exists()
+        )
 
 
 class HistoriqueDuReferentielTests(ExpenseTestCase):
