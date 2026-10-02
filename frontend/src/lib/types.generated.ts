@@ -366,6 +366,88 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/dossier-kinds/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description La liste commune des types de dossiers (décision 101).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
+         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
+         */
+        get: operations["dossier_kinds_list"]
+        put?: never
+        /**
+         * @description La liste commune des types de dossiers (décision 101).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
+         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
+         */
+        post: operations["dossier_kinds_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/dossier-kinds/{id}/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description La liste commune des types de dossiers (décision 101).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
+         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
+         */
+        get: operations["dossier_kinds_retrieve"]
+        /**
+         * @description La liste commune des types de dossiers (décision 101).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
+         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
+         */
+        put: operations["dossier_kinds_update"]
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        /**
+         * @description La liste commune des types de dossiers (décision 101).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
+         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Elle s'écrit comme la configuration (``configuration.manage``,
+         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
+         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+         *     sinon « Stands » pour les dix-sept filiales.
+         */
+        patch: operations["dossier_kinds_partial_update"]
+        trace?: never
+    }
     "/api/dossiers/": {
         parameters: {
             query?: never
@@ -373,10 +455,10 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         get: operations["dossiers_list"]
         put?: never
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         post: operations["dossiers_create"]
         delete?: never
         options?: never
@@ -391,16 +473,16 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         get: operations["dossiers_retrieve"]
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         put: operations["dossiers_update"]
         post?: never
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         delete: operations["dossiers_destroy"]
         options?: never
         head?: never
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         patch: operations["dossiers_partial_update"]
         trace?: never
     }
@@ -413,7 +495,7 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         post: operations["dossiers_close_create"]
         delete?: never
         options?: never
@@ -430,7 +512,7 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         post: operations["dossiers_justify_create"]
         delete?: never
         options?: never
@@ -447,8 +529,25 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         post: operations["dossiers_reject_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/dossiers/{id}/rename/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        /** @description Change le titre du dossier, à tout moment (décision 104). */
+        post: operations["dossiers_rename_create"]
         delete?: never
         options?: never
         head?: never
@@ -481,7 +580,7 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Dossiers de justification (N°ORDRE). */
+        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
         post: operations["dossiers_review_create"]
         delete?: never
         options?: never
@@ -1408,10 +1507,22 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
+         *
+         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
+         *     et les désactive (``referentiel.update``). La référence est attribuée à
+         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         */
         get: operations["projects_list"]
         put?: never
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
+         *
+         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
+         *     et les désactive (``referentiel.update``). La référence est attribuée à
+         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         */
         post: operations["projects_create"]
         delete?: never
         options?: never
@@ -1426,15 +1537,33 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
+         *
+         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
+         *     et les désactive (``referentiel.update``). La référence est attribuée à
+         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         */
         get: operations["projects_retrieve"]
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
+         *
+         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
+         *     et les désactive (``referentiel.update``). La référence est attribuée à
+         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         */
         put: operations["projects_update"]
         post?: never
         delete?: never
         options?: never
         head?: never
-        /** @description Base commune : cloisonnement par pays + droits liés au rôle. */
+        /**
+         * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
+         *
+         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
+         *     et les désactive (``referentiel.update``). La référence est attribuée à
+         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         */
         patch: operations["projects_partial_update"]
         trace?: never
     }
@@ -1916,9 +2045,10 @@ export interface components {
          *     * `proof_replaced` - Remplacement de justificatif
          *     * `downloaded` - Téléchargement
          *     * `imported` - Import Excel
+         *     * `renamed` - Renommage
          * @enum {string}
          */
-        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported"
+        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported" | "renamed"
         AuditLog: {
             readonly id: number
             /** Utilisateur */
@@ -2010,11 +2140,15 @@ export interface components {
             /** Actif */
             is_active?: boolean
         }
+        /** @enum {unknown} */
+        BlankEnum: ""
         Breakdown: {
             readonly year: number
             readonly by_team: components["schemas"]["BreakdownRow"][]
             readonly by_owner: components["schemas"]["BreakdownRow"][]
             readonly by_project: components["schemas"]["BreakdownRow"][]
+            readonly by_project_kind: components["schemas"]["BreakdownRow"][]
+            readonly by_dossier_kind: components["schemas"]["BreakdownRow"][]
             readonly by_category: components["schemas"]["BreakdownRow"][]
             readonly by_expense_title: components["schemas"]["BreakdownRow"][]
             readonly by_month: components["schemas"]["BreakdownRow"][]
@@ -2269,9 +2403,10 @@ export interface components {
          *     * `workflow_configuration` - Configuration du workflow
          *     * `user` - Compte utilisateur
          *     * `beneficiary` - Bénéficiaire
+         *     * `dossier_kind` - Type de dossier
          * @enum {string}
          */
-        ChangeLogModelEnum: "country" | "manager" | "team" | "cost_center" | "project" | "expense_title" | "marketing_category" | "budget" | "reallocation" | "exchange_rate" | "workflow_configuration" | "user" | "beneficiary"
+        ChangeLogModelEnum: "country" | "manager" | "team" | "cost_center" | "project" | "expense_title" | "marketing_category" | "budget" | "reallocation" | "exchange_rate" | "workflow_configuration" | "user" | "beneficiary" | "dossier_kind"
         ChangePasswordRequest: {
             current_password: string
             new_password: string
@@ -2609,10 +2744,17 @@ export interface components {
          * @enum {string}
          */
         DatabaseEnum: "ok" | "ko"
+        /**
+         * @description Un dossier, ouvert dans un projet avec un type (décision 102).
+         *
+         *     Le numéro est calculé à la création (``expenses.numerotation``) et ne
+         *     se saisit plus. Le pays vient du projet quand la charge utile ne le
+         *     donne pas. Projet, type, pays et numéro ne changent plus ensuite.
+         */
         Dossier: {
             readonly id: number
             /** N° d'ordre */
-            number: string
+            readonly number: string
             /** Libellé */
             label: string
             country: number
@@ -2620,6 +2762,19 @@ export interface components {
             readonly country_ref: string | null
             readonly currency: string
             readonly country_timezone: string
+            /** Projet */
+            project: number
+            readonly project_name: string | null
+            readonly project_reference: string | null
+            readonly project_kind: string | null
+            readonly project_kind_display: string | null
+            /** Type de dossier */
+            kind: number
+            readonly kind_name: string | null
+            /** Rang */
+            readonly sequence: number | null
+            /** Référence d'origine */
+            readonly external_ref: string
             team: number | null
             readonly team_name: string | null
             owner: number | null
@@ -2650,10 +2805,17 @@ export interface components {
              */
             readonly updated_at: string
         }
+        /**
+         * @description Un dossier, ouvert dans un projet avec un type (décision 102).
+         *
+         *     Le numéro est calculé à la création (``expenses.numerotation``) et ne
+         *     se saisit plus. Le pays vient du projet quand la charge utile ne le
+         *     donne pas. Projet, type, pays et numéro ne changent plus ensuite.
+         */
         DossierDetail: {
             readonly id: number
             /** N° d'ordre */
-            number: string
+            readonly number: string
             /** Libellé */
             label: string
             country: number
@@ -2661,6 +2823,19 @@ export interface components {
             readonly country_ref: string | null
             readonly currency: string
             readonly country_timezone: string
+            /** Projet */
+            project: number
+            readonly project_name: string | null
+            readonly project_reference: string | null
+            readonly project_kind: string | null
+            readonly project_kind_display: string | null
+            /** Type de dossier */
+            kind: number
+            readonly kind_name: string | null
+            /** Rang */
+            readonly sequence: number | null
+            /** Référence d'origine */
+            readonly external_ref: string
             team: number | null
             readonly team_name: string | null
             owner: number | null
@@ -2693,12 +2868,65 @@ export interface components {
             readonly expenses: components["schemas"]["Expense"][]
             readonly proofs: components["schemas"]["Proof"][]
         }
+        /**
+         * @description Un type de dossier de la liste commune (décision 101).
+         *
+         *     Son type de projet ne change plus dès qu'un dossier l'emploie : les
+         *     dossiers ouverts sous « Stands » resteraient sinon dans un congrès
+         *     sous un type devenu celui d'un voyage.
+         */
+        DossierKind: {
+            readonly id: number
+            /** Type de projet */
+            project_kind: components["schemas"]["ProjectKindEnum"]
+            readonly project_kind_display: string
+            /** Nom */
+            name: string
+            description: string
+            /** Actif */
+            is_active: boolean
+            /**
+             * Créé le
+             * Format: date-time
+             */
+            readonly created_at: string
+            /**
+             * Modifié le
+             * Format: date-time
+             */
+            readonly updated_at: string
+        }
+        /**
+         * @description Un type de dossier de la liste commune (décision 101).
+         *
+         *     Son type de projet ne change plus dès qu'un dossier l'emploie : les
+         *     dossiers ouverts sous « Stands » resteraient sinon dans un congrès
+         *     sous un type devenu celui d'un voyage.
+         */
+        DossierKindRequest: {
+            /** Type de projet */
+            project_kind: components["schemas"]["ProjectKindEnum"]
+            /** Nom */
+            name: string
+            description?: string
+            /** Actif */
+            is_active?: boolean
+        }
+        /**
+         * @description Un dossier, ouvert dans un projet avec un type (décision 102).
+         *
+         *     Le numéro est calculé à la création (``expenses.numerotation``) et ne
+         *     se saisit plus. Le pays vient du projet quand la charge utile ne le
+         *     donne pas. Projet, type, pays et numéro ne changent plus ensuite.
+         */
         DossierRequest: {
-            /** N° d'ordre */
-            number: string
             /** Libellé */
-            label: string
-            country: number
+            label?: string
+            country?: number
+            /** Projet */
+            project?: number
+            /** Type de dossier */
+            kind?: number
             team?: number | null
             owner?: number | null
             /** Format: date */
@@ -2724,7 +2952,7 @@ export interface components {
         DossierTransitionResponse: {
             readonly id: number
             /** N° d'ordre */
-            number: string
+            readonly number: string
             /** Libellé */
             label: string
             country: number
@@ -2732,6 +2960,19 @@ export interface components {
             readonly country_ref: string | null
             readonly currency: string
             readonly country_timezone: string
+            /** Projet */
+            project: number
+            readonly project_name: string | null
+            readonly project_reference: string | null
+            readonly project_kind: string | null
+            readonly project_kind_display: string | null
+            /** Type de dossier */
+            kind: number
+            readonly kind_name: string | null
+            /** Rang */
+            readonly sequence: number | null
+            /** Référence d'origine */
+            readonly external_ref: string
             team: number | null
             readonly team_name: string | null
             owner: number | null
@@ -3230,10 +3471,12 @@ export interface components {
             readonly ligne: number
             readonly motif: string
         }
-        /** @description Classeur à importer, et le pays d'un classeur sans colonne PAYS. */
+        /** @description Classeur à importer, le projet et le type de ses dossiers (décision 102). */
         ImportRequest: {
             /** Format: binary */
             file: string
+            project: number
+            kind: number
             country?: number
         }
         ImportResult: {
@@ -3549,6 +3792,21 @@ export interface components {
             previous: string | null
             results: components["schemas"]["CountryList"][]
         }
+        PaginatedDossierKindList: {
+            /** @example 123 */
+            count: number
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next: string | null
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous: string | null
+            results: components["schemas"]["DossierKind"][]
+        }
         PaginatedDossierList: {
             /** @example 123 */
             count: number
@@ -3818,12 +4076,37 @@ export interface components {
             /** Actif */
             is_active?: boolean
         }
+        /**
+         * @description Un type de dossier de la liste commune (décision 101).
+         *
+         *     Son type de projet ne change plus dès qu'un dossier l'emploie : les
+         *     dossiers ouverts sous « Stands » resteraient sinon dans un congrès
+         *     sous un type devenu celui d'un voyage.
+         */
+        PatchedDossierKindRequest: {
+            /** Type de projet */
+            project_kind?: components["schemas"]["ProjectKindEnum"]
+            /** Nom */
+            name?: string
+            description?: string
+            /** Actif */
+            is_active?: boolean
+        }
+        /**
+         * @description Un dossier, ouvert dans un projet avec un type (décision 102).
+         *
+         *     Le numéro est calculé à la création (``expenses.numerotation``) et ne
+         *     se saisit plus. Le pays vient du projet quand la charge utile ne le
+         *     donne pas. Projet, type, pays et numéro ne changent plus ensuite.
+         */
         PatchedDossierRequest: {
-            /** N° d'ordre */
-            number?: string
             /** Libellé */
             label?: string
             country?: number
+            /** Projet */
+            project?: number
+            /** Type de dossier */
+            kind?: number
             team?: number | null
             owner?: number | null
             /** Format: date */
@@ -3954,12 +4237,13 @@ export interface components {
             }
         }
         /**
-         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         * @description Un projet, son type et sa référence (décision 100).
          *
-         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
-         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
-         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
-         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         *     La référence, l'année et le rang sont attribués à la création
+         *     (``core.numerotation``) et ne se saisissent pas. Le type est exigé à la
+         *     création et ne change plus — sauf pour un projet d'avant la 2.0, resté
+         *     « à typer », qui se type une fois. Le projet « Historique » ne se type
+         *     pas : il range des dossiers d'avant les projets.
          */
         PatchedProjectRequest: {
             /** Pays */
@@ -3971,6 +4255,8 @@ export interface components {
             status?: components["schemas"]["ProjectStatusEnum"]
             /** Format: decimal */
             budget?: string | null
+            /** Type de projet */
+            kind?: components["schemas"]["ProjectKindEnum"] | components["schemas"]["BlankEnum"]
             /** Actif */
             is_active?: boolean
         }
@@ -4131,6 +4417,8 @@ export interface components {
             readonly "managers.update": boolean
             /** @description Ajouter une équipe, un centre de coûts, un projet, un intitulé, une catégorie, un bénéficiaire. */
             readonly "referentiel.create": boolean
+            /** @description Ouvrir un congrès, un voyage ou un soutien financier dans son pays ; sa référence est attribuée. */
+            readonly "projets.create": boolean
             /** @description Renommer, rattacher, activer ou désactiver une entité du référentiel. */
             readonly "referentiel.update": boolean
             /** @description Créer une enveloppe annuelle ou une sous-enveloppe. */
@@ -4169,18 +4457,21 @@ export interface components {
             readonly "rectifications.request": boolean
             /** @description Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne. */
             readonly "rectifications.decide": boolean
+            /** @description Changer le titre d'un dossier de son pays, même soumis ou clôturé ; l'ancien titre reste au journal. */
+            readonly "dossiers.rename": boolean
             /** @description Télécharger le registre en Excel, CSV, Word ou PDF. */
             readonly "data.export": boolean
             /** @description Charger un classeur de dépenses de son pays en brouillons. */
             readonly "data.import": boolean
         }
         /**
-         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         * @description Un projet, son type et sa référence (décision 100).
          *
-         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
-         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
-         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
-         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         *     La référence, l'année et le rang sont attribués à la création
+         *     (``core.numerotation``) et ne se saisissent pas. Le type est exigé à la
+         *     création et ne change plus — sauf pour un projet d'avant la 2.0, resté
+         *     « à typer », qui se type une fois. Le projet « Historique » ne se type
+         *     pas : il range des dossiers d'avant les projets.
          */
         Project: {
             readonly id: number
@@ -4195,6 +4486,20 @@ export interface components {
             readonly status_display: string
             /** Format: decimal */
             budget: string | null
+            /** Type de projet */
+            kind: components["schemas"]["ProjectKindEnum"] | components["schemas"]["BlankEnum"]
+            readonly kind_display: string
+            /** Année */
+            readonly year: number | null
+            /** Rang */
+            readonly sequence: number | null
+            /** Référence */
+            readonly reference: string | null
+            /** Projet historique */
+            readonly is_historical: boolean
+            readonly a_typer: boolean
+            /** @default 0 */
+            readonly dossier_count: number
             /** Actif */
             is_active: boolean
             /**
@@ -4209,12 +4514,20 @@ export interface components {
             readonly updated_at: string
         }
         /**
-         * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
+         * @description * `congres` - Congrès
+         *     * `voyage` - Voyage
+         *     * `soutien_financier` - Soutien financier
+         * @enum {string}
+         */
+        ProjectKindEnum: "congres" | "voyage" | "soutien_financier"
+        /**
+         * @description Un projet, son type et sa référence (décision 100).
          *
-         *     Les lignes, les dossiers, les enveloppes et les profils qui la portent
-         *     sont cloisonnés par **leur** pays : déplacer l'équipe les laisserait
-         *     derrière elle, et une équipe du Togo lirait des lignes ivoiriennes. On
-         *     corrige ce qui la porte d'abord, ou l'on en crée une autre.
+         *     La référence, l'année et le rang sont attribués à la création
+         *     (``core.numerotation``) et ne se saisissent pas. Le type est exigé à la
+         *     création et ne change plus — sauf pour un projet d'avant la 2.0, resté
+         *     « à typer », qui se type une fois. Le projet « Historique » ne se type
+         *     pas : il range des dossiers d'avant les projets.
          */
         ProjectRequest: {
             /** Pays */
@@ -4226,6 +4539,8 @@ export interface components {
             status?: components["schemas"]["ProjectStatusEnum"]
             /** Format: decimal */
             budget?: string | null
+            /** Type de projet */
+            kind?: components["schemas"]["ProjectKindEnum"] | components["schemas"]["BlankEnum"]
             /** Actif */
             is_active?: boolean
         }
@@ -4409,6 +4724,10 @@ export interface components {
          * @enum {string}
          */
         RectificationStatusEnum: "pending" | "approved" | "refused"
+        /** @description Le nouveau titre d'un dossier (décision 104). */
+        RenommerRequest: {
+            label: string
+        }
         /**
          * @description * `super_admin` - Super administrateur (DG, DO, CEO, DEV)
          *     * `admin` - Administrateur (RH)
@@ -4571,6 +4890,7 @@ export interface components {
         }
         /**
          * @description * `edit` - edit
+         *     * `rename` - rename
          *     * `add_line` - add_line
          *     * `upload` - upload
          *     * `delete` - delete
@@ -4583,7 +4903,7 @@ export interface components {
          *     * `request_rectification` - request_rectification
          * @enum {string}
          */
-        TransitionEnum: "edit" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen" | "request_rectification"
+        TransitionEnum: "edit" | "rename" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen" | "request_rectification"
         /**
          * @description Motif accompagnant une transition ; obligatoire pour un rejet (§5.5)
          *     et pour une réouverture.
@@ -4766,8 +5086,9 @@ export interface operations {
                  *     * `proof_replaced` - Remplacement de justificatif
                  *     * `downloaded` - Téléchargement
                  *     * `imported` - Import Excel
+                 *     * `renamed` - Renommage
                  */
-                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
+                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "renamed" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
                 country?: number
                 object_type?: string
                 /** @description Quel champ utiliser pour classer les résultats. */
@@ -5503,11 +5824,150 @@ export interface operations {
             }
         }
     }
+    dossier_kinds_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean
+                /** @description Quel champ utiliser pour classer les résultats. */
+                ordering?: string
+                /** @description Un numéro de page de l'ensemble des résultats. */
+                page?: number
+                /** @description Nombre de résultats à retourner par page. */
+                page_size?: number
+                /**
+                 * @description * `congres` - Congrès
+                 *     * `voyage` - Voyage
+                 *     * `soutien_financier` - Soutien financier
+                 */
+                project_kind?: "congres" | "soutien_financier" | "voyage"
+                /** @description Un terme de recherche. */
+                search?: string
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["PaginatedDossierKindList"]
+                }
+            }
+        }
+    }
+    dossier_kinds_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DossierKindRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["DossierKindRequest"]
+                "multipart/form-data": components["schemas"]["DossierKindRequest"]
+            }
+        }
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["DossierKind"]
+                }
+            }
+        }
+    }
+    dossier_kinds_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Type de dossier. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["DossierKind"]
+                }
+            }
+        }
+    }
+    dossier_kinds_update: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Type de dossier. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DossierKindRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["DossierKindRequest"]
+                "multipart/form-data": components["schemas"]["DossierKindRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["DossierKind"]
+                }
+            }
+        }
+    }
+    dossier_kinds_partial_update: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Type de dossier. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedDossierKindRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedDossierKindRequest"]
+                "multipart/form-data": components["schemas"]["PatchedDossierKindRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["DossierKind"]
+                }
+            }
+        }
+    }
     dossiers_list: {
         parameters: {
             query?: {
                 country?: number
                 country__country_ref?: string
+                kind?: number
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
                 owner?: number
@@ -5515,6 +5975,13 @@ export interface operations {
                 page?: number
                 /** @description Nombre de résultats à retourner par page. */
                 page_size?: number
+                project?: number
+                /**
+                 * @description * `congres` - Congrès
+                 *     * `voyage` - Voyage
+                 *     * `soutien_financier` - Soutien financier
+                 */
+                project__kind?: "congres" | "soutien_financier" | "voyage"
                 /** @description Un terme de recherche. */
                 search?: string
                 /**
@@ -5748,6 +6215,34 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["DossierTransitionResponse"]
+                }
+            }
+        }
+    }
+    dossiers_rename_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Dossier de justification. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenommerRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["RenommerRequest"]
+                "multipart/form-data": components["schemas"]["RenommerRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["DossierDetail"]
                 }
             }
         }
@@ -6719,8 +7214,9 @@ export interface operations {
                  *     * `workflow_configuration` - Configuration du workflow
                  *     * `user` - Compte utilisateur
                  *     * `beneficiary` - Bénéficiaire
+                 *     * `dossier_kind` - Type de dossier
                  */
-                model_name?: "beneficiary" | "budget" | "cost_center" | "country" | "exchange_rate" | "expense_title" | "manager" | "marketing_category" | "project" | "reallocation" | "team" | "user" | "workflow_configuration"
+                model_name?: "beneficiary" | "budget" | "cost_center" | "country" | "dossier_kind" | "exchange_rate" | "expense_title" | "manager" | "marketing_category" | "project" | "reallocation" | "team" | "user" | "workflow_configuration"
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
                 /** @description Un numéro de page de l'ensemble des résultats. */
@@ -7370,6 +7866,13 @@ export interface operations {
             query?: {
                 country?: number
                 is_active?: boolean
+                is_historical?: boolean
+                /**
+                 * @description * `congres` - Congrès
+                 *     * `voyage` - Voyage
+                 *     * `soutien_financier` - Soutien financier
+                 */
+                kind?: "congres" | "soutien_financier" | "voyage"
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
                 /** @description Un numéro de page de l'ensemble des résultats. */

@@ -30,6 +30,7 @@ from core.mixins import NoDestroyModelViewSet
 from core.regles import traduire_les_regles
 
 from . import stockage, transitions
+from .numerotation import creer_dossier
 from .audit import champs_journalises, journaliser_la_modification, photographier, record
 from .mixins import DraftDeletableViewSet
 from .models import (
@@ -46,6 +47,7 @@ from .serializers import (
     DossierDetailSerializer,
     DossierSerializer,
     DossiersParPaysSerializer,
+    RenommerSerializer,
     ExpenseRegisterSerializer,
     ExpenseSerializer,
     ExpenseTransitionSerializer,
@@ -213,27 +215,32 @@ class BeneficiaryViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     )
 )
 class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
-    """Dossiers de justification (N°ORDRE)."""
+    """Dossiers de justification, ouverts dans un projet (décision 102)."""
 
     queryset = (
-        Dossier.objects.select_related("country", "team", "owner").with_totals()
+        Dossier.objects.select_related("country", "team", "owner", "project", "kind")
+        .with_totals()
     )
     permission_classes = [RolePermission]
     filterset_fields = [
         "country", "country__country_ref", "status", "team", "owner",
+        "project", "project__kind", "kind",
     ]
-    search_fields = ["number", "label"]
+    search_fields = ["number", "label", "project__name", "project__reference", "external_ref"]
     ordering_fields = ["date", "number", "created_at"]
     # Un manager rattaché à des équipes ne voit que leurs dossiers : le
     # cloisonnement par pays ne suffit pas quand plusieurs équipes d'un même
     # pays ne doivent pas lire les dépenses les unes des autres.
     team_lookup = "team"
+    action_write_capabilities = {
+        **WorkflowMixin.action_write_capabilities, "rename": "dossiers.rename",
+    }
 
     #: Actions qui répondent le détail complet (lignes et pièces) : la
     #: fiche, et chaque transition — l'interface affiche le dossier tel
     #: qu'il est après l'action, sans avoir à le recharger.
     ACTIONS_DETAIL = frozenset(
-        {"retrieve", "submit", "review", "justify", "reject", "close", "reopen"}
+        {"retrieve", "submit", "review", "justify", "reject", "close", "reopen", "rename"}
     )
 
     def get_serializer_class(self):
@@ -324,6 +331,20 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
             ],
         })
 
+    @extend_schema(request=RenommerSerializer, responses=DossierDetailSerializer)
+    @action(detail=True, methods=["post"])
+    def rename(self, request, pk=None):
+        """Change le titre du dossier, à tout moment (décision 104)."""
+        dossier = self.get_object()
+        demande = RenommerSerializer(data=request.data)
+        demande.is_valid(raise_exception=True)
+        with traduire_les_regles():
+            transitions.renommer(
+                dossier, demande.validated_data["label"], get_access(request.user),
+                Trace.depuis_requete(request),
+            )
+        return Response(self.presenter(dossier))
+
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
         """Déclare le dossier : ses lignes partent avec lui."""
@@ -336,7 +357,10 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
 
     def perform_create(self, serializer):
         self._check_country_scope(serializer)
-        serializer.save(created_by=self.request.user.username)
+        # Le numéro est calculé, projet verrouillé (décision 102).
+        serializer.instance = creer_dossier(
+            Dossier(**serializer.validated_data, created_by=self.request.user.username)
+        )
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
     def perform_update(self, serializer):

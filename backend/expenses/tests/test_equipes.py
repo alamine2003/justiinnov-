@@ -160,8 +160,8 @@ class CloisonnementParEquipeTests(ExpenseTestCase):
         le dossier et la ligne exigent une de ses équipes."""
         self.login(self.manager_a)
         dossier_payload = {
-            "number": "N-0100", "label": "Salon", "country": self.togo.pk,
-            "date": f"{self.year}-04-01",
+            "project": self.projet.pk, "kind": self.stands.pk,
+            "label": "Salon", "country": self.togo.pk, "date": f"{self.year}-04-01",
         }
 
         dossier_sans = self.client.post("/api/dossiers/", dossier_payload)

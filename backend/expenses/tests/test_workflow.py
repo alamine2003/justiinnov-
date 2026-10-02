@@ -702,11 +702,11 @@ class DossierWorkflowTests(ExpenseTestCase):
 
         response = self.client.post(
             "/api/dossiers/",
-            {"number": "N-0100", "label": "Salon", "country": self.togo.pk,
-             "date": f"{self.year}-04-01"},
+            {"project": self.projet.pk, "kind": self.stands.pk, "label": "Salon",
+             "country": self.togo.pk, "date": f"{self.year}-04-01"},
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(response.data["created_by"], "owner.togo")
 
     def test_totaux_du_dossier(self):
@@ -805,8 +805,8 @@ class ScopingTests(ExpenseTestCase):
         )
         dossier = self.client.post(
             "/api/dossiers/",
-            {"number": "N-0200", "label": "Salon", "country": self.togo.pk,
-             "date": f"{self.year}-04-01", "owner": self.manager.pk},
+            {"project": self.projet.pk, "kind": self.stands.pk, "label": "Salon",
+             "country": self.togo.pk, "date": f"{self.year}-04-01", "owner": self.manager.pk},
         )
 
         self.assertEqual(depense.status_code, status.HTTP_400_BAD_REQUEST)

@@ -14,7 +14,8 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget, ExchangeRate
-from core.models import Country, Project, Team
+from core.models import Country, DossierKind, Project, ProjectKind, Team
+from core.numerotation import creer_projet
 from expenses.models import AuditLog, Dossier, Expense, Proof
 from expenses.tests.base import ExpenseTestCase, in_memory_storage
 from expenses.workflow import Status
@@ -188,7 +189,14 @@ class BreakdownTests(DashboardTestCase):
         self.assertEqual(total, Decimal("570000.00"))
 
     def test_les_libelles_de_repli_suivent_la_langue(self):
-        self.make_expense(team=None, owner=None, status=Status.SUBMITTED, budget=self.budget)
+        # Un dossier d'avant la 2.0, sans projet ni type.
+        ancien = Dossier.objects.create(
+            number="N-ANCIEN", label="Ancien", country=self.togo, date=date(self.year, 2, 1),
+        )
+        self.make_expense(
+            dossier=ancien, project=None, team=None, owner=None,
+            status=Status.SUBMITTED, budget=self.budget,
+        )
         self.login(self.doo)
 
         en = self.client.get(
@@ -203,6 +211,7 @@ class BreakdownTests(DashboardTestCase):
         self.assertIn("No team", {row["label"] for row in en.data["by_team"]})
         self.assertIn("Outside any project", {row["label"] for row in en.data["by_project"]})
         self.assertIn("Sans équipe", {row["label"] for row in fr.data["by_team"]})
+        self.assertIn("Sans type de dossier", {row["label"] for row in fr.data["by_dossier_kind"]})
 
     def test_le_pays_est_obligatoire(self):
         """Sans pays, deux équipes homonymes de pays différents fusionnent."""
@@ -214,9 +223,52 @@ class BreakdownTests(DashboardTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("country", response.data)
 
-    def test_repartition_par_projet(self):
-        projet = Project.objects.create(country=self.togo, name="Campagne T1")
-        self.make_expense(amount="100000.00", status=Status.JUSTIFIED, project=projet)
+    def test_repartition_par_projet_et_par_type(self):
+        """Le projet d'une ligne est celui de son dossier (décision 102) ; la
+        répartition se lit aussi par type de projet et par type de dossier."""
+        projet = creer_projet(Project(
+            country=self.togo, name="Campagne T1", kind=ProjectKind.VOYAGE,
+        ))
+        billets = DossierKind.objects.get_or_create(
+            project_kind=ProjectKind.VOYAGE, name="Billets"
+        )[0]
+        dossier = Dossier.objects.create(
+            number="N-VOYAGE", label="Billets", country=self.togo, project=projet,
+            kind=billets, date=date(self.year, 2, 1),
+        )
+        self.make_expense(
+            dossier=dossier, project=projet, amount="100000.00",
+            status=Status.JUSTIFIED, budget=self.budget,
+        )
+        self.login(self.doo)
+
+        response = self.client.get(
+            "/api/dashboard/breakdown/", {"year": self.year, "country": self.togo.pk}
+        )
+
+        self.assertIn("Campagne T1", {row["label"] for row in response.data["by_project"]})
+        self.assertIn("Congrès de Lomé", {row["label"] for row in response.data["by_project"]})
+        self.assertIn("Voyage", {row["label"] for row in response.data["by_project_kind"]})
+        self.assertIn("Congrès", {row["label"] for row in response.data["by_project_kind"]})
+        self.assertIn("Billets", {row["label"] for row in response.data["by_dossier_kind"]})
+
+    def test_une_ligne_rangee_sous_historique_garde_son_projet(self):
+        """La reprise range un dossier d'avant la 2.0 sous « Historique » sans
+        toucher à ses lignes (décision 103) : la répartition par projet suit
+        la ligne, comme la consommation de la sous-enveloppe du projet."""
+        campagne = Project.objects.create(country=self.togo, name="Campagne 2025")
+        historique = Project.objects.create(
+            country=self.togo, name="Historique (avant 2.0)", is_historical=True,
+            reference="TG-P-HIST",
+        )
+        ancien = Dossier.objects.create(
+            number="N-ANCIEN", label="Ancien", country=self.togo, project=historique,
+            date=date(self.year, 2, 1),
+        )
+        self.make_expense(
+            dossier=ancien, project=campagne, amount="40000.00",
+            status=Status.SUBMITTED, budget=self.budget,
+        )
         self.login(self.doo)
 
         response = self.client.get(
@@ -224,8 +276,8 @@ class BreakdownTests(DashboardTestCase):
         )
 
         labels = {row["label"] for row in response.data["by_project"]}
-        self.assertIn("Campagne T1", labels)
-        self.assertIn("Hors projet", labels)
+        self.assertIn("Campagne 2025", labels)
+        self.assertNotIn("Historique (avant 2.0)", labels)
 
 
 class AlertTests(DashboardTestCase):

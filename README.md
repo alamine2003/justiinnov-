@@ -156,6 +156,21 @@ Autrement, il pourrait décaisser puis se donner quitus, ce qui viderait
 l'application de sa raison d'être. La règle des quatre yeux reste en garde :
 celui qui a saisi une dépense ne la contrôle pas.
 
+**Projets, puis dossiers (version 2.0).** Le projet est la rubrique
+principale : un congrès, un voyage ou un soutien financier (`kind`), avec
+une référence calculée à sa création, `TG-P-2026-001` — code du pays,
+année, rang dans le pays et l'année. Le pays ouvre ses projets
+(`POST /api/projects/`, capacité `projets.create`) ; le siège les modifie,
+les type et les désactive (`referentiel.update`). Un dossier s'ouvre **dans
+un projet** actif et typé, sous un **type de dossier** de ce type de projet
+(`POST /api/dossiers/` avec `project` et `kind`) : Stands, Voyages, Billets…
+— une liste commune aux filiales, tenue par le siège
+(`/api/dossier-kinds/`). Son numéro est calculé, `TG-P-2026-001-D001`, et ne
+se saisit plus ; ses lignes portent le projet du dossier. Le titre d'un
+dossier se renomme **à tout moment**, même clôturé, par un manager du pays
+(`POST /api/dossiers/{id}/rename/`, capacité `dossiers.rename`), et chaque
+changement est tracé (décisions 100 à 104).
+
 **Un dossier appartient à un pays.** Son pays est attribué à la création,
 dans le périmètre de son auteur, et ne change plus. Seul ce pays remplit
 ses lignes et ses pièces ; un brouillon ne se modifie et ne se soumet que
@@ -732,7 +747,13 @@ l'envoi, jamais avant.
 ## Import Excel et N°ORDRE
 
 `POST /api/imports/expenses.xlsx` (champ `file`, le pays : `data.import`)
-lit deux classeurs : l'export de la plateforme, et le **classeur historique du
+importe **dans un projet, sous un type de dossier** : les paramètres
+`project` et `kind` (requête ou formulaire) sont obligatoires depuis la 2.0
+et suivent les règles d'une ouverture de dossier. Chaque N°ORDRE du classeur
+devient un dossier du projet, numéroté par le serveur ; le N°ORDRE est gardé
+comme référence d'origine (`external_ref`), et un classeur réimporté — ou
+un export réimporté — retrouve ses dossiers. Il lit deux classeurs :
+l'export de la plateforme, et le **classeur historique du
 client** — feuille « BASE DE DONNEES ACTIONS », titre et note en tête,
 en-tête en septième ligne, neuf colonnes (N°ORDRE, DATE, TEAM, OWNER,
 LIBELLE DES TRANSACTIONS, DEPENSES, MONTANT JUSTIFIER, ECART, PIECES
@@ -740,15 +761,13 @@ JUSTIFICATIVES). La ligne d'en-tête est reconnue à son contenu dans les
 quinze premières lignes ; seules ces six premières colonnes sont
 obligatoires.
 
-- Le classeur historique est mono-pays : passez le pays en paramètre,
-  `?country=<id>` (ou champ de formulaire `country`). Il est vérifié contre
-  le périmètre du compte ; un pays inconnu et un pays hors périmètre reçoivent
-  le même refus. Avec une colonne PAYS, le paramètre sert de repli aux
-  cellules vides.
-- Le **N°ORDRE est unique par pays**, comme dans le classeur : le « 12 » du
-  Togo et le « 12 » de la Côte d'Ivoire sont deux dossiers. Une ligne rejoint
-  le dossier de son pays s'il est encore en brouillon, sinon elle le crée ;
-  un entier est lu en texte (« 12 », jamais « 12.0 »).
+- Le pays est celui du projet. Un paramètre `country`, s'il est donné, doit
+  être le même ; une cellule PAYS d'un autre pays est une erreur de ligne.
+  Un projet inconnu et un projet hors périmètre reçoivent le même refus.
+- Le **N°ORDRE désigne un dossier du projet** : une ligne rejoint le dossier
+  du projet qui porte ce N°ORDRE (référence d'origine ou numéro) s'il est
+  encore en brouillon, sinon elle le crée ; un entier est lu en texte
+  (« 12 », jamais « 12.0 »).
 - **Une ligne importée n'existe qu'une fois par dossier.** Son identité est
   l'empreinte de son jour, de son libellé et de son montant
   (`Expense.import_key`) : la validation la compare aux lignes déjà en

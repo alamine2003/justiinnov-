@@ -26,7 +26,7 @@ from budget.aggregates import (
     to_xof,
 )
 from core.journal import tracer
-from core.models import Country
+from core.models import Country, DossierKind, Project, ProjectKind
 from expenses.models import AuditLog
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 
@@ -39,6 +39,7 @@ from .exports import (
     tableaux_rapprochement,
 )
 from .scope import Periode, fuseau_de, scoped_querysets
+from accounts.perimetre import filtrer
 from accounts.permissions import RolePermission, get_access
 from .imports import audit_import, importer_depenses
 from .serializers import (
@@ -287,7 +288,18 @@ class BreakdownView(APIView):
                 "year": year,
                 "by_team": self._group(counted, "team__name", _("Sans équipe")),
                 "by_owner": self._group(counted, "owner__name", _("Sans propriétaire")),
+                # Le projet de la ligne : celui de son dossier depuis la 2.0
+                # (décision 102), celui qu'elle portait pour un dossier rangé
+                # sous « Historique » (décision 103) — comme la consommation
+                # des sous-enveloppes par projet.
                 "by_project": self._group(counted, "project__name", _("Hors projet")),
+                "by_project_kind": self._group(
+                    counted, "dossier__project__kind", _("Sans type de projet"),
+                    libelles=dict(ProjectKind.choices),
+                ),
+                "by_dossier_kind": self._group(
+                    counted, "dossier__kind__name", _("Sans type de dossier")
+                ),
                 "by_category": self._group(
                     counted, "marketing_category__name", _("Sans catégorie")
                 ),
@@ -298,7 +310,7 @@ class BreakdownView(APIView):
             }
         )
 
-    def _group(self, expenses, field, fallback):
+    def _group(self, expenses, field, fallback, libelles=None):
         rows = (
             expenses.values(field)
             .annotate(
@@ -310,7 +322,7 @@ class BreakdownView(APIView):
         )
         return [
             {
-                "label": row[field] or fallback,
+                "label": (libelles or {}).get(row[field], row[field]) or fallback,
                 "amount": _money(row["amount"]),
                 "justified": _money(row["justified"]),
                 "gap": _money((row["amount"] or ZERO) - (row["justified"] or ZERO)),
@@ -501,15 +513,45 @@ class ExpensesImportView(APIView):
             raise ValidationError({"file": _("Le champ file est obligatoire.")})
         dry_run = str(request.query_params.get("dry_run", "false")).lower() == "true"
         country = self._pays_de_l_import(request)
+        project, kind = self._projet_de_l_import(request)
         with transaction.atomic():
             resultat = importer_depenses(
-                uploaded, request.user, dry_run=dry_run, country=country
+                uploaded, request.user, dry_run=dry_run, country=country,
+                project=project, kind=kind,
             )
             # Une prévisualisation ne verse rien : elle ne laisse pas une
             # trace « importé » qui ferait croire le contraire.
             if not dry_run:
-                audit_import(request, resultat, country=country)
+                audit_import(
+                    request, resultat, country=project.country,
+                    project=project.reference or project.name, kind=kind.name,
+                )
         return Response(resultat)
+
+    def _projet_de_l_import(self, request):
+        """Le projet et le type de dossier de l'import (décision 102).
+
+        Le projet se cherche dans le périmètre du demandeur : un projet
+        inconnu et un projet du voisin reçoivent le même refus. Ses règles
+        d'ouverture (actif, typé, type de dossier du bon type) sont jugées
+        par ``importer_depenses``, comme pour une saisie.
+        """
+        valeurs = {}
+        for champ in ("project", "kind"):
+            brut = request.query_params.get(champ) or request.data.get(champ)
+            if brut in (None, ""):
+                raise ValidationError({champ: _("Le champ %(champ)s est obligatoire.") % {"champ": champ}})
+            valeurs[champ] = _as_int(brut, champ)
+        project = filtrer(
+            Project.objects.select_related("country").filter(pk=valeurs["project"]),
+            get_access(request.user),
+        ).first()
+        if project is None:
+            raise ValidationError({"project": _("Projet inconnu.")})
+        kind = DossierKind.objects.filter(pk=valeurs["kind"]).first()
+        if kind is None:
+            raise ValidationError({"kind": _("Type de dossier inconnu.")})
+        return project, kind
 
     def _pays_de_l_import(self, request):
         """Le pays désigné par la requête, s'il est dans le périmètre.

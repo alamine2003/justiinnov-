@@ -27,6 +27,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from openpyxl import load_workbook
@@ -36,6 +37,7 @@ from budget.aggregates import convert
 from core.journal import tracer
 from core.models import Country, Manager, Team
 from expenses.models import AuditLog, Dossier, Expense
+from expenses.numerotation import creer_dossier, refus_d_ouverture
 from expenses.workflow import Status, agit_en_auteur
 
 from .scope import fuseau_de
@@ -384,15 +386,42 @@ def cle_d_import(jour, title, amount):
     return hashlib.sha256(texte.encode("utf-8")).hexdigest()
 
 
-def _lignes_en_base(dossier, cache):
-    """Empreintes des lignes déjà présentes dans un dossier, lues une fois."""
+def _lignes_en_base(dossier, cache, number):
+    """Empreintes des lignes déjà présentes dans un dossier, lues une fois.
+
+    ``number`` est le N°ORDRE sous lequel le classeur désigne ce dossier :
+    son numéro, ou sa référence d'origine s'il vient d'un import.
+    """
     if dossier.pk not in cache:
         fuseau = fuseau_de(dossier.country)
         cache[dossier.pk] = {
-            _empreinte(dossier.number, timezone.localtime(instant, fuseau).date(), title, amount)
+            _empreinte(number, timezone.localtime(instant, fuseau).date(), title, amount)
             for instant, title, amount in dossier.expenses.values_list("date", "title", "amount")
         }
     return cache[dossier.pk]
+
+
+def _lignes_hors_du_projet(country, project, number, cache):
+    """Empreintes des lignes que le même N°ORDRE porte **ailleurs** dans le pays.
+
+    Un classeur se rattache à un projet, mais ses lignes existent peut-être
+    déjà dans un dossier d'un autre projet du pays — le même classeur
+    importé deux fois dans deux projets, ou un classeur d'avant la 2.0 dont
+    les dossiers sont rangés sous « Historique ». Les réimporter
+    consommerait deux fois l'enveloppe. Le dossier se désigne par son
+    numéro ou sa référence d'origine, comme dans le projet visé.
+    """
+    cle = (country.pk, project.pk, number)
+    if cle not in cache:
+        fuseau = fuseau_de(country)
+        lignes = Expense.objects.filter(dossier__country=country).exclude(
+            dossier__project=project
+        ).filter(Q(dossier__external_ref=number) | Q(dossier__number=number))
+        cache[cle] = {
+            _empreinte(number, timezone.localtime(instant, fuseau).date(), title, amount)
+            for instant, title, amount in lignes.values_list("date", "title", "amount")
+        }
+    return cache[cle]
 
 
 def _resoudre_le_pays(row, avec_colonne_pays, pays_par_nom, pays_impose, access):
@@ -410,18 +439,32 @@ def _resoudre_le_pays(row, avec_colonne_pays, pays_par_nom, pays_impose, access)
     return country
 
 
-def importer_depenses(uploaded, user, dry_run=False, country=None):
+def importer_depenses(uploaded, user, dry_run=False, country=None, project=None, kind=None):
     """Valide tout le classeur, puis le crée atomiquement si demandé.
 
-    ``country`` est le pays de l'import, déjà vérifié contre le périmètre
-    par la vue. Il est obligatoire quand le classeur n'a pas de colonne
-    PAYS — le cas du fichier historique — et sert de repli quand la cellule
-    PAYS d'une ligne est vide.
+    Depuis la 2.0 (décision 102), un classeur s'importe **dans un projet**,
+    sous un **type de dossier** : ``project`` et ``kind``, déjà vérifiés
+    contre le périmètre par la vue, sont obligatoires et suivent les règles
+    d'une ouverture de dossier (``refus_d_ouverture``). Chaque N°ORDRE du
+    classeur devient un dossier du projet, numéroté par
+    ``expenses.numerotation`` ; le N°ORDRE est gardé comme référence
+    d'origine (``external_ref``) : réimporter le classeur retrouve ses
+    dossiers au lieu d'en créer d'autres.
+
+    Le pays est celui du projet. ``country``, s'il est donné, doit être le
+    même ; une cellule PAYS d'une autre filiale est refusée.
     """
     try:
         lignes, colonnes = _charger_lignes(uploaded)
     except ValueError as exc:
         return _resultat(0, 0, [_erreur(1, str(exc))], dry_run)
+
+    refus = refus_d_ouverture(project, kind)
+    if refus is None and country is not None and country.pk != project.country_id:
+        refus = ("project", _("Ce projet appartient à un autre pays que celui de l'import."))
+    if refus is not None:
+        return _resultat(0, 0, [_erreur(1, refus[1])], dry_run)
+    country = project.country
 
     avec_colonne_pays = "PAYS" in colonnes
     if not avec_colonne_pays and country is None:
@@ -458,6 +501,7 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
     # fichier — ou le même classeur collé deux fois — ne doit rien créer.
     empreintes_vues = {}
     lignes_en_base = {}
+    lignes_hors_projet = {}
 
     for numero_ligne, row in lignes:
         try:
@@ -465,6 +509,11 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
             pays_ligne = _resoudre_le_pays(
                 row, avec_colonne_pays, pays, country, access
             )
+            if pays_ligne.pk != project.country_id:
+                raise ValueError(
+                    _("La ligne relève de « %(pays)s », le projet d'un autre pays.")
+                    % {"pays": pays_ligne.name}
+                )
 
             date_ligne = _date(row["DATE"], fuseau_de(pays_ligne))
             amount = _montant(row["DEPENSES"], "DEPENSES")
@@ -499,13 +548,17 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
                     )
                 managers_a_creer.setdefault(cle_manager, (pays_ligne, owner_name))
 
-            # Le N°ORDRE est unique par pays : le dossier se cherche dans le
-            # pays de la ligne, jamais ailleurs.
-            cle_dossier = (pays_ligne.pk, number)
+            # Le N°ORDRE du classeur désigne un dossier **du projet**, jamais
+            # ailleurs : celui qu'un import précédent a créé (sa référence
+            # d'origine), ou celui qui porte ce numéro — un classeur exporté
+            # puis réimporté retrouve ainsi ses dossiers.
+            cle_dossier = (project.pk, number)
             if cle_dossier not in dossiers_existants:
                 dossiers_existants[cle_dossier] = (
                     Dossier.objects.select_related("team")
-                    .filter(country=pays_ligne, number=number)
+                    .filter(project=project)
+                    .filter(Q(external_ref=number) | Q(number=number))
+                    .order_by("pk")
                     .first()
                 )
             dossier = dossiers_existants[cle_dossier]
@@ -540,11 +593,20 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
                 raise ValueError(_("Ligne identique à la ligne %(ligne)s du classeur") % {"ligne": deja})
             if dossier is not None and _empreinte(
                 number, date_ligne.date(), title, amount
-            ) in _lignes_en_base(dossier, lignes_en_base):
+            ) in _lignes_en_base(dossier, lignes_en_base, number):
                 raise ValueError(
                     _(
                         "Ligne déjà présente dans le dossier « %(number)s » : "
                         "même date, même libellé, même montant"
+                    ) % {"number": number}
+                )
+            if _empreinte(number, date_ligne.date(), title, amount) in _lignes_hors_du_projet(
+                pays_ligne, project, number, lignes_hors_projet
+            ):
+                raise ValueError(
+                    _(
+                        "Ligne déjà présente dans le dossier « %(number)s » d'un autre "
+                        "projet du pays : même date, même libellé, même montant"
                     ) % {"number": number}
                 )
             empreintes_vues[empreinte] = numero_ligne
@@ -553,6 +615,8 @@ def importer_depenses(uploaded, user, dry_run=False, country=None):
                 "ligne": numero_ligne,
                 "cle_dossier": cle_dossier,
                 "number": number,
+                "project": project,
+                "kind": kind,
                 "country": pays_ligne,
                 "team": team,
                 "cle_equipe": cle_equipe,
@@ -616,23 +680,22 @@ def _creer_le_dossier(ligne, user):
     ) % {"number": ligne["number"]}
     try:
         with transaction.atomic():
-            dossier, cree = Dossier.objects.get_or_create(
+            return creer_dossier(Dossier(
+                project=ligne["project"],
+                kind=ligne["kind"],
                 country=ligne["country"],
-                number=ligne["number"],
-                defaults={
-                    "label": ligne["title"] or ligne["number"],
-                    "team": ligne["team"],
-                    "owner": ligne["owner"],
-                    "date": ligne["date"].date(),
-                    "status": Status.DRAFT,
-                    "created_by": user.username,
-                },
-            )
+                external_ref=ligne["number"],
+                label=ligne["title"] or ligne["number"],
+                team=ligne["team"],
+                owner=ligne["owner"],
+                date=ligne["date"].date(),
+                status=Status.DRAFT,
+                created_by=user.username,
+            ))
     except IntegrityError:
+        # La contrainte (projet, référence d'origine) : un autre import du
+        # même classeur a créé ce dossier entre la validation et l'écriture.
         raise _LigneEnErreur(ligne["ligne"], motif)
-    if not cree:
-        raise _LigneEnErreur(ligne["ligne"], motif)
-    return dossier
 
 
 def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
@@ -667,6 +730,7 @@ def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
             Expense(
                 dossier=dossier,
                 country=ligne["country"],
+                project=ligne["project"],
                 team=ligne["team"],
                 owner=ligne["owner"],
                 date=ligne["date"],
@@ -729,8 +793,12 @@ def _resultat(dossiers, lignes, erreurs, dry_run, *, equipes_creees=0, managers_
     }
 
 
-def audit_import(request, resultat, country=None):
-    """Un import verse des lignes dans le système : il laisse une trace."""
+def audit_import(request, resultat, country=None, **contexte):
+    """Un import verse des lignes dans le système : il laisse une trace.
+
+    ``country`` est le pays du projet de l'import ; ``contexte`` nomme le
+    projet et le type de dossier dans le détail de l'entrée.
+    """
     tracer(
         request,
         AuditLog.Action.IMPORTED,
@@ -740,5 +808,6 @@ def audit_import(request, resultat, country=None):
         # Le pays de l'import, quand il vient de la requête : le journal
         # d'un pays doit montrer ce qui y a été versé.
         country=country,
+        **contexte,
         **resultat,
     )

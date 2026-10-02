@@ -14,6 +14,7 @@ from .models import (
     ChangeLog,
     CostCenter,
     Country,
+    DossierKind,
     ExpenseTitle,
     Manager,
     MarketingCategory,
@@ -27,7 +28,10 @@ from .requetes import (  # noqa: F401 — ré-exportés pour les commandes et le
     set_current_request,
 )
 
-ALL_MODELS = (Country, Manager, Team, CostCenter, Project, ExpenseTitle, MarketingCategory)
+ALL_MODELS = (
+    Country, Manager, Team, CostCenter, Project, DossierKind, ExpenseTitle,
+    MarketingCategory,
+)
 
 _MODEL_NAME = {
     "Country": ChangeLog.Models.COUNTRY,
@@ -35,6 +39,7 @@ _MODEL_NAME = {
     "Team": ChangeLog.Models.TEAM,
     "CostCenter": ChangeLog.Models.COST_CENTER,
     "Project": ChangeLog.Models.PROJECT,
+    "DossierKind": ChangeLog.Models.DOSSIER_KIND,
     "ExpenseTitle": ChangeLog.Models.EXPENSE_TITLE,
     "MarketingCategory": ChangeLog.Models.MARKETING_CATEGORY,
 }

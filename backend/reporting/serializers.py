@@ -104,15 +104,19 @@ class BreakdownSerializer(serializers.Serializer):
     by_team = BreakdownRowSerializer(many=True, read_only=True)
     by_owner = BreakdownRowSerializer(many=True, read_only=True)
     by_project = BreakdownRowSerializer(many=True, read_only=True)
+    by_project_kind = BreakdownRowSerializer(many=True, read_only=True)
+    by_dossier_kind = BreakdownRowSerializer(many=True, read_only=True)
     by_category = BreakdownRowSerializer(many=True, read_only=True)
     by_expense_title = BreakdownRowSerializer(many=True, read_only=True)
     by_month = BreakdownRowSerializer(many=True, read_only=True)
 
 
 class ImportSerializer(serializers.Serializer):
-    """Classeur à importer, et le pays d'un classeur sans colonne PAYS."""
+    """Classeur à importer, le projet et le type de ses dossiers (décision 102)."""
 
     file = serializers.FileField()
+    project = serializers.IntegerField()
+    kind = serializers.IntegerField()
     country = serializers.IntegerField(required=False)
 
 

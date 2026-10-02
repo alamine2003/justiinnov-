@@ -6,6 +6,7 @@ que ``core`` ne connaît pas : ``core`` est au bas de l'ordre des
 dépendances, ``accounts`` juste au-dessus (décision 40).
 """
 
+from django.db.models import Count, Q
 from django.utils.translation import gettext_lazy
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -19,6 +20,7 @@ from core.models import (
     ChangeLog,
     CostCenter,
     Country,
+    DossierKind,
     ExpenseTitle,
     Manager,
     MarketingCategory,
@@ -32,12 +34,15 @@ from core.serializers import (
     CountryDetailSerializer,
     CountryListSerializer,
     CountryWriteSerializer,
+    DossierKindSerializer,
     ExpenseTitleSerializer,
     ManagerSerializer,
     MarketingCategorySerializer,
     ProjectSerializer,
     TeamSerializer,
 )
+
+from core.numerotation import creer_projet
 
 from .perimetre import ChampCloisonne
 from .permissions import RolePermission, get_access, roles_pour
@@ -292,13 +297,56 @@ class CostCenterViewSet(ScopedViewSet):
 
 
 class ProjectViewSet(ScopedViewSet):
+    """Les projets : la rubrique principale depuis la 2.0 (décision 100).
+
+    Le pays les crée (``projets.create``) ; le siège les modifie, les type
+    et les désactive (``referentiel.update``). La référence est attribuée à
+    la création, ligne du pays verrouillée (``core.numerotation``).
+    """
+
     queryset = Project.objects.select_related("country").all().order_by("-created_at")
     serializer_class = ProjectSerializer
-    filterset_fields = ["country", "status", "is_active"]
-    search_fields = ["name"]
-    ordering_fields = ["created_at", "name"]
+    filterset_fields = ["country", "status", "is_active", "kind", "is_historical"]
+    search_fields = ["name", "reference"]
+    ordering_fields = ["created_at", "name", "reference"]
     write_capability = "referentiel.update"
-    action_write_capabilities = {"create": "referentiel.create"}
+    action_write_capabilities = {"create": "projets.create"}
+
+    def get_queryset(self):
+        # Le nombre de dossiers est celui que le lecteur verra en ouvrant le
+        # projet : cloisonné comme la liste des dossiers — un manager
+        # rattaché à des équipes ne compte que les leurs. Par la relation
+        # inverse : ``accounts`` précède ``expenses`` et ne l'importe pas.
+        access = get_access(self.request.user)
+        visibles = Q()
+        if access is not None and access.team_ids is not None:
+            visibles &= Q(dossiers__team_id__in=access.team_ids)
+        return super().get_queryset().annotate(
+            dossier_count=Count("dossiers", filter=visibles, distinct=True)
+        )
+
+    def perform_create(self, serializer):
+        self._check_country_scope(serializer)
+        serializer.instance = creer_projet(Project(**serializer.validated_data))
+
+
+class DossierKindViewSet(NoDestroyModelViewSet):
+    """La liste commune des types de dossiers (décision 101).
+
+    Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
+    tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
+    Elle s'écrit comme la configuration (``configuration.manage``,
+    administrateurs, verrouillé au pays) et non comme le référentiel d'un
+    pays, que l'organisation peut ouvrir au pays : un manager désactiverait
+    sinon « Stands » pour les dix-sept filiales.
+    """
+
+    queryset = DossierKind.objects.all()
+    serializer_class = DossierKindSerializer
+    permission_classes = [RolePermission]
+    filterset_fields = ["project_kind", "is_active"]
+    search_fields = ["name"]
+    write_capability = "configuration.manage"
 
 
 class ExpenseTitleViewSet(ScopedViewSet):

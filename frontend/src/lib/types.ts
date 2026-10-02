@@ -88,7 +88,7 @@ export type WorkflowStatus = Schema<"WorkflowStatusEnum">
  * supprimer. Le serveur les calcule — brouillon ou non, auteur ou non,
  * droit ou non — et l'interface n'a aucune liste d'états à recopier.
  */
-type EditAction = "edit" | "add_line" | "upload" | "delete"
+type EditAction = "edit" | "rename" | "add_line" | "upload" | "delete"
 
 /**
  * Demande de rectification d'un constat : proposée dans `allowed_actions`

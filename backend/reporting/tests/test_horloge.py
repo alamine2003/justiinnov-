@@ -18,7 +18,8 @@ from accounts.models import Role
 from accounts.permissions import Access
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget
-from core.models import Country, Team, WorkflowConfiguration
+from core.models import Country, Project, ProjectKind, Team, WorkflowConfiguration
+from core.numerotation import creer_projet
 from expenses.models import Dossier, Expense
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
@@ -137,10 +138,14 @@ class ImportTests(HorlogeTestCase):
         # Djibouti, dont le responsable est déjà inscrit dans le pays.
         self.djibouti.managers.add(self.manager)
         self.login(make_user("djibouti.innov", Role.MANAGER, [self.djibouti]))
+        projet = creer_projet(Project(
+            country=self.djibouti, name="Congrès de Djibouti", kind=ProjectKind.CONGRES,
+        ))
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",
-            {"file": ("depenses.xlsx", contenu, XLSX)}, format="multipart",
+            {"file": ("depenses.xlsx", contenu, XLSX), "project": projet.pk, "kind": self.stands.pk},
+            format="multipart",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)

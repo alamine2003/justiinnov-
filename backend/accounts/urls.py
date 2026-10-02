@@ -11,6 +11,7 @@ router.register("managers", referentiel.ManagerViewSet, basename="manager")
 router.register("teams", referentiel.TeamViewSet, basename="team")
 router.register("cost-centers", referentiel.CostCenterViewSet, basename="cost-center")
 router.register("projects", referentiel.ProjectViewSet, basename="project")
+router.register("dossier-kinds", referentiel.DossierKindViewSet, basename="dossier-kind")
 router.register("expense-titles", referentiel.ExpenseTitleViewSet, basename="expense-title")
 router.register(
     "marketing-categories", referentiel.MarketingCategoryViewSet, basename="marketing-category"

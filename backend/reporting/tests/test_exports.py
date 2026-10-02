@@ -505,4 +505,5 @@ class LangueDesTitresTests(DashboardTestCase):
         with translation.override("en"):
             tableau = exports.lignes_depenses(Expense.objects.filter(country=self.togo))
 
-        self.assertIn("(incomplete proof)", tableau.lignes[0][-1])
+        colonne = [titre for titre, _ in exports.EXPENSE_COLUMNS].index("PIECES JUSTIFICATIVES")
+        self.assertIn("(incomplete proof)", tableau.lignes[0][colonne])
