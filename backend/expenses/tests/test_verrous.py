@@ -94,7 +94,7 @@ class CourseTestCase(TransactionTestCase):
             # Sans type par défaut : un projet n'a qu'un dossier par type
             # (décision 106), et ces courses en ouvrent plusieurs.
             number=numero, label=f"Mission {numero}", country=self.togo,
-            project=self.projet, kind=kind,
+            project=self.projet, kind=kind, predefini=kind is not None,
             team=self.team, owner=self.manager, date=date(self.year, 3, 15),
             status=statut, created_by=self.owner.username,
         )

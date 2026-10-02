@@ -8,7 +8,8 @@ dossier : il saisit ses lignes dans ceux-là. Chaque dossier est numéroté
 dans son projet (``expenses.numerotation``) et tracé.
 
 Un type ajouté plus tard à la liste vaut pour les projets créés ensuite :
-les projets existants ne sont pas complétés d'office.
+les projets existants ne sont pas complétés d'office ; le siège complète
+un projet à la demande (``POST /api/projects/{id}/completer/``).
 """
 
 from zoneinfo import ZoneInfo
@@ -16,7 +17,7 @@ from zoneinfo import ZoneInfo
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import DossierKind
+from core.models import DossierKind, Project
 
 from .audit import record
 from .models import AuditLog, Dossier
@@ -38,15 +39,19 @@ def creer_les_dossiers_predefinis(projet, *, auteur="", equipe=None, trace):
     if not projet.accepte_des_dossiers:
         return []
     jour = timezone.localtime(timezone.now(), ZoneInfo(projet.country.timezone)).date()
-    deja = set(projet.dossiers.exclude(kind=None).values_list("kind_id", flat=True))
     crees = []
     with transaction.atomic():
+        # Projet verrouillé : deux typages ou deux complétions simultanés
+        # ne liraient pas le même « déjà là ».
+        Project.objects.select_for_update().filter(pk=projet.pk).first()
+        deja = set(projet.dossiers.filter(predefini=True).values_list("kind_id", flat=True))
         for kind in DossierKind.objects.filter(
             project_kind=projet.kind, is_active=True
         ).exclude(pk__in=deja):
             dossier = creer_dossier(Dossier(
                 project=projet, kind=kind, label=kind.name, country=projet.country,
                 team=equipe, date=jour, status=Status.DRAFT, created_by=auteur,
+                predefini=True,
             ))
             record(trace, AuditLog.Action.CREATED, dossier)
             crees.append(dossier)

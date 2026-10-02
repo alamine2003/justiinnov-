@@ -172,9 +172,11 @@ Aucun dossier ne se crée ni ne se supprime par l'API : `POST` et `DELETE
 `TG-P-2026-001-D001` ; ses lignes portent le projet du dossier.
 
 Le manager corrige le titre d'un projet (`POST /api/projects/{id}/rename/`,
-`{name, motif}`, `projets.rename`) ; le siège le modifie, le désactive ou
-type un projet d'avant la 2.0 (`PATCH /api/projects/{id}/` avec `motif`,
-`projets.update`). **Toute modification d'un projet ou d'un type de dossier
+`{name, motif}`, `projets.rename`) ; le siège le modifie — hors titre —, le
+désactive ou type un projet d'avant la 2.0 (`PATCH /api/projects/{id}/` avec
+`motif`, `projets.update`), et le complète des dossiers prédéfinis qui lui
+manquent (`POST /api/projects/{id}/completer/`). Un projet qui ne recevrait
+aucun dossier ne se crée pas. **Toute modification d'un projet ou d'un type de dossier
 exige un motif**, gardé au journal (`ChangeLog.motif`, décision 109). Le
 titre d'un dossier se renomme **jusqu'à la clôture**, par un manager du
 pays (`POST /api/dossiers/{id}/rename/`, `dossiers.rename`), et chaque
@@ -184,7 +186,7 @@ changement est tracé (décisions 104 et 108). **Chaque ligne a sa pièce** :
 qui les compte, et le dossier ne se justifie pas tant que chacune n'a pas
 la sienne. La fiche d'un projet a son historique —
 `GET /api/projects/{id}/historique/`, projet, dossiers, lignes et pièces en
-une seule chronologie (décision 110) — et l'audit son tableau de bord —
+une seule chronologie, lue avec `audit.read` (décision 110) — et l'audit son tableau de bord —
 `GET /api/audit/synthese/?debut=&fin=&country=` (décision 111) ; le journal
 d'audit se filtre par période et par projet (`?debut=&fin=&projet=`).
 Dans l'interface, « Projets » remplace « Dossiers » dans la navigation : la

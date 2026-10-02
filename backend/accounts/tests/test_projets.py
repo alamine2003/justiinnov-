@@ -110,6 +110,19 @@ class ProjetsTests(ExpenseTestCase):
                 )
                 self.assertEqual(reponse.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_le_siege_ne_change_pas_le_titre_par_la_modification(self):
+        for compte in (self.controller, self.doo):
+            with self.subTest(compte=compte.username):
+                self.login(compte)
+                reponse = self.client.patch(
+                    f"/api/projects/{self.projet.pk}/",
+                    {"name": "Titre du siège", "motif": "Essai"}, format="json",
+                )
+                self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("name", reponse.data)
+        self.projet.refresh_from_db()
+        self.assertEqual(self.projet.name, "Congrès de Lomé")
+
     def test_un_projet_du_voisin_ne_se_renomme_pas(self):
         self.login(self.rep_ivoire)
 
@@ -169,6 +182,47 @@ class ProjetsTests(ExpenseTestCase):
         ))
         dates = [e["created_at"] for e in entrees]
         self.assertEqual(dates, sorted(dates, reverse=True))
+
+    def test_une_ligne_retiree_reste_dans_l_historique_et_le_journal(self):
+        """Elle n'est plus en base ; sa suppression, et celle de sa pièce,
+        restent lisibles depuis le projet (décisions 110 et 111)."""
+        from expenses.models import Expense, Proof
+
+        self.dossier.created_by = self.owner.username
+        self.dossier.save()
+        ligne = Expense.objects.create(
+            dossier=self.dossier, country=self.togo, project=self.projet, team=self.team,
+            date="2026-03-15T10:00:00Z", title="Taxi", amount="5000.00",
+            created_by=self.owner.username,
+        )
+        Proof.objects.create(
+            dossier=self.dossier, expense=ligne, file="justificatifs/t.pdf",
+            original_name="taxi.pdf", sha256="c" * 64,
+        )
+        self.login(self.owner)
+        self.assertEqual(self.client.delete(f"/api/expenses/{ligne.pk}/").status_code, 204)
+        self.login(self.controller)
+
+        historique = self.client.get(f"/api/projects/{self.projet.pk}/historique/").data["entrees"]
+        journal = self.client.get("/api/audit/", {"projet": self.projet.pk, "action": "deleted"})
+
+        retraits = {(e["objet"], e["action"]) for e in historique if e["action"] == "deleted"}
+        self.assertEqual(retraits, {("Expense", "deleted"), ("Proof", "deleted")})
+        self.assertEqual(
+            sorted(e["object_type"] for e in journal.data["results"]), ["Expense", "Proof"]
+        )
+
+    def test_l_historique_reste_ferme_au_pays_meme_avec_l_historique_ouvert(self):
+        """Il relit le journal d'audit : ``history.read``, ouvrable au pays,
+        n'y donne pas accès (``audit.read``, jamais le pays)."""
+        configurer(capability_roles={"history.read": ["super_admin", "admin", "manager"]})
+        self.login(self.owner)
+
+        self.assertEqual(self.client.get("/api/history/").status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.client.get(f"/api/projects/{self.projet.pk}/historique/").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
 
     def test_le_type_d_un_projet_ne_change_plus(self):
         self.login(self.controller)

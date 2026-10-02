@@ -502,7 +502,7 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
     country = project.country
     cible = (
         Dossier.objects.select_related("team", "country")
-        .filter(project=project, kind=kind).first()
+        .filter(project=project, kind=kind, predefini=True).first()
     )
     if cible is None:
         return _resultat(0, [_erreur(1, _(

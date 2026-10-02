@@ -28,10 +28,18 @@ class Migration(migrations.Migration):
                 verbose_name="Ligne de dépense",
             ),
         ),
+        # Aucun dossier existant n'est marqué prédéfini : ceux ouverts à la
+        # main sous la 2.0, même plusieurs sous un type, ne bloquent pas la
+        # contrainte (décision 106 ; rien n'est deviné, décision 103).
+        migrations.AddField(
+            model_name="dossier",
+            name="predefini",
+            field=models.BooleanField(default=False, editable=False, verbose_name="Prédéfini"),
+        ),
         migrations.AddConstraint(
             model_name="dossier",
             constraint=models.UniqueConstraint(
-                condition=models.Q(("kind__isnull", False)),
+                condition=models.Q(("predefini", True)),
                 fields=("project", "kind"),
                 name="unique_type_par_projet",
             ),

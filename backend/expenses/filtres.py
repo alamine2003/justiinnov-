@@ -3,6 +3,7 @@
 import django_filters
 from django.db.models import Q
 
+from .historique import retirees_des_dossiers
 from .models import AuditLog, Dossier, Expense, Proof, Rectification
 
 
@@ -28,6 +29,7 @@ class AuditLogFilter(django_filters.FilterSet):
                 object_type="Proof",
                 object_id__in=Proof.objects.filter(dossier__project=value).values("pk"),
             )
+            | retirees_des_dossiers(dossiers.values_list("pk", flat=True))
             | Q(
                 object_type="Rectification",
                 object_id__in=Rectification.objects.filter(

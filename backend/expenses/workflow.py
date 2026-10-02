@@ -158,7 +158,7 @@ SAISIE_CAPACITES = {
     "add_line": "expenses.create",
     "upload": "proofs.upload",
     "delete": "expenses.delete",
-    # Le titre d'un dossier, à tout moment (décision 104) : seul ce qui ne
+    # Le titre d'un dossier, jusqu'à la clôture (décisions 104 et 108) : seul ce qui ne
     # porte ni montant ni preuve se modifie après la déclaration.
     "rename": "dossiers.rename",
 }
@@ -494,7 +494,7 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
         if action == "submit" and lines["total"] == 0:
             continue
         if action == "justify" and (
-            lines["pending"] or lines["unjustified"] or dossier.lignes_sans_preuve().exists()
+            lines["pending"] or lines["unjustified"] or dossier.a_des_lignes_sans_preuve()
         ):
             continue
         if action in ("reject", "close") and lines["pending"]:

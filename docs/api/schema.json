@@ -2474,7 +2474,7 @@
         "/api/dossiers/{id}/rename/": {
             "post": {
                 "operationId": "dossiers_rename_create",
-                "description": "Change le titre du dossier, à tout moment (décision 104).",
+                "description": "Change le titre du dossier, jusqu'à sa clôture (décisions 104 et 108).",
                 "parameters": [
                     {
                         "in": "path",
@@ -6240,6 +6240,46 @@
                         }
                     }
                 },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Project"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/projects/{id}/completer/": {
+            "post": {
+                "operationId": "projects_completer_create",
+                "description": "Ouvre les dossiers prédéfinis qui manquent au projet (décision 106).\n\nUn projet réactivé, un type de dossier ajouté depuis, un projet typé\navant la décision : le siège le complète à la demande, jamais\nd'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils\nreviennent au pays.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Projet.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "projects"
+                ],
                 "security": [
                     {
                         "tokenAuth": []

@@ -598,7 +598,7 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Change le titre du dossier, à tout moment (décision 104). */
+        /** @description Change le titre du dossier, jusqu'à sa clôture (décisions 104 et 108). */
         post: operations["dossiers_rename_create"]
         delete?: never
         options?: never
@@ -1643,6 +1643,30 @@ export interface paths {
          *     du pays verrouillée (``core.numerotation``).
          */
         patch: operations["projects_partial_update"]
+        trace?: never
+    }
+    "/api/projects/{id}/completer/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        /**
+         * @description Ouvre les dossiers prédéfinis qui manquent au projet (décision 106).
+         *
+         *     Un projet réactivé, un type de dossier ajouté depuis, un projet typé
+         *     avant la décision : le siège le complète à la demande, jamais
+         *     d'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils
+         *     reviennent au pays.
+         */
+        post: operations["projects_completer_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
         trace?: never
     }
     "/api/projects/{id}/historique/": {
@@ -8246,6 +8270,28 @@ export interface operations {
                 "multipart/form-data": components["schemas"]["PatchedProjectRequest"]
             }
         }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Project"]
+                }
+            }
+        }
+    }
+    projects_completer_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Projet. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
         responses: {
             200: {
                 headers: {

@@ -322,8 +322,13 @@ class ProjectViewSet(ScopedViewSet):
     search_fields = ["name", "reference"]
     ordering_fields = ["created_at", "name", "reference"]
     write_capability = "projets.update"
-    action_write_capabilities = {"create": "projets.create", "rename": "projets.rename"}
-    action_read_capabilities = {"historique": "history.read"}
+    action_write_capabilities = {
+        "create": "projets.create", "rename": "projets.rename", "completer": "projets.update",
+    }
+    # L'historique d'un projet lit le journal d'audit de ses dossiers : il
+    # en suit la capacité, jamais ouverte au pays (``audit.read``), pas
+    # celle de l'historique du référentiel, que la matrice peut lui ouvrir.
+    action_read_capabilities = {"historique": "audit.read"}
 
     def get_queryset(self):
         # Le nombre de dossiers est celui que le lecteur verra en ouvrant le
@@ -371,10 +376,17 @@ class ProjectViewSet(ScopedViewSet):
         equipe = self._equipe_des_dossiers(donnees.pop("team", None))
         with transaction.atomic():
             projet = creer_projet(Project(**donnees))
-            creer_les_dossiers_predefinis(
+            crees = creer_les_dossiers_predefinis(
                 projet, auteur=self.request.user.username, equipe=equipe,
                 trace=Trace.depuis_requete(self.request),
             )
+            # Un projet sans dossier ne servirait à rien, et le pays n'a
+            # aucun moyen d'en ouvrir : il ne se crée pas.
+            if not crees:
+                raise serializers.ValidationError({"kind": _(
+                    "Ce projet ne recevrait aucun dossier : il doit être actif, et son "
+                    "type de projet doit avoir des types de dossiers actifs."
+                )})
         # Relu par le queryset de la vue : la réponse compte ses dossiers.
         serializer.instance = self.get_queryset().get(pk=projet.pk)
 
@@ -411,6 +423,28 @@ class ProjectViewSet(ScopedViewSet):
                 projet.name = nom
                 with motif_du_journal(entree.validated_data["motif"]):
                     projet.save(update_fields=["name", "updated_at"])
+        lu = self.get_queryset().get(pk=projet.pk)
+        return Response(ProjectSerializer(lu, context=self.get_serializer_context()).data)
+
+    @extend_schema(request=None, responses=ProjectSerializer)
+    @action(detail=True, methods=["post"])
+    def completer(self, request, pk=None):
+        """Ouvre les dossiers prédéfinis qui manquent au projet (décision 106).
+
+        Un projet réactivé, un type de dossier ajouté depuis, un projet typé
+        avant la décision : le siège le complète à la demande, jamais
+        d'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils
+        reviennent au pays.
+        """
+        # Import local, comme à la création.
+        from expenses.predefinis import creer_les_dossiers_predefinis
+
+        projet = self.get_object()
+        if not projet.accepte_des_dossiers:
+            raise serializers.ValidationError({"project": _(
+                "Ce projet n'accepte pas de dossier : il doit être actif et typé."
+            )})
+        creer_les_dossiers_predefinis(projet, trace=Trace.depuis_requete(request))
         lu = self.get_queryset().get(pk=projet.pk)
         return Response(ProjectSerializer(lu, context=self.get_serializer_context()).data)
 

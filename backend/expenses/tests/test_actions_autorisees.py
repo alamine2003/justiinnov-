@@ -216,6 +216,40 @@ class ActionsDeDossierTests(ExpenseTestCase):
         self.assertEqual(self._actions(self.owner), ["rename"])
 
 
+class CoutDeLaListeTests(ExpenseTestCase):
+    """Savoir si un dossier se justifie ne coûte pas une requête par
+    dossier : les lignes sans pièce sont comptées par ``with_totals``."""
+
+    def _requetes(self, nombre, debut=0):
+        for rang in range(debut, debut + nombre):
+            dossier = Dossier.objects.create(
+                number=f"N-L{rang:03d}", label=f"Dossier {rang}", country=self.togo,
+                date=date(self.year, 3, 16), created_by=self.owner.username,
+                status=Status.SUBMITTED,
+            )
+            self.make_expense(dossier=dossier, status=Status.JUSTIFIED)
+        self.login(self.controller)
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        # Une première lecture met en cache configuration et matrice.
+        self.client.get("/api/dossiers/")
+        with CaptureQueriesContext(connection) as requetes:
+            reponse = self.client.get("/api/dossiers/")
+        # Lignes tranchées, sans pièce : la question est posée pour chaque
+        # dossier, et la réponse est non.
+        self.assertTrue(all("justify" not in d["allowed_actions"] for d in reponse.data["results"]
+                            if d["number"].startswith("N-L")))
+        self.assertEqual(reponse.status_code, status.HTTP_200_OK)
+        return len(requetes)
+
+    def test_le_nombre_de_requetes_ne_suit_pas_le_nombre_de_dossiers(self):
+        peu = self._requetes(2)
+        beaucoup = self._requetes(8, debut=2)
+
+        self.assertEqual(peu, beaucoup)
+
+
 class TransitionRenvoieLeDetailTests(ExpenseTestCase):
     """Une transition répond le dossier complet, lignes et pièces comprises :
     l'interface affiche ce qui est, sans recharger."""

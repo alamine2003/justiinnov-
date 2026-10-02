@@ -72,6 +72,52 @@ class DossiersPredefinisTests(ExpenseTestCase):
             self.types_du(ProjectKind.VOYAGE),
         )
 
+    def test_un_projet_qui_ne_recevrait_aucun_dossier_ne_se_cree_pas(self):
+        """Le pays n'aurait aucun moyen d'en ouvrir : ni projet inactif, ni
+        type de projet sans type de dossier actif."""
+        DossierKind.objects.filter(project_kind=ProjectKind.SOUTIEN_FINANCIER).update(is_active=False)
+
+        sans_type_actif = self.creer(kind=ProjectKind.SOUTIEN_FINANCIER)
+        inactif = self.creer(name="Congrès en sommeil", is_active=False)
+
+        for reponse in (sans_type_actif, inactif):
+            self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST, reponse.data)
+        self.assertFalse(
+            Project.objects.filter(name__in=["Congrès de Kara", "Congrès en sommeil"]).exists()
+        )
+
+    def test_le_siege_complete_un_projet_de_ses_dossiers_manquants(self):
+        """Un type ajouté depuis : le projet n'est pas complété d'office,
+        le siège le complète à la demande ; rien n'est ouvert deux fois."""
+        projet_id = self.creer().data["id"]
+        badges = DossierKind.objects.create(project_kind=ProjectKind.CONGRES, name="Badges")
+        self.assertFalse(Dossier.objects.filter(project_id=projet_id, kind=badges).exists())
+
+        refus_pays = self.client.post(f"/api/projects/{projet_id}/completer/")
+        self.login(self.controller)
+        complete = self.client.post(f"/api/projects/{projet_id}/completer/")
+        encore = self.client.post(f"/api/projects/{projet_id}/completer/")
+
+        self.assertEqual(refus_pays.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(complete.status_code, status.HTTP_200_OK, complete.data)
+        self.assertEqual(encore.status_code, status.HTTP_200_OK)
+        ajoute = Dossier.objects.get(project_id=projet_id, kind=badges)
+        self.assertTrue(ajoute.predefini)
+        self.assertEqual(ajoute.created_by, "")
+        self.assertEqual(
+            Dossier.objects.filter(project_id=projet_id).count(),
+            len(self.types_du(ProjectKind.CONGRES)),
+        )
+
+    def test_un_projet_inactif_ne_se_complete_pas(self):
+        self.projet.is_active = False
+        self.projet.save()
+        self.login(self.controller)
+
+        reponse = self.client.post(f"/api/projects/{self.projet.pk}/completer/")
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_un_type_desactive_n_ouvre_pas_de_dossier(self):
         self.stands.is_active = False
         self.stands.save()

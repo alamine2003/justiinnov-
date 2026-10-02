@@ -58,6 +58,15 @@ def _entree_circuit(entree):
     }
 
 
+def retirees_des_dossiers(dossiers):
+    """Les lignes et pièces retirées de ``dossiers`` : elles ne sont plus en
+    base, leur trace dit encore d'où elles venaient (``dossier_id``)."""
+    return Q(
+        action=AuditLog.Action.DELETED, object_type__in=["Expense", "Proof"],
+        detail__dossier_id__in=list(dossiers),
+    )
+
+
 def historique_du_projet(projet):
     """``{"entrees": [...], "tronque": bool}`` pour ``projet``."""
     dossiers = list(projet.dossiers.values_list("pk", flat=True))
@@ -74,6 +83,7 @@ def historique_du_projet(projet):
         | Q(object_type="Expense", object_id__in=lignes)
         | Q(object_type="Proof", object_id__in=pieces)
         | Q(object_type="Rectification", object_id__in=rectifications)
+        | retirees_des_dossiers(dossiers)
     ).order_by("-created_at", "-pk")[: PLAFOND + 1]
     entrees = sorted(
         [*map(_entree_referentiel, referentiel), *map(_entree_circuit, circuit)],

@@ -32,22 +32,24 @@ A_SURVEILLER = 20
 A = AuditLog.Action
 C = ChangeLog.Actions
 
-#: Compteurs du circuit : clé de l'interface → (actions du journal d'audit,
-#: objet compté). Une soumission ou une réouverture s'écrit sur le dossier
-#: **et** sur chacune de ses lignes : elle se compte une fois, sur le
-#: dossier ; une décision se compte par ligne tranchée ; une
-#: rectification, par demande. ``None`` : tout objet.
+#: Compteurs du circuit : clé de l'interface → couples (actions du journal
+#: d'audit, objet compté ; ``None`` : tout objet). Une soumission ou une
+#: réouverture s'écrit sur le dossier **et** sur chacune de ses lignes :
+#: elle se compte une fois, sur le dossier. Une décision se compte par
+#: ligne tranchée — le refus d'une ligne s'écrit ``unjustified`` — ; un
+#: refus, par ligne non justifiée ou par pièce rejetée ; une
+#: rectification, par demande.
 COMPTEURS_CIRCUIT = {
-    "declarations": ([A.SUBMITTED], "Dossier"),
-    "decisions": ([A.JUSTIFIED, A.UNJUSTIFIED, A.REJECTED], "Expense"),
-    "reouvertures": ([A.REOPENED], "Dossier"),
-    "rectifications": ([A.RECTIFICATION_REQUESTED], None),
-    "refus": ([A.REJECTED, A.UNJUSTIFIED], "Expense"),
-    "pieces": ([A.PROOF_UPLOADED, A.PROOF_REPLACED], None),
-    "sorties": ([A.DOWNLOADED], None),
-    "imports": ([A.IMPORTED], None),
-    "suppressions": ([A.DELETED], None),
-    "renommages": ([A.RENAMED], None),
+    "declarations": [([A.SUBMITTED], "Dossier")],
+    "decisions": [([A.JUSTIFIED, A.UNJUSTIFIED], "Expense")],
+    "reouvertures": [([A.REOPENED], "Dossier")],
+    "rectifications": [([A.RECTIFICATION_REQUESTED], None)],
+    "refus": [([A.UNJUSTIFIED], "Expense"), ([A.REJECTED], "Proof")],
+    "pieces": [([A.PROOF_UPLOADED, A.PROOF_REPLACED], None)],
+    "sorties": [([A.DOWNLOADED], None)],
+    "imports": [([A.IMPORTED], None)],
+    "suppressions": [([A.DELETED], None)],
+    "renommages": [([A.RENAMED], None)],
 }
 
 #: Ce qui, dans le circuit, mérite qu'on y regarde à deux fois.
@@ -87,9 +89,9 @@ def synthese(circuit, referentiel, *, debut=None, fin=None):
     compteurs = {
         cle: sum(
             n for (action, type_d_objet), n in comptes.items()
-            if action in actions and objet in (None, type_d_objet)
+            if any(action in actions and objet in (None, type_d_objet) for actions, objet in regles)
         )
-        for cle, (actions, objet) in COMPTEURS_CIRCUIT.items()
+        for cle, regles in COMPTEURS_CIRCUIT.items()
     }
     compteurs["circuit"] = sum(comptes.values())
     compteurs["referentiel"] = referentiel.count()

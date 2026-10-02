@@ -872,12 +872,15 @@ def retirer_brouillon(objet, acteur, trace):
         # Ses pièces d'abord : elles la protègent en base (décision 107).
         _retirer_les_pieces(
             instance.proofs, instance.dossier, trace, resultat,
-            _("Justificatif supprimé avec sa ligne"),
+            "Justificatif supprimé avec sa ligne",
         )
         resultat.audit.append(
             record(
                 trace, AuditLog.Action.DELETED, instance,
                 label=f"Brouillon supprimé — {instance}", amount=str(instance.amount),
+                # La ligne disparaît : son dossier la retrouve dans
+                # l'historique du projet (décision 110).
+                dossier_id=instance.dossier_id,
             )
         )
         instance.delete()
@@ -938,7 +941,7 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
     # (décision 107).
     _retirer_les_pieces(
         dossier.proofs, dossier, trace, resultat,
-        _("Justificatif supprimé avec son dossier"),
+        "Justificatif supprimé avec son dossier",
     )
     for ligne in lignes:
         resultat.audit.append(
@@ -954,6 +957,9 @@ def _retirer_le_contenu(dossier, acteur, trace, resultat):
 
 def _retirer_les_pieces(pieces, dossier, trace, resultat, libelle):
     """Retire des pièces d'un brouillon, chacune tracée, sous verrou.
+
+    ``libelle`` est écrit tel quel au journal, en français comme ses
+    autres libellés : il ne dépend pas de la langue du demandeur.
 
     La plus récente d'abord : une nouvelle version référence celle qu'elle
     remplace, et cette référence est protégée. Le fichier ne doit pas
@@ -971,7 +977,7 @@ def _retirer_les_pieces(pieces, dossier, trace, resultat, libelle):
                 trace, AuditLog.Action.DELETED, piece,
                 label=f"{libelle} — {piece}",
                 country=dossier.country, sha256=piece.sha256, version=piece.version,
-                dossier=dossier.number,
+                dossier=dossier.number, dossier_id=dossier.pk,
             )
         )
         stockage.programmer_la_suppression(piece, trace=trace, dossier=dossier)

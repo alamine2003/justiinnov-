@@ -231,6 +231,12 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
                 )
             return attrs
         attrs.pop("team", None)
+        # Le titre est l'affaire du pays (décision 108) : il passe par
+        # « Renommer » (``projets.rename``), verrouillé au siège.
+        if "name" in attrs and attrs["name"] != instance.name:
+            raise serializers.ValidationError(
+                {"name": _("Le titre d'un projet se change par « Renommer », côté pays.")}
+            )
         if not (attrs.get("motif") or "").strip():
             raise serializers.ValidationError(
                 {"motif": _("Indiquez le motif de la modification : il reste au journal.")}

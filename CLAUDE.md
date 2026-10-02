@@ -188,14 +188,16 @@ l'application.
   par le seul `super_admin`), dans la même transaction
   (`expenses.predefinis`), signés par le manager qui crée le projet, dans
   l'équipe qu'il choisit. **Aucun dossier ne se crée ni ne se supprime par
-  l'API** (405) ; un dossier par type et par projet
-  (`unique_type_par_projet`). Son numéro est calculé,
+  l'API** (405) ; un dossier prédéfini par type et par projet
+  (`Dossier.predefini`, `unique_type_par_projet`). Un projet qui n'en
+  recevrait aucun ne se crée pas ; le siège complète à la demande un projet
+  des dossiers qui lui manquent (`POST /api/projects/{id}/completer/`). Son numéro est calculé,
   `TG-P-2026-001-D001` (`expenses.numerotation`) ; projet et type ne
   changent plus ; ses lignes portent son projet. Les dossiers d'avant la
   2.0 sont rangés sous le projet « Historique » de leur pays, leurs
   lignes intactes. Un classeur s'importe dans le dossier prédéfini d'un
   projet. La fiche projet a son historique (`/api/projects/{id}/historique/`,
-  décision 110) ; l'audit a son tableau de bord (`/api/audit/synthese/`,
+  `audit.read`, décision 110) ; l'audit a son tableau de bord (`/api/audit/synthese/`,
   décision 111). Dans l'interface, « Projets » remplace « Dossiers » dans
   la navigation, et ce qu'un projet permet vient du serveur
   (`accepte_des_dossiers`, décision 105).

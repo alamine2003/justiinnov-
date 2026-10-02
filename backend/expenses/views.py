@@ -319,7 +319,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
     @extend_schema(request=RenommerSerializer, responses=DossierDetailSerializer)
     @action(detail=True, methods=["post"])
     def rename(self, request, pk=None):
-        """Change le titre du dossier, à tout moment (décision 104)."""
+        """Change le titre du dossier, jusqu'à sa clôture (décisions 104 et 108)."""
         dossier = self.get_object()
         demande = RenommerSerializer(data=request.data)
         demande.is_valid(raise_exception=True)

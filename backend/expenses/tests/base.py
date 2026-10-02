@@ -91,7 +91,7 @@ class ExpenseTestCase(APITestCase):
 
         cls.dossier = Dossier.objects.create(
             number="N-0001", label="Mission Lomé", country=cls.togo,
-            project=cls.projet, kind=cls.stands,
+            project=cls.projet, kind=cls.stands, predefini=True,
             team=cls.team, owner=cls.manager, date=date(cls.year, 3, 15),
             status=cls.dossier_status, created_by=cls.owner.username,
         )
