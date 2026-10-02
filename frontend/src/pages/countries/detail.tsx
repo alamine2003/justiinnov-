@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom"
+import { Link, useParams } from "react-router-dom"
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -17,7 +17,7 @@ import { ManageRows } from "@/components/countries/manage-rows"
 import { ManageBeneficiaries } from "@/components/countries/manage-beneficiaries"
 import { ManageManagers } from "@/components/countries/manage-managers"
 import { CaretHistory } from "@/components/countries/history"
-import { ProjectStatusBadge } from "@/components/expenses/status-badge"
+import { ProjectKindBadge, ProjectStatusBadge } from "@/components/expenses/status-badge"
 import {
   createCostCenter,
   createExpenseTitle,
@@ -32,7 +32,7 @@ import {
   updateTeam,
 } from "@/lib/countries"
 import { useAuth } from "@/context/use-auth"
-import { PROJECT_STATUSES, projectStatusLabel } from "@/lib/labels"
+import { PROJECT_KINDS, PROJECT_STATUSES, projectKindLabel, projectStatusLabel } from "@/lib/labels"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import { STATUS_TONES } from "@/lib/status-styles"
 import type { CountryDetail } from "@/lib/types"
@@ -275,8 +275,30 @@ export function CountryDetailPage() {
               <ManageRows<CountryDetail["projects"][number]>
                 title={t("pays.fiche.projets")}
                 rows={country.projects}
+                description={t("pays.projets.description")}
                 columns={[
-                  { key: "name", header: t("champs.name") },
+                  {
+                    key: "name",
+                    header: t("champs.name"),
+                    render: (p) => (
+                      <>
+                        <Link
+                          to={`/projets/${p.id}`}
+                          className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {p.name}
+                        </Link>
+                        {p.reference && (
+                          <p className="font-mono text-xs text-muted-foreground">{p.reference}</p>
+                        )}
+                      </>
+                    ),
+                  },
+                  {
+                    key: "kind",
+                    header: t("projets.type"),
+                    render: (p) => <ProjectKindBadge project={p} />,
+                  },
                   {
                     key: "status",
                     header: t("commun.statut"),
@@ -294,12 +316,24 @@ export function CountryDetailPage() {
                   },
                 ]}
                 detectActive={(p) => p.is_active}
-                defaultForm={{ name: "", status: "planned", budget: "" }}
+                defaultForm={{ name: "", kind: "", status: "planned", budget: "" }}
                 formFields={[
                   {
                     key: "name",
                     label: t("champs.name"),
                     placeholder: t("pays.projets.nom_placeholder"),
+                  },
+                  // Le type se choisit à la création et ne change plus ; un
+                  // projet d'avant la 2.0 se type une fois (décision 100). Le
+                  // serveur refuse le reste et le dialogue le dit.
+                  {
+                    key: "kind",
+                    label: t("projets.type"),
+                    options: [
+                      { value: "", label: t("projets.formulaire.choisir_type") },
+                      ...PROJECT_KINDS.map((value) => ({ value, label: projectKindLabel(t, value) })),
+                    ],
+                    optional: true,
                   },
                   { key: "status", label: t("commun.statut"), options: statutOptions },
                   {

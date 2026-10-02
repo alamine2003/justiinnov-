@@ -24,6 +24,10 @@ export type Team = Schema<"Team">
 export type CostCenter = Schema<"CostCenter">
 export type ProjectStatus = Schema<"ProjectStatusEnum">
 export type Project = Schema<"Project">
+/** Congrès, voyage ou soutien financier : fixé à la création du projet (décision 100). */
+export type ProjectKind = Schema<"ProjectKindEnum">
+/** Type de dossier de la liste commune aux filiales (décision 101). */
+export type DossierKind = Schema<"DossierKind">
 export type ExpenseTitle = Schema<"ExpenseTitle">
 export type MarketingCategory = Schema<"MarketingCategory">
 export type CountrySummary = Schema<"CountryList">
@@ -108,8 +112,8 @@ export type ExpenseTransitionName = Exclude<TransitionName, "submit">
 
 export type Dossier = Schema<"Dossier">
 export type DossierDetail = Schema<"DossierDetail">
-/** Dossiers visibles par pays, pour les onglets de la liste. */
-export type DossiersParPays = Schema<"DossiersParPays">
+/** Objets visibles par pays, pour les onglets d'une liste (dossiers, projets). */
+export type ParPays = Schema<"ParPays">
 export type Expense = Schema<"Expense">
 export type PaymentMethod = Schema<"PaymentMethodEnum">
 export type ProofStatus = Schema<"ProofStatusEnum">

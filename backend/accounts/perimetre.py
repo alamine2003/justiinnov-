@@ -22,8 +22,10 @@ les notifications. Un test vérifie que les deux répondent la même chose.
 :class:`ChampCloisonne` l'applique aux clés étrangères d'une charge utile.
 """
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from rest_framework import serializers
+
+from core.models import Country
 
 from .models import HEADQUARTERS_ROLES, Role
 from .permissions import get_access
@@ -54,6 +56,40 @@ def filtrer(queryset, access, *, pays="country", equipe=None, distinct=False):
         return queryset
     queryset = queryset.filter(**filtre)
     return queryset.distinct() if distinct else queryset
+
+
+def compter_par_pays(objets, access):
+    """Nombre d'objets visibles par pays, pour les onglets d'une liste.
+
+    ``objets`` est la liste déjà cloisonnée et filtrée, sans le filtre du
+    pays que l'onglet choisit : chaque onglet annonce ce qu'il affichera
+    (décision 99). Les pays actifs du périmètre y figurent même sans objet
+    — un manager voit son pays avant d'y avoir rien ouvert — ; un pays
+    désactivé n'y figure que s'il en a encore. Le compte vient de la base,
+    pas de l'interface. Sert aux dossiers et aux projets.
+    """
+    comptes = dict(
+        objets.model.objects.filter(pk__in=objets.values("pk"))
+        .order_by()
+        .values_list("country")
+        .annotate(n=Count("pk"))
+    )
+    pays = filtrer(
+        Country.objects.filter(Q(is_active=True) | Q(pk__in=comptes)), access, pays="pk"
+    ).order_by("name", "pk")
+    return {
+        "total": sum(comptes.values()),
+        "pays": [
+            {
+                "id": c.pk,
+                "name": c.name,
+                "code": c.code,
+                "country_ref": c.country_ref,
+                "count": comptes.get(c.pk, 0),
+            }
+            for c in pays
+        ],
+    }
 
 
 #: Valeur d'``equipe`` pour une ressource qui ne se cloisonne pas par

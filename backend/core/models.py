@@ -206,6 +206,15 @@ class Project(TimeStampedModel):
     def __str__(self):
         return self.name
 
+    @property
+    def accepte_des_dossiers(self):
+        """Un projet actif et typé, hors « Historique » (décision 102).
+
+        La même règle que ``expenses.numerotation.refus_d_ouverture``, lue
+        par l'interface pour proposer ou non « Nouveau dossier ».
+        """
+        return bool(self.kind) and not self.is_historical and self.is_active
+
 
 class DossierKind(TimeStampedModel):
     """Type de dossier ouvert dans un projet : Stands, Voyages, Billets…

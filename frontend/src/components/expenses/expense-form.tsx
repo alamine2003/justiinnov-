@@ -41,6 +41,10 @@ interface ExpenseFormProps {
   onSave: (values: Record<string, unknown>) => Promise<void>
   editing: Expense | null
   teams: Team[]
+  /**
+   * Projets proposés à la ligne : vide hors du projet « Historique », où la
+   * ligne suit le projet de son dossier et le champ ne s'affiche pas.
+   */
   projects: Project[]
   beneficiaries: Beneficiary[]
   expenseTitles: ExpenseTitle[]
@@ -164,7 +168,9 @@ function ExpenseFormBody({
         original_currency: enDeviseEtrangere ? devise.trim().toUpperCase() : "",
         original_amount: montantEtranger,
         team: team === "" ? null : team,
-        project: project === "" ? null : project,
+        // Hors du projet « Historique », la ligne prend le projet de son
+        // dossier : le serveur le recopie, rien à envoyer.
+        ...(projects.length > 0 ? { project: project === "" ? null : project } : {}),
         owner: owner === "" ? null : owner,
         expense_title: expenseTitle === "" ? null : expenseTitle,
         marketing_category: category === "" ? null : category,
@@ -365,23 +371,25 @@ function ExpenseFormBody({
               ))}
             </NativeSelect>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="exp-project">{t("champs.project")}</Label>
-            <NativeSelect
-              id="exp-project"
-              value={project}
-              onChange={(e) =>
-                setProject(e.target.value === "" ? "" : Number(e.target.value))
-              }
-            >
-              <option value="">{t("commun.aucun")}</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
+          {projects.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="exp-project">{t("champs.project")}</Label>
+              <NativeSelect
+                id="exp-project"
+                value={project}
+                onChange={(e) =>
+                  setProject(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              >
+                <option value="">{t("commun.aucun")}</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

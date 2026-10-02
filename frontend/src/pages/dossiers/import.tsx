@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react"
+import { useSearchParams } from "react-router-dom"
 import { AlertTriangle, CheckCircle2, FlaskConical, Loader2, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -11,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
-import { fetchCountries } from "@/lib/countries"
+import { fetchDossierKinds, fetchProjects } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, invalidateReferentiel, useReferentiel } from "@/lib/referentiel"
 import { importExpenses, type ImportError, type ImportResult } from "@/lib/reporting"
 
@@ -24,6 +25,10 @@ function decrireErreur(erreur: ImportError | string): { ligne?: number; motif: s
 /**
  * Import d'un classeur de dépenses, par le pays (`data.import`).
  *
+ * Un classeur s'importe dans un projet, sous un type de dossier
+ * (décision 102) : le pays est celui du projet. La fiche d'un projet y
+ * mène avec `?project=`, déjà choisi.
+ *
  * Importer, c'est déclarer (décision 89) : la page vit avec les dossiers,
  * pas dans la configuration, et le serveur applique les règles de la
  * saisie — le pays du compte, ses équipes, ses brouillons. Ce qui entre
@@ -33,7 +38,12 @@ function decrireErreur(erreur: ImportError | string): { ligne?: number; motif: s
  */
 export function ImportPage() {
   const { t } = useTranslation()
-  const [country, setCountry] = useState<number | "">("")
+  const [params] = useSearchParams()
+  const projetDemande = Number(params.get("project"))
+  const [project, setProject] = useState<number | "">(
+    Number.isInteger(projetDemande) && projetDemande > 0 ? projetDemande : "",
+  )
+  const [kind, setKind] = useState<number | "">("")
   const [file, setFile] = useState<File | null>(null)
   const [dryRun, setDryRun] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -43,12 +53,36 @@ export function ImportPage() {
   // `<input type="file">` ne se pilote pas autrement.
   const [fileKey, setFileKey] = useState(0)
 
-  const countries = useReferentiel("countries", () =>
-    fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+  const projects = useReferentiel("projects", () =>
+    fetchProjects({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
+  )
+  // Seuls les projets qui acceptent un dossier : le serveur le dit.
+  const ouverts = (projects.data?.results ?? []).filter((p) => p.accepte_des_dossiers)
+  // Le projet retenu est celui de la liste : un `?project=` qui n'y figure
+  // pas (historique, à typer, désactivé, saisi à la main) ne bloque pas
+  // l'écran sur un choix invisible, il laisse choisir.
+  const projetChoisi = ouverts.find((p) => p.id === project)
+  const kinds = useReferentiel(
+    `dossier-kinds:${projetChoisi?.kind}`,
+    () =>
+      fetchDossierKinds({
+        project_kind: projetChoisi?.kind,
+        is_active: true,
+        page_size: REFERENTIEL_PAGE_SIZE,
+      }),
+    { enabled: Boolean(projetChoisi?.kind) },
   )
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (!projetChoisi) {
+      setError(t("dossiers.import.projet_requis"))
+      return
+    }
+    if (kind === "") {
+      setError(t("projets.dossier.type_requis"))
+      return
+    }
     if (!file) {
       setError(t("dossiers.import.fichier_requis"))
       return
@@ -57,7 +91,7 @@ export function ImportPage() {
     setError(null)
     setResult(null)
     try {
-      const resultat = await importExpenses(file, { country, dryRun })
+      const resultat = await importExpenses(file, { project: projetChoisi.id, kind, dryRun })
       setResult(resultat)
       if (!resultat.dry_run) {
         setFile(null)
@@ -69,6 +103,7 @@ export function ImportPage() {
             key === "teams" ||
             key === "managers" ||
             key === "dossiers" ||
+            key === "projects" ||
             key.startsWith("country:"),
         )
       }
@@ -85,14 +120,14 @@ export function ImportPage() {
         title={t("dossiers.import.titre")}
         description={t("dossiers.import.description")}
       />
-      {countries.error && (
+      {(projects.error || kinds.error) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>{t("erreurs.referentiel_indisponible")}</AlertTitle>
-          <AlertDescription>{countries.error}</AlertDescription>
+          <AlertDescription>{projects.error ?? kinds.error}</AlertDescription>
         </Alert>
       )}
-      <TruncatedNotice page={countries.data} noun={t("configuration.pays.noun_pluriel")} />
+      <TruncatedNotice page={projects.data} noun={t("projets.nom_other")} />
 
       <Card className="border-border/60 shadow-sm">
         <CardHeader>
@@ -105,26 +140,50 @@ export function ImportPage() {
             <FormError className="sm:col-span-2">{error}</FormError>
 
             <div className="grid gap-2">
-              <Label htmlFor="import-country">{t("commun.pays")}</Label>
+              <Label htmlFor="import-project">{t("champs.project")}</Label>
               <NativeSelect
-                id="import-country"
-                value={country}
-                onChange={(e) => setCountry(e.target.value === "" ? "" : Number(e.target.value))}
+                id="import-project"
+                value={projetChoisi?.id ?? ""}
+                onChange={(e) => {
+                  setProject(e.target.value === "" ? "" : Number(e.target.value))
+                  setKind("")
+                }}
+                disabled={projects.loading}
               >
-                <option value="">{t("dossiers.import.pays_colonne")}</option>
-                {(countries.data?.results ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.country_ref ? `${c.country_ref} — ` : ""}
-                    {c.name}
+                <option value="">
+                  {ouverts.length === 0 && !projects.loading
+                    ? t("dossiers.import.aucun_projet")
+                    : t("dossiers.import.choisir_projet")}
+                </option>
+                {ouverts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.reference ? `${p.reference} — ` : ""}
+                    {p.name}
                   </option>
                 ))}
               </NativeSelect>
-              <p className="text-xs text-muted-foreground">
-                {t("dossiers.import.pays_aide")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("dossiers.import.projet_aide")}</p>
             </div>
 
             <div className="grid gap-2">
+              <Label htmlFor="import-kind">{t("projets.type_de_dossier")}</Label>
+              <NativeSelect
+                id="import-kind"
+                value={kind}
+                onChange={(e) => setKind(e.target.value === "" ? "" : Number(e.target.value))}
+                disabled={!projetChoisi || kinds.loading}
+              >
+                <option value="">{t("projets.dossier.choisir_type")}</option>
+                {(kinds.data?.results ?? []).map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name}
+                  </option>
+                ))}
+              </NativeSelect>
+              <p className="text-xs text-muted-foreground">{t("dossiers.import.type_aide")}</p>
+            </div>
+
+            <div className="grid gap-2 sm:col-span-2">
               <Label htmlFor="import-file">{t("dossiers.import.fichier")}</Label>
               <Input
                 key={fileKey}

@@ -118,18 +118,18 @@ export interface ImportResult {
 }
 
 /**
- * Importe un classeur de dépenses. `country` est obligatoire pour un
- * classeur sans colonne PAYS ; `dryRun` simule sans rien écrire.
+ * Importe un classeur de dépenses dans un projet, sous un type de dossier :
+ * le pays est celui du projet. `dryRun` simule sans rien écrire.
  */
 export function importExpenses(
   file: File,
-  options: { country?: number | ""; dryRun: boolean },
+  options: { project: number; kind: number; dryRun: boolean },
 ) {
   const form = new FormData()
   form.append("file", file)
-  const params: Record<string, unknown> = {}
+  // Les mêmes règles qu'une ouverture de dossier (décision 102).
+  const params: Record<string, unknown> = { project: options.project, kind: options.kind }
   if (options.dryRun) params.dry_run = "true"
-  if (options.country !== undefined && options.country !== "") params.country = options.country
   return apiPost<ImportResult>("/imports/expenses.xlsx", form, { params })
 }
 

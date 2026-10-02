@@ -283,6 +283,12 @@ export function DashboardPage() {
                 <TabsTrigger value="by_team">{t("pilotage.repartition.par_equipe")}</TabsTrigger>
                 <TabsTrigger value="by_owner">{t("pilotage.repartition.par_manager")}</TabsTrigger>
                 <TabsTrigger value="by_project">{t("pilotage.repartition.par_projet")}</TabsTrigger>
+                <TabsTrigger value="by_project_kind">
+                  {t("pilotage.repartition.par_type_projet")}
+                </TabsTrigger>
+                <TabsTrigger value="by_dossier_kind">
+                  {t("pilotage.repartition.par_type_dossier")}
+                </TabsTrigger>
                 <TabsTrigger value="by_category">{t("pilotage.repartition.par_categorie")}</TabsTrigger>
                 <TabsTrigger value="by_expense_title">
                   {t("pilotage.repartition.par_intitule")}
@@ -291,7 +297,7 @@ export function DashboardPage() {
               </TabsList>
               {(
                 [
-                  "by_team", "by_owner", "by_project",
+                  "by_team", "by_owner", "by_project", "by_project_kind", "by_dossier_kind",
                   "by_category", "by_expense_title", "by_month",
                 ] as const
               ).map((key) => (

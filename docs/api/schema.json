@@ -2726,7 +2726,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/DossiersParPays"
+                                    "$ref": "#/components/schemas/ParPays"
                                 }
                             }
                         },
@@ -6213,6 +6213,35 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/Project"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/projects/par-pays/": {
+            "get": {
+                "operationId": "projects_par_pays_retrieve",
+                "description": "Nombre de projets visibles par pays, pour les onglets de la liste.\n\nLes mêmes filtres que la liste (type, recherche…) sans le pays, que\nl'onglet choisit — comme les dossiers (décision 99).",
+                "tags": [
+                    "projects"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ParPays"
                                 }
                             }
                         },
@@ -10120,6 +10149,11 @@
                         "readOnly": true,
                         "nullable": true
                     },
+                    "project_is_historical": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "nullable": true
+                    },
                     "kind": {
                         "type": "integer",
                         "title": "Type de dossier"
@@ -10239,6 +10273,7 @@
                     "project_reference",
                     "project_kind",
                     "project_kind_display",
+                    "project_is_historical",
                     "kind",
                     "kind_name",
                     "sequence",
@@ -10320,6 +10355,11 @@
                     },
                     "project_kind_display": {
                         "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "project_is_historical": {
+                        "type": "boolean",
                         "readOnly": true,
                         "nullable": true
                     },
@@ -10456,6 +10496,7 @@
                     "project_reference",
                     "project_kind",
                     "project_kind_display",
+                    "project_is_historical",
                     "kind",
                     "kind_name",
                     "sequence",
@@ -10700,6 +10741,11 @@
                         "readOnly": true,
                         "nullable": true
                     },
+                    "project_is_historical": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "nullable": true
+                    },
                     "kind": {
                         "type": "integer",
                         "title": "Type de dossier"
@@ -10837,6 +10883,7 @@
                     "project_reference",
                     "project_kind",
                     "project_kind_display",
+                    "project_is_historical",
                     "kind",
                     "kind_name",
                     "sequence",
@@ -10859,27 +10906,6 @@
                     "updated_at",
                     "expenses",
                     "proofs"
-                ]
-            },
-            "DossiersParPays": {
-                "type": "object",
-                "description": "Répartition des dossiers par pays, pour les onglets de la liste.",
-                "properties": {
-                    "total": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
-                    "pays": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/PaysDesDossiers"
-                        },
-                        "readOnly": true
-                    }
-                },
-                "required": [
-                    "total",
-                    "pays"
                 ]
             },
             "ExchangeRate": {
@@ -13310,6 +13336,27 @@
                     }
                 }
             },
+            "ParPays": {
+                "type": "object",
+                "description": "Répartition d'une liste par pays, pour ses onglets (décision 99).",
+                "properties": {
+                    "total": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "pays": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PaysCompte"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "total",
+                    "pays"
+                ]
+            },
             "PatchedBeneficiaryRequest": {
                 "type": "object",
                 "properties": {
@@ -13974,9 +14021,9 @@
                 "type": "string",
                 "description": "* `cash` - Espèces\n* `transfer` - Virement\n* `mobile` - Mobile money\n* `card` - Carte\n* `check` - Chèque\n* `other` - Autre"
             },
-            "PaysDesDossiers": {
+            "PaysCompte": {
                 "type": "object",
-                "description": "Un pays du périmètre et le nombre de ses dossiers visibles.",
+                "description": "Un pays du périmètre et le nombre de ses objets visibles.",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -14440,6 +14487,10 @@
                         "readOnly": true,
                         "default": 0
                     },
+                    "accepte_des_dossiers": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
@@ -14474,6 +14525,7 @@
                     "is_historical",
                     "a_typer",
                     "dossier_count",
+                    "accepte_des_dossiers",
                     "is_active",
                     "created_at",
                     "updated_at"

@@ -177,6 +177,7 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
     kind_display = serializers.CharField(source="get_kind_display", read_only=True)
     a_typer = serializers.SerializerMethodField()
     dossier_count = serializers.IntegerField(read_only=True, default=0)
+    accepte_des_dossiers = serializers.BooleanField(read_only=True)
     RELATIONS_QUI_RETIENNENT = ("expenses", "budgets", "dossiers")
 
     class Meta:
@@ -185,7 +186,7 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
             "id", "country", "country_name", "name", "description",
             "status", "status_display", "budget",
             "kind", "kind_display", "year", "sequence", "reference",
-            "is_historical", "a_typer", "dossier_count",
+            "is_historical", "a_typer", "dossier_count", "accepte_des_dossiers",
             "is_active", "created_at", "updated_at",
         ]
         read_only_fields = ["year", "sequence", "reference", "is_historical"]
@@ -550,3 +551,20 @@ class ConfigurationSerializer(serializers.Serializer):
         read_only=True,
         help_text=_("Un tableau de bord de supervision (Grafana) est déployé avec cette pile."),
     )
+
+
+class PaysCompteSerializer(serializers.Serializer):
+    """Un pays du périmètre et le nombre de ses objets visibles."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    code = serializers.CharField(read_only=True)
+    country_ref = serializers.CharField(read_only=True, allow_null=True)
+    count = serializers.IntegerField(read_only=True)
+
+
+class ParPaysSerializer(serializers.Serializer):
+    """Répartition d'une liste par pays, pour ses onglets (décision 99)."""
+
+    total = serializers.IntegerField(read_only=True)
+    pays = PaysCompteSerializer(many=True, read_only=True)

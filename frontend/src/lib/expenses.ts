@@ -5,7 +5,7 @@ import type {
   Beneficiary,
   Dossier,
   DossierDetail,
-  DossiersParPays,
+  ParPays,
   Expense,
   ExpenseTransitionName,
   Paginated,
@@ -17,7 +17,7 @@ import type {
 } from "@/lib/types"
 
 // ---------------------------------------------------------------------------
-// Dossiers (N°ORDRE)
+// Dossiers, ouverts dans un projet (décision 102)
 // ---------------------------------------------------------------------------
 export function fetchDossiers(params?: Record<string, unknown>, signal?: AbortSignal) {
   return apiGet<Paginated<Dossier>>("/dossiers/", params, signal)
@@ -25,7 +25,7 @@ export function fetchDossiers(params?: Record<string, unknown>, signal?: AbortSi
 
 /** Nombre de dossiers par pays, avec les filtres de la liste sauf le pays. */
 export function fetchDossiersParPays(params?: Record<string, unknown>, signal?: AbortSignal) {
-  return apiGet<DossiersParPays>("/dossiers/par-pays/", params, signal)
+  return apiGet<ParPays>("/dossiers/par-pays/", params, signal)
 }
 
 export function fetchDossier(id: number, signal?: AbortSignal) {
@@ -34,6 +34,14 @@ export function fetchDossier(id: number, signal?: AbortSignal) {
 
 export function createDossier(data: unknown) {
   return apiPost<Dossier>("/dossiers/", data)
+}
+
+/**
+ * Change le titre d'un dossier, à tout moment, même clôturé (décision 104).
+ * Rien d'autre ne bouge ; l'ancien titre reste au journal d'audit.
+ */
+export function renameDossier(id: number, label: string) {
+  return apiPost<DossierDetail>(`/dossiers/${id}/rename/`, { label })
 }
 
 /** Charge utile d'une transition : motif, et montant justifié pour `justify`. */

@@ -28,6 +28,7 @@ class ProjetsTests(ExpenseTestCase):
         self.assertEqual(reponse.data["reference"], projet.reference)
         self.assertEqual(reponse.data["kind_display"], "Congrès")
         self.assertFalse(reponse.data["a_typer"])
+        self.assertTrue(reponse.data["accepte_des_dossiers"])
         self.assertTrue(
             ChangeLog.objects.filter(model_name="project", object_id=projet.pk, action="created").exists()
         )
@@ -77,6 +78,7 @@ class ProjetsTests(ExpenseTestCase):
 
         lu = self.client.get(f"/api/projects/{ancien.pk}/").data
         self.assertTrue(lu["a_typer"])
+        self.assertFalse(lu["accepte_des_dossiers"])
         reponse = self.client.patch(
             f"/api/projects/{ancien.pk}/", {"kind": "voyage"}, format="json"
         )
@@ -101,6 +103,22 @@ class ProjetsTests(ExpenseTestCase):
 
         self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_ni_l_historique_ni_un_projet_desactive_n_acceptent_de_dossier(self):
+        """La règle que lit l'interface pour proposer « Nouveau dossier »
+        (décision 105) est celle de l'ouverture (``refus_d_ouverture``)."""
+        historique = Project.objects.create(
+            country=self.togo, name="Historique (avant 2.0)", is_historical=True,
+            reference="TG-P-HIST",
+        )
+        self.projet.is_active = False
+        self.projet.save()
+        self.login(self.owner)
+
+        for projet in (historique, self.projet):
+            with self.subTest(projet=projet.name):
+                lu = self.client.get(f"/api/projects/{projet.pk}/").data
+                self.assertFalse(lu["accepte_des_dossiers"])
+
     def test_la_liste_compte_les_dossiers_et_se_filtre_par_type(self):
         self.login(self.owner)
 
@@ -109,6 +127,26 @@ class ProjetsTests(ExpenseTestCase):
         projets = {p["id"]: p for p in reponse.data["results"]}
         self.assertEqual(projets[self.projet.pk]["dossier_count"], 1)
         self.assertNotIn(self.projet_ivoire.pk, projets)
+
+    def test_les_onglets_comptent_les_projets_par_pays(self):
+        """Comme les dossiers (décision 99) : un onglet par pays du
+        périmètre, avec le nombre de projets que la liste affichera."""
+        self.login(self.controller)
+
+        reponse = self.client.get("/api/projects/par-pays/", {"kind": "congres"})
+
+        self.assertEqual(reponse.status_code, status.HTTP_200_OK)
+        comptes = {p["id"]: p["count"] for p in reponse.data["pays"]}
+        self.assertEqual(comptes[self.togo.pk], Project.objects.filter(country=self.togo, kind="congres").count())
+        self.assertEqual(reponse.data["total"], Project.objects.filter(kind="congres").count())
+
+    def test_le_manager_ne_voit_que_l_onglet_de_son_pays(self):
+        self.login(self.owner)
+
+        reponse = self.client.get("/api/projects/par-pays/")
+
+        self.assertEqual([p["id"] for p in reponse.data["pays"]], [self.togo.pk])
+        self.assertEqual(reponse.data["total"], Project.objects.filter(country=self.togo).count())
 
     def test_un_projet_d_un_autre_pays_est_introuvable(self):
         self.login(self.owner)

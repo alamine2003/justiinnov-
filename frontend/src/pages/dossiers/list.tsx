@@ -1,49 +1,32 @@
-import { useState, type FormEvent } from "react"
+import { useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { AlertTriangle, FolderOpen, Loader2, Plus, Search, Upload } from "lucide-react"
+import { AlertTriangle, Search, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { FilterChips } from "@/components/ui/filter-chips"
-import { FormError } from "@/components/ui/form-error"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { PageHeader } from "@/components/ui/page-header"
-import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TruncatedNotice } from "@/components/ui/truncated-notice"
-import { StatusBadge } from "@/components/expenses/status-badge"
+import { CountryTabs } from "@/components/countries/country-tabs"
+import { DossiersTable } from "@/components/expenses/dossiers-table"
 import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
-import { createDossier, fetchDossiers, fetchDossiersParPays } from "@/lib/expenses"
-import { fetchCountries, fetchCountry } from "@/lib/countries"
+import { fetchDossiers, fetchDossiersParPays } from "@/lib/expenses"
 import { WORKFLOW_STATUSES, workflowLabel } from "@/lib/labels"
-import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
-import { scopedTeams, teamRequired } from "@/lib/teams"
-import type { CountrySummary, WorkflowStatus } from "@/lib/types"
+import type { WorkflowStatus } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
-import { cn, formatAmount, formatDay, todayIso } from "@/lib/utils"
 
+/**
+ * Tous les dossiers visibles, quel que soit leur projet.
+ *
+ * Depuis la 2.0 (décision 102), la rubrique principale est « Projets » : un
+ * dossier s'ouvre dans son projet. Cette liste reste pour les tuiles du
+ * pilotage (`?status=`), la recherche transverse et l'export ; elle quitte
+ * la navigation.
+ */
 export function DossiersPage() {
   const { t } = useTranslation()
   const { can, me } = useAuth()
@@ -63,7 +46,6 @@ export function DossiersPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
-  const [formOpen, setFormOpen] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
   const query = useQuery(
@@ -76,9 +58,6 @@ export function DossiersPage() {
       return fetchDossiers(requestParams, signal)
     },
     { fallback: t("dossiers.liste.chargement_impossible") },
-  )
-  const countries = useReferentiel("countries", () =>
-    fetchCountries({ page_size: REFERENTIEL_PAGE_SIZE, is_active: true }),
   )
 
   const dossiers = query.data?.results ?? []
@@ -131,12 +110,6 @@ export function DossiersPage() {
             {t("dossiers.import.bouton")}
           </Button>
         )}
-        {canCreate && (
-          <Button onClick={() => setFormOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" aria-hidden />
-            {t("dossiers.liste.nouveau")}
-          </Button>
-        )}
       </PageHeader>
 
       {(query.error || exportError) && (
@@ -146,32 +119,14 @@ export function DossiersPage() {
           <AlertDescription>{exportError ?? query.error}</AlertDescription>
         </Alert>
       )}
-      <TruncatedNotice page={countries.data} noun={t("dossiers.noms_pays")} />
 
       {choixPaysVisible && (
-        <Tabs
-          value={countryFilter === "" ? TOUS_LES_PAYS : String(countryFilter)}
-          onValueChange={(value) =>
-            changeFilter("country", value === TOUS_LES_PAYS ? "" : String(value))
-          }
-        >
-          <TabsList
-            variant="line"
-            aria-label={t("dossiers.liste.filtrer_pays")}
-            className="w-full flex-wrap justify-start border-b border-border/60 group-data-horizontal/tabs:h-auto"
-          >
-            <TabsTrigger value={TOUS_LES_PAYS} className="flex-none px-3 py-1.5">
-              {t("dossiers.liste.tous_pays")}{" "}
-              <CompteOnglet valeur={parPays.data?.total} />
-            </TabsTrigger>
-            {(parPays.data?.pays ?? []).map((pays) => (
-              <TabsTrigger key={pays.id} value={String(pays.id)} className="flex-none px-3 py-1.5">
-                {pays.name}{" "}
-                <CompteOnglet valeur={pays.count} />
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <CountryTabs
+          value={countryFilter}
+          onChange={(value) => changeFilter("country", value)}
+          data={parPays.data}
+          label={t("dossiers.liste.filtrer_pays")}
+        />
       )}
 
       {/* Six statuts tiennent en pastilles : les voir tous vaut mieux que les
@@ -211,76 +166,14 @@ export function DossiersPage() {
 
       <Card className="border-border/60 shadow-sm">
         <CardContent className="pt-6">
-          <div className="overflow-x-auto rounded-lg border border-border/60">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col">{t("champs.number")}</TableHead>
-                  <TableHead scope="col">{t("commun.pays")}</TableHead>
-                  <TableHead scope="col">{t("commun.date")}</TableHead>
-                  <TableHead scope="col" className="text-center">{t("dossiers.liste.colonnes.lignes")}</TableHead>
-                  <TableHead scope="col" className="text-center">{t("dossiers.liste.colonnes.preuves")}</TableHead>
-                  <TableHead scope="col" className="text-right">{t("dossiers.liste.colonnes.depenses")}</TableHead>
-                  <TableHead scope="col" className="text-right">{t("dossiers.liste.colonnes.ecart")}</TableHead>
-                  <TableHead scope="col">{t("commun.statut")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {query.loading ? (
-                  <SkeletonRows columns={8} />
-                ) : dossiers.length === 0 ? (
-                  <EmptyRow
-                    colSpan={8}
-                    icon={FolderOpen}
-                    title={t("dossiers.liste.vide.titre")}
-                    hint={
-                      canCreate
-                        ? t("dossiers.liste.vide.aide_creer")
-                        : t("dossiers.liste.vide.aide_filtres")
-                    }
-                  />
-                ) : (
-                  dossiers.map((dossier) => (
-                    <TableRow key={dossier.id}>
-                      <TableCell>
-                        {/* Le lien porte la navigation : accessible au
-                            clavier, ouvrable dans un nouvel onglet. */}
-                        <Link
-                          to={`/dossiers/${dossier.id}`}
-                          className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          {dossier.number}
-                        </Link>
-                        <p className="text-xs text-muted-foreground">{dossier.label}</p>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {dossier.country_ref ?? dossier.country_name}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDay(dossier.date)}
-                      </TableCell>
-                      <TableCell className="text-center">{dossier.expense_count}</TableCell>
-                      <TableCell className="text-center">{dossier.proof_count}</TableCell>
-                      <TableCell className="text-right">
-                        {formatAmount(dossier.totals.amount, dossier.currency)}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right",
-                          Number(dossier.totals.gap) > 0 && "font-medium text-destructive",
-                        )}
-                      >
-                        {formatAmount(dossier.totals.gap)}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={dossier.status} label={dossier.status_display} />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <DossiersTable
+            dossiers={dossiers}
+            loading={query.loading}
+            colonne="projet"
+            vide={
+              canCreate ? t("dossiers.liste.vide.aide_creer") : t("dossiers.liste.vide.aide_filtres")
+            }
+          />
 
           <Pagination
             page={page}
@@ -291,219 +184,6 @@ export function DossiersPage() {
         </CardContent>
       </Card>
 
-      {formOpen && (
-        <DossierForm
-          onOpenChange={setFormOpen}
-          countries={countries.data?.results ?? []}
-          onSaved={async () => {
-            query.reload()
-          }}
-        />
-      )}
     </div>
   )
-}
-
-function DossierForm({
-  onOpenChange,
-  countries,
-  onSaved,
-}: {
-  onOpenChange: (open: boolean) => void
-  countries: CountrySummary[]
-  onSaved: () => Promise<void>
-}) {
-  const { t } = useTranslation()
-  const { me } = useAuth()
-  const [number, setNumber] = useState("")
-  const [label, setLabel] = useState("")
-  const [country, setCountry] = useState<number | "">(countries[0]?.id ?? "")
-  const [team, setTeam] = useState<number | "">("")
-  const [owner, setOwner] = useState<number | "">("")
-  const [date, setDate] = useState(todayIso())
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  // Équipes et managers du pays choisi, depuis sa fiche : la seule liste qui
-  // sache quel manager est rattaché à quel pays.
-  const detail = useReferentiel(
-    `country:${country}`,
-    () => fetchCountry(Number(country)),
-    { enabled: country !== "" },
-  )
-  // Un manager rattaché à des équipes n'ouvre un dossier que pour elles.
-  const teams = scopedTeams(
-    (detail.data?.teams ?? []).filter((equipe) => equipe.is_active),
-    me,
-  )
-  const managers = (detail.data?.managers ?? []).filter((m) => m.is_active)
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (country === "") {
-      setError(t("dossiers.formulaire.choisir_pays"))
-      return
-    }
-    if (teamRequired(me) && team === "") {
-      setError(t("dossiers.formulaire.equipe_requise"))
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      await createDossier({
-        number,
-        label,
-        country,
-        team: team === "" ? null : team,
-        owner: owner === "" ? null : owner,
-        date,
-      })
-      await onSaved()
-      onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("dossiers.formulaire.creation_impossible"))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("dossiers.liste.nouveau")}</DialogTitle>
-          <DialogDescription>{t("dossiers.formulaire.description")}</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
-          <FormError>{error}</FormError>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="dos-number">{t("champs.number")}</Label>
-              <Input
-                id="dos-number"
-                value={number}
-                onChange={(e) => setNumber(e.target.value)}
-                placeholder={t("dossiers.formulaire.numero_placeholder")}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="dos-date">{t("commun.date")}</Label>
-              <Input
-                id="dos-date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="dos-label">{t("champs.label")}</Label>
-            <Input
-              id="dos-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder={t("dossiers.formulaire.libelle_placeholder")}
-              required
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="dos-country">{t("commun.pays")}</Label>
-            <NativeSelect
-              id="dos-country"
-              value={country}
-              onChange={(e) => {
-                setCountry(e.target.value === "" ? "" : Number(e.target.value))
-                setTeam("")
-                setOwner("")
-              }}
-              required
-            >
-              {/* Toujours une première option vide : quand la liste arrive
-                  après l'ouverture du formulaire, le choix reste à faire —
-                  sans elle, le navigateur montrait le premier pays comme
-                  choisi alors que rien ne l'était. */}
-              <option value="">
-                {countries.length === 0
-                  ? t("dossiers.formulaire.aucun_pays")
-                  : t("dossiers.formulaire.choisir_pays_option")}
-              </option>
-              {countries.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.country_ref ? `${c.country_ref} — ` : ""}
-                  {c.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="dos-team">{t("champs.team")}</Label>
-              <NativeSelect
-                id="dos-team"
-                value={team}
-                onChange={(e) =>
-                  setTeam(e.target.value === "" ? "" : Number(e.target.value))
-                }
-                disabled={detail.loading}
-                required={teamRequired(me)}
-              >
-                <option value="">{t("commun.aucun")}</option>
-                {teams.map((equipe) => (
-                  <option key={equipe.id} value={equipe.id}>
-                    {equipe.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="dos-owner">{t("dossiers.formulaire.manager_responsable")}</Label>
-              <NativeSelect
-                id="dos-owner"
-                value={owner}
-                onChange={(e) =>
-                  setOwner(e.target.value === "" ? "" : Number(e.target.value))
-                }
-                disabled={detail.loading}
-              >
-                <option value="">{t("commun.aucun")}</option>
-                {managers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-          </div>
-          {detail.error && <FormError>{detail.error}</FormError>}
-          <DialogFooter>
-            <div>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                {t("commun.annuler")}
-              </Button>
-              <Button type="submit" disabled={saving} className="ml-2">
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {t("commun.creer")}
-              </Button>
-            </div>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** Valeur de l'onglet « Tous les pays » : base-ui ne distingue pas un onglet de valeur vide. */
-const TOUS_LES_PAYS = "tous"
-
-/**
- * Nombre de dossiers d'un onglet, tel que le serveur l'a compté. L'espace
- * qui le précède est pour les lecteurs d'écran : sans lui, l'onglet
- * s'annonçait « Togo2 ».
- */
-function CompteOnglet({ valeur }: { valeur: number | undefined }) {
-  if (valeur === undefined) return null
-  return <span className="text-xs tabular-nums text-muted-foreground">{valeur}</span>
 }

@@ -358,7 +358,9 @@ En haut de chaque page sauf l'accueil, avant le `PageHeader` : un bouton
 plateforme est fermée — mot de passe provisoire, enrôlement exigé). Il
 revient à l'écran précédent quand la navigation a commencé dans
 l'application, sinon à la liste de la section (`lib/navigation.ts`,
-`parentPath` : `/dossiers/12` → `/dossiers`, `/dossiers` → `/`). Une page
+`parentPath` : `/projets/12` → `/projets`, `/projets` → `/`). Un dossier
+ouvert d'un lien direct revient à `/dossiers` ; son fil d'Ariane mène à
+son projet. Une page
 ne rajoute pas son propre lien « Retour aux… » : il y en a un, au même
 endroit partout.
 
@@ -564,21 +566,89 @@ autres rôles, ni bouton, ni lien : ils travaillent dans l'application.
 ### Import d'un classeur
 
 Importer, c'est déclarer (décision 89) : l'import revient au pays et vit
-avec les dossiers, pas dans la Configuration. Sur la liste des dossiers,
-un bouton `outline` « Importer » (icône `Upload`), rendu seulement si
-`can("data.import")`, mène à la page `/dossiers/import` — une page à part,
-avec son `PageHeader` et le bouton « Retour » commun. Elle propose la
+avec les dossiers, pas dans la Configuration. Sur la fiche d'un projet qui
+accepte des dossiers, et sur la liste des dossiers, un bouton `outline`
+« Importer » (icône `Upload`), rendu seulement si `can("data.import")`,
+mène à la page `/dossiers/import` — une page à part, avec son `PageHeader`
+et le bouton « Retour » commun ; depuis un projet, `?project=` l'y choisit
+d'avance. Un classeur s'importe dans un **projet** et sous un **type de
+dossier** (décision 102) : deux `NativeSelect`, le second ne listant que
+les types du type du projet ; le pays est celui du projet. Elle propose la
 simulation (`dry_run`) avant l'écriture ; les erreurs se lisent au numéro
 de ligne du classeur. Le siège ne voit pas le bouton.
 
-### Onglets par pays des dossiers
+### Projets, la rubrique principale
+
+Depuis la 2.0 (décisions 100 et 105), la navigation porte **« Projets »**
+(icône `Briefcase`) à la place de « Dossiers » : Pays › Projet › Dossier ›
+Lignes.
+
+- **Liste** (`/projets`) : onglets par pays (`<CountryTabs>`,
+  `components/countries/country-tabs.tsx`, partagé avec la liste des
+  dossiers), recherche, puis le type de projet en `<FilterChips>`. Le nom
+  est le lien, la référence (`TG-P-2026-001`) dessous en `font-mono
+  text-xs`. Le type se lit par `<ProjectKindBadge>`
+  (`status-badge.tsx`) : contourné (`outline`) pour un type, puisque ce
+  n'est pas un état ; **« À typer »** (`ATTENTE`) pour un projet d'avant la
+  2.0, **« Historique »** (`ARCHIVE`) pour le projet où la reprise a rangé
+  les anciens dossiers — lus sur `a_typer` et `is_historical`.
+  « Nouveau projet » (`default`) si `can("projets.create")` : pays (choisi
+  d'office s'il n'y en a qu'un), nom, type, description ; la fiche du
+  projet créé s'ouvre.
+- **Fiche** (`/projets/:id`) : `PageHeader` au nom du projet, badges du
+  type et du statut, référence et pays. Ses dossiers dans
+  `<DossiersTable colonne="type">` (`components/expenses/dossiers-table.tsx`,
+  partagé avec `/dossiers`, où la colonne dit le projet), filtrables par
+  type de dossier en pastilles (`?type=`). « Nouveau dossier » et
+  « Importer » ne s'affichent que si `accepte_des_dossiers` ; sinon un
+  `<Alert>` neutre dit pourquoi (projet historique, à typer, désactivé) —
+  plutôt qu'un bouton absent sans explication.
+- **Nouveau dossier** (`components/expenses/dossier-form.tsx`) : type de
+  dossier, date, titre, équipe, manager. Le titre reprend le nom du type
+  choisi tant que l'utilisateur ne l'a pas écrit lui-même. Ni pays ni
+  numéro : le serveur les tire du projet. La fiche du dossier s'ouvre.
+- `/dossiers` reste — tuiles du pilotage (`?status=`), recherche
+  transverse, export — mais quitte la navigation et n'ouvre plus de
+  dossier.
+- **Configuration › Types de dossiers** : la liste commune, en
+  `ManageRows` ; un type s'ajoute ou se désactive.
+- Fiche d'un pays, onglet Projets : nom en lien vers la fiche, référence,
+  `<ProjectKindBadge>` ; le dialogue de modification porte le type, que le
+  siège fixe une fois pour un projet « à typer ».
+
+### Fiche d'un dossier : fil d'Ariane et renommage
+
+Au-dessus du `PageHeader`, un fil d'Ariane `nav` (`aria-label` « Fil
+d'Ariane ») en `text-xs text-muted-foreground` : **Projets › projet ›
+numéro**, les deux premiers en liens, le dernier `aria-current="page"` en
+`font-mono`. Il complète le bouton « Retour », il ne le remplace pas. Le
+titre de la page est le **titre** du dossier ; le numéro et le type
+suivent dans la description.
+
+Un bouton **« Renommer »** (`outline`, icône `PencilLine`,
+`components/expenses/rename-dossier.tsx`), dans les actions du
+`PageHeader`, rendu **seulement** si `allowed_actions` contient `rename`
+(décision 104 : un manager du pays, à tout moment, même dossier clôturé).
+Dialogue « Renommer le dossier N°… », dont la description dit que seul le
+titre change et que l'ancien reste au journal d'audit ; le champ part du
+titre actuel. Un titre vide se refuse à la soumission ; un refus du
+serveur s'affiche en `<FormError>`, dialogue ouvert.
+
+Le formulaire de ligne ne propose plus de projet : la ligne suit celui de
+son dossier. Seul un dossier du projet « Historique »
+(`project_is_historical`) garde le choix, ses lignes portant chacune le
+leur.
+
+### Onglets par pays des dossiers et des projets
 
 Un dossier appartient à un pays (décision 89). Dès que le compte voit
 plusieurs pays — le siège, ou un manager rattaché à plusieurs pays —, la
 liste des dossiers se sépare en **onglets**, au-dessus de la recherche :
 « Tous les pays », puis un onglet par pays, chacun suivi du nombre de
 dossiers qu'il affichera (décision 99). Un manager d'un seul pays n'en a
-pas. Les onglets sont `Tabs` en variante `line`, qui passent à la ligne
+pas. La liste des projets a les mêmes, comptés par
+`GET /api/projects/par-pays/`, par le même composant (`<CountryTabs>`).
+Les onglets sont `Tabs` en variante `line`, qui passent à la ligne
 quand les dix-sept filiales sont ouvertes — jamais une barre qui défile.
 Les pays et leurs comptes viennent de `GET /api/dossiers/par-pays/`, avec
 les filtres de la liste (statut, recherche) sauf le pays : l'interface ne

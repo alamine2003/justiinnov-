@@ -185,23 +185,6 @@ class RenommerSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=250, trim_whitespace=True)
 
 
-class PaysDesDossiersSerializer(serializers.Serializer):
-    """Un pays du périmètre et le nombre de ses dossiers visibles."""
-
-    id = serializers.IntegerField(read_only=True)
-    name = serializers.CharField(read_only=True)
-    code = serializers.CharField(read_only=True)
-    country_ref = serializers.CharField(read_only=True, allow_null=True)
-    count = serializers.IntegerField(read_only=True)
-
-
-class DossiersParPaysSerializer(serializers.Serializer):
-    """Répartition des dossiers par pays, pour les onglets de la liste."""
-
-    total = serializers.IntegerField(read_only=True)
-    pays = PaysDesDossiersSerializer(many=True, read_only=True)
-
-
 def _jour_local(date, country):
     """Jour d'une dépense dans le fuseau de son pays, pour y chercher le taux.
 
@@ -908,6 +891,9 @@ class DossierSerializer(serializers.ModelSerializer):
     project_kind_display = serializers.CharField(
         source="project.get_kind_display", read_only=True, allow_null=True
     )
+    project_is_historical = serializers.BooleanField(
+        source="project.is_historical", read_only=True, allow_null=True
+    )
     kind_name = serializers.CharField(source="kind.name", read_only=True, allow_null=True)
     team = ChampCloisonne(
         queryset=Team.objects.all(), chemin_pays="country", chemin_equipe="pk",
@@ -943,7 +929,8 @@ class DossierSerializer(serializers.ModelSerializer):
             "id", "number", "label", "country", "country_name", "country_ref",
             "currency", "country_timezone",
             "project", "project_name", "project_reference", "project_kind",
-            "project_kind_display", "kind", "kind_name", "sequence", "external_ref",
+            "project_kind_display", "project_is_historical",
+            "kind", "kind_name", "sequence", "external_ref",
             "team", "team_name",
             "owner", "owner_name", "date",
             "status", "status_display", "note", "reopen_note", "totals",

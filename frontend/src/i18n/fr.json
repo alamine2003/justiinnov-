@@ -45,7 +45,6 @@
     "retour": "Retour",
     "principale": "Navigation principale",
     "pilotage": "Pilotage",
-    "dossiers": "Dossiers",
     "registre": "Registre",
     "budgets": "Budgets",
     "pays": "Pays",
@@ -58,7 +57,8 @@
     "equipes": "Équipes",
     "supervision": "Supervision",
     "activer_2fa": "Activer la double authentification",
-    "totp_active": "2FA active"
+    "totp_active": "2FA active",
+    "projets": "Projets"
   },
   "erreurs": {
     "injoignable": "Serveur injoignable. Vérifiez votre connexion.",
@@ -211,6 +211,11 @@
     "langue": {
       "fr": "Français",
       "en": "English"
+    },
+    "projet_type": {
+      "congres": "Congrès",
+      "voyage": "Voyage",
+      "soutien_financier": "Soutien financier"
     }
   },
   "layout": {
@@ -306,16 +311,17 @@
     "noms_beneficiaires": "bénéficiaires",
     "liste": {
       "titre": "Dossiers de justification",
-      "description": "Un dossier porte un N°ORDRE et regroupe les dépenses et les preuves d'une même opération.",
+      "description": "Tous les dossiers visibles, quel que soit leur projet. Un dossier s'ouvre dans son projet, depuis la rubrique Projets.",
       "nouveau": "Nouveau dossier",
       "chargement_impossible": "Impossible de charger les dossiers",
-      "recherche_placeholder": "N°ORDRE ou libellé…",
+      "recherche_placeholder": "Numéro, titre ou projet…",
       "recherche_aria": "Rechercher un dossier",
       "filtrer_statut": "Filtrer par statut",
       "tous_statuts": "Tous les statuts",
       "filtrer_pays": "Filtrer par pays",
       "tous_pays": "Tous les pays",
       "colonnes": {
+        "numero": "Numéro",
         "lignes": "Lignes",
         "preuves": "Preuves",
         "depenses": "Dépenses",
@@ -323,20 +329,17 @@
       },
       "vide": {
         "titre": "Aucun dossier",
-        "aide_creer": "Créez un dossier pour y rattacher vos dépenses.",
+        "aide_creer": "Ouvrez un projet, puis créez-y vos dossiers.",
         "aide_filtres": "Aucun dossier ne correspond à ces filtres."
       }
     },
     "formulaire": {
-      "description": "Le N°ORDRE identifie l'ensemble documentaire ; il doit être unique.",
-      "choisir_pays": "Choisissez un pays.",
       "creation_impossible": "Création impossible",
-      "numero_placeholder": "N-2026-001",
-      "libelle_placeholder": "Mission commerciale Lomé",
       "aucun_pays": "Aucun pays disponible",
       "manager_responsable": "Manager responsable",
       "equipe_requise": "Choisissez une de vos équipes.",
-      "choisir_pays_option": "Choisissez un pays…"
+      "choisir_pays_option": "Choisissez un pays…",
+      "choisir_pays": "Choisissez un pays."
     },
     "detail": {
       "chargement_impossible": "Impossible de charger le dossier",
@@ -377,7 +380,8 @@
       "ecart_de": "écart {{montant}}",
       "ecart_nul": "écart nul",
       "barre_aria": "{{titre}} : {{justifie}} justifiés sur {{depense}} dépensés",
-      "barre_dossier_aria": "{{justifie}} justifiés sur {{depense}} dépensés"
+      "barre_dossier_aria": "{{justifie}} justifiés sur {{depense}} dépensés",
+      "fil_ariane": "Fil d'Ariane"
     },
     "reouverture": {
       "rouvrir": "Rouvrir",
@@ -396,10 +400,8 @@
     },
     "import": {
       "titre": "Importer un classeur",
-      "description": "Les dépenses de votre pays, depuis un classeur : elles arrivent en brouillon, à votre nom, et suivent ensuite le même circuit que les dépenses saisies. Simulez d'abord : rien n'est écrit tant que le classeur contient une erreur.",
+      "description": "Les dépenses de votre pays, depuis un classeur, dans un projet et sous un type de dossier : elles arrivent en brouillon, à votre nom, et suivent ensuite le même circuit que les dépenses saisies. Simulez d'abord : rien n'est écrit tant que le classeur contient une erreur.",
       "classeur": "Classeur Excel (.xlsx)",
-      "pays_colonne": "Selon la colonne PAYS du classeur",
-      "pays_aide": "Obligatoire pour un classeur sans colonne PAYS.",
       "fichier": "Fichier",
       "fichier_aide": "Export des dépenses ou classeur historique, au format .xlsx.",
       "fichier_requis": "Choisissez un classeur .xlsx.",
@@ -416,7 +418,19 @@
       "rien_ecrit": "Un classeur en erreur n'est pas importé : corrigez les lignes signalées, puis recommencez.",
       "ligne": "Ligne {{numero}}",
       "dossiers_crees": "Dossiers créés",
-      "bouton": "Importer"
+      "bouton": "Importer",
+      "choisir_projet": "Choisissez un projet…",
+      "aucun_projet": "Aucun projet ouvert aux dossiers",
+      "projet_aide": "Le classeur s'importe dans ce projet, et dans son pays.",
+      "projet_requis": "Choisissez le projet dans lequel importer.",
+      "type_aide": "Le type des dossiers que le classeur ouvrira."
+    },
+    "renommer": {
+      "bouton": "Renommer",
+      "titre": "Renommer le dossier {{numero}}",
+      "description": "Seul le titre change : montants, lignes, pièces et statut restent tels quels. L'ancien titre est conservé dans le journal d'audit.",
+      "titre_requis": "Indiquez le nouveau titre.",
+      "impossible": "Renommage impossible"
     }
   },
   "depenses": {
@@ -803,7 +817,9 @@
         "ecart": "Écart"
       },
       "vide_titre": "Aucune dépense sur la période",
-      "vide_indication": "Changez d'année ou de pays pour voir une répartition."
+      "vide_indication": "Changez d'année ou de pays pour voir une répartition.",
+      "par_type_projet": "Par type de projet",
+      "par_type_dossier": "Par type de dossier"
     },
     "alertes_soustitre": "les plus graves d'abord",
     "bandeau": {
@@ -895,7 +911,8 @@
     },
     "projets": {
       "nom_placeholder": "Projet 2026",
-      "budget_placeholder": "0"
+      "budget_placeholder": "0",
+      "description": "Le pays ouvre ses projets depuis la rubrique Projets. Le siège les modifie, type les projets d'avant la version 2.0 et les désactive."
     },
     "depenses": {
       "intitule_placeholder": "Frais de déplacement"
@@ -966,7 +983,8 @@
       "general": "Général",
       "utilisateurs": "Utilisateurs",
       "pays": "Pays",
-      "permissions": "Permissions"
+      "permissions": "Permissions",
+      "types-de-dossiers": "Types de dossiers"
     },
     "general": {
       "parametres_titre": "Paramètres du serveur et du workflow",
@@ -1114,6 +1132,13 @@
       "publier_action": "Publier",
       "devise_invalide": "Indiquez un code devise à trois lettres (ISO 4217).",
       "taux_invalide": "Indiquez un taux décimal strictement positif."
+    },
+    "types_dossiers": {
+      "titre": "Types de dossiers",
+      "description": "La liste commune aux filiales : le pays choisit le type d'un dossier parmi ceux du type de son projet. Un type se désactive, il ne se supprime pas.",
+      "chargement_impossible": "Impossible de charger les types de dossiers",
+      "nom_placeholder": "Stands",
+      "noun_pluriel": "types de dossiers"
     }
   },
   "audit": {
@@ -1151,5 +1176,65 @@
     "periode_aria": "Période de l'export",
     "exercice_entier": "Exercice entier",
     "impossible": "Export impossible"
+  },
+  "projets": {
+    "nom_one": "projet",
+    "nom_other": "projets",
+    "reference": "Projet",
+    "type": "Type de projet",
+    "type_de_dossier": "Type de dossier",
+    "sans_type": "Sans type",
+    "a_typer": "À typer",
+    "historique": "Historique",
+    "desactive": "Désactivé",
+    "liste": {
+      "titre": "Projets",
+      "description": "Un projet — congrès, voyage, soutien financier — contient ses dossiers. Ouvrez un projet pour y voir et y créer ses dossiers.",
+      "nouveau": "Nouveau projet",
+      "chargement_impossible": "Impossible de charger les projets",
+      "recherche_placeholder": "Nom ou référence…",
+      "recherche_aria": "Rechercher un projet",
+      "filtrer_pays": "Filtrer par pays",
+      "filtrer_type": "Filtrer par type de projet",
+      "colonnes": {
+        "dossiers": "Dossiers"
+      },
+      "vide": {
+        "titre": "Aucun projet",
+        "aide_creer": "Créez un projet, puis ouvrez-y vos dossiers.",
+        "aide_filtres": "Aucun projet ne correspond à ces filtres.",
+        "aide_lecture": "Aucun projet n'a encore été ouvert dans votre périmètre."
+      }
+    },
+    "formulaire": {
+      "description": "La référence du projet est attribuée à la création. Son type fixe les dossiers qu'on pourra y ouvrir et ne changera plus.",
+      "nom_placeholder": "Congrès de cardiologie 2026",
+      "choisir_type": "Choisissez un type…",
+      "type_aide": "Congrès : stands, t-shirts, collations, voyages. Voyage : billets, carburant, hôtellerie, repas, forfait. Soutien financier.",
+      "nom_requis": "Indiquez le nom du projet.",
+      "type_requis": "Choisissez le type du projet."
+    },
+    "fiche": {
+      "chargement": "Chargement du projet…",
+      "chargement_impossible": "Impossible de charger le projet",
+      "introuvable_titre": "Projet introuvable",
+      "introuvable_texte": "Ce projet n'existe pas ou n'est pas dans votre périmètre.",
+      "actualisation": "Actualisation du projet",
+      "filtrer_type": "Filtrer par type de dossier",
+      "historique_aide": "Ce projet range les dossiers ouverts avant la version 2.0. Il n'accepte pas de nouveau dossier : ouvrez-les dans un projet typé.",
+      "a_typer_aide": "Ce projet date d'avant la version 2.0 et n'a pas encore de type. Le siège le type depuis la fiche du pays ; d'ici là, il n'accepte pas de nouveau dossier.",
+      "desactive_aide": "Ce projet est désactivé : ses dossiers restent lisibles, il n'en accepte plus de nouveau.",
+      "vide_creer": "Ouvrez le premier dossier de ce projet : choisissez son type, le titre suivra.",
+      "vide_lecture": "Ce projet n'a pas encore de dossier : le pays les y ouvre."
+    },
+    "dossier": {
+      "titre": "Nouveau dossier — {{projet}}",
+      "description": "Le numéro du dossier est attribué à la création, à la suite de ceux du projet. Le titre reprend le type ; il se renomme à tout moment.",
+      "choisir_type": "Choisissez un type…",
+      "aucun_type": "Aucun type de dossier pour ce projet",
+      "type_requis": "Choisissez le type du dossier.",
+      "titre_placeholder": "Stands du hall A",
+      "titre_aide": "Par défaut, le nom du type."
+    }
   }
 }
