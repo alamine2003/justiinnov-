@@ -91,3 +91,50 @@ describe("ExpenseForm — équipe d'un manager rattaché", () => {
     expect(onSave.mock.calls[0][0]).toMatchObject({ amount: "2500", team: null })
   })
 })
+
+/**
+ * Une ligne porte le projet de son dossier (décision 102) : le formulaire
+ * ne le propose plus et ne l'envoie pas — le serveur le recopie. Seul un
+ * dossier du projet « Historique » garde le choix (décision 105).
+ */
+describe("ExpenseForm — projet de la ligne", () => {
+  const projet = { id: 9, name: "Gamme pédiatrique" } as Parameters<typeof ExpenseForm>[0]["projects"][number]
+
+  it("hors « Historique », ni champ ni projet envoyé", async () => {
+    const onSave = afficher()
+    expect(screen.queryByLabelText("Projet")).toBeNull()
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("project")
+  })
+
+  it("à la modification non plus : le projet en base n'est pas effacé", async () => {
+    const onSave = afficher({
+      editing: {
+        id: 5, title: "Taxi", amount: "2500", project: 9, team: 4,
+        date: "2026-03-15T10:00:00Z", payment_method: "cash",
+      } as Parameters<typeof ExpenseForm>[0]["editing"],
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("project")
+  })
+
+  it("dans « Historique », le champ s'affiche et le projet part", async () => {
+    const onSave = afficher({ projects: [projet] })
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+    fireEvent.change(screen.getByLabelText("Projet"), { target: { value: "9" } })
+
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave.mock.calls[0][0]).toMatchObject({ project: 9 })
+  })
+})

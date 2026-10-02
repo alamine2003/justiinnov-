@@ -103,6 +103,22 @@ class ProjetsTests(ExpenseTestCase):
 
         self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_ni_l_historique_ni_un_projet_desactive_n_acceptent_de_dossier(self):
+        """La règle que lit l'interface pour proposer « Nouveau dossier »
+        (décision 105) est celle de l'ouverture (``refus_d_ouverture``)."""
+        historique = Project.objects.create(
+            country=self.togo, name="Historique (avant 2.0)", is_historical=True,
+            reference="TG-P-HIST",
+        )
+        self.projet.is_active = False
+        self.projet.save()
+        self.login(self.owner)
+
+        for projet in (historique, self.projet):
+            with self.subTest(projet=projet.name):
+                lu = self.client.get(f"/api/projects/{projet.pk}/").data
+                self.assertFalse(lu["accepte_des_dossiers"])
+
     def test_la_liste_compte_les_dossiers_et_se_filtre_par_type(self):
         self.login(self.owner)
 

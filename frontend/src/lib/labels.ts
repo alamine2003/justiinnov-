@@ -86,8 +86,19 @@ export function projectStatusLabel(t: TFunction, status: ProjectStatus): string 
   return t(`libelles.projet_statut.${status}`, { defaultValue: status })
 }
 
-/** Types de projet, dans l'ordre du modèle (décision 100). */
-export const PROJECT_KINDS: ProjectKind[] = ["congres", "voyage", "soutien_financier"]
+/**
+ * Types de projet, dans l'ordre du modèle (décision 100). Un `Record` sur
+ * l'énumération du schéma : un type ajouté côté serveur ne compile plus
+ * tant qu'il n'est pas listé ici, au lieu de manquer en silence.
+ */
+const RANG_DES_TYPES_DE_PROJET: Record<ProjectKind, number> = {
+  congres: 0,
+  voyage: 1,
+  soutien_financier: 2,
+}
+export const PROJECT_KINDS = (Object.keys(RANG_DES_TYPES_DE_PROJET) as ProjectKind[]).sort(
+  (a, b) => RANG_DES_TYPES_DE_PROJET[a] - RANG_DES_TYPES_DE_PROJET[b],
+)
 
 export function projectKindLabel(t: TFunction, kind: ProjectKind): string {
   return t(`libelles.projet_type.${kind}`, { defaultValue: kind })

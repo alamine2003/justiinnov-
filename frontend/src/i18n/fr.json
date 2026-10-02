@@ -1202,7 +1202,8 @@
       "vide": {
         "titre": "Aucun projet",
         "aide_creer": "Créez un projet, puis ouvrez-y vos dossiers.",
-        "aide_filtres": "Aucun projet ne correspond à ces filtres."
+        "aide_filtres": "Aucun projet ne correspond à ces filtres.",
+        "aide_lecture": "Aucun projet n'a encore été ouvert dans votre périmètre."
       }
     },
     "formulaire": {
@@ -1223,7 +1224,8 @@
       "historique_aide": "Ce projet range les dossiers ouverts avant la version 2.0. Il n'accepte pas de nouveau dossier : ouvrez-les dans un projet typé.",
       "a_typer_aide": "Ce projet date d'avant la version 2.0 et n'a pas encore de type. Le siège le type depuis la fiche du pays ; d'ici là, il n'accepte pas de nouveau dossier.",
       "desactive_aide": "Ce projet est désactivé : ses dossiers restent lisibles, il n'en accepte plus de nouveau.",
-      "vide_creer": "Ouvrez le premier dossier de ce projet : choisissez son type, le titre suivra."
+      "vide_creer": "Ouvrez le premier dossier de ce projet : choisissez son type, le titre suivra.",
+      "vide_lecture": "Ce projet n'a pas encore de dossier : le pays les y ouvre."
     },
     "dossier": {
       "titre": "Nouveau dossier — {{projet}}",

@@ -58,6 +58,9 @@ export function ImportPage() {
   )
   // Seuls les projets qui acceptent un dossier : le serveur le dit.
   const ouverts = (projects.data?.results ?? []).filter((p) => p.accepte_des_dossiers)
+  // Le projet retenu est celui de la liste : un `?project=` qui n'y figure
+  // pas (historique, à typer, désactivé, saisi à la main) ne bloque pas
+  // l'écran sur un choix invisible, il laisse choisir.
   const projetChoisi = ouverts.find((p) => p.id === project)
   const kinds = useReferentiel(
     `dossier-kinds:${projetChoisi?.kind}`,
@@ -72,7 +75,7 @@ export function ImportPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (project === "") {
+    if (!projetChoisi) {
       setError(t("dossiers.import.projet_requis"))
       return
     }
@@ -88,7 +91,7 @@ export function ImportPage() {
     setError(null)
     setResult(null)
     try {
-      const resultat = await importExpenses(file, { project, kind, dryRun })
+      const resultat = await importExpenses(file, { project: projetChoisi.id, kind, dryRun })
       setResult(resultat)
       if (!resultat.dry_run) {
         setFile(null)
@@ -140,7 +143,7 @@ export function ImportPage() {
               <Label htmlFor="import-project">{t("champs.project")}</Label>
               <NativeSelect
                 id="import-project"
-                value={project}
+                value={projetChoisi?.id ?? ""}
                 onChange={(e) => {
                   setProject(e.target.value === "" ? "" : Number(e.target.value))
                   setKind("")

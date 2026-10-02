@@ -358,7 +358,9 @@ En haut de chaque page sauf l'accueil, avant le `PageHeader` : un bouton
 plateforme est fermée — mot de passe provisoire, enrôlement exigé). Il
 revient à l'écran précédent quand la navigation a commencé dans
 l'application, sinon à la liste de la section (`lib/navigation.ts`,
-`parentPath` : `/projets/12` → `/projets`, `/projets` → `/`). Une page
+`parentPath` : `/projets/12` → `/projets`, `/projets` → `/`). Un dossier
+ouvert d'un lien direct revient à `/dossiers` ; son fil d'Ariane mène à
+son projet. Une page
 ne rajoute pas son propre lien « Retour aux… » : il y en a un, au même
 endroit partout.
 

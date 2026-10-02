@@ -198,9 +198,11 @@ export function ProjetDetailPage() {
             loading={dossiers.loading}
             colonne="type"
             vide={
-              ouvert && can("expenses.create")
-                ? t("projets.fiche.vide_creer")
-                : t("dossiers.liste.vide.aide_filtres")
+              typeFilter !== ""
+                ? t("dossiers.liste.vide.aide_filtres")
+                : ouvert && can("expenses.create")
+                  ? t("projets.fiche.vide_creer")
+                  : t("projets.fiche.vide_lecture")
             }
           />
           <Pagination

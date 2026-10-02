@@ -202,7 +202,11 @@ export function ProjetsPage() {
                     icon={Briefcase}
                     title={t("projets.liste.vide.titre")}
                     hint={
-                      canCreate ? t("projets.liste.vide.aide_creer") : t("projets.liste.vide.aide_filtres")
+                      debouncedSearch || kindFilter || countryFilter !== ""
+                        ? t("projets.liste.vide.aide_filtres")
+                        : canCreate
+                          ? t("projets.liste.vide.aide_creer")
+                          : t("projets.liste.vide.aide_lecture")
                     }
                   />
                 ) : (

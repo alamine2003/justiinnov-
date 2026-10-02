@@ -1202,7 +1202,8 @@
       "vide": {
         "titre": "No project",
         "aide_creer": "Create a project, then open your files in it.",
-        "aide_filtres": "No project matches these filters."
+        "aide_filtres": "No project matches these filters.",
+        "aide_lecture": "No project has been opened in your scope yet."
       }
     },
     "formulaire": {
@@ -1223,7 +1224,8 @@
       "historique_aide": "This project holds the files opened before version 2.0. It accepts no new file: open them in a typed project.",
       "a_typer_aide": "This project dates from before version 2.0 and has no type yet. Headquarters assigns one from the country's page; until then, it accepts no new file.",
       "desactive_aide": "This project is deactivated: its files remain readable, it accepts no new one.",
-      "vide_creer": "Open this project's first file: choose its type, the title will follow."
+      "vide_creer": "Open this project's first file: choose its type, the title will follow.",
+      "vide_lecture": "This project has no file yet: the country opens them."
     },
     "dossier": {
       "titre": "New file — {{projet}}",

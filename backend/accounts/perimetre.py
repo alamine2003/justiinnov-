@@ -58,7 +58,6 @@ def filtrer(queryset, access, *, pays="country", equipe=None, distinct=False):
     return queryset.distinct() if distinct else queryset
 
 
-
 def compter_par_pays(objets, access):
     """Nombre d'objets visibles par pays, pour les onglets d'une liste.
 
@@ -91,6 +90,7 @@ def compter_par_pays(objets, access):
             for c in pays
         ],
     }
+
 
 #: Valeur d'``equipe`` pour une ressource qui ne se cloisonne pas par
 #: équipe — une enveloppe, une alerte de pays — : tout manager du pays la
