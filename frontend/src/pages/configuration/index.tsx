@@ -6,12 +6,13 @@ import { CountriesSection } from "@/pages/configuration/countries-section"
 import { UsersSection } from "@/pages/configuration/users-section"
 import { GeneralSection } from "@/pages/configuration/general-section"
 import { PermissionsSection } from "@/pages/configuration/permissions-section"
+import { DossierKindsSection } from "@/pages/configuration/dossier-kinds-section"
 
 /**
  * Identifiants d'onglets : valeurs techniques, reprises dans l'URL
  * (`?onglet=utilisateurs`). Seuls les libellés sont traduits.
  */
-const ONGLETS = ["general", "utilisateurs", "pays", "permissions"] as const
+const ONGLETS = ["general", "utilisateurs", "pays", "types-de-dossiers", "permissions"] as const
 
 type Onglet = (typeof ONGLETS)[number]
 
@@ -56,6 +57,9 @@ export function ConfigurationPage() {
         </TabsContent>
         <TabsContent value="pays" className="mt-4">
           <CountriesSection />
+        </TabsContent>
+        <TabsContent value="types-de-dossiers" className="mt-4">
+          <DossierKindsSection />
         </TabsContent>
         <TabsContent value="permissions" className="mt-4">
           <PermissionsSection />

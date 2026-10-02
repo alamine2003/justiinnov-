@@ -12,6 +12,7 @@ const OUT = process.env.SHOT_OUT ?? "/tmp"
 
 const pages = [
   ["accueil", "/"],
+  ["projets", "/projets"],
   ["dossiers", "/dossiers"],
   ["registre", "/registre"],
   ["budgets", "/budgets"],

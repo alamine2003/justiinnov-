@@ -2,20 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DossiersPage } from "./list"
-import { invalidateReferentiel } from "@/lib/referentiel"
 
-const fetchCountries = vi.fn()
-const createDossier = vi.fn()
 const fetchDossiers = vi.fn()
 const fetchDossiersParPays = vi.fn()
 vi.mock("@/lib/expenses", () => ({
   fetchDossiers: (...args: unknown[]) => fetchDossiers(...args),
   fetchDossiersParPays: (...args: unknown[]) => fetchDossiersParPays(...args),
-  createDossier: (...args: unknown[]) => createDossier(...args),
-}))
-vi.mock("@/lib/countries", () => ({
-  fetchCountries: () => fetchCountries(),
-  fetchCountry: () => Promise.resolve({ teams: [], managers: [] }),
 }))
 let droits: Record<string, boolean> | null = null
 vi.mock("@/context/use-auth", () => ({
@@ -47,57 +39,12 @@ beforeEach(() => {
 })
 
 /**
- * Régression : le formulaire pré-remplissait le pays *au montage* avec le
- * premier de la liste. Ouvert avant que la liste n'arrive, il gardait un pays
- * vide qu'aucune option ne représentait : le navigateur affichait le premier
- * pays comme choisi, et la soumission répondait « Choisissez un pays. » à
- * quelqu'un qui croyait l'avoir fait.
- */
-describe("DossiersPage — formulaire ouvert avant les pays", () => {
-  beforeEach(() => {
-    invalidateReferentiel("countries")
-    createDossier.mockReset()
-  })
-
-  it("montre un choix vide, explicite, quand la liste arrive après l'ouverture", async () => {
-    let livrer: (page: unknown) => void = () => {}
-    fetchCountries.mockReturnValue(new Promise((resolve) => (livrer = resolve)))
-    render(
-      <MemoryRouter>
-        <DossiersPage />
-      </MemoryRouter>,
-    )
-    fireEvent.click(await screen.findByRole("button", { name: "Nouveau dossier" }))
-    const pays = (await screen.findByLabelText("Pays")) as HTMLSelectElement
-    expect(pays.selectedOptions[0]?.textContent).toBe("Aucun pays disponible")
-
-    livrer({ count: 1, next: null, previous: null, results: [togo] })
-
-    await waitFor(() => expect(screen.getByRole("option", { name: /Togo/ })).toBeInTheDocument())
-    expect(pays.value).toBe("")
-    expect(pays.selectedOptions[0]?.textContent).toBe("Choisissez un pays…")
-
-    fireEvent.change(screen.getByLabelText("N°ORDRE"), { target: { value: "N-2026-001" } })
-    fireEvent.change(screen.getByLabelText("Libellé"), { target: { value: "Mission" } })
-    fireEvent.click(screen.getByRole("button", { name: "Créer" }))
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Choisissez un pays.")
-    expect(createDossier).not.toHaveBeenCalled()
-  })
-})
-
-/**
  * Un dossier appartient à un pays (décision 89) : le siège, qui voit tous
  * les pays, lit la liste pays par pays, en onglets. Chaque onglet porte le
  * nombre de dossiers compté par le serveur, et le pays choisi part au
  * serveur.
  */
 describe("DossiersPage — onglets par pays", () => {
-  beforeEach(() => {
-    invalidateReferentiel("countries")
-    fetchCountries.mockResolvedValue({ count: 2, next: null, previous: null, results: [togo, ivoire] })
-  })
-
   it("montre un onglet par pays, avec le compte du serveur", async () => {
     render(
       <MemoryRouter>
@@ -160,11 +107,6 @@ describe("DossiersPage — onglets par pays", () => {
 })
 
 describe("DossiersPage — import", () => {
-  beforeEach(() => {
-    invalidateReferentiel("countries")
-    fetchCountries.mockResolvedValue({ count: 1, next: null, previous: null, results: [togo] })
-  })
-
   it("propose l'import à qui peut importer, vers sa page", async () => {
     droits = { "data.import": true, "expenses.create": true }
     render(
@@ -179,6 +121,18 @@ describe("DossiersPage — import", () => {
       "href",
       "/dossiers/import",
     )
+  })
+
+  it("n'ouvre plus de dossier ici : un dossier s'ouvre dans son projet", async () => {
+    droits = { "data.import": true, "expenses.create": true }
+    render(
+      <MemoryRouter>
+        <DossiersPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole("button", { name: "Importer" })
+    expect(screen.queryByRole("button", { name: "Nouveau dossier" })).toBeNull()
   })
 
   it("ne le propose pas au siège, qui ne déclare pas", async () => {

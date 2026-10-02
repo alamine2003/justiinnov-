@@ -12,6 +12,8 @@ import type { Permissions } from "@/lib/types"
 // connexion n'a pas à embarquer le back-office.
 const LoginPage = lazy(() => import("@/pages/login").then((m) => ({ default: m.LoginPage })))
 const DashboardPage = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.DashboardPage })))
+const ProjetsPage = lazy(() => import("@/pages/projets/list").then((m) => ({ default: m.ProjetsPage })))
+const ProjetDetailPage = lazy(() => import("@/pages/projets/detail").then((m) => ({ default: m.ProjetDetailPage })))
 const DossiersPage = lazy(() => import("@/pages/dossiers/list").then((m) => ({ default: m.DossiersPage })))
 const ImportPage = lazy(() => import("@/pages/dossiers/import").then((m) => ({ default: m.ImportPage })))
 const DossierDetailPage = lazy(() => import("@/pages/dossiers/detail").then((m) => ({ default: m.DossierDetailPage })))
@@ -159,6 +161,11 @@ export default function App() {
           <Route path="/countries/:id" element={<CountryDetailPage />} />
           <Route path="/budgets" element={<BudgetsPage />} />
           <Route path="/" element={<DashboardPage />} />
+          {/* La rubrique principale depuis la 2.0 (décision 100) : un projet,
+              puis ses dossiers. `/dossiers` reste pour les tuiles du
+              pilotage et la recherche transverse. */}
+          <Route path="/projets" element={<ProjetsPage />} />
+          <Route path="/projets/:id" element={<ProjetDetailPage />} />
           <Route path="/dossiers" element={<DossiersPage />} />
           {/* Importer, c'est déclarer : la page suit le droit du pays
               (`data.import`), à côté des dossiers (décision 89). */}

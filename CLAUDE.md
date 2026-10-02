@@ -184,7 +184,9 @@ l'application.
   projet et type ne changent plus ; ses lignes portent son projet. Les
   dossiers d'avant la 2.0 sont rangés sous le projet « Historique » de
   leur pays, leurs lignes intactes. Un classeur s'importe dans un projet,
-  sous un type de dossier.
+  sous un type de dossier. Dans l'interface, « Projets » remplace
+  « Dossiers » dans la navigation, et ce qu'un projet permet vient du
+  serveur (`accepte_des_dossiers`, décision 105).
 - **Un dossier appartient à un pays** (décision 89). Son pays est
   attribué à la création, dans le périmètre de son auteur, et ne change
   plus jamais — même vide. Seul ce pays remplit ses lignes et ses pièces :

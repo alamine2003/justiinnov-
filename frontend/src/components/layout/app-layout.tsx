@@ -2,8 +2,8 @@ import { useState } from "react"
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
   Activity,
+  Briefcase,
   Download,
-  FolderOpen,
   Globe,
   Info,
   LayoutDashboard,
@@ -98,8 +98,8 @@ export function AppLayout() {
       <NavItem to="/" icon={LayoutDashboard} onNavigate={() => setMenuOpen(false)}>
         {t("nav.pilotage")}
       </NavItem>
-      <NavItem to="/dossiers" icon={FolderOpen} onNavigate={() => setMenuOpen(false)}>
-        {t("nav.dossiers")}
+      <NavItem to="/projets" icon={Briefcase} onNavigate={() => setMenuOpen(false)}>
+        {t("nav.projets")}
       </NavItem>
       <NavItem to="/registre" icon={ListChecks} onNavigate={() => setMenuOpen(false)}>
         {t("nav.registre")}

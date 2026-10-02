@@ -45,7 +45,6 @@
     "retour": "Back",
     "principale": "Main navigation",
     "pilotage": "Overview",
-    "dossiers": "Files",
     "registre": "Register",
     "budgets": "Budgets",
     "pays": "Countries",
@@ -58,7 +57,8 @@
     "equipes": "Teams",
     "supervision": "Monitoring",
     "activer_2fa": "Enable two-factor authentication",
-    "totp_active": "2FA active"
+    "totp_active": "2FA active",
+    "projets": "Projects"
   },
   "erreurs": {
     "injoignable": "Server unreachable. Check your connection.",
@@ -211,6 +211,11 @@
     "langue": {
       "fr": "Français",
       "en": "English"
+    },
+    "projet_type": {
+      "congres": "Congress",
+      "voyage": "Trip",
+      "soutien_financier": "Financial support"
     }
   },
   "layout": {
@@ -306,16 +311,17 @@
     "noms_beneficiaires": "beneficiaries",
     "liste": {
       "titre": "Justification files",
-      "description": "A file carries an ORDER No. and groups the expenses and proofs of a single operation.",
+      "description": "Every file you can see, whatever its project. A file is opened in its project, from the Projects section.",
       "nouveau": "New file",
       "chargement_impossible": "Unable to load the files",
-      "recherche_placeholder": "ORDER No. or label…",
+      "recherche_placeholder": "Number, title or project…",
       "recherche_aria": "Search for a file",
       "filtrer_statut": "Filter by status",
       "tous_statuts": "All statuses",
       "filtrer_pays": "Filter by country",
       "tous_pays": "All countries",
       "colonnes": {
+        "numero": "Number",
         "lignes": "Lines",
         "preuves": "Proofs",
         "depenses": "Expenses",
@@ -323,20 +329,17 @@
       },
       "vide": {
         "titre": "No file",
-        "aide_creer": "Create a file to attach your expenses to it.",
+        "aide_creer": "Open a project, then create your files in it.",
         "aide_filtres": "No file matches these filters."
       }
     },
     "formulaire": {
-      "description": "The ORDER No. identifies the set of documents; it must be unique.",
-      "choisir_pays": "Choose a country.",
       "creation_impossible": "Unable to create",
-      "numero_placeholder": "N-2026-001",
-      "libelle_placeholder": "Sales mission in Lomé",
       "aucun_pays": "No country available",
       "manager_responsable": "Responsible manager",
       "equipe_requise": "Choose one of your teams.",
-      "choisir_pays_option": "Choose a country…"
+      "choisir_pays_option": "Choose a country…",
+      "choisir_pays": "Choose a country."
     },
     "detail": {
       "chargement_impossible": "Unable to load the file",
@@ -377,7 +380,8 @@
       "ecart_de": "gap {{montant}}",
       "ecart_nul": "no gap",
       "barre_aria": "{{titre}}: {{justifie}} justified out of {{depense}} spent",
-      "barre_dossier_aria": "{{justifie}} justified out of {{depense}} spent"
+      "barre_dossier_aria": "{{justifie}} justified out of {{depense}} spent",
+      "fil_ariane": "Breadcrumb"
     },
     "reouverture": {
       "rouvrir": "Reopen",
@@ -396,10 +400,8 @@
     },
     "import": {
       "titre": "Import a workbook",
-      "description": "Your country's expenses, from a workbook: they arrive as drafts, in your name, and then follow the same flow as expenses entered by hand. Simulate first: nothing is written while the workbook contains an error.",
+      "description": "Your country's expenses, from a workbook, into a project and under a file type: they arrive as drafts, in your name, and then follow the same workflow as expenses entered by hand. Simulate first: nothing is written while the workbook contains an error.",
       "classeur": "Excel workbook (.xlsx)",
-      "pays_colonne": "From the workbook's COUNTRY column",
-      "pays_aide": "Required for a workbook without a COUNTRY column.",
       "fichier": "File",
       "fichier_aide": "Expense export or historical workbook, in .xlsx format.",
       "fichier_requis": "Choose an .xlsx workbook.",
@@ -416,7 +418,19 @@
       "rien_ecrit": "A workbook with errors is not imported: fix the reported lines, then try again.",
       "ligne": "Line {{numero}}",
       "dossiers_crees": "Files created",
-      "bouton": "Import"
+      "bouton": "Import",
+      "choisir_projet": "Choose a project…",
+      "aucun_projet": "No project open to files",
+      "projet_aide": "The workbook is imported into this project, and its country.",
+      "projet_requis": "Choose the project to import into.",
+      "type_aide": "The type of the files the workbook will open."
+    },
+    "renommer": {
+      "bouton": "Rename",
+      "titre": "Rename file {{numero}}",
+      "description": "Only the title changes: amounts, lines, proofs and status stay as they are. The former title is kept in the audit log.",
+      "titre_requis": "Enter the new title.",
+      "impossible": "Rename failed"
     }
   },
   "depenses": {
@@ -803,7 +817,9 @@
         "ecart": "Gap"
       },
       "vide_titre": "No expense for this period",
-      "vide_indication": "Change the year or the country to see a breakdown."
+      "vide_indication": "Change the year or the country to see a breakdown.",
+      "par_type_projet": "By project type",
+      "par_type_dossier": "By file type"
     },
     "alertes_soustitre": "most serious first",
     "bandeau": {
@@ -895,7 +911,8 @@
     },
     "projets": {
       "nom_placeholder": "Project 2026",
-      "budget_placeholder": "0"
+      "budget_placeholder": "0",
+      "description": "The country opens its projects from the Projects section. Headquarters edits them, assigns a type to projects from before version 2.0 and deactivates them."
     },
     "depenses": {
       "intitule_placeholder": "Travel expenses"
@@ -966,7 +983,8 @@
       "general": "General",
       "utilisateurs": "Users",
       "pays": "Countries",
-      "permissions": "Permissions"
+      "permissions": "Permissions",
+      "types-de-dossiers": "File types"
     },
     "general": {
       "parametres_titre": "Server and workflow settings",
@@ -1114,6 +1132,13 @@
       "publier_action": "Publish",
       "devise_invalide": "Enter a three-letter currency code (ISO 4217).",
       "taux_invalide": "Enter a strictly positive decimal rate."
+    },
+    "types_dossiers": {
+      "titre": "File types",
+      "description": "The list shared by all subsidiaries: the country picks a file's type among those of its project's type. A type is deactivated, never deleted.",
+      "chargement_impossible": "Unable to load file types",
+      "nom_placeholder": "Stands",
+      "noun_pluriel": "file types"
     }
   },
   "audit": {
@@ -1151,5 +1176,63 @@
     "periode_aria": "Export period",
     "exercice_entier": "Whole year",
     "impossible": "Export failed"
+  },
+  "projets": {
+    "nom_one": "project",
+    "nom_other": "projects",
+    "reference": "Project",
+    "type": "Project type",
+    "type_de_dossier": "File type",
+    "sans_type": "No type",
+    "a_typer": "To be typed",
+    "historique": "History",
+    "desactive": "Deactivated",
+    "liste": {
+      "titre": "Projects",
+      "description": "A project — congress, trip, financial support — holds its files. Open a project to see and create its files.",
+      "nouveau": "New project",
+      "chargement_impossible": "Unable to load projects",
+      "recherche_placeholder": "Name or reference…",
+      "recherche_aria": "Search for a project",
+      "filtrer_pays": "Filter by country",
+      "filtrer_type": "Filter by project type",
+      "colonnes": {
+        "dossiers": "Files"
+      },
+      "vide": {
+        "titre": "No project",
+        "aide_creer": "Create a project, then open your files in it.",
+        "aide_filtres": "No project matches these filters."
+      }
+    },
+    "formulaire": {
+      "description": "The project's reference is assigned on creation. Its type sets which files can be opened in it and will not change.",
+      "nom_placeholder": "Cardiology congress 2026",
+      "choisir_type": "Choose a type…",
+      "type_aide": "Congress: stands, T-shirts, refreshments, trips. Trip: tickets, fuel, accommodation, meals, flat rate. Financial support.",
+      "nom_requis": "Enter the project's name.",
+      "type_requis": "Choose the project's type."
+    },
+    "fiche": {
+      "chargement": "Loading project…",
+      "chargement_impossible": "Unable to load the project",
+      "introuvable_titre": "Project not found",
+      "introuvable_texte": "This project does not exist or is outside your scope.",
+      "actualisation": "Refreshing project",
+      "filtrer_type": "Filter by file type",
+      "historique_aide": "This project holds the files opened before version 2.0. It accepts no new file: open them in a typed project.",
+      "a_typer_aide": "This project dates from before version 2.0 and has no type yet. Headquarters assigns one from the country's page; until then, it accepts no new file.",
+      "desactive_aide": "This project is deactivated: its files remain readable, it accepts no new one.",
+      "vide_creer": "Open this project's first file: choose its type, the title will follow."
+    },
+    "dossier": {
+      "titre": "New file — {{projet}}",
+      "description": "The file's number is assigned on creation, following the project's other files. The title takes the type's name; it can be renamed at any time.",
+      "choisir_type": "Choose a type…",
+      "aucun_type": "No file type for this project",
+      "type_requis": "Choose the file's type.",
+      "titre_placeholder": "Hall A stands",
+      "titre_aide": "Defaults to the type's name."
+    }
   }
 }

@@ -195,6 +195,24 @@ async function main() {
   await hq.keyboard.press("Escape")
   await hq.waitForTimeout(400)
 
+  // Version 2.0 (décision 100) : « Projets » est la rubrique principale.
+  expect(hqNav.some((t) => t.includes("Projets")), "la navigation porte « Projets »")
+  expect(!hqNav.some((t) => t.includes("Dossiers")), "« Dossiers » a quitté la navigation")
+  await goto(hq, "/projets", 1200)
+  expect((await hq.textContent("h1"))?.includes("Projets") ?? false, "la page Projets s'ouvre")
+  await shot(hq, "projets")
+  const premierProjet = hq.locator("tbody tr").getByRole("link").first()
+  if (await premierProjet.count()) {
+    await premierProjet.click()
+    await hq.waitForURL("**/projets/*", { timeout: 15000 })
+    await hq.waitForTimeout(1200)
+    expect(
+      (await hq.getByRole("button", { name: /Nouveau dossier/ }).count()) === 0,
+      "le siège n'ouvre pas de dossier dans un projet",
+    )
+    await shot(hq, "projet_detail")
+  }
+
   await goto(hq, "/dossiers")
   const hqDossiers = await hq.locator("tbody tr").count()
   expectData(hqDossiers > 0, `des dossiers sont listés (${hqDossiers})`)
@@ -301,6 +319,7 @@ async function main() {
   for (const [onglet, nom] of [
     ["Utilisateurs", "configuration_utilisateurs"],
     ["Pays", "configuration_pays"],
+    ["Types de dossiers", "configuration_types_dossiers"],
     ["Permissions", "configuration_permissions"],
   ] as const) {
     await hq.getByRole("tab", { name: onglet }).click()
@@ -327,6 +346,26 @@ async function main() {
     "le pays ne voit pas « Supervision »",
   )
   await rep.keyboard.press("Escape")
+  await goto(rep, "/projets", 1200)
+  await shot(rep, "projets_representant")
+  // Le pays ouvre un dossier dans un projet typé : type choisi, titre repris.
+  const projetOuvert = rep.locator("tbody tr").getByRole("link").first()
+  if (await projetOuvert.count()) {
+    await projetOuvert.click()
+    await rep.waitForURL("**/projets/*", { timeout: 15000 })
+    await rep.waitForTimeout(1200)
+    await shot(rep, "projet_detail_representant")
+    const nouveauDossier = rep.getByRole("button", { name: "Nouveau dossier" })
+    if (await nouveauDossier.count()) {
+      await nouveauDossier.click()
+      await rep.waitForTimeout(800)
+      expect((await rep.getByRole("dialog").count()) > 0, "le dialogue « Nouveau dossier » s'ouvre")
+      await shot(rep, "dossier_nouveau")
+      await rep.keyboard.press("Escape")
+      await rep.waitForTimeout(400)
+    }
+  }
+
   await goto(rep, "/dossiers")
   const repDossiers = await rep.locator("tbody tr").count()
   expect(repDossiers <= hqDossiers, `le pays voit au plus autant de dossiers que le siège (${repDossiers})`)

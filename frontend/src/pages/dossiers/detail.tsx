@@ -1,6 +1,6 @@
 import { useState } from "react"
-import { useParams } from "react-router-dom"
-import { AlertTriangle, FileText, Loader2, Plus, RotateCcw } from "lucide-react"
+import { Link, useParams } from "react-router-dom"
+import { AlertTriangle, ChevronRight, FileText, Loader2, Plus, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import { CarteDeLigne } from "@/components/expenses/expense-line-card"
 import { ExpenseForm } from "@/components/expenses/expense-form"
 import { ProofPanel } from "@/components/expenses/proof-panel"
 import { RectificationPanel } from "@/components/expenses/rectification-panel"
+import { RenameDossier } from "@/components/expenses/rename-dossier"
 import { ReopenDossier } from "@/components/expenses/reopen-dossier"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
@@ -26,6 +27,7 @@ import {
   fetchBeneficiaries,
   fetchDossier,
   fetchRectifications,
+  renameDossier,
   reopenDossier,
   requestRectification,
   transitionDossier,
@@ -135,6 +137,14 @@ export function DossierDetailPage() {
     query.reload()
   }
 
+  // Le renommage ne touche qu'au titre (décision 104) : la fiche renvoyée
+  // remplace l'écran, le dialogue affiche lui-même un refus.
+  const rename = async (label: string) => {
+    setActionError(null)
+    setNotice(null)
+    query.setData(await renameDossier(dossierId, label))
+  }
+
   // La rectification n'est pas une transition : la ligne ne bouge qu'à la
   // décision d'un administrateur. Le dialogue affiche lui-même les refus
   // par champ, d'où l'erreur relancée ; la fiche est relue au succès
@@ -212,7 +222,12 @@ export function DossierDetailPage() {
       equipe.id === dossier.team ||
       (equipe.is_active && scopedTeams([equipe], me).length > 0),
   )
-  const projects = (country.data?.projects ?? []).filter((p) => p.is_active)
+  // Une ligne porte le projet de son dossier (décision 102) : le choix n'est
+  // offert que dans le projet « Historique », dont les dossiers d'avant la
+  // 2.0 gardent les projets de leurs lignes.
+  const projects = dossier.project_is_historical
+    ? (country.data?.projects ?? []).filter((p) => p.is_active && !p.is_historical)
+    : []
   const expenseTitles = (country.data?.expense_titles ?? []).filter((titre) => titre.is_active)
   const marketingCategories = (country.data?.marketing_categories ?? []).filter((c) => c.is_active)
   const managers = (country.data?.managers ?? []).filter((m) => m.is_active)
@@ -274,14 +289,44 @@ export function DossierDetailPage() {
       )}
       <TruncatedNotice page={beneficiaries.data} noun={t("dossiers.noms_beneficiaires")} />
 
+      {/* Projets › projet › dossier : le dossier vit dans son projet. */}
+      {dossier.project && (
+        <nav aria-label={t("dossiers.detail.fil_ariane")} className="text-xs text-muted-foreground">
+          <ol className="flex flex-wrap items-center gap-1">
+            <li>
+              <Link to="/projets" className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {t("nav.projets")}
+              </Link>
+            </li>
+            <li aria-hidden>
+              <ChevronRight className="h-3 w-3" />
+            </li>
+            <li>
+              <Link
+                to={`/projets/${dossier.project}`}
+                className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {dossier.project_name}
+              </Link>
+            </li>
+            <li aria-hidden>
+              <ChevronRight className="h-3 w-3" />
+            </li>
+            <li aria-current="page" className="font-mono">{dossier.number}</li>
+          </ol>
+        </nav>
+      )}
+
       <PageHeader
-        title={dossier.number}
+        title={dossier.label}
         description={
           <>
             <span className="mr-2 inline-flex align-middle">
               <StatusBadge status={dossier.status} label={dossier.status_display} />
             </span>
-            {dossier.label} · {dossier.country_ref ?? dossier.country_name} ·{" "}
+            <span className="font-mono">{dossier.number}</span>
+            {dossier.kind_name && ` · ${dossier.kind_name}`} ·{" "}
+            {dossier.country_ref ?? dossier.country_name} ·{" "}
             {formatDay(dossier.date)}
             {dossier.team_name && ` · ${dossier.team_name}`}
             {dossier.owner_name && ` · ${dossier.owner_name}`}
@@ -304,6 +349,7 @@ export function DossierDetailPage() {
           onTransition={runDossierTransition}
           onError={setActionError}
         />
+        <RenameDossier dossier={dossier} onRename={rename} />
         <ReopenDossier dossier={dossier} onReopen={reopen} />
       </PageHeader>
 

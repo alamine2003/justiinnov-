@@ -169,7 +169,11 @@ un projet** actif et typé, sous un **type de dossier** de ce type de projet
 se saisit plus ; ses lignes portent le projet du dossier. Le titre d'un
 dossier se renomme **à tout moment**, même clôturé, par un manager du pays
 (`POST /api/dossiers/{id}/rename/`, capacité `dossiers.rename`), et chaque
-changement est tracé (décisions 100 à 104).
+changement est tracé (décisions 100 à 104). Dans l'interface, « Projets »
+remplace « Dossiers » dans la navigation : la liste des projets
+(`GET /api/projects/`, onglets par pays par `GET /api/projects/par-pays/`)
+mène à la fiche d'un projet, qui liste ses dossiers par type et en ouvre de
+nouveaux quand le serveur le permet (`accepte_des_dossiers`, décision 105).
 
 **Un dossier appartient à un pays.** Son pays est attribué à la création,
 dans le périmètre de son auteur, et ne change plus. Seul ce pays remplit

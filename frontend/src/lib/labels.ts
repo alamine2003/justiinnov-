@@ -13,6 +13,7 @@ import {
 import type {
   AlertLevel,
   OverrunPolicy,
+  ProjectKind,
   ProjectStatus,
   ProofStatus,
   Role,
@@ -83,6 +84,13 @@ export const PROJECT_STATUSES: ProjectStatus[] = ["planned", "active", "on_hold"
 
 export function projectStatusLabel(t: TFunction, status: ProjectStatus): string {
   return t(`libelles.projet_statut.${status}`, { defaultValue: status })
+}
+
+/** Types de projet, dans l'ordre du modèle (décision 100). */
+export const PROJECT_KINDS: ProjectKind[] = ["congres", "voyage", "soutien_financier"]
+
+export function projectKindLabel(t: TFunction, kind: ProjectKind): string {
+  return t(`libelles.projet_type.${kind}`, { defaultValue: kind })
 }
 
 export const OVERRUN_POLICIES: OverrunPolicy[] = ["block", "warn", "approval"]

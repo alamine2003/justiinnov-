@@ -5,10 +5,12 @@ import type {
   CostCenter,
   CountryDetail,
   CountrySummary,
+  DossierKind,
   ExpenseTitle,
   Manager,
   MarketingCategory,
   Paginated,
+  ParPays,
   Project,
   Team,
 } from "@/lib/types"
@@ -82,8 +84,17 @@ export function updateCostCenter(id: number, data: unknown) {
 // ---------------------------------------------------------------------------
 // Projets
 // ---------------------------------------------------------------------------
-export function fetchProjects(params?: Record<string, unknown>) {
-  return apiGet<Paginated<Project>>("/projects/", params)
+export function fetchProjects(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<Project>>("/projects/", params, signal)
+}
+
+/** Nombre de projets par pays, avec les filtres de la liste sauf le pays. */
+export function fetchProjectsParPays(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<ParPays>("/projects/par-pays/", params, signal)
+}
+
+export function fetchProject(id: number, signal?: AbortSignal) {
+  return apiGet<Project>(`/projects/${id}/`, undefined, signal)
 }
 
 export function createProject(data: unknown) {
@@ -92,6 +103,21 @@ export function createProject(data: unknown) {
 
 export function updateProject(id: number, data: unknown) {
   return apiPatch<Project>(`/projects/${id}/`, data)
+}
+
+// ---------------------------------------------------------------------------
+// Types de dossiers : la liste commune, tenue par le siège (décision 101)
+// ---------------------------------------------------------------------------
+export function fetchDossierKinds(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<DossierKind>>("/dossier-kinds/", params, signal)
+}
+
+export function createDossierKind(data: unknown) {
+  return apiPost<DossierKind>("/dossier-kinds/", data)
+}
+
+export function updateDossierKind(id: number, data: unknown) {
+  return apiPatch<DossierKind>(`/dossier-kinds/${id}/`, data)
 }
 
 // ---------------------------------------------------------------------------
