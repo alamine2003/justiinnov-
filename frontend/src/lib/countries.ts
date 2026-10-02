@@ -7,6 +7,7 @@ import type {
   CountrySummary,
   DossierKind,
   ExpenseTitle,
+  HistoriqueDeProjet,
   Manager,
   MarketingCategory,
   Paginated,
@@ -103,6 +104,21 @@ export function createProject(data: unknown) {
 
 export function updateProject(id: number, data: unknown) {
   return apiPatch<Project>(`/projects/${id}/`, data)
+}
+
+/** Le titre du projet, côté pays, motif à l'appui (décisions 108 et 109). */
+export function renameProject(id: number, name: string, motif: string) {
+  return apiPost<Project>(`/projects/${id}/rename/`, { name, motif })
+}
+
+/** Ouvre les dossiers prédéfinis qui manquent au projet (siège, décision 106). */
+export function completerProject(id: number) {
+  return apiPost<Project>(`/projects/${id}/completer/`, {})
+}
+
+/** Le projet, ses dossiers, leurs lignes et leurs pièces : une chronologie (décision 110). */
+export function fetchProjectHistory(id: number, signal?: AbortSignal) {
+  return apiGet<HistoriqueDeProjet>(`/projects/${id}/historique/`, undefined, signal)
 }
 
 // ---------------------------------------------------------------------------

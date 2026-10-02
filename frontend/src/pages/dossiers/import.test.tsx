@@ -46,7 +46,7 @@ beforeEach(() => {
   fetchDossierKinds.mockResolvedValue(page([stands]))
   importExpenses.mockReset()
   importExpenses.mockResolvedValue({
-    dossiers_crees: 1, lignes_creees: 2, equipes_creees: 0, managers_crees: 0, erreurs: [], dry_run: true,
+    lignes_creees: 2, equipes_creees: 0, managers_crees: 0, erreurs: [], dry_run: true,
   })
 })
 
@@ -71,6 +71,9 @@ describe("ImportPage — un classeur s'importe dans un projet (décision 102)", 
       project: congres.id, kind: stands.id, dryRun: true,
     })
     expect(fetchDossierKinds).toHaveBeenCalledWith(expect.objectContaining({ project_kind: "congres" }))
+    // L'import n'ouvre plus de dossier (décision 106) : il n'en compte pas.
+    expect(await screen.findByText("Lignes créées")).toBeInTheDocument()
+    expect(screen.queryByText("Dossiers créés")).toBeNull()
   })
 
   it("reprend le projet de l'URL", async () => {

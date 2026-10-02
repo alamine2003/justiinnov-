@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { ManageRows } from "@/components/countries/manage-rows"
+import { useAuth } from "@/context/use-auth"
 import { createDossierKind, fetchDossierKinds, updateDossierKind } from "@/lib/countries"
 import { PROJECT_KINDS, projectKindLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, invalidateReferentiel } from "@/lib/referentiel"
@@ -14,13 +15,17 @@ import { Erreur } from "@/pages/configuration/section-states"
 /**
  * La liste commune des types de dossiers (décision 101).
  *
- * Commune aux dix-sept filiales et tenue par le siège : un type s'ajoute
- * ou se désactive, il ne se supprime pas — des dossiers l'emploient. Son
- * type de projet ne change plus dès qu'un dossier l'emploie ; le serveur le
- * refuse et le dialogue affiche le motif.
+ * Commune aux dix-sept filiales : elle fixe les dossiers que chaque
+ * nouveau projet reçoit d'office (décision 106). Tenue par le super
+ * administrateur seul (`dossier_kinds.manage`, décision 108) : la RH la lit.
+ * Un type s'ajoute ou se désactive, il ne se supprime pas ; toute
+ * modification exige un motif, gardé au journal (décision 109). Son type de
+ * projet ne change plus dès qu'un dossier l'emploie ; le serveur le refuse et
+ * le dialogue affiche le motif.
  */
 export function DossierKindsSection() {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const query = useQuery(
     "configuration:types-de-dossiers",
     (signal) => fetchDossierKinds({ page_size: REFERENTIEL_PAGE_SIZE }, signal),
@@ -62,7 +67,7 @@ export function DossierKindsSection() {
               },
             ]}
             detectActive={(k) => k.is_active}
-            defaultForm={{ project_kind: PROJECT_KINDS[0], name: "", description: "" }}
+            defaultForm={{ project_kind: PROJECT_KINDS[0], name: "", description: "", motif: "" }}
             formFields={[
               {
                 key: "project_kind",
@@ -75,7 +80,15 @@ export function DossierKindsSection() {
                 placeholder: t("configuration.types_dossiers.nom_placeholder"),
               },
               { key: "description", label: t("commun.description"), optional: true },
+              {
+                key: "motif",
+                label: t("projets.motif.libelle"),
+                placeholder: t("projets.motif.placeholder"),
+                optional: true,
+                mention: t("configuration.types_dossiers.motif_mention"),
+              },
             ]}
+            canManage={can("dossier_kinds.manage")}
             onSave={save}
           />
         </CardContent>

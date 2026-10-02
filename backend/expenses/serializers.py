@@ -632,6 +632,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
         help_text=_("Toujours calculé : dépense − montant justifié."),
     )
     allowed_actions = serializers.SerializerMethodField()
+    #: La ligne a-t-elle une pièce exploitable (décision 107) ? Dit par le
+    #: serveur : l'interface n'a pas à connaître la règle.
+    has_proof = serializers.SerializerMethodField()
 
     class Meta:
         model = Expense
@@ -646,7 +649,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "original_currency", "original_amount", "original_rate",
             "payment_method", "payment_method_display",
             "status", "status_display", "note", "control_note", "created_by",
-            "allowed_actions", "created_at", "updated_at",
+            "allowed_actions", "has_proof", "created_at", "updated_at",
         ]
         # Le statut ne se modifie que par les actions de workflow ;
         # l'imputation budgétaire et le taux appliqué sont résolus par le
@@ -666,6 +669,13 @@ class ExpenseSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_budget_label(self, expense):
         return str(expense.budget) if expense.budget_id else None
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_has_proof(self, expense):
+        """Lu sur l'annotation ``avec_la_preuve`` ; à défaut, une requête."""
+        if hasattr(expense, "a_une_preuve"):
+            return expense.a_une_preuve
+        return not expense.dossier.lignes_sans_preuve().filter(pk=expense.pk).exists()
 
     @extend_schema_field(
         serializers.ListField(child=serializers.ChoiceField(choices=TRANSITION_CHOICES))
@@ -976,6 +986,8 @@ class DossierSerializer(serializers.ModelSerializer):
     totals = serializers.SerializerMethodField()
     expense_count = serializers.SerializerMethodField()
     proof_count = serializers.SerializerMethodField()
+    #: Lignes sans pièce exploitable (décision 107), comptées par le serveur.
+    lignes_sans_preuve = serializers.SerializerMethodField()
     allowed_actions = serializers.SerializerMethodField()
 
     class Meta:
@@ -989,8 +1001,8 @@ class DossierSerializer(serializers.ModelSerializer):
             "team", "team_name",
             "owner", "owner_name", "date",
             "status", "status_display", "note", "reopen_note", "totals",
-            "expense_count", "proof_count", "allowed_actions", "created_by",
-            "created_at", "updated_at",
+            "expense_count", "proof_count", "lignes_sans_preuve", "allowed_actions",
+            "created_by", "created_at", "updated_at",
         ]
         # Le motif de réouverture est posé par l'action ``reopen`` seule ;
         # le numéro et le rang par ``expenses.numerotation`` ; la référence
@@ -1003,6 +1015,12 @@ class DossierSerializer(serializers.ModelSerializer):
     @extend_schema_field(DossierTotalsSerializer)
     def get_totals(self, dossier):
         return {key: str(value) for key, value in dossier.totals().items()}
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_lignes_sans_preuve(self, dossier):
+        if hasattr(dossier, "lines_sans_preuve"):
+            return 0 if dossier.piece_d_avant else dossier.lines_sans_preuve
+        return dossier.lignes_sans_preuve().count()
 
     @extend_schema_field(serializers.IntegerField())
     def get_expense_count(self, dossier):

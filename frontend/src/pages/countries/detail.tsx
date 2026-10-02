@@ -22,22 +22,19 @@ import {
   createCostCenter,
   createExpenseTitle,
   createMarketingCategory,
-  createProject,
   createTeam,
   fetchCountry,
   updateCostCenter,
   updateExpenseTitle,
   updateMarketingCategory,
-  updateProject,
   updateTeam,
 } from "@/lib/countries"
 import { useAuth } from "@/context/use-auth"
-import { PROJECT_KINDS, PROJECT_STATUSES, projectKindLabel, projectStatusLabel } from "@/lib/labels"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import { STATUS_TONES } from "@/lib/status-styles"
 import type { CountryDetail } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
-import { formatAmount, normalizeDecimal } from "@/lib/utils"
+import { formatAmount } from "@/lib/utils"
 
 function ActiveBadge({ active, feminine = false }: { active: boolean; feminine?: boolean }) {
   const { t } = useTranslation()
@@ -102,11 +99,6 @@ export function CountryDetailPage() {
     )
   }
 
-  const statutOptions = PROJECT_STATUSES.map((value) => ({
-    value,
-    label: projectStatusLabel(t, value),
-  }))
-
   const saver =
     (
       create: (data: Record<string, unknown>) => Promise<unknown>,
@@ -122,16 +114,6 @@ export function CountryDetailPage() {
 
   const saveTeam = saver(createTeam, updateTeam)
   const saveCostCenter = saver(createCostCenter, updateCostCenter)
-  const saveProject = saver(createProject, updateProject, (data) => {
-    // Le budget d'un projet est facultatif ; vide, il est explicitement nul
-    // plutôt qu'une chaîne que le serveur refuserait.
-    const budget = typeof data.budget === "string" ? data.budget.trim() : ""
-    const normalise = budget ? normalizeDecimal(budget) : null
-    if (budget && normalise === null) {
-      throw new Error(t("pays.fiche.budget_nombre"))
-    }
-    return { ...data, budget: normalise }
-  })
   const saveExpense = saver(createExpenseTitle, updateExpenseTitle)
   const saveCategory = saver(createMarketingCategory, updateMarketingCategory)
 
@@ -316,36 +298,13 @@ export function CountryDetailPage() {
                   },
                 ]}
                 detectActive={(p) => p.is_active}
-                defaultForm={{ name: "", kind: "", status: "planned", budget: "" }}
-                formFields={[
-                  {
-                    key: "name",
-                    label: t("champs.name"),
-                    placeholder: t("pays.projets.nom_placeholder"),
-                  },
-                  // Le type se choisit à la création et ne change plus ; un
-                  // projet d'avant la 2.0 se type une fois (décision 100). Le
-                  // serveur refuse le reste et le dialogue le dit.
-                  {
-                    key: "kind",
-                    label: t("projets.type"),
-                    options: [
-                      { value: "", label: t("projets.formulaire.choisir_type") },
-                      ...PROJECT_KINDS.map((value) => ({ value, label: projectKindLabel(t, value) })),
-                    ],
-                    optional: true,
-                  },
-                  { key: "status", label: t("commun.statut"), options: statutOptions },
-                  {
-                    key: "budget",
-                    label: t("pays.fiche.budget_devise", { devise }),
-                    placeholder: t("pays.projets.budget_placeholder"),
-                    optional: true,
-                    decimal: true,
-                  },
-                ]}
-                canManage={canManage}
-                onSave={saveProject}
+                // Lecture seule ici (décisions 106 et 108) : le pays crée et
+                // renomme ses projets depuis « Projets », le siège les
+                // modifie depuis leur fiche, motif à l'appui.
+                defaultForm={{}}
+                formFields={[]}
+                canManage={false}
+                onSave={async () => undefined}
               />
             </CardContent>
           </Card>

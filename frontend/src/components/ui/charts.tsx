@@ -479,3 +479,97 @@ export function Legende({ items, className }: LegendeProps) {
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Activité par jour (audit, décision 111)
+// ---------------------------------------------------------------------------
+
+/** Un jour de la période : événements du circuit et du référentiel, comptés par le serveur. */
+export interface JourDActivite {
+  jour: string
+  circuit: number
+  referentiel: number
+}
+
+interface BarresParJourProps {
+  /** Les jours où il s'est passé quelque chose, dans l'ordre ; les autres n'y sont pas. */
+  jours: JourDActivite[]
+  /** Ce que le graphique montre, pour les lecteurs d'écran. */
+  title: string
+}
+
+/**
+ * Barres empilées, une par jour actif : le circuit en teinte de marque, le
+ * référentiel et les comptes en teinte claire. Les comptes viennent du
+ * serveur ; seule la hauteur des barres se calcule ici. Les chiffres sont
+ * aussi donnés en texte par la page.
+ */
+export function BarresParJour({ jours, title }: BarresParJourProps) {
+  const { largeur, hauteur, gauche, droite, haut, bas } = CADRE
+  const base = hauteur - bas
+  const utile = largeur - gauche - droite
+  const max = plafond(Math.max(...jours.map((j) => j.circuit + j.referentiel), 0))
+  const pas = jours.length > 0 ? utile / jours.length : utile
+  const epaisseur = Math.max(Math.min(pas * 0.7, 28), 2)
+  const h = (valeur: number) => ratio(valeur, max) * (base - haut)
+  // Huit étiquettes de date au plus, pour qu'elles ne se chevauchent pas.
+  const tousLes = Math.max(1, Math.ceil(jours.length / 8))
+
+  return (
+    <div>
+      <span className="sr-only">{title}</span>
+      <svg viewBox={`0 0 ${largeur} ${hauteur}`} className="block h-auto w-full" aria-hidden>
+        {[0, 0.5, 1].map((part) => {
+          const ligneY = base - part * (base - haut)
+          return (
+            <g key={part}>
+              <line
+                x1={gauche}
+                y1={ligneY}
+                x2={largeur - droite}
+                y2={ligneY}
+                strokeWidth="1"
+                className={part === 0 ? "stroke-border" : "stroke-border/50"}
+              />
+              <text
+                x={gauche - 8}
+                y={ligneY + 3}
+                textAnchor="end"
+                className="fill-muted-foreground text-[0.5625rem]"
+              >
+                {Math.round(part * max)}
+              </text>
+            </g>
+          )
+        })}
+        {jours.map((jour, index) => {
+          const x = gauche + index * pas + (pas - epaisseur) / 2
+          const hCircuit = h(jour.circuit)
+          const hReferentiel = h(jour.referentiel)
+          return (
+            <g key={jour.jour}>
+              <rect x={x} y={base - hCircuit} width={epaisseur} height={hCircuit} className="fill-marque" />
+              <rect
+                x={x}
+                y={base - hCircuit - hReferentiel}
+                width={epaisseur}
+                height={hReferentiel}
+                className="fill-marque-clair"
+              />
+              {index % tousLes === 0 && (
+                <text
+                  x={x + epaisseur / 2}
+                  y={hauteur - 12}
+                  textAnchor="middle"
+                  className="fill-muted-foreground text-[0.5625rem]"
+                >
+                  {jour.jour.slice(5)}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}

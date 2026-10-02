@@ -425,6 +425,19 @@ class ExpenseQuerySet(models.QuerySet):
         """
         return self.prefetch_related(*EXPENSE_RELATIONS)
 
+    def avec_la_preuve(self):
+        """Annote ``a_une_preuve`` : la ligne a-t-elle une pièce exploitable
+        (décision 107) ? La sienne, ni rejetée ni archivée — ou une pièce
+        d'avant la 2.0, déposée sur tout son dossier. Même règle que
+        ``Dossier.lignes_sans_preuve``, sans requête par ligne."""
+        utilisables = Proof.objects.exclude(
+            status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED]
+        )
+        return self.annotate(
+            a_une_preuve=Exists(utilisables.filter(expense=OuterRef("pk")))
+            | Exists(utilisables.filter(dossier=OuterRef("dossier"), expense=None))
+        )
+
     def with_rectification(self):
         """Annote la ligne de son histoire de rectification, pour
         ``allowed_actions`` sans une requête par ligne :

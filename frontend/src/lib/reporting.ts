@@ -106,8 +106,6 @@ export interface ImportError {
 }
 
 export interface ImportResult {
-  /** Absent sur un serveur qui ne le compte pas encore. */
-  dossiers_crees?: number
   lignes_creees: number
   equipes_creees: number
   managers_crees: number

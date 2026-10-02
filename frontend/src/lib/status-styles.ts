@@ -146,4 +146,13 @@ export const ACTION_STYLE: Record<string, string> = {
   rectification_decided: INFO,
   rectified: ATTENTE,
   imported: INFO,
+  renamed: INFO,
+  // Historique des comptes (onglet « Référentiel et comptes » de l'audit).
+  login: ARCHIVE,
+  logout: ARCHIVE,
+  login_failed: DANGER,
+  password_changed: INFO,
+  password_reset: ATTENTE,
+  totp_confirmed: SUCCES,
+  totp_reset: ATTENTE,
 }

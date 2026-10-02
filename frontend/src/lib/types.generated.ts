@@ -2971,6 +2971,7 @@ export interface components {
             readonly totals: components["schemas"]["DossierTotals"]
             readonly expense_count: number
             readonly proof_count: number
+            readonly lignes_sans_preuve: number
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
             /** Ouvert par */
             readonly created_by: string
@@ -3033,6 +3034,7 @@ export interface components {
             readonly totals: components["schemas"]["DossierTotals"]
             readonly expense_count: number
             readonly proof_count: number
+            readonly lignes_sans_preuve: number
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
             /** Ouvert par */
             readonly created_by: string
@@ -3172,6 +3174,7 @@ export interface components {
             readonly totals: components["schemas"]["DossierTotals"]
             readonly expense_count: number
             readonly proof_count: number
+            readonly lignes_sans_preuve: number
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
             /** Ouvert par */
             readonly created_by: string
@@ -3337,6 +3340,7 @@ export interface components {
             /** Saisie par */
             readonly created_by: string
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
+            readonly has_proof: boolean
             /**
              * Créé le
              * Format: date-time
@@ -3460,6 +3464,7 @@ export interface components {
             /** Saisie par */
             readonly created_by: string
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
+            readonly has_proof: boolean
             /**
              * Créé le
              * Format: date-time
@@ -3474,7 +3479,6 @@ export interface components {
             readonly expense_title_label: string | null
             readonly marketing_category_name: string | null
             readonly proofs: components["schemas"]["ExpenseProof"][]
-            readonly has_proof: boolean
         }
         ExpenseRequest: {
             dossier: number
@@ -3640,6 +3644,7 @@ export interface components {
             /** Saisie par */
             readonly created_by: string
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
+            readonly has_proof: boolean
             /**
              * Créé le
              * Format: date-time

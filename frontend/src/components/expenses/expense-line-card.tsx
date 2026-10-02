@@ -1,14 +1,15 @@
-import { Loader2, Pencil, Trash2 } from "lucide-react"
+import { FileWarning, Loader2, Paperclip, Pencil, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { BarreEcart } from "@/components/ui/charts"
 import { OriginalAmount } from "@/components/expenses/original-amount"
+import { ProofPanel } from "@/components/expenses/proof-panel"
 import { RequestRectification } from "@/components/expenses/request-rectification"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
 import { estDeclaree } from "@/lib/circuit"
 import { WORKFLOW_CARD_STYLE } from "@/lib/status-styles"
-import type { Expense, ExpenseTransitionName } from "@/lib/types"
+import type { Expense, ExpenseTransitionName, Proof } from "@/lib/types"
 import { cn, formatAmount, formatDateIn } from "@/lib/utils"
 
 /**
@@ -19,9 +20,15 @@ import { cn, formatAmount, formatDateIn } from "@/lib/utils"
  *
  * Ce qui est possible sur la ligne vient de `allowed_actions` : la carte
  * n'a aucune liste d'états ni de rôles.
+ *
+ * Chaque ligne porte son justificatif (décision 107) : ses pièces, leur
+ * contrôle et le dépôt vivent sur la carte. « Sans justificatif » se lit
+ * sur `has_proof`, dit par le serveur.
  */
 export function CarteDeLigne({
   expense,
+  proofs,
+  closed,
   currency,
   deleting,
   onEdit,
@@ -29,8 +36,12 @@ export function CarteDeLigne({
   onTransition,
   onRequestRectification,
   onError,
+  onProofsChanged,
 }: {
   expense: Expense
+  /** Les pièces de la ligne, prises dans celles du dossier. */
+  proofs: Proof[]
+  closed: boolean
   currency: string
   deleting: boolean
   onEdit: (expense: Expense) => void
@@ -42,6 +53,7 @@ export function CarteDeLigne({
   ) => Promise<void>
   onRequestRectification: (expense: Expense, motif: string) => Promise<void>
   onError: (message: string | null) => void
+  onProofsChanged: () => Promise<void>
 }) {
   const { t } = useTranslation()
   const montant = Number(expense.amount)
@@ -129,6 +141,30 @@ export function CarteDeLigne({
               ? t("dossiers.detail.ecart_de", { montant: formatAmount(expense.gap) })
               : t("dossiers.detail.ecart_nul")}
         </span>
+      </div>
+
+      <div className="mt-3 space-y-1.5 border-t border-border/60 pt-3">
+        <p className="flex items-center gap-1.5 text-xs font-medium">
+          {expense.has_proof ? (
+            <>
+              <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+              {t("pieces.ligne.justificatif")}
+            </>
+          ) : (
+            <span className="flex items-center gap-1.5 text-statut-attente">
+              <FileWarning className="h-3.5 w-3.5" aria-hidden />
+              {t("pieces.ligne.sans_justificatif")}
+            </span>
+          )}
+        </p>
+        <ProofPanel
+          compact
+          expenseId={expense.id}
+          proofs={proofs}
+          canUpload={expense.allowed_actions.includes("upload")}
+          closed={closed}
+          onChanged={onProofsChanged}
+        />
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">

@@ -127,7 +127,10 @@
     "is_active": "Active",
     "teams": "Teams",
     "phone": "Phone",
-    "contact": "Other contact details"
+    "contact": "Other contact details",
+    "control_note": "Review note",
+    "reopen_note": "Reopening reason",
+    "description": "Description"
   },
   "libelles": {
     "roles": {
@@ -194,7 +197,8 @@
       "rectified": "Rectification of a finding",
       "proof_incomplete": "Incomplete document",
       "proof_to_review": "Document to review",
-      "imported": "Import"
+      "imported": "Import",
+      "renamed": "Rename"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",
@@ -216,6 +220,37 @@
       "congres": "Congress",
       "voyage": "Trip",
       "soutien_financier": "Financial support"
+    },
+    "historique_action": {
+      "created": "Creation",
+      "updated": "Update",
+      "reassigned": "Country change",
+      "deactivated": "Deactivation",
+      "reactivated": "Reactivation",
+      "deleted": "Deletion",
+      "password_reset": "Password reset",
+      "password_changed": "Password change",
+      "login": "Sign-in",
+      "login_failed": "Failed sign-in",
+      "logout": "Sign-out",
+      "totp_confirmed": "Two-factor authentication enabled",
+      "totp_reset": "Two-factor authentication reset"
+    },
+    "historique_objet": {
+      "project": "Projects",
+      "dossier_kind": "Dossier types",
+      "workflow_configuration": "Configuration and rights",
+      "user": "Accounts",
+      "country": "Countries",
+      "team": "Teams",
+      "manager": "Managers",
+      "beneficiary": "Beneficiaries",
+      "budget": "Envelopes",
+      "reallocation": "Reallocations",
+      "exchange_rate": "Exchange rates",
+      "cost_center": "Cost centres",
+      "expense_title": "Expense titles",
+      "marketing_category": "Marketing categories"
     }
   },
   "layout": {
@@ -312,7 +347,6 @@
     "liste": {
       "titre": "Justification files",
       "description": "Every file you can see, whatever its project. A file is opened in its project, from the Projects section.",
-      "nouveau": "New file",
       "chargement_impossible": "Unable to load the files",
       "recherche_placeholder": "Number, title or project…",
       "recherche_aria": "Search for a file",
@@ -329,7 +363,7 @@
       },
       "vide": {
         "titre": "No file",
-        "aide_creer": "Open a project, then create your files in it.",
+        "aide_creer": "Create a project: its dossiers are opened automatically, you only have to fill them.",
         "aide_filtres": "No file matches these filters."
       }
     },
@@ -400,7 +434,7 @@
     },
     "import": {
       "titre": "Import a workbook",
-      "description": "Your country's expenses, from a workbook, into a project and under a file type: they arrive as drafts, in your name, and then follow the same workflow as expenses entered by hand. Simulate first: nothing is written while the workbook contains an error.",
+      "description": "Your country's expenses, from a workbook, loaded into a project's predefined dossier — which must be a draft in your name. They arrive as drafts and then follow the same workflow as entered expenses; each line's document is then uploaded on the line. Simulate first: nothing is written while the workbook contains an error.",
       "classeur": "Excel workbook (.xlsx)",
       "fichier": "File",
       "fichier_aide": "Expense export or historical workbook, in .xlsx format.",
@@ -417,18 +451,17 @@
       "managers_crees": "Managers created",
       "rien_ecrit": "A workbook with errors is not imported: fix the reported lines, then try again.",
       "ligne": "Line {{numero}}",
-      "dossiers_crees": "Files created",
       "bouton": "Import",
       "choisir_projet": "Choose a project…",
       "aucun_projet": "No project open to files",
       "projet_aide": "The workbook is imported into this project, and its country.",
       "projet_requis": "Choose the project to import into.",
-      "type_aide": "The type of the files the workbook will open."
+      "type_aide": "The project's dossier that receives the workbook's lines."
     },
     "renommer": {
       "bouton": "Rename",
       "titre": "Rename file {{numero}}",
-      "description": "Only the title changes: amounts, lines, proofs and status stay as they are. The former title is kept in the audit log.",
+      "description": "Only the title changes: amounts, lines, documents and status stay as they are. The former title is kept in the audit log. Once the dossier is closed, it no longer changes.",
       "titre_requis": "Enter the new title.",
       "impossible": "Rename failed"
     }
@@ -529,8 +562,8 @@
     }
   },
   "pieces": {
-    "titre": "Supporting documents",
-    "description": "Attached to the file; each file carries its SHA-256 fingerprint.",
+    "titre": "Documents from before 2.0",
+    "description": "Filed on the whole dossier before each line had its own; each file carries its SHA-256 fingerprint.",
     "deposer": "Upload",
     "telechargement_impossible": "Unable to download",
     "colonnes": {
@@ -555,7 +588,7 @@
       "titre": "Upload a supporting document",
       "formats": "Accepted formats: {{formats}}.",
       "formats_generique": "PDF, image or document.",
-      "doublon": "A file already present on this file is refused, unless it explicitly replaces an earlier version.",
+      "doublon": "A file already on this line is refused, unless it explicitly replaces an earlier version.",
       "fichier_requis": "Select a file.",
       "trop_gros": "The file weighs {{taille}}; the limit is {{limite}}.",
       "impossible": "Unable to upload",
@@ -582,6 +615,16 @@
       "indisponible": "Preview unavailable",
       "chargement": "Loading the preview…",
       "version": "version {{version}}"
+    },
+    "ligne": {
+      "justificatif": "Supporting document",
+      "sans_justificatif": "No supporting document",
+      "remplacer_ou_ajouter": "Upload another document"
+    },
+    "dossier": {
+      "sans_justificatif_one": "{{count}} line without supporting document",
+      "sans_justificatif_other": "{{count}} lines without supporting document",
+      "sans_justificatif_aide": "Each line has its document: upload it from the line. The dossier cannot be justified while a line lacks one."
     }
   },
   "registre": {
@@ -912,7 +955,7 @@
     "projets": {
       "nom_placeholder": "Project 2026",
       "budget_placeholder": "0",
-      "description": "The country opens its projects from the Projects section. Headquarters edits them, assigns a type to projects from before version 2.0 and deactivates them."
+      "description": "The country opens its projects from Projects and corrects their title; headquarters edits, types and deactivates them from their page, with a reason."
     },
     "depenses": {
       "intitule_placeholder": "Travel expenses"
@@ -1135,15 +1178,16 @@
     },
     "types_dossiers": {
       "titre": "File types",
-      "description": "The list shared by all subsidiaries: the country picks a file's type among those of its project's type. A type is deactivated, never deleted.",
+      "description": "The list shared by the subsidiaries: each new project automatically receives one dossier per active type of its project type. Held by the super administrator; a type is deactivated, never deleted.",
       "chargement_impossible": "Unable to load file types",
       "nom_placeholder": "Stands",
-      "noun_pluriel": "file types"
+      "noun_pluriel": "file types",
+      "motif_mention": "required for a change"
     }
   },
   "audit": {
     "titre": "Audit log",
-    "description": "Who did what, when and from which address. Entries can neither be edited nor deleted.",
+    "description": "Who did what, when, from which address and why: an overview, then the workflow and reference-data logs. Nothing can be edited or deleted here.",
     "chargement_impossible": "Unable to load the audit log",
     "recherche_placeholder": "User or label…",
     "recherche_aria": "Search the audit log",
@@ -1160,7 +1204,76 @@
     "detail_montant": "amount {{avant}} → {{apres}}",
     "detail_empreinte": "fingerprint {{empreinte}}…",
     "noun_singulier": "entry",
-    "noun_pluriel": "entries"
+    "noun_pluriel": "entries",
+    "source": {
+      "circuit": "Workflow",
+      "referentiel": "Reference data and accounts"
+    },
+    "evenement": {
+      "motif": "Reason:",
+      "note": "Note:"
+    },
+    "onglets": {
+      "aria": "Audit log views",
+      "vue": "Overview",
+      "circuit": "Workflow",
+      "referentiel": "Reference data and accounts"
+    },
+    "filtres": {
+      "debut": "From",
+      "fin": "To",
+      "objet_aria": "Filter by object",
+      "tous_objets": "All objects",
+      "utilisateur": "User: {{nom}}",
+      "projet": "Project no. {{id}}",
+      "objets": {
+        "Dossier": "Dossiers",
+        "Expense": "Lines",
+        "Proof": "Supporting documents",
+        "Rectification": "Corrections",
+        "BudgetReallocation": "Reallocations",
+        "Export": "Exports",
+        "ExpenseImport": "Imports"
+      }
+    },
+    "referentiel": {
+      "recherche_placeholder": "User, label or reason…",
+      "recherche_aria": "Search the history",
+      "col_motif": "Reason"
+    },
+    "synthese": {
+      "indisponible": "Summary unavailable",
+      "periode": "From {{debut}} to {{fin}}: {{circuit}} workflow event(s), {{referentiel}} reference-data and account event(s).",
+      "compteurs": {
+        "declarations": "Dossiers submitted",
+        "decisions": "Lines decided",
+        "reouvertures": "Reopenings",
+        "rectifications": "Corrections requested",
+        "refus": "Refusals",
+        "pieces": "Documents uploaded",
+        "renommages": "Renames",
+        "suppressions": "Drafts withdrawn",
+        "imports": "Imports",
+        "sorties": "Data exports",
+        "changements_de_droits": "Rights changes",
+        "echecs_de_connexion": "Failed sign-ins",
+        "reinitialisations_2fa": "2FA resets",
+        "desactivations": "Deactivations",
+        "projets": "Project changes",
+        "circuit": "Workflow",
+        "referentiel": "Reference data"
+      },
+      "par_jour": "Activity by day",
+      "detail_par_jour": "Day-by-day figures",
+      "jour": "{{jour}}: {{circuit}} workflow, {{referentiel}} reference data",
+      "rien": "Nothing over the period.",
+      "par_utilisateur": "Most active",
+      "par_pays": "By country (workflow)",
+      "evenements": "Events",
+      "a_surveiller": "To watch",
+      "a_surveiller_aide": "The latest sensitive events of the period: reopenings, corrections, refusals, withdrawals, imports, failed sign-ins, resets, rights changes.",
+      "rien_a_surveiller": "No sensitive event over the period."
+    }
   },
   "exports": {
     "exporter": "Export",
@@ -1189,7 +1302,7 @@
     "desactive": "Deactivated",
     "liste": {
       "titre": "Projects",
-      "description": "A project — congress, trip, financial support — holds its files. Open a project to see and create its files.",
+      "description": "A project — congress, trip, financial support — is created with its dossiers. Open a project to fill its dossiers.",
       "nouveau": "New project",
       "chargement_impossible": "Unable to load projects",
       "recherche_placeholder": "Name or reference…",
@@ -1201,18 +1314,20 @@
       },
       "vide": {
         "titre": "No project",
-        "aide_creer": "Create a project, then open your files in it.",
+        "aide_creer": "Create a project: its dossiers are opened automatically.",
         "aide_filtres": "No project matches these filters.",
         "aide_lecture": "No project has been opened in your scope yet."
       }
     },
     "formulaire": {
-      "description": "The project's reference is assigned on creation. Its type sets which files can be opened in it and will not change.",
+      "description": "The project's reference is assigned on creation. Its type sets the dossiers it receives automatically, and will not change.",
       "nom_placeholder": "Cardiology congress 2026",
       "choisir_type": "Choose a type…",
-      "type_aide": "Congress: stands, T-shirts, refreshments, trips. Trip: tickets, fuel, accommodation, meals, flat rate. Financial support.",
+      "type_aide": "The project automatically receives one dossier per dossier type of its type.",
       "nom_requis": "Enter the project's name.",
-      "type_requis": "Choose the project's type."
+      "type_requis": "Choose the project's type.",
+      "dossiers_prevus": "The project will receive its dossiers: {{dossiers}}.",
+      "equipe_aide": "The team of its dossiers, hence of their lines."
     },
     "fiche": {
       "chargement": "Loading project…",
@@ -1221,20 +1336,49 @@
       "introuvable_texte": "This project does not exist or is outside your scope.",
       "actualisation": "Refreshing project",
       "filtrer_type": "Filter by file type",
-      "historique_aide": "This project holds the files opened before version 2.0. It accepts no new file: open them in a typed project.",
-      "a_typer_aide": "This project dates from before version 2.0 and has no type yet. Headquarters assigns one from the country's page; until then, it accepts no new file.",
-      "desactive_aide": "This project is deactivated: its files remain readable, it accepts no new one.",
-      "vide_creer": "Open this project's first file: choose its type, the title will follow.",
-      "vide_lecture": "This project has no file yet: the country opens them."
+      "historique_aide": "This project holds the dossiers opened before version 2.0. It receives no new one.",
+      "a_typer_aide": "This project predates version 2.0 and has no type yet. Headquarters types it from “Edit”: it then receives its predefined dossiers.",
+      "desactive_aide": "This project is deactivated: its dossiers remain readable.",
+      "vide_lecture": "This project has no dossier.",
+      "onglets": "Project content"
     },
     "dossier": {
-      "titre": "New file — {{projet}}",
-      "description": "The file's number is assigned on creation, following the project's other files. The title takes the type's name; it can be renamed at any time.",
       "choisir_type": "Choose a type…",
-      "aucun_type": "No file type for this project",
-      "type_requis": "Choose the file's type.",
-      "titre_placeholder": "Hall A stands",
-      "titre_aide": "Defaults to the type's name."
+      "type_requis": "Choose the file's type."
+    },
+    "renommer": {
+      "bouton": "Rename",
+      "titre": "Rename project {{reference}}",
+      "description": "Only the title changes: type, reference and dossiers stay as they are. The former title and your reason stay in the log.",
+      "impossible": "Renaming failed"
+    },
+    "motif": {
+      "libelle": "Reason",
+      "placeholder": "Why this change?",
+      "aide": "Required: it stays in the log, with the name of who wrote it.",
+      "requis": "Give the reason for the change: it stays in the log."
+    },
+    "modifier": {
+      "bouton": "Edit",
+      "titre": "Edit project {{reference}}",
+      "description": "The project's status, budget, description and activity. The title is changed through “Rename”, by the country.",
+      "typer_aide": "Once typed, the project receives its predefined dossiers; the type will not change again.",
+      "actif": "Active project",
+      "impossible": "Edit failed"
+    },
+    "completer": {
+      "bouton": "Add missing dossiers",
+      "titre": "Complete project {{reference}}",
+      "description": "Opens the predefined dossiers this project is missing — a dossier type added since, a reactivated project. They have no author: the country fills them. Nothing is opened twice.",
+      "confirmer": "Complete",
+      "impossible": "Could not complete the project"
+    },
+    "historique_onglet": {
+      "titre": "History",
+      "indisponible": "History unavailable",
+      "vide": "Nothing has happened to this project yet.",
+      "tronque": "Only the most recent events are shown.",
+      "journal_complet": "See the project's full log"
     }
   }
 }

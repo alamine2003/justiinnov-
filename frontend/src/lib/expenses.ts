@@ -13,6 +13,7 @@ import type {
   ProofStatus,
   Rectification,
   RegisterEntry,
+  SyntheseAudit,
   TransitionName,
 } from "@/lib/types"
 
@@ -217,4 +218,9 @@ export function updateBeneficiary(id: number, data: unknown) {
 
 export function fetchAudit(params?: Record<string, unknown>, signal?: AbortSignal) {
   return apiGet<Paginated<AuditEntry>>("/audit/", params, signal)
+}
+
+/** Le tableau de bord de l'audit : période et pays, tout compté par le serveur (décision 111). */
+export function fetchAuditSynthese(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<SyntheseAudit>("/audit/synthese/", params, signal)
 }

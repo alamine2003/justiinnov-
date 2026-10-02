@@ -273,7 +273,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         prefetch : la règle n'est pas récrite ici.
         """
         return filtrer(
-            Expense.objects.avec_les_relations().with_rectification(),
+            Expense.objects.avec_les_relations().with_rectification().avec_la_preuve(),
             get_access(self.request.user),
             pays=ExpenseViewSet.country_lookup,
             equipe=ExpenseViewSet.team_lookup,
@@ -382,7 +382,7 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
 
     # ``with_rectification`` : ``allowed_actions`` dit si une rectification
     # peut être demandée sans une requête par ligne.
-    queryset = Expense.objects.avec_les_relations().with_rectification()
+    queryset = Expense.objects.avec_les_relations().with_rectification().avec_la_preuve()
     serializer_class = ExpenseSerializer
     transition_serializer_class = ExpenseTransitionSerializer
     permission_classes = [RolePermission]

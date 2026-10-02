@@ -207,6 +207,7 @@ une page.
 | `BarreEnveloppe` | Un pays contre son enveloppe, à échelle commune, dépassement en corail | Pilotage, Budgets |
 | `RailEnveloppe` | Une enveloppe et ses seuils d'alerte gradués | Budgets |
 | `BarreEcart` | La part justifiée d'une dépense, et son écart | Dossier — détail |
+| `BarresParJour` | Événements par jour, circuit en `marque`, référentiel en `marque-clair`, empilés | Audit — vue d'ensemble |
 | `Legende` | Pastille et libellé d'une série ; `dashed` pour un repère en pointillé | toutes |
 
 Trois règles s'y appliquent :
@@ -346,9 +347,13 @@ La tuile vectorielle `favicon.svg` fait foi : les PNG s'en déduisent par
 `npx tsx scripts/generate-icons.mts` (dans `frontend/`).
 
 La **version** (pied de page, pastille de l'en-tête, écran de connexion)
-vient de `BRAND.version`, figée à la construction : celle du tag `v*`
-livré, sinon celle de `package.json` (`vite.config.ts`, `define`). On ne
-l'écrit nulle part ailleurs ; poser un tag suffit.
+vient de `BRAND.version`, figée à la construction (`vite.config.ts`,
+`define`) : `APP_VERSION`, que la livraison pose à la version de
+`package.json` suivie du SHA court, sinon `package.json` seul. On ne
+l'écrit nulle part ailleurs. Pour une nouvelle version, on relève
+`package.json` (`npm version X.Y.Z --no-git-tag-version`), on fusionne,
+puis on tague ce commit ; la livraison refuse un tag `vX.Y.Z` que
+`package.json` ne porte pas (décision 98).
 
 ### Bouton « Retour »
 
@@ -575,7 +580,10 @@ d'avance. Un classeur s'importe dans un **projet** et sous un **type de
 dossier** (décision 102) : deux `NativeSelect`, le second ne listant que
 les types du type du projet ; le pays est celui du projet. Elle propose la
 simulation (`dry_run`) avant l'écriture ; les erreurs se lisent au numéro
-de ligne du classeur. Le siège ne voit pas le bouton.
+de ligne du classeur. Le siège ne voit pas le bouton. Depuis la décision
+106, l'import n'ouvre plus de dossier : les lignes se versent dans le
+dossier prédéfini du type choisi, et le résultat compte les lignes,
+équipes et managers créés — plus de dossiers.
 
 ### Projets, la rubrique principale
 
@@ -592,29 +600,51 @@ Lignes.
   n'est pas un état ; **« À typer »** (`ATTENTE`) pour un projet d'avant la
   2.0, **« Historique »** (`ARCHIVE`) pour le projet où la reprise a rangé
   les anciens dossiers — lus sur `a_typer` et `is_historical`.
-  « Nouveau projet » (`default`) si `can("projets.create")` : pays (choisi
-  d'office s'il n'y en a qu'un), nom, type, description ; la fiche du
-  projet créé s'ouvre.
+  « Nouveau projet » (`default`) si `can("projets.create")` — le pays
+  seul : pays (choisi d'office s'il n'y en a qu'un), nom, type, équipe
+  (exigée d'un manager rattaché à des équipes), description. Le type
+  choisi, le texte d'aide **annonce les dossiers que le projet recevra**,
+  lus dans la liste commune du serveur (« Le projet recevra ses dossiers :
+  Stands, T-shirts… ») — jamais recopiés dans l'interface. Un refus du
+  serveur sur le type, l'équipe ou le nom s'écrit sous le champ ; le reste
+  en `<FormError>`. La fiche du projet créé s'ouvre.
 - **Fiche** (`/projets/:id`) : `PageHeader` au nom du projet, badges du
-  type et du statut, référence et pays. Ses dossiers dans
-  `<DossiersTable colonne="type">` (`components/expenses/dossiers-table.tsx`,
-  partagé avec `/dossiers`, où la colonne dit le projet), filtrables par
-  type de dossier en pastilles (`?type=`). « Nouveau dossier » et
-  « Importer » ne s'affichent que si `accepte_des_dossiers` ; sinon un
-  `<Alert>` neutre dit pourquoi (projet historique, à typer, désactivé) —
-  plutôt qu'un bouton absent sans explication.
-- **Nouveau dossier** (`components/expenses/dossier-form.tsx`) : type de
-  dossier, date, titre, équipe, manager. Le titre reprend le nom du type
-  choisi tant que l'utilisateur ne l'a pas écrit lui-même. Ni pays ni
-  numéro : le serveur les tire du projet. La fiche du dossier s'ouvre.
+  type et du statut, référence et pays. Deux onglets `line` (`?onglet=`) :
+  - **Dossiers** : ses dossiers prédéfinis dans
+    `<DossiersTable colonne="type">` (`components/expenses/dossiers-table.tsx`,
+    partagé avec `/dossiers`, où la colonne dit le projet), filtrables par
+    type de dossier en pastilles (`?type=`). **Il n'y a pas de « Nouveau
+    dossier »** : un projet naît avec les siens (décision 106), on les
+    remplit. « Importer » ne s'affiche que si `accepte_des_dossiers` ;
+    sinon un `<Alert>` neutre dit pourquoi (projet historique, à typer,
+    désactivé) — plutôt qu'un bouton absent sans explication ;
+  - **Historique**, si `can("audit.read")` (décision 110) : une chronologie
+    de cartes `<Evenement>` (`components/audit/evenement.tsx`, partagée
+    avec l'audit) — action, source, objet (lien vers un dossier), motif en
+    tête, note, avant / après par `DiffList`, date, auteur, adresse ; un
+    `<Alert>` renvoie au journal complet filtré par projet quand la liste
+    est tronquée.
+- **Actions du projet**, dans le `PageHeader` (`components/projects/`), chacune
+  selon son droit, jamais selon le rôle :
+  - **Renommer** (`outline`, `PencilLine`, `projets.rename` — le pays) :
+    titre et **motif obligatoire** (`ChampMotif`), décision 109 ;
+  - **Modifier** (`outline`, `Settings2`, `projets.update` — le siège) :
+    statut, budget, description, activité, et le type d'un projet « à
+    typer » ; **jamais le titre** ; motif obligatoire ;
+  - **Compléter les dossiers** (`outline`, `FolderPlus`, `projets.update`,
+    si `accepte_des_dossiers`) : confirmation, puis le serveur ouvre les
+    dossiers prédéfinis qui manquent.
+  Un refus du serveur s'affiche en `<FormError>`, dialogue ouvert.
 - `/dossiers` reste — tuiles du pilotage (`?status=`), recherche
   transverse, export — mais quitte la navigation et n'ouvre plus de
   dossier.
 - **Configuration › Types de dossiers** : la liste commune, en
-  `ManageRows` ; un type s'ajoute ou se désactive.
-- Fiche d'un pays, onglet Projets : nom en lien vers la fiche, référence,
-  `<ProjectKindBadge>` ; le dialogue de modification porte le type, que le
-  siège fixe une fois pour un projet « à typer ».
+  `ManageRows` ; en écriture seulement avec `can("dossier_kinds.manage")`
+  (le super administrateur), en lecture pour la RH ; un type s'ajoute ou se
+  désactive, avec un motif pour toute modification.
+- Fiche d'un pays, onglet Projets : en **lecture seule** — nom en lien vers
+  la fiche, référence, `<ProjectKindBadge>`. On crée, renomme, modifie et
+  complète un projet depuis sa fiche, motif à l'appui.
 
 ### Fiche d'un dossier : fil d'Ariane et renommage
 
@@ -628,7 +658,45 @@ suivent dans la description.
 Un bouton **« Renommer »** (`outline`, icône `PencilLine`,
 `components/expenses/rename-dossier.tsx`), dans les actions du
 `PageHeader`, rendu **seulement** si `allowed_actions` contient `rename`
-(décision 104 : un manager du pays, à tout moment, même dossier clôturé).
+(décisions 104 et 108 : un manager du pays, jusqu'à la clôture).
+
+**Chaque ligne porte sa pièce** (décision 107). Sur la carte d'une ligne
+(`CarteDeLigne`), sous la barre justifié / écart, un bloc « Justificatif » :
+l'état se lit sur `has_proof`, dit par le serveur — « Sans justificatif »
+en `statut-attente` (icône `FileWarning`) sinon —, puis les pièces de la
+ligne en liste serrée (`<ProofPanel compact>`) : nom, version, badge de
+statut, Aperçu, Télécharger, Contrôler selon `allowed_reviews`. « Déposer »
+(`outline`, `sm`) n'apparaît que si la ligne porte `upload` ; le dépôt
+envoie `expense`, jamais `dossier`, et le remplacement ne propose que les
+pièces de la ligne. Le rail de droite ne garde que le nombre de lignes sans
+justificatif (`lignes_sans_preuve`, un `<Alert>` neutre) et, s'il y en a,
+les **pièces d'avant la 2.0**, déposées sur tout le dossier : elles se lisent
+et se contrôlent, il ne s'en dépose plus.
+
+### Audit en tableau de bord
+
+La page Audit (`audit.read`, décision 111) porte trois onglets `line`
+(`?onglet=`), et ses filtres vivent dans l'URL — période (`debut`, `fin`)
+et pays, communs aux trois, puis ceux de chaque onglet : une tuile mène
+au journal déjà filtré, et l'adresse se partage.
+
+- **Vue d'ensemble** (`pages/audit/overview.tsx`), lue sur
+  `/api/audit/synthese/` : une phrase de période avec les totaux du
+  serveur ; deux rangées de `StatCard` — circuit, puis référentiel et
+  comptes —, chacune un lien vers le journal filtré, bordée `danger`
+  quand un compteur sensible (réouvertures, refus, retraits, sorties,
+  échecs de connexion, droits…) n'est pas nul ; l'activité par jour en
+  `BarresParJour` avec sa `Legende` et les chiffres jour par jour en texte
+  (`<details>`) ; les plus actifs et l'activité par pays en tableaux ; la
+  liste **« À surveiller »** en cartes `<Evenement>`. La page ne compte
+  rien.
+- **Circuit** : le journal d'audit, filtrable par action (renommage
+  compris), objet, utilisateur et projet (`?projet=`, posé par
+  l'historique d'un projet) ; un filtre posé par lien se retire par une
+  pastille.
+- **Référentiel et comptes** : l'historique (`/api/history/`), filtrable
+  par action et par entité, recherche sur le motif comprise ; colonne
+  « Motif » et avant / après par `DiffList`.
 Dialogue « Renommer le dossier N°… », dont la description dit que seul le
 titre change et que l'ancien reste au journal d'audit ; le champ part du
 titre actuel. Un titre vide se refuse à la soumission ; un refus du

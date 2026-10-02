@@ -10519,6 +10519,10 @@
                         "type": "integer",
                         "readOnly": true
                     },
+                    "lignes_sans_preuve": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "allowed_actions": {
                         "type": "array",
                         "items": {
@@ -10575,6 +10579,7 @@
                     "totals",
                     "expense_count",
                     "proof_count",
+                    "lignes_sans_preuve",
                     "allowed_actions",
                     "created_by",
                     "created_at",
@@ -10728,6 +10733,10 @@
                         "type": "integer",
                         "readOnly": true
                     },
+                    "lignes_sans_preuve": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "allowed_actions": {
                         "type": "array",
                         "items": {
@@ -10798,6 +10807,7 @@
                     "totals",
                     "expense_count",
                     "proof_count",
+                    "lignes_sans_preuve",
                     "allowed_actions",
                     "created_by",
                     "created_at",
@@ -11116,6 +11126,10 @@
                         "type": "integer",
                         "readOnly": true
                     },
+                    "lignes_sans_preuve": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "allowed_actions": {
                         "type": "array",
                         "items": {
@@ -11190,6 +11204,7 @@
                     "totals",
                     "expense_count",
                     "proof_count",
+                    "lignes_sans_preuve",
                     "allowed_actions",
                     "created_by",
                     "created_at",
@@ -11559,6 +11574,10 @@
                         },
                         "readOnly": true
                     },
+                    "has_proof": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -11610,6 +11629,7 @@
                     "control_note",
                     "created_by",
                     "allowed_actions",
+                    "has_proof",
                     "created_at",
                     "updated_at"
                 ]
@@ -11880,6 +11900,10 @@
                         },
                         "readOnly": true
                     },
+                    "has_proof": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -11911,10 +11935,6 @@
                         "items": {
                             "$ref": "#/components/schemas/ExpenseProof"
                         },
-                        "readOnly": true
-                    },
-                    "has_proof": {
-                        "type": "boolean",
                         "readOnly": true
                     }
                 },
@@ -11956,13 +11976,13 @@
                     "control_note",
                     "created_by",
                     "allowed_actions",
+                    "has_proof",
                     "created_at",
                     "updated_at",
                     "dossier_label",
                     "expense_title_label",
                     "marketing_category_name",
-                    "proofs",
-                    "has_proof"
+                    "proofs"
                 ]
             },
             "ExpenseRequest": {
@@ -12343,6 +12363,10 @@
                         },
                         "readOnly": true
                     },
+                    "has_proof": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -12398,6 +12422,7 @@
                     "control_note",
                     "created_by",
                     "allowed_actions",
+                    "has_proof",
                     "created_at",
                     "updated_at"
                 ]

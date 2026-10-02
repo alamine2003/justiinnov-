@@ -46,12 +46,19 @@ interface UploadRules {
 }
 
 interface ProofPanelProps {
-  dossierId: number
+  /**
+   * La ligne que les pièces prouvent (décision 107) : un dépôt s'y
+   * rattache. `null` pour les pièces d'avant la 2.0, déposées sur tout le
+   * dossier : elles se lisent et se contrôlent, il ne s'en dépose plus.
+   */
+  expenseId: number | null
   proofs: Proof[]
-  /** Faux une fois le dossier clôturé : une preuve arrivée après coup se dépose jusque-là. */
+  /** `upload` dans les actions de la ligne : jusqu'à la clôture, par le pays. */
   canUpload: boolean
   /** Le dossier est clôturé : l'état vide le dit, plutôt que d'inviter à déposer. */
   closed?: boolean
+  /** Sur la carte d'une ligne : une liste serrée, sans en-tête de section. */
+  compact?: boolean
   onChanged: () => Promise<void>
 }
 
@@ -69,14 +76,16 @@ function reviewChoices(proof: Proof): ReviewChoice[] {
 }
 
 export function ProofPanel({
-  dossierId,
+  expenseId,
   proofs,
-  canUpload,
+  canUpload: peutDeposer,
   closed = false,
+  compact = false,
   onChanged,
 }: ProofPanelProps) {
   const { t } = useTranslation()
   const { can } = useAuth()
+  const canUpload = peutDeposer && expenseId !== null
 
   // Les formats et la taille acceptés vivent dans la configuration du
   // serveur, réservée au siège. Un compte pays dépose sans ces garde-fous :
@@ -110,6 +119,108 @@ export function ProofPanel({
     } finally {
       setBusyId(null)
     }
+  }
+
+  const actions = (proof: Proof) => (
+    <div className="flex flex-wrap gap-1">
+      {isPreviewable(proof) && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          aria-label={t("pieces.previsualiser_aria", { nom: proof.original_name })}
+          onClick={() => setPreviewing(proof)}
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        aria-label={t("pieces.telecharger_aria", { nom: proof.original_name })}
+        disabled={busyId === proof.id}
+        onClick={() => void handleDownload(proof)}
+      >
+        {busyId === proof.id ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Download className="h-3.5 w-3.5" />
+        )}
+      </Button>
+      {reviewChoices(proof).length > 0 && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          aria-label={t("pieces.controler_aria", { nom: proof.original_name })}
+          onClick={() => setReviewing(proof)}
+        >
+          <FileCheck2 className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </div>
+  )
+
+  const dialogues = (
+    <>
+      {uploadOpen && expenseId !== null && (
+        <UploadDialog
+          onOpenChange={setUploadOpen}
+          expenseId={expenseId}
+          proofs={proofs}
+          rules={rules}
+          onUploaded={onChanged}
+        />
+      )}
+
+      {/* Clé sur la pièce : l'état du dialogue (décision, motif) repart de
+          zéro d'une pièce à l'autre. */}
+      {reviewing && (
+        <ReviewDialog
+          key={reviewing.id}
+          proof={reviewing}
+          onClose={() => setReviewing(null)}
+          onReviewed={onChanged}
+        />
+      )}
+
+      <ProofPreview proof={previewing} onClose={() => setPreviewing(null)} />
+    </>
+  )
+
+  // Sur la carte d'une ligne : ses pièces, en liste serrée, et le dépôt.
+  if (compact) {
+    return (
+      <div className="space-y-1.5">
+        <FormError>{error}</FormError>
+        {proofs.length > 0 && (
+          <ul className="space-y-1">
+            {proofs.map((proof) => (
+              <li
+                key={proof.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="truncate text-xs font-medium">{proof.original_name}</span>
+                  <span className="text-xs text-muted-foreground">v{proof.version}</span>
+                  <ProofStatusBadge status={proof.status} label={proof.status_display} />
+                </span>
+                {actions(proof)}
+              </li>
+            ))}
+          </ul>
+        )}
+        {canUpload && (
+          <Button size="sm" variant="outline" onClick={() => setUploadOpen(true)}>
+            <Upload className="mr-1 h-3.5 w-3.5" aria-hidden />
+            {proofs.length > 0 ? t("pieces.ligne.remplacer_ou_ajouter") : t("pieces.deposer")}
+          </Button>
+        )}
+        {dialogues}
+      </div>
+    )
   }
 
   return (
@@ -175,44 +286,7 @@ export function ProofPanel({
                     {proof.rejection_reason}
                   </p>
                 )}
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {isPreviewable(proof) && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      aria-label={t("pieces.previsualiser_aria", { nom: proof.original_name })}
-                      onClick={() => setPreviewing(proof)}
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    aria-label={t("pieces.telecharger_aria", { nom: proof.original_name })}
-                    disabled={busyId === proof.id}
-                    onClick={() => void handleDownload(proof)}
-                  >
-                    {busyId === proof.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Download className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                  {reviewChoices(proof).length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      aria-label={t("pieces.controler_aria", { nom: proof.original_name })}
-                      onClick={() => setReviewing(proof)}
-                    >
-                      <FileCheck2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
+                <div className="mt-2">{actions(proof)}</div>
               </div>
             </li>
           ))}
@@ -234,41 +308,20 @@ export function ProofPanel({
         </button>
       )}
 
-      {uploadOpen && (
-        <UploadDialog
-          onOpenChange={setUploadOpen}
-          dossierId={dossierId}
-          proofs={proofs}
-          rules={rules}
-          onUploaded={onChanged}
-        />
-      )}
-
-      {/* Clé sur la pièce : l'état du dialogue (décision, motif) repart de
-          zéro d'une pièce à l'autre. */}
-      {reviewing && (
-        <ReviewDialog
-          key={reviewing.id}
-          proof={reviewing}
-          onClose={() => setReviewing(null)}
-          onReviewed={onChanged}
-        />
-      )}
-
-      <ProofPreview proof={previewing} onClose={() => setPreviewing(null)} />
+      {dialogues}
     </div>
   )
 }
 
 function UploadDialog({
   onOpenChange,
-  dossierId,
+  expenseId,
   proofs,
   rules,
   onUploaded,
 }: {
   onOpenChange: (open: boolean) => void
-  dossierId: number
+  expenseId: number
   proofs: Proof[]
   rules: UploadRules
   onUploaded: () => Promise<void>
@@ -304,7 +357,8 @@ function UploadDialog({
     setProgress(0)
     try {
       const form = new FormData()
-      form.append("dossier", String(dossierId))
+      // La pièce se rattache à sa ligne ; le serveur en déduit le dossier.
+      form.append("expense", String(expenseId))
       form.append("kind", kind)
       form.append("file", file)
       if (replaces !== "") form.append("replaces", String(replaces))
