@@ -150,11 +150,10 @@ Le poste de travail d'abord, mais rien ne casse de 1 440 px à un
 téléphone : **aucune page ne défile horizontalement** — seul un tableau ou
 un graphique défile, dans sa propre boîte.
 
-- **Barre du haut** (`AppLayout`) : libellés et icônes dès `xl` (1 280 px) ;
-  icônes seules de `lg` à `xl`, le libellé restant le nom accessible
-  (`sr-only xl:not-sr-only`) et l'info-bulle ; sous `lg`, menu ☰ et
-  panneau latéral. Les sept entrées du siège ne tiennent pas en dessous :
-  à 768 px, la barre débordait de 163 px (`app-layout.test.tsx`).
+- **Navigation** (`AppLayout`) : barre latérale dès `lg` (1 024 px), menu ☰
+  et panneau en dessous — voir « Navigation » ci-dessous. La barre du haut
+  qui la précédait demandait 1 280 px pour les sept entrées du siège ; à
+  768 px, la page débordait de 163 px.
 - **Onglets qui passent à la ligne** (`TabsList` avec `flex-wrap`) : la
   liste a une hauteur *minimale*, jamais fixe — sans quoi la seconde ligne
   recouvre le contenu qui suit.
@@ -163,6 +162,30 @@ un graphique défile, dans sa propre boîte.
   (11 sur 1 000 : 9 px au plus étroit, 13 px sur une carte de bureau), qu'une
   réduction rendrait illisible et qu'un agrandissement rendrait énorme.
 - **Frise du circuit** : 56 px par étape sous `sm`, 112 au-delà.
+
+### Navigation
+
+`AppLayout` (`components/layout/app-layout.tsx`) range les entrées dans une
+**barre latérale** dès `lg`, par groupe : **Suivi** (Pilotage, Projets,
+Registre), **Budget** (Budgets, Pays), **Contrôle** (Audit, si
+`can("audit.read")`), **Administration** (Configuration, si
+`can("configuration.manage")`). Un groupe que les droits laissent vide ne
+s'affiche pas. Surface neutre (`bg-card`, `border-r border-border/60`),
+entrée active en `bg-accent` : la barre ne porte aucune teinte de marque.
+
+- **Repliable** en bande d'icônes de 4 rem (bouton « Réduire le menu », en
+  bas, `aria-expanded`) : les libellés passent en `sr-only` — ils restent
+  le nom accessible — et en info-bulle, les intitulés de groupe en filet.
+  Le choix est propre au navigateur (`localStorage`, `justi_menu_replie`,
+  lu et écrit sous `try/catch`) ; par défaut, la barre est dépliée.
+- **L'en-tête** garde à gauche le **périmètre** (« Siège — tous pays »,
+  « TG-01 ») — il dit quelles données on lit — et à droite la cloche, la
+  langue, le thème et le menu du compte. Sous `lg`, il reprend le logo et
+  le menu ☰, qui ouvre la même navigation groupée dans un panneau.
+- Le repère s'appelle toujours « Navigation principale » : les captures
+  (`scripts/screenshot.ts`) et la CI comptent ses liens.
+- Plateforme fermée (mot de passe provisoire, enrôlement exigé) : pas de
+  barre latérale, le logo reste dans l'en-tête.
 
 ---
 
