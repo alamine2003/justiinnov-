@@ -6,11 +6,22 @@
  *   SHOT_<PREFIXE>_USER, SHOT_<PREFIXE>_PASSWORD et, pour un compte enrôlé,
  *   SHOT_<PREFIXE>_TOTP_SECRET (secret base32, celui du QR d'enrôlement).
  *
- * Le code est calculé à la volée et saisi d'emblée ; si le serveur le
- * réclame malgré tout (code périmé), il est recalculé et présenté à nouveau.
+ * La connexion se fait en deux temps, comme à l'écran : identifiant et mot
+ * de passe, puis le code — calculé à la volée — si le serveur le réclame ;
+ * un code périmé entre-temps est recalculé et présenté à nouveau.
  */
 import { generate } from "otplib"
-import type { Page } from "playwright"
+import type { ConsoleMessage, Page } from "playwright"
+
+/**
+ * Le premier temps d'une connexion enrôlée répond `400 totp_required` :
+ * voulu, mais le navigateur le journalise comme une erreur. Les scripts, qui
+ * échouent sur toute erreur de console, écartent celle-là et elle seule —
+ * ce statut, sur cette adresse.
+ */
+export function estLeRefusAttenduDuCode(message: ConsoleMessage): boolean {
+  return message.text().includes("status of 400") && message.location().url.endsWith("/api/token-auth/")
+}
 
 export interface Credentials {
   prefix: string

@@ -5,7 +5,7 @@
  *   npx tsx scripts/shot-theme.mts
  */
 import { chromium } from "playwright"
-import { credentials, signIn } from "./login.ts"
+import { credentials, estLeRefusAttenduDuCode, signIn } from "./login.ts"
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:5173"
 const OUT = process.env.SHOT_OUT ?? "/tmp"
@@ -28,7 +28,9 @@ const erreurs: string[] = []
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: "fr-FR" })
 page.on("console", (message) => {
-  if (message.type() === "error") erreurs.push(`[console] ${message.text()}`)
+  if (message.type() === "error" && !estLeRefusAttenduDuCode(message)) {
+    erreurs.push(`[console] ${message.text()}`)
+  }
 })
 page.on("pageerror", (error) => erreurs.push(`[pageerror] ${String(error)}`))
 

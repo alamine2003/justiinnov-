@@ -13,7 +13,7 @@
  * périmètre, une redirection absente, un titre qui manque.
  */
 import { chromium, type Browser, type Page } from "playwright"
-import { credentials, signIn } from "./login.ts"
+import { credentials, estLeRefusAttenduDuCode, signIn } from "./login.ts"
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:5173"
 const OUT = process.env.SHOT_OUT ?? "/tmp"
@@ -52,7 +52,7 @@ async function newPage(browser: Browser, viewport = { width: 1440, height: 900 }
   // cette langue et les attentes ci-dessous, écrites en français, échoueraient.
   const page = await browser.newPage({ viewport, locale: "fr-FR" })
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`[console] ${m.text()}`)
+    if (m.type() === "error" && !estLeRefusAttenduDuCode(m)) errors.push(`[console] ${m.text()}`)
   })
   page.on("pageerror", (e) => errors.push(`[pageerror] ${String(e)}`))
   return page

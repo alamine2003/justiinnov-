@@ -896,7 +896,9 @@ npx tsx scripts/shot-theme.mts    # écrans principaux, thème clair puis sombre
 ```
 
 Les trois scripts **échouent si la console du navigateur a produit la moindre
-erreur**. Regardez les captures : plusieurs défauts de ce projet — un
+erreur** — une seule exception, nommée : le `400 totp_required` du premier
+temps d'une connexion enrôlée (`POST /api/token-auth/`), voulu, que
+`estLeRefusAttenduDuCode` (`scripts/login.ts`) écarte. Regardez les captures : plusieurs défauts de ce projet — un
 `method-wrapper` affiché en clair, une page qui plantait, un bouton d'édition
 jamais rendu — n'ont été trouvés que là. Le compte siège utilisé ne doit pas
 avoir de mot de passe provisoire (`must_change_password: false`), sans quoi
