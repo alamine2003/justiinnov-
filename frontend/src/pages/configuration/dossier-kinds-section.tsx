@@ -45,7 +45,7 @@ export function DossierKindsSection() {
       {query.error && <Erreur message={query.error} />}
       <TruncatedNotice page={query.data} noun={t("configuration.types_dossiers.noun_pluriel")} />
       <Card className="border-border/60 shadow-sm">
-        <CardContent className="pt-6">
+        <CardContent>
           <ManageRows<DossierKind>
             title={t("configuration.types_dossiers.titre")}
             description={t("configuration.types_dossiers.description")}

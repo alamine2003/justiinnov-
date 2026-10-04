@@ -37,7 +37,7 @@ export function EnveloppeDuPays({
 
   return (
     <Card className="border-border/60 shadow-sm">
-      <CardContent className="space-y-5 pt-6">
+      <CardContent className="space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold">
@@ -193,7 +193,7 @@ export function SousEnveloppes({
           const niveau = budget.figures.execution_level
           return (
             <Card key={budget.id} className="border-border/60 shadow-sm">
-              <CardContent className="pt-6">
+              <CardContent>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">

@@ -186,3 +186,28 @@ describe("Pilotage — teinte du taux d'exécution", () => {
     expect(fetchConfiguration).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Régression : l'aide de la tuile « Dossiers ouverts » disait « tous pays »
+ * en dur, y compris à un manager qui n'en voit qu'un.
+ */
+describe("Pilotage — portée des tuiles", () => {
+  it("nomme le pays du manager", async () => {
+    profil = { has_global_scope: false, countries: [pays(2, "Togo")] } as Partial<Me>
+
+    monter()
+
+    await waitFor(() => expect(fetchDashboard).toHaveBeenCalled())
+    expect(screen.getByRole("link", { name: /Dossiers ouverts/ })).toHaveTextContent("Togo")
+    expect(screen.queryByText("tous pays")).toBeNull()
+  })
+
+  it("garde « tous pays » au siège", async () => {
+    profil = { has_global_scope: true, countries: [] } as Partial<Me>
+
+    monter()
+
+    await waitFor(() => expect(fetchDashboard).toHaveBeenCalled())
+    expect(screen.getByRole("link", { name: /Dossiers ouverts/ })).toHaveTextContent("tous pays")
+  })
+})
