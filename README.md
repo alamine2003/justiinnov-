@@ -494,7 +494,7 @@ au sein de la livraison continue, en sept travaux indépendants :
 | Parcours complet | la pile livrable (backend en production sans code monté, frontend nginx, Caddy devant avec le Caddyfile livré) démarre, des comptes jetables entrent par `compose cp` et `seed_users`, `seed_demo --base-jetable` remplit des données, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, `/admin/` répond l'application et non le back-office, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
 | Exploitation | syntaxe et `shellcheck` des scripts de `deploy/`, tests de `sauvegarder.sh` avec des doublures |
 | Pile de production | `deploy/docker-compose.prod.yml` s'interpole dans chacun de ses modes, la base archive un segment dans le volume que `sauvegardes-init` lui a donné, le service de sauvegarde prend une sauvegarde physique sous `postgres`, et la reprise à un instant donné retrouve, dans son conteneur, les lignes effacées juste après cet instant |
-| Dépendances | `pip-audit --strict` et `npm audit --audit-level=high`, **bloquants** |
+| Dépendances | `pip-audit --strict` et `npm audit` au seuil `high` hors avis tolérés (`frontend/scripts/auditer-dependances.mts`, décision 112), **bloquants** |
 
 **La plateforme tourne sur un serveur dédié** (Hetzner), joint par le
 domaine gratuit `178-105-215-49.sslip.io` en attendant un nom de domaine
