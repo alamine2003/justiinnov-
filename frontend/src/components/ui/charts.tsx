@@ -161,7 +161,7 @@ export interface PointMensuel {
 }
 
 /** Cadre du dessin, en unités de `viewBox`. */
-const CADRE = { largeur: 1000, hauteur: 200, gauche: 42, droite: 8, haut: 12, bas: 34 }
+const CADRE = { largeur: 1000, hauteur: 210, gauche: 50, droite: 24, haut: 12, bas: 36 }
 
 /**
  * Graduation « ronde » au-dessus du plus grand point : 1, 2 ou 5 fois une
@@ -198,11 +198,20 @@ export function CourbeMensuelle({ points, title }: CourbeMensuelleProps) {
   const graduations = [0, 0.25, 0.5, 0.75, 1]
 
   return (
-    <div>
+    <div className="overflow-x-auto">
       <span className="sr-only">{title}</span>
       {/* Pas de `preserveAspectRatio="none"` : il étirerait les graduations
-          et les noms de mois avec le dessin. */}
-      <svg viewBox={`0 0 ${largeur} ${hauteur}`} className="block h-auto w-full" aria-hidden>
+          et les noms de mois avec le dessin. Une largeur minimale garde le
+          texte lisible : sur un téléphone, le dessin réduit à 330 px
+          ramenait les noms de mois à 4 px ; il défile plutôt dans sa boîte.
+          Le texte est en unités du dessin (1 000 de large) : 11 unités
+          rendent 9 px à la largeur minimale (800 px), 13 px sur une carte
+          de 1 200 px ; 14 unités y montaient à 17 px. */}
+      <svg
+        viewBox={`0 0 ${largeur} ${hauteur}`}
+        className="block h-auto w-full min-w-[50rem]"
+        aria-hidden
+      >
       {graduations.map((part) => {
         const ligneY = base - part * (base - haut)
         return (
@@ -219,7 +228,7 @@ export function CourbeMensuelle({ points, title }: CourbeMensuelleProps) {
               x={gauche - 8}
               y={ligneY + 3}
               textAnchor="end"
-              className="fill-muted-foreground text-[0.5625rem]"
+              className="fill-muted-foreground text-[0.6875rem]"
             >
               {formatCompactAmount(part * max)}
             </text>
@@ -256,7 +265,7 @@ export function CourbeMensuelle({ points, title }: CourbeMensuelleProps) {
           x={x(index)}
           y={hauteur - 12}
           textAnchor="middle"
-          className="fill-muted-foreground text-[0.5938rem]"
+          className="fill-muted-foreground text-[0.6875rem]"
         >
           {monthShortName(point.month)}
         </text>
@@ -516,9 +525,14 @@ export function BarresParJour({ jours, title }: BarresParJourProps) {
   const tousLes = Math.max(1, Math.ceil(jours.length / 8))
 
   return (
-    <div>
+    <div className="overflow-x-auto">
       <span className="sr-only">{title}</span>
-      <svg viewBox={`0 0 ${largeur} ${hauteur}`} className="block h-auto w-full" aria-hidden>
+      {/* Même largeur minimale que la courbe mensuelle, même raison. */}
+      <svg
+        viewBox={`0 0 ${largeur} ${hauteur}`}
+        className="block h-auto w-full min-w-[50rem]"
+        aria-hidden
+      >
         {[0, 0.5, 1].map((part) => {
           const ligneY = base - part * (base - haut)
           return (
@@ -535,7 +549,7 @@ export function BarresParJour({ jours, title }: BarresParJourProps) {
                 x={gauche - 8}
                 y={ligneY + 3}
                 textAnchor="end"
-                className="fill-muted-foreground text-[0.5625rem]"
+                className="fill-muted-foreground text-[0.6875rem]"
               >
                 {Math.round(part * max)}
               </text>
@@ -561,7 +575,7 @@ export function BarresParJour({ jours, title }: BarresParJourProps) {
                   x={x + epaisseur / 2}
                   y={hauteur - 12}
                   textAnchor="middle"
-                  className="fill-muted-foreground text-[0.5625rem]"
+                  className="fill-muted-foreground text-[0.6875rem]"
                 >
                   {jour.jour.slice(5)}
                 </text>

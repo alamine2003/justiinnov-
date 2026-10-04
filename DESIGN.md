@@ -137,10 +137,32 @@ Le titre de page passe par `<PageHeader>` : ne le réécrivez pas à la main.
 - Rythme vertical d'une page : `space-y-6`. À l'intérieur d'une carte :
   `space-y-3`. Entre un libellé et son champ : `gap-2`.
 - Grille de cartes : `grid gap-4 sm:grid-cols-2 lg:grid-cols-4`.
-- Contenu de carte : `CardContent` avec `pt-6` quand il n'y a pas d'en-tête.
+- Contenu de carte : `CardContent` **sans** marge haute ajoutée — la carte a
+  déjà la sienne (`py-(--card-spacing)`, 16 px). Un `pt-6` de plus laissait
+  40 px vides au-dessus des tableaux et 16 en dessous.
 - Rayons dérivés de `--radius: 0.7rem` : `rounded-lg` pour les champs et
   boutons, `rounded-xl` pour les cartes, `rounded-2xl` pour les pastilles
   d'identité.
+
+### Largeurs d'écran
+
+Le poste de travail d'abord, mais rien ne casse de 1 440 px à un
+téléphone : **aucune page ne défile horizontalement** — seul un tableau ou
+un graphique défile, dans sa propre boîte.
+
+- **Barre du haut** (`AppLayout`) : libellés et icônes dès `xl` (1 280 px) ;
+  icônes seules de `lg` à `xl`, le libellé restant le nom accessible
+  (`sr-only xl:not-sr-only`) et l'info-bulle ; sous `lg`, menu ☰ et
+  panneau latéral. Les sept entrées du siège ne tiennent pas en dessous :
+  à 768 px, la barre débordait de 163 px (`app-layout.test.tsx`).
+- **Onglets qui passent à la ligne** (`TabsList` avec `flex-wrap`) : la
+  liste a une hauteur *minimale*, jamais fixe — sans quoi la seconde ligne
+  recouvre le contenu qui suit.
+- **Graphiques** (`CourbeMensuelle`, `BarresParJour`) : largeur minimale de
+  50 rem et défilement dans leur boîte ; leur texte est en unités du dessin
+  (11 sur 1 000 : 9 px au plus étroit, 13 px sur une carte de bureau), qu'une
+  réduction rendrait illisible et qu'un agrandissement rendrait énorme.
+- **Frise du circuit** : 56 px par étape sous `sm`, 112 au-delà.
 
 ---
 
