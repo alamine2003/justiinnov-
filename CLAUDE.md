@@ -225,6 +225,11 @@ l'application.
   d'une entité de référentiel se fait par désactivation (`is_active`) ;
   l'API répond 405 sur `DELETE`. La conservation est illimitée : ni tâche
   de ménage, ni rétention sur les dossiers, les pièces ou les journaux.
+  **Une seule exception, déjà décidée : la remise à zéro des essais**
+  (décision 113), avant l'ouverture aux filiales — `manage.py
+  remise_a_zero_des_essais`, une fois, sur sauvegarde fraîche, chaque objet
+  retiré tracé `purged` au journal. Elle ne se refait pas : la commande
+  refuse une seconde fois.
 - **Les chiffres se calculent côté serveur.** Solde, écart, taux : l'interface
   affiche, elle ne recalcule pas. Les actions possibles aussi : chaque
   dossier et chaque ligne portent `allowed_actions` — saisie (`edit`,

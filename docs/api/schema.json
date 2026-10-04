@@ -28,6 +28,7 @@
                                 "proof_replaced",
                                 "proof_to_review",
                                 "proof_uploaded",
+                                "purged",
                                 "rectification_decided",
                                 "rectification_requested",
                                 "rectified",
@@ -40,7 +41,7 @@
                                 "updated"
                             ]
                         },
-                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage"
+                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage\n* `purged` - Remise à zéro des essais"
                     },
                     {
                         "in": "query",
@@ -8274,10 +8275,11 @@
                     "proof_replaced",
                     "downloaded",
                     "imported",
-                    "renamed"
+                    "renamed",
+                    "purged"
                 ],
                 "type": "string",
-                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage"
+                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage\n* `purged` - Remise à zéro des essais"
             },
             "AuditLog": {
                 "type": "object",

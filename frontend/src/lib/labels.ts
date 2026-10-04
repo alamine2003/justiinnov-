@@ -123,6 +123,7 @@ export const AUDIT_ACTIONS = [
   "created",
   "updated",
   "deleted",
+  "purged",
   "submitted",
   "reviewed",
   "justified",

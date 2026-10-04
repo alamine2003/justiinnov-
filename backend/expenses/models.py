@@ -909,6 +909,10 @@ class AuditLog(models.Model):
         # Le titre d'un dossier se renomme jusqu'à la clôture (décisions 104 et 108) :
         # l'entrée porte l'ancien et le nouveau titre.
         RENAMED = "renamed", _("Renommage")
+        # Une seule fois, avant l'ouverture aux filiales : les saisies d'essai
+        # retirées par ``manage.py remise_a_zero_des_essais`` (décision 113).
+        # Pas ``deleted`` : ce qui part n'est pas seulement un brouillon.
+        PURGED = "purged", _("Remise à zéro des essais")
 
     user = models.CharField(_("Utilisateur"), max_length=180, blank=True)
     action = models.CharField(_("Action"), max_length=32, choices=Action.choices)

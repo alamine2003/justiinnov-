@@ -1463,6 +1463,49 @@ docker compose exec db dropdb -U justi justi_repetition
 rm -rf ~/repetition
 ```
 
+### Remise à zéro des essais — une seule fois (décision 113)
+
+Avant l'ouverture aux filiales, la production ne porte que des saisies
+d'essai ; la direction a décidé de les retirer. C'est la **seule**
+suppression hors brouillon que la plateforme connaisse, et elle ne se fait
+qu'une fois : `remise_a_zero_des_essais` refuse une seconde fois. Il faut
+la 2.0.1 en ligne (la commande y arrive). En root, sur le serveur, dans
+`/home/deploy/justi-innov` :
+
+**1. Sauvegarder, base et pièces** — les fichiers des justificatifs vont
+être effacés du bucket :
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm sauvegarde --une-fois
+docker compose -f docker-compose.prod.yml run --rm sauvegarde-pieces --une-fois
+docker compose -f docker-compose.prod.yml run --rm sauvegarde-distante --une-fois
+./restaurer.sh --lister        # notez le nom du dump qui vient d'être pris
+```
+
+**2. Compter, sans rien retirer :**
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T backend python manage.py remise_a_zero_des_essais \
+    --compte <administrateur> --sauvegarde <dump> \
+    --motif "Saisies d'essai retirées avant l'ouverture aux filiales (décision 113)"
+```
+
+Elle affiche les dossiers par pays et les lignes par statut. Si ce ne sont
+pas des essais, **on s'arrête là**.
+
+**3. Retirer** — la même commande, avec `--executer --base justi_innov`
+(le nom de la base, recopié). Tout part en une transaction, ou rien.
+
+**4. Vérifier**, depuis le dépôt sur le poste : `deploy/empreintes_de_la_base.sql`
+(voir « Répéter une migration ») doit montrer `0` ligne, `0` dossier et
+`0` pièce, les enveloppes inchangées, et l'audit grandi d'une entrée par
+objet retiré. Les fichiers s'effacent après le commit ; ce qui aurait
+résisté est repris par l'ordonnanceur (`supprimer_fichiers`).
+
+**5. Consigner** dans le journal d'exploitation : date, nom du dump, sortie
+des étapes 2 et 3. Ce dump, la copie mensuelle d'octobre et le coffre
+distant gardent les essais : rien n'est perdu, rien n'est à effacer.
+
 ## Reprise à un instant donné
 
 Le dump de 02:00 dit où l'on était cette nuit-là. **Les segments de journal
