@@ -96,6 +96,7 @@ class NotifyAlertsTests(DashboardTestCase):
             number="N-DEC", label="Fin d'exercice", country=self.togo,
             date=date(self.year - 1, 12, 20), status=Status.SUBMITTED,
         )
+        self.make_expense(dossier=ancien, project=None, status=Status.SUBMITTED)
         janvier = timezone.make_aware(datetime(self.year, 1, 15, 9, 0))
 
         with mock.patch("django.utils.timezone.now", return_value=janvier):
@@ -159,6 +160,11 @@ class RapportPeriodiqueTests(DashboardTestCase):
             number="CI-0001", label="Salon Abidjan", country=cls.ivoire,
             date=date(cls.year, 4, 2), status=Status.SUBMITTED,
         )
+        # Une ligne sans pièce : c'est elle que le rapport signale (décision 107).
+        cls.make_expense(
+            cls, amount="1000.00", dossier=cls.abidjan, country=cls.ivoire,
+            project=None, team=None, status=Status.SUBMITTED,
+        )
 
     def _classeur(self, message):
         _, contenu, _ = message.attachments[0]
@@ -209,9 +215,9 @@ class RapportPeriodiqueTests(DashboardTestCase):
         francais = self._message_de("doo@example.org")
         self.assertNotIn("doo@example.org", anglais.bcc)
         self.assertEqual(anglais.subject, f"[Budget control] weekly report — {self.year}")
-        self.assertIn("Dossiers without any supporting document", anglais.body)
+        self.assertIn("Dossiers with a line lacking supporting documents", anglais.body)
         self.assertEqual(francais.subject, f"[Contrôle budgétaire] Rapport hebdomadaire — {self.year}")
-        self.assertIn("Dossiers sans aucun justificatif", francais.body)
+        self.assertIn("Dossiers dont une ligne est sans justificatif", francais.body)
 
     def test_les_adresses_ne_sont_pas_exposees(self):
         for message in mail.outbox:
@@ -243,7 +249,7 @@ class RapportPeriodiqueTests(DashboardTestCase):
 
         siege = self._message_de("doo@example.org")
         # N-0001 (pièce rejetée) et CI-0001 (aucune pièce) ; pas le brouillon.
-        self.assertIn("Dossiers sans aucun justificatif : 2", siege.body)
+        self.assertIn("Dossiers dont une ligne est sans justificatif : 2", siege.body)
 
     def test_les_devises_ne_s_additionnent_qu_en_fcfa(self):
         ghana = Country.objects.create(

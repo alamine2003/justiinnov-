@@ -96,8 +96,8 @@ export function ImportPage() {
       if (!resultat.dry_run) {
         setFile(null)
         setFileKey((k) => k + 1)
-        // Le classeur crée des équipes, des managers et des dossiers : les
-        // listes en cache ne les connaissent pas.
+        // Le classeur crée des lignes, et parfois des équipes et des
+        // managers : les listes en cache ne les connaissent pas.
         invalidateReferentiel(
           (key) =>
             key === "teams" ||
@@ -250,8 +250,7 @@ function ImportResultCard({ result }: { result: ImportResult }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Compteur label={t("dossiers.import.dossiers_crees")} valeur={result.dossiers_crees ?? 0} />
+        <dl className="grid gap-2 sm:grid-cols-3">
           <Compteur label={t("dossiers.import.lignes_creees")} valeur={result.lignes_creees ?? 0} />
           <Compteur label={t("dossiers.import.equipes_creees")} valeur={result.equipes_creees ?? 0} />
           <Compteur label={t("dossiers.import.managers_crees")} valeur={result.managers_crees ?? 0} />

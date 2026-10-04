@@ -28,6 +28,53 @@ CONTROLE = (
 )
 
 
+#: Ce que le manager porte par défaut (décision 108) : déclarer — projets,
+#: lignes, pièces, soumission, import —, corriger un titre, demander une
+#: rectification. Rien d'autre.
+DROITS_DU_MANAGER = {
+    "projets.create", "projets.rename", "dossiers.rename",
+    "expenses.create", "expenses.update", "expenses.delete",
+    "proofs.upload", "dossiers.submit", "data.import",
+    "rectifications.request",
+}
+#: Ce que la matrice peut lui ouvrir, par choix d'organisation : le
+#: référentiel de son pays, l'historique, l'export, la demande de
+#: réallocation. Tout le reste lui est verrouillé.
+OUVRABLES_AU_MANAGER = {
+    "history.read", "managers.create", "managers.update",
+    "referentiel.create", "referentiel.update",
+    "reallocations.request", "data.export",
+}
+
+
+class DroitsDuManagerTests(ScopingTestCase):
+    """Revue des droits du manager : moindre privilège (décision 108)."""
+
+    def test_le_manager_ne_porte_par_defaut_que_la_declaration(self):
+        self.assertEqual(
+            {c.key for c in CAPACITES if Role.MANAGER in c.defaut}, DROITS_DU_MANAGER
+        )
+
+    def test_tout_le_reste_lui_est_verrouille_sauf_quelques_lignes(self):
+        ouvrables = {
+            c.key for c in CAPACITES
+            if Role.MANAGER not in c.defaut and Role.MANAGER not in c.verrouillees
+        }
+        self.assertEqual(ouvrables, OUVRABLES_AU_MANAGER)
+
+    def test_projets_et_types_de_dossiers_ne_s_ouvrent_pas_au_pays(self):
+        """Modifier un projet, tenir la liste des types qui fixe ses
+        dossiers : jamais le pays. Créer un projet : jamais le siège."""
+        for cle in ("projets.update", "dossier_kinds.manage"):
+            with self.subTest(cle=cle):
+                self.assertIn(Role.MANAGER, CAPACITES_PAR_CLE[cle].verrouillees)
+        self.assertTrue(
+            {Role.ADMIN, Role.SUPER_ADMIN} <= CAPACITES_PAR_CLE["projets.create"].verrouillees
+        )
+        self.assertIn(Role.ADMIN, CAPACITES_PAR_CLE["dossier_kinds.manage"].verrouillees)
+        self.assertEqual(roles_pour("dossier_kinds.manage"), {Role.SUPER_ADMIN})
+
+
 class MatriceDesDroitsTests(ScopingTestCase):
     @classmethod
     def setUpTestData(cls):

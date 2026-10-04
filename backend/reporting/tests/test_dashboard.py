@@ -533,6 +533,10 @@ class NotificationTests(DashboardTestCase):
             number="CI-0001", label="Salon Abidjan", country=self.ivoire,
             date=date(self.year, 4, 2), status=Status.SUBMITTED,
         )
+        self.make_expense(
+            dossier=abidjan, country=self.ivoire, project=None, team=None,
+            status=Status.SUBMITTED,
+        )
         self.notifier()  # justificatif manquant sur les deux dossiers
 
         self.login(self.controller)
@@ -715,12 +719,8 @@ class DashboardCostTests(DashboardTestCase):
     def test_la_charge_utile_des_alertes_est_plafonnee(self):
         from reporting.views import MAX_ALERTS
 
-        for index in range(MAX_ALERTS + 10):
-            Dossier.objects.create(
-                number=f"P-{index:03d}", label=f"Dossier {index}",
-                country=self.togo, date=date(self.year, 2, 1),
-                status=Status.SUBMITTED,
-            )
+        # Chaque dossier a une ligne sans pièce (décision 107).
+        self._peupler(MAX_ALERTS + 10)
         self.login(self.doo)
 
         _, response = self._requetes()

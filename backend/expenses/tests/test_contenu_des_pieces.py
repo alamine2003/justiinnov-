@@ -21,7 +21,7 @@ class ContenuDesPiecesTests(ExpenseTestCase):
         self.login(self.owner)
         return self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "kind": "invoice",
+            {"expense": self.ligne_de_preuve().pk, "kind": "invoice",
              "file": SimpleUploadedFile(nom, contenu, content_type=content_type)},
             format="multipart",
         )
@@ -70,7 +70,7 @@ class SignaturesStrictesTests(ExpenseTestCase):
         self.login(self.owner)
         return self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "kind": "invoice",
+            {"expense": self.ligne_de_preuve().pk, "kind": "invoice",
              "file": SimpleUploadedFile(nom, contenu, content_type="application/octet-stream")},
             format="multipart",
         )

@@ -51,6 +51,22 @@
                     },
                     {
                         "in": "query",
+                        "name": "debut",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "fin",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "in": "query",
                         "name": "object_type",
                         "schema": {
                             "type": "string"
@@ -81,6 +97,13 @@
                         "description": "Nombre de résultats à retourner par page.",
                         "schema": {
                             "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "projet",
+                        "schema": {
+                            "type": "number"
                         }
                     },
                     {
@@ -157,6 +180,63 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/AuditLog"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/audit/synthese/": {
+            "get": {
+                "operationId": "audit_synthese_retrieve",
+                "description": "Le tableau de bord de l'audit : les deux journaux, comptés en base (décision 111).",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "country",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un pays."
+                    },
+                    {
+                        "in": "query",
+                        "name": "debut",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Premier jour (défaut : il y a 30 jours)."
+                    },
+                    {
+                        "in": "query",
+                        "name": "fin",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Dernier jour (défaut : aujourd'hui)."
+                    }
+                ],
+                "tags": [
+                    "audit"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SyntheseAudit"
                                 }
                             }
                         },
@@ -1632,7 +1712,7 @@
         "/api/dossier-kinds/": {
             "get": {
                 "operationId": "dossier_kinds_list",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté, tenue par le super administrateur seul\n(``dossier_kinds.manage``, verrouillé à la RH et au pays, décision\n108) : elle fixe les dossiers que chaque projet reçoit d'office\n(décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.\nToute modification exige un motif (décision 109).",
                 "parameters": [
                     {
                         "in": "query",
@@ -1718,7 +1798,7 @@
             },
             "post": {
                 "operationId": "dossier_kinds_create",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté, tenue par le super administrateur seul\n(``dossier_kinds.manage``, verrouillé à la RH et au pays, décision\n108) : elle fixe les dossiers que chaque projet reçoit d'office\n(décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.\nToute modification exige un motif (décision 109).",
                 "tags": [
                     "dossier-kinds"
                 ],
@@ -1767,7 +1847,7 @@
         "/api/dossier-kinds/{id}/": {
             "get": {
                 "operationId": "dossier_kinds_retrieve",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté, tenue par le super administrateur seul\n(``dossier_kinds.manage``, verrouillé à la RH et au pays, décision\n108) : elle fixe les dossiers que chaque projet reçoit d'office\n(décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.\nToute modification exige un motif (décision 109).",
                 "parameters": [
                     {
                         "in": "path",
@@ -1805,7 +1885,7 @@
             },
             "put": {
                 "operationId": "dossier_kinds_update",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté, tenue par le super administrateur seul\n(``dossier_kinds.manage``, verrouillé à la RH et au pays, décision\n108) : elle fixe les dossiers que chaque projet reçoit d'office\n(décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.\nToute modification exige un motif (décision 109).",
                 "parameters": [
                     {
                         "in": "path",
@@ -1863,7 +1943,7 @@
             },
             "patch": {
                 "operationId": "dossier_kinds_partial_update",
-                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté — le pays y choisit le type d'un dossier —,\ntenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.\nElle s'écrit comme la configuration (``configuration.manage``,\nadministrateurs, verrouillé au pays) et non comme le référentiel d'un\npays, que l'organisation peut ouvrir au pays : un manager désactiverait\nsinon « Stands » pour les dix-sept filiales.",
+                "description": "La liste commune des types de dossiers (décision 101).\n\nLue par tout compte connecté, tenue par le super administrateur seul\n(``dossier_kinds.manage``, verrouillé à la RH et au pays, décision\n108) : elle fixe les dossiers que chaque projet reçoit d'office\n(décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.\nToute modification exige un motif (décision 109).",
                 "parameters": [
                     {
                         "in": "path",
@@ -1922,7 +2002,7 @@
         "/api/dossiers/": {
             "get": {
                 "operationId": "dossiers_list",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
+                "description": "Dossiers de justification, prédéfinis par leur projet (décision 106).\n\nUn dossier naît avec son projet, un par type de dossier : l'API n'en crée\nni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit\nses lignes, le renomme jusqu'à la clôture et le soumet.",
                 "parameters": [
                     {
                         "in": "query",
@@ -2057,59 +2137,12 @@
                         "description": ""
                     }
                 }
-            },
-            "post": {
-                "operationId": "dossiers_create",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
-                "tags": [
-                    "dossiers"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/DossierRequest"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/DossierRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/DossierRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "tokenAuth": []
-                    },
-                    {
-                        "cookieAuth": []
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Dossier"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
             }
         },
         "/api/dossiers/{id}/": {
             "get": {
                 "operationId": "dossiers_retrieve",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
+                "description": "Dossiers de justification, prédéfinis par leur projet (décision 106).\n\nUn dossier naît avec son projet, un par type de dossier : l'API n'en crée\nni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit\nses lignes, le renomme jusqu'à la clôture et le soumet.",
                 "parameters": [
                     {
                         "in": "path",
@@ -2147,7 +2180,7 @@
             },
             "put": {
                 "operationId": "dossiers_update",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
+                "description": "Dossiers de justification, prédéfinis par leur projet (décision 106).\n\nUn dossier naît avec son projet, un par type de dossier : l'API n'en crée\nni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit\nses lignes, le renomme jusqu'à la clôture et le soumet.",
                 "parameters": [
                     {
                         "in": "path",
@@ -2205,7 +2238,7 @@
             },
             "patch": {
                 "operationId": "dossiers_partial_update",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
+                "description": "Dossiers de justification, prédéfinis par leur projet (décision 106).\n\nUn dossier naît avec son projet, un par type de dossier : l'API n'en crée\nni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit\nses lignes, le renomme jusqu'à la clôture et le soumet.",
                 "parameters": [
                     {
                         "in": "path",
@@ -2259,43 +2292,12 @@
                         "description": ""
                     }
                 }
-            },
-            "delete": {
-                "operationId": "dossiers_destroy",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id",
-                        "schema": {
-                            "type": "integer"
-                        },
-                        "description": "Un(une) valeur entière unique identifiant ce(cette) Dossier de justification.",
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "dossiers"
-                ],
-                "security": [
-                    {
-                        "tokenAuth": []
-                    },
-                    {
-                        "cookieAuth": []
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No response body"
-                    }
-                }
             }
         },
         "/api/dossiers/{id}/close/": {
             "post": {
                 "operationId": "dossiers_close_create",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
+                "description": "Dossiers de justification, prédéfinis par leur projet (décision 106).\n\nUn dossier naît avec son projet, un par type de dossier : l'API n'en crée\nni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit\nses lignes, le renomme jusqu'à la clôture et le soumet.",
                 "parameters": [
                     {
                         "in": "path",
@@ -2354,7 +2356,7 @@
         "/api/dossiers/{id}/justify/": {
             "post": {
                 "operationId": "dossiers_justify_create",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
+                "description": "Dossiers de justification, prédéfinis par leur projet (décision 106).\n\nUn dossier naît avec son projet, un par type de dossier : l'API n'en crée\nni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit\nses lignes, le renomme jusqu'à la clôture et le soumet.",
                 "parameters": [
                     {
                         "in": "path",
@@ -2413,7 +2415,7 @@
         "/api/dossiers/{id}/reject/": {
             "post": {
                 "operationId": "dossiers_reject_create",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
+                "description": "Dossiers de justification, prédéfinis par leur projet (décision 106).\n\nUn dossier naît avec son projet, un par type de dossier : l'API n'en crée\nni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit\nses lignes, le renomme jusqu'à la clôture et le soumet.",
                 "parameters": [
                     {
                         "in": "path",
@@ -2472,7 +2474,7 @@
         "/api/dossiers/{id}/rename/": {
             "post": {
                 "operationId": "dossiers_rename_create",
-                "description": "Change le titre du dossier, à tout moment (décision 104).",
+                "description": "Change le titre du dossier, jusqu'à sa clôture (décisions 104 et 108).",
                 "parameters": [
                     {
                         "in": "path",
@@ -2591,7 +2593,7 @@
         "/api/dossiers/{id}/review/": {
             "post": {
                 "operationId": "dossiers_review_create",
-                "description": "Dossiers de justification, ouverts dans un projet (décision 102).",
+                "description": "Dossiers de justification, prédéfinis par leur projet (décision 106).\n\nUn dossier naît avec son projet, un par type de dossier : l'API n'en crée\nni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit\nses lignes, le renomme jusqu'à la clôture et le soumet.",
                 "parameters": [
                     {
                         "in": "path",
@@ -4623,6 +4625,22 @@
                     },
                     {
                         "in": "query",
+                        "name": "debut",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "fin",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "in": "query",
                         "name": "model_name",
                         "schema": {
                             "type": "string",
@@ -4645,6 +4663,13 @@
                             ]
                         },
                         "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur\n* `beneficiary` - Bénéficiaire\n* `dossier_kind` - Type de dossier"
+                    },
+                    {
+                        "in": "query",
+                        "name": "object_id",
+                        "schema": {
+                            "type": "integer"
+                        }
                     },
                     {
                         "name": "ordering",
@@ -4671,6 +4696,22 @@
                         "description": "Nombre de résultats à retourner par page.",
                         "schema": {
                             "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "performed_by",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un terme de recherche.",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 ],
@@ -5905,7 +5946,7 @@
         "/api/projects/": {
             "get": {
                 "operationId": "projects_list",
-                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``, déclaration : jamais le siège) et\nchacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en\ncorrige le titre (``projets.rename``) ; le siège en change le statut,\nla description, les désactive et type ceux d'avant la 2.0\n(``projets.update``). Toute modification exige un motif, gardé au\njournal (décision 109). La référence est attribuée à la création, ligne\ndu pays verrouillée (``core.numerotation``).",
                 "parameters": [
                     {
                         "in": "query",
@@ -6020,7 +6061,7 @@
             },
             "post": {
                 "operationId": "projects_create",
-                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``, déclaration : jamais le siège) et\nchacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en\ncorrige le titre (``projets.rename``) ; le siège en change le statut,\nla description, les désactive et type ceux d'avant la 2.0\n(``projets.update``). Toute modification exige un motif, gardé au\njournal (décision 109). La référence est attribuée à la création, ligne\ndu pays verrouillée (``core.numerotation``).",
                 "tags": [
                     "projects"
                 ],
@@ -6069,7 +6110,7 @@
         "/api/projects/{id}/": {
             "get": {
                 "operationId": "projects_retrieve",
-                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``, déclaration : jamais le siège) et\nchacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en\ncorrige le titre (``projets.rename``) ; le siège en change le statut,\nla description, les désactive et type ceux d'avant la 2.0\n(``projets.update``). Toute modification exige un motif, gardé au\njournal (décision 109). La référence est attribuée à la création, ligne\ndu pays verrouillée (``core.numerotation``).",
                 "parameters": [
                     {
                         "in": "path",
@@ -6107,7 +6148,7 @@
             },
             "put": {
                 "operationId": "projects_update",
-                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``, déclaration : jamais le siège) et\nchacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en\ncorrige le titre (``projets.rename``) ; le siège en change le statut,\nla description, les désactive et type ceux d'avant la 2.0\n(``projets.update``). Toute modification exige un motif, gardé au\njournal (décision 109). La référence est attribuée à la création, ligne\ndu pays verrouillée (``core.numerotation``).",
                 "parameters": [
                     {
                         "in": "path",
@@ -6165,7 +6206,7 @@
             },
             "patch": {
                 "operationId": "projects_partial_update",
-                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``) ; le siège les modifie, les type\net les désactive (``referentiel.update``). La référence est attribuée à\nla création, ligne du pays verrouillée (``core.numerotation``).",
+                "description": "Les projets : la rubrique principale depuis la 2.0 (décision 100).\n\nLe pays les crée (``projets.create``, déclaration : jamais le siège) et\nchacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en\ncorrige le titre (``projets.rename``) ; le siège en change le statut,\nla description, les désactive et type ceux d'avant la 2.0\n(``projets.update``). Toute modification exige un motif, gardé au\njournal (décision 109). La référence est attribuée à la création, ligne\ndu pays verrouillée (``core.numerotation``).",
                 "parameters": [
                     {
                         "in": "path",
@@ -6221,6 +6262,146 @@
                 }
             }
         },
+        "/api/projects/{id}/completer/": {
+            "post": {
+                "operationId": "projects_completer_create",
+                "description": "Ouvre les dossiers prédéfinis qui manquent au projet (décision 106).\n\nUn projet réactivé, un type de dossier ajouté depuis, un projet typé\navant la décision : le siège le complète à la demande, jamais\nd'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils\nreviennent au pays.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Projet.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Project"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/projects/{id}/historique/": {
+            "get": {
+                "operationId": "projects_historique_retrieve",
+                "description": "Tout ce qui est arrivé au projet et à ses dossiers (décision 110).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Projet.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HistoriqueDeProjet"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/projects/{id}/rename/": {
+            "post": {
+                "operationId": "projects_rename_create",
+                "description": "Change le titre du projet, motif à l'appui (décisions 108 et 109).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Projet.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RenommerProjetRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RenommerProjetRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RenommerProjetRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Project"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/projects/par-pays/": {
             "get": {
                 "operationId": "projects_par_pays_retrieve",
@@ -6253,11 +6434,18 @@
         "/api/proofs/": {
             "get": {
                 "operationId": "proofs_list",
-                "description": "Pièces justificatives, rattachées au dossier.",
+                "description": "Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107).",
                 "parameters": [
                     {
                         "in": "query",
                         "name": "dossier",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "expense",
                         "schema": {
                             "type": "integer"
                         }
@@ -6404,7 +6592,7 @@
         "/api/proofs/{id}/": {
             "get": {
                 "operationId": "proofs_retrieve",
-                "description": "Pièces justificatives, rattachées au dossier.",
+                "description": "Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107).",
                 "parameters": [
                     {
                         "in": "path",
@@ -6442,7 +6630,7 @@
             },
             "put": {
                 "operationId": "proofs_update",
-                "description": "Pièces justificatives, rattachées au dossier.",
+                "description": "Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107).",
                 "parameters": [
                     {
                         "in": "path",
@@ -6500,7 +6688,7 @@
             },
             "patch": {
                 "operationId": "proofs_partial_update",
-                "description": "Pièces justificatives, rattachées au dossier.",
+                "description": "Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107).",
                 "parameters": [
                     {
                         "in": "path",
@@ -9015,6 +9203,9 @@
                         "nullable": true,
                         "title": "Adresse IP"
                     },
+                    "motif": {
+                        "type": "string"
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -9038,6 +9229,7 @@
                     "diff",
                     "performed_by",
                     "ip_address",
+                    "motif",
                     "created_at"
                 ]
             },
@@ -9097,6 +9289,99 @@
                 "required": [
                     "current_password",
                     "new_password"
+                ]
+            },
+            "CompteursAudit": {
+                "type": "object",
+                "description": "Les compteurs de la synthèse d'audit (décision 111).",
+                "properties": {
+                    "circuit": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "referentiel": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "declarations": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "decisions": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "reouvertures": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "rectifications": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "refus": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "pieces": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "sorties": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "imports": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "suppressions": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "renommages": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "changements_de_droits": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "echecs_de_connexion": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "reinitialisations_2fa": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "desactivations": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "projets": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "circuit",
+                    "referentiel",
+                    "declarations",
+                    "decisions",
+                    "reouvertures",
+                    "rectifications",
+                    "refus",
+                    "pieces",
+                    "sorties",
+                    "imports",
+                    "suppressions",
+                    "renommages",
+                    "changements_de_droits",
+                    "echecs_de_connexion",
+                    "reinitialisations_2fa",
+                    "desactivations",
+                    "projets"
                 ]
             },
             "Configuration": {
@@ -10234,6 +10519,10 @@
                         "type": "integer",
                         "readOnly": true
                     },
+                    "lignes_sans_preuve": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "allowed_actions": {
                         "type": "array",
                         "items": {
@@ -10290,6 +10579,7 @@
                     "totals",
                     "expense_count",
                     "proof_count",
+                    "lignes_sans_preuve",
                     "allowed_actions",
                     "created_by",
                     "created_at",
@@ -10443,6 +10733,10 @@
                         "type": "integer",
                         "readOnly": true
                     },
+                    "lignes_sans_preuve": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "allowed_actions": {
                         "type": "array",
                         "items": {
@@ -10513,6 +10807,7 @@
                     "totals",
                     "expense_count",
                     "proof_count",
+                    "lignes_sans_preuve",
                     "allowed_actions",
                     "created_by",
                     "created_at",
@@ -10601,6 +10896,11 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
+                    },
+                    "motif": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 1000
                     }
                 },
                 "required": [
@@ -10826,6 +11126,10 @@
                         "type": "integer",
                         "readOnly": true
                     },
+                    "lignes_sans_preuve": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "allowed_actions": {
                         "type": "array",
                         "items": {
@@ -10900,12 +11204,98 @@
                     "totals",
                     "expense_count",
                     "proof_count",
+                    "lignes_sans_preuve",
                     "allowed_actions",
                     "created_by",
                     "created_at",
                     "updated_at",
                     "expenses",
                     "proofs"
+                ]
+            },
+            "EntreeHistorique": {
+                "type": "object",
+                "description": "Une entrée de l'historique d'un projet : référentiel ou circuit (décision 110).",
+                "properties": {
+                    "source": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/SourceEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "action": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "action_display": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "objet": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "object_id": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "label": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "user": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "ip_address": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "motif": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "avant": {
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "apres": {
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "note": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "source",
+                    "id",
+                    "action",
+                    "action_display",
+                    "objet",
+                    "object_id",
+                    "label",
+                    "user",
+                    "ip_address",
+                    "motif",
+                    "avant",
+                    "apres",
+                    "note",
+                    "created_at"
                 ]
             },
             "ExchangeRate": {
@@ -11184,6 +11574,10 @@
                         },
                         "readOnly": true
                     },
+                    "has_proof": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -11235,6 +11629,7 @@
                     "control_note",
                     "created_by",
                     "allowed_actions",
+                    "has_proof",
                     "created_at",
                     "updated_at"
                 ]
@@ -11246,6 +11641,11 @@
                     "id": {
                         "type": "integer",
                         "readOnly": true
+                    },
+                    "expense": {
+                        "type": "integer",
+                        "nullable": true,
+                        "title": "Ligne de dépense"
                     },
                     "original_name": {
                         "type": "string",
@@ -11295,6 +11695,7 @@
                 },
                 "required": [
                     "id",
+                    "expense",
                     "original_name",
                     "kind",
                     "kind_display",
@@ -11499,6 +11900,10 @@
                         },
                         "readOnly": true
                     },
+                    "has_proof": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -11530,10 +11935,6 @@
                         "items": {
                             "$ref": "#/components/schemas/ExpenseProof"
                         },
-                        "readOnly": true
-                    },
-                    "has_proof": {
-                        "type": "boolean",
                         "readOnly": true
                     }
                 },
@@ -11575,13 +11976,13 @@
                     "control_note",
                     "created_by",
                     "allowed_actions",
+                    "has_proof",
                     "created_at",
                     "updated_at",
                     "dossier_label",
                     "expense_title_label",
                     "marketing_category_name",
-                    "proofs",
-                    "has_proof"
+                    "proofs"
                 ]
             },
             "ExpenseRequest": {
@@ -11962,6 +12363,10 @@
                         },
                         "readOnly": true
                     },
+                    "has_proof": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -12017,6 +12422,7 @@
                     "control_note",
                     "created_by",
                     "allowed_actions",
+                    "has_proof",
                     "created_at",
                     "updated_at"
                 ]
@@ -12065,6 +12471,27 @@
                 "type": "string",
                 "description": "* `ok` - ok\n* `indisponible` - indisponible\n* `replique` - replique"
             },
+            "HistoriqueDeProjet": {
+                "type": "object",
+                "description": "L'historique d'un projet, du plus récent au plus ancien, plafonné.",
+                "properties": {
+                    "entrees": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EntreeHistorique"
+                        },
+                        "readOnly": true
+                    },
+                    "tronque": {
+                        "type": "boolean",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "entrees",
+                    "tronque"
+                ]
+            },
             "ImportError": {
                 "type": "object",
                 "properties": {
@@ -12109,10 +12536,6 @@
             "ImportResult": {
                 "type": "object",
                 "properties": {
-                    "dossiers_crees": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
                     "lignes_creees": {
                         "type": "integer",
                         "readOnly": true
@@ -12138,12 +12561,34 @@
                     }
                 },
                 "required": [
-                    "dossiers_crees",
                     "lignes_creees",
                     "equipes_creees",
                     "managers_crees",
                     "erreurs",
                     "dry_run"
+                ]
+            },
+            "JourAudit": {
+                "type": "object",
+                "properties": {
+                    "jour": {
+                        "type": "string",
+                        "format": "date",
+                        "readOnly": true
+                    },
+                    "circuit": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "referentiel": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "jour",
+                    "circuit",
+                    "referentiel"
                 ]
             },
             "LanguageEnum": {
@@ -13552,6 +13997,11 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
+                    },
+                    "motif": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 1000
                     }
                 }
             },
@@ -13867,14 +14317,30 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
+                    },
+                    "team": {
+                        "type": "integer",
+                        "writeOnly": true,
+                        "nullable": true,
+                        "title": "Équipe"
+                    },
+                    "motif": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 1000
                     }
                 }
             },
             "PatchedProofRequest": {
                 "type": "object",
+                "description": "Une pièce justificative, déposée sur la ligne qu'elle prouve (décision 107).\n\nLe dossier se déduit de la ligne ; fourni, il doit être le sien. Les\npièces d'avant la 2.0, sans ligne, restent lisibles et se remplacent\nsur une ligne de leur dossier.",
                 "properties": {
                     "dossier": {
                         "type": "integer"
+                    },
+                    "expense": {
+                        "type": "integer",
+                        "nullable": true
                     },
                     "file": {
                         "type": "string",
@@ -14020,6 +14486,28 @@
                 ],
                 "type": "string",
                 "description": "* `cash` - Espèces\n* `transfer` - Virement\n* `mobile` - Mobile money\n* `card` - Carte\n* `check` - Chèque\n* `other` - Autre"
+            },
+            "PaysAudit": {
+                "type": "object",
+                "properties": {
+                    "country": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "count": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "country",
+                    "name",
+                    "count"
+                ]
             },
             "PaysCompte": {
                 "type": "object",
@@ -14248,7 +14736,22 @@
                     "projets.create": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Ouvrir un congrès, un voyage ou un soutien financier dans son pays ; sa référence est attribuée."
+                        "description": "Ouvrir un congrès, un voyage ou un soutien financier dans son pays : il reçoit ses dossiers prédéfinis."
+                    },
+                    "projets.rename": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Changer le titre d'un projet de son pays, motif à l'appui ; l'ancien titre reste au journal."
+                    },
+                    "projets.update": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Changer le statut ou la description d'un projet, le désactiver, typer un projet d'avant la 2.0 ; motif obligatoire."
+                    },
+                    "dossier_kinds.manage": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Ajouter, renommer ou désactiver un type de dossier de la liste commune aux filiales."
                     },
                     "referentiel.update": {
                         "type": "boolean",
@@ -14288,7 +14791,7 @@
                     "expenses.create": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Ouvrir un dossier dans son pays, y ajouter des lignes de dépense."
+                        "description": "Saisir les lignes de dépense dans les dossiers prédéfinis des projets de son pays."
                     },
                     "expenses.update": {
                         "type": "boolean",
@@ -14298,12 +14801,12 @@
                     "expenses.delete": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Retirer un dossier ou une ligne jamais soumis. Son auteur seulement."
+                        "description": "Retirer une ligne jamais soumise, avec ses pièces. Son auteur seulement."
                     },
                     "proofs.upload": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Joindre un justificatif, ou le remplacer, jusqu'à la clôture."
+                        "description": "Joindre à une ligne son justificatif, ou le remplacer, jusqu'à la clôture."
                     },
                     "dossiers.submit": {
                         "type": "boolean",
@@ -14348,7 +14851,7 @@
                     "dossiers.rename": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Changer le titre d'un dossier de son pays, même soumis ou clôturé ; l'ancien titre reste au journal."
+                        "description": "Changer le titre d'un dossier de son pays tant qu'il n'est pas clôturé ; l'ancien titre reste au journal."
                     },
                     "data.export": {
                         "type": "boolean",
@@ -14358,7 +14861,7 @@
                     "data.import": {
                         "type": "boolean",
                         "readOnly": true,
-                        "description": "Charger un classeur de dépenses de son pays en brouillons."
+                        "description": "Verser un classeur de dépenses de son pays, en brouillons, dans le dossier prédéfini d'un projet."
                     }
                 },
                 "required": [
@@ -14374,6 +14877,9 @@
                     "managers.update",
                     "referentiel.create",
                     "projets.create",
+                    "projets.rename",
+                    "projets.update",
+                    "dossier_kinds.manage",
                     "referentiel.update",
                     "budgets.create",
                     "budgets.update",
@@ -14585,6 +15091,17 @@
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
+                    },
+                    "team": {
+                        "type": "integer",
+                        "writeOnly": true,
+                        "nullable": true,
+                        "title": "Équipe"
+                    },
+                    "motif": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 1000
                     }
                 },
                 "required": [
@@ -14604,6 +15121,7 @@
             },
             "Proof": {
                 "type": "object",
+                "description": "Une pièce justificative, déposée sur la ligne qu'elle prouve (décision 107).\n\nLe dossier se déduit de la ligne ; fourni, il doit être le sien. Les\npièces d'avant la 2.0, sans ligne, restent lisibles et se remplacent\nsur une ligne de leur dossier.",
                 "properties": {
                     "id": {
                         "type": "integer",
@@ -14611,6 +15129,10 @@
                     },
                     "dossier": {
                         "type": "integer"
+                    },
+                    "expense": {
+                        "type": "integer",
+                        "nullable": true
                     },
                     "original_name": {
                         "type": "string",
@@ -14709,6 +15231,7 @@
                 "required": [
                     "id",
                     "dossier",
+                    "expense",
                     "original_name",
                     "kind",
                     "kind_display",
@@ -14741,9 +15264,14 @@
             },
             "ProofRequest": {
                 "type": "object",
+                "description": "Une pièce justificative, déposée sur la ligne qu'elle prouve (décision 107).\n\nLe dossier se déduit de la ligne ; fourni, il doit être le sien. Les\npièces d'avant la 2.0, sans ligne, restent lisibles et se remplacent\nsur une ligne de leur dossier.",
                 "properties": {
                     "dossier": {
                         "type": "integer"
+                    },
+                    "expense": {
+                        "type": "integer",
+                        "nullable": true
                     },
                     "file": {
                         "type": "string",
@@ -14765,7 +15293,6 @@
                     }
                 },
                 "required": [
-                    "dossier",
                     "file"
                 ]
             },
@@ -14993,6 +15520,27 @@
                 "type": "string",
                 "description": "* `pending` - En attente\n* `approved` - Approuvée\n* `refused` - Refusée"
             },
+            "RenommerProjetRequest": {
+                "type": "object",
+                "description": "Le nouveau titre d'un projet et son motif (décisions 108 et 109).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "title": "Titre",
+                        "maxLength": 180
+                    },
+                    "motif": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                    }
+                },
+                "required": [
+                    "motif",
+                    "name"
+                ]
+            },
             "RenommerRequest": {
                 "type": "object",
                 "description": "Le nouveau titre d'un dossier (décision 104).",
@@ -15151,6 +15699,75 @@
                 "required": [
                     "country",
                     "name"
+                ]
+            },
+            "SourceEnum": {
+                "enum": [
+                    "referentiel",
+                    "circuit"
+                ],
+                "type": "string",
+                "description": "* `referentiel` - referentiel\n* `circuit` - circuit"
+            },
+            "SyntheseAudit": {
+                "type": "object",
+                "description": "Tout ce que l'audit doit montrer d'un coup d'œil, calculé en base.",
+                "properties": {
+                    "debut": {
+                        "type": "string",
+                        "format": "date",
+                        "readOnly": true
+                    },
+                    "fin": {
+                        "type": "string",
+                        "format": "date",
+                        "readOnly": true
+                    },
+                    "compteurs": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/CompteursAudit"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "par_jour": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/JourAudit"
+                        },
+                        "readOnly": true
+                    },
+                    "par_utilisateur": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/UtilisateurAudit"
+                        },
+                        "readOnly": true
+                    },
+                    "par_pays": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PaysAudit"
+                        },
+                        "readOnly": true
+                    },
+                    "a_surveiller": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EntreeHistorique"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "debut",
+                    "fin",
+                    "compteurs",
+                    "par_jour",
+                    "par_utilisateur",
+                    "par_pays",
+                    "a_surveiller"
                 ]
             },
             "Team": {
@@ -15523,6 +16140,23 @@
                     "email",
                     "role",
                     "username"
+                ]
+            },
+            "UtilisateurAudit": {
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "count": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "user",
+                    "count"
                 ]
             },
             "WorkflowConfiguration": {

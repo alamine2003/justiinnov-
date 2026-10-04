@@ -164,10 +164,16 @@ def _style_header(sheet, columns):
     sheet.freeze_panes = "A2"
 
 
-def _proof_summary(dossier):
-    """Reprend la nuance « Reçu (justif incomplet) » du fichier d'origine."""
+def _proof_summary(dossier, expense=None):
+    """Reprend la nuance « Reçu (justif incomplet) » du fichier d'origine.
+
+    Pour une ligne (décision 107) : ses pièces, et celles d'avant la 2.0
+    déposées sur tout le dossier. Lu dans le préchargement du dossier.
+    """
     labels = []
     for proof in dossier.proofs.all():
+        if expense is not None and proof.expense_id not in (expense.pk, None):
+            continue
         if proof.status == Proof.ProofStatus.ARCHIVED:
             continue
         label = proof.get_kind_display()
@@ -209,13 +215,9 @@ def lignes_depenses(expenses):
     )
     totals = {"amount": ZERO, "justified": ZERO}
     devises = set()
-    # Le résumé des pièces est calculé une fois par dossier, pas par ligne.
-    pieces = {}
 
     for expense in source:
         dossier = expense.dossier
-        if dossier.pk not in pieces:
-            pieces[dossier.pk] = _proof_summary(dossier)
         # La ligne TOTAL suit la règle des écrans : un brouillon n'est pas
         # une dépense, il est listé (colonne STATUT) mais ne compte pas.
         if expense.status != Status.DRAFT:
@@ -239,7 +241,7 @@ def lignes_depenses(expenses):
             expense.justified_amount,
             expense.amount - expense.justified_amount,
             expense.get_status_display(),
-            pieces[dossier.pk],
+            _proof_summary(dossier, expense),
             _projet(dossier),
             dossier.project.get_kind_display() if dossier.project else "",
             dossier.kind.name if dossier.kind else "",

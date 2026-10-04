@@ -214,7 +214,7 @@ class Command(BaseCommand):
                 if non_converties else ""
             )
             + "\n" + _("Dépenses saisies sur la période : %(count)s") % {"count": nouvelles} + "\n"
-            + _("Dossiers sans aucun justificatif : %(count)s") % {"count": sans_preuve} + "\n\n"
+            + _("Dossiers dont une ligne est sans justificatif : %(count)s") % {"count": sans_preuve} + "\n\n"
             + (
                 _("Le détail par enveloppe et par dossier figure en pièce jointe.")
                 if avec_piece

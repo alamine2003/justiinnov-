@@ -15,6 +15,7 @@ const pages = [
   ["projets", "/projets"],
   ["dossiers", "/dossiers"],
   ["registre", "/registre"],
+  ["audit", "/audit"],
   ["budgets", "/budgets"],
   ["configuration", "/configuration"],
   ["login", "/login"],

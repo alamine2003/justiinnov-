@@ -27,7 +27,7 @@ from core.models import (
     Team,
     WorkflowConfiguration,
 )
-from core.serializers import DetailField
+from core.serializers import DetailField, EntreeHistoriqueSerializer
 
 from .contacts import est_un_telephone, normaliser_telephone
 from .models import (
@@ -342,8 +342,20 @@ class BeneficiarySerializer(serializers.ModelSerializer):
 
 
 class ProofSerializer(serializers.ModelSerializer):
+    """Une pièce justificative, déposée sur la ligne qu'elle prouve (décision 107).
+
+    Le dossier se déduit de la ligne ; fourni, il doit être le sien. Les
+    pièces d'avant la 2.0, sans ligne, restent lisibles et se remplacent
+    sur une ligne de leur dossier.
+    """
+
     dossier = ChampCloisonne(
-        queryset=Dossier.objects.all(), chemin_pays="country", chemin_equipe="team"
+        queryset=Dossier.objects.all(), chemin_pays="country", chemin_equipe="team",
+        required=False,
+    )
+    expense = ChampCloisonne(
+        queryset=Expense.objects.all(), chemin_pays="country", chemin_equipe="team",
+        required=False, allow_null=True,
     )
     replaces = ChampCloisonne(
         queryset=Proof.objects.all(), chemin_pays="dossier__country",
@@ -357,12 +369,12 @@ class ProofSerializer(serializers.ModelSerializer):
     #: Fixés au dépôt. Une pièce est une preuve : on n'en change ni le
     #: contenu, ni le dossier, ni la filiation — on en dépose une nouvelle
     #: version, qui archive l'ancienne.
-    IMMUABLES = ("file", "dossier", "replaces")
+    IMMUABLES = ("file", "dossier", "expense", "replaces")
 
     class Meta:
         model = Proof
         fields = [
-            "id", "dossier", "file", "original_name", "kind", "kind_display",
+            "id", "dossier", "expense", "file", "original_name", "kind", "kind_display",
             "status", "status_display", "is_complete", "sha256", "size",
             "content_type", "version", "replaces", "uploaded_by",
             "rejection_reason", "download_url", "allowed_reviews",
@@ -433,7 +445,10 @@ class ProofSerializer(serializers.ModelSerializer):
         if self.instance is not None:
             self._verifier_la_mise_a_jour()
 
+        if self.instance is None:
+            self._rattacher_a_la_ligne(attrs)
         dossier = attrs.get("dossier") or getattr(self.instance, "dossier", None)
+        expense = attrs.get("expense") or getattr(self.instance, "expense", None)
         if dossier is not None and dossier.status in PROOF_LOCKED_STATUSES:
             raise serializers.ValidationError(
                 _(
@@ -444,7 +459,7 @@ class ProofSerializer(serializers.ModelSerializer):
 
         replaces = attrs.get("replaces")
         if replaces is not None and dossier is not None:
-            self.verifier_le_remplacement(replaces, dossier)
+            self.verifier_le_remplacement(replaces, dossier, expense)
 
         uploaded = attrs.get("file")
         if uploaded is not None:
@@ -453,15 +468,29 @@ class ProofSerializer(serializers.ModelSerializer):
             attrs["original_name"] = uploaded.name[:255]
             # Le type vient du contenu vérifié, pas de l'en-tête du client.
             attrs["content_type"] = self._content_type
-            self._check_duplicate(dossier, attrs["sha256"], replaces)
+            self._check_duplicate(dossier, expense, attrs["sha256"], replaces)
         return attrs
+
+    def _rattacher_a_la_ligne(self, attrs):
+        """Une pièce neuve se dépose sur une ligne ; son dossier est celui de la ligne."""
+        expense = attrs.get("expense")
+        if expense is None:
+            raise serializers.ValidationError(
+                {"expense": _("Choisissez la ligne de dépense que cette pièce prouve.")}
+            )
+        fourni = attrs.get("dossier")
+        if fourni is not None and fourni.pk != expense.dossier_id:
+            raise serializers.ValidationError(
+                {"dossier": _("La pièce se range dans le dossier de sa ligne.")}
+            )
+        attrs["dossier"] = expense.dossier
 
     def create(self, validated_data):
         """Écrit la fiche ; un ``INSERT`` refusé ne laisse pas de fichier.
 
         ``FileField`` écrit le fichier dans le stockage **avant** l'insertion
         de la ligne : deux dépôts simultanés du même contenu passaient tous
-        deux la validation, la contrainte ``piece_unique_par_dossier``
+        deux la validation, la contrainte ``piece_unique_par_ligne``
         refusait le second, et son fichier restait dans le stockage sans
         fiche. Il est retiré aussitôt ; l'erreur, elle, remonte telle quelle
         à la vue, qui la traduit.
@@ -500,15 +529,22 @@ class ProofSerializer(serializers.ModelSerializer):
             )
 
     @staticmethod
-    def verifier_le_remplacement(replaces, dossier):
-        """La pièce remplacée doit appartenir au même dossier.
+    def verifier_le_remplacement(replaces, dossier, expense=None):
+        """La pièce remplacée doit appartenir au même dossier, et à la même ligne.
 
         Sans ce contrôle, un pays pouvait archiver — via ``replaces`` — une
         pièce d'un dossier qu'il n'a pas le droit de voir : le remplacement
         change le statut de la pièce remplacée. Le message ne distingue pas
-        « autre dossier » de « inexistante », pour ne rien révéler.
+        « autre dossier » de « inexistante », pour ne rien révéler. Une pièce
+        d'avant la 2.0, sans ligne, se remplace sur une ligne de son dossier :
+        c'est ainsi qu'elle trouve sa ligne (décision 107).
         """
-        if replaces.dossier_id != dossier.pk:
+        autre_ligne = (
+            expense is not None
+            and replaces.expense_id is not None
+            and replaces.expense_id != expense.pk
+        )
+        if replaces.dossier_id != dossier.pk or autre_ligne:
             raise serializers.ValidationError(
                 {"replaces": _("Pièce invalide pour ce dossier.")}
             )
@@ -517,20 +553,27 @@ class ProofSerializer(serializers.ModelSerializer):
                 {"replaces": _("Cette pièce a déjà été remplacée.")}
             )
 
-    def _check_duplicate(self, dossier, digest, replaces):
-        """Refuse un fichier identique déjà présent sur le même dossier (§5.4).
+    def _check_duplicate(self, dossier, expense, digest, replaces):
+        """Refuse un fichier identique déjà présent sur la même ligne (§5.4).
 
         Un remplacement explicite reste possible : c'est le seul cas où
-        redéposer le même contenu a un sens.
+        redéposer le même contenu a un sens. Une même facture peut prouver
+        deux lignes d'un dossier ; deux fois sur la même ligne, c'est un
+        doublon (décision 107).
         """
-        if dossier is None or replaces is not None:
+        if replaces is not None:
             return
-        existing = Proof.objects.filter(dossier=dossier, sha256=digest)
+        if expense is not None:
+            existing = Proof.objects.filter(expense=expense, sha256=digest)
+        elif dossier is not None:
+            existing = Proof.objects.filter(dossier=dossier, expense=None, sha256=digest)
+        else:
+            return
         if self.instance is not None:
             existing = existing.exclude(pk=self.instance.pk)
         if existing.exists():
             raise serializers.ValidationError(
-                {"file": _("Ce fichier est déjà rattaché à ce dossier (doublon).")}
+                {"file": _("Ce fichier est déjà rattaché à cette ligne (doublon).")}
             )
 
 
@@ -589,6 +632,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
         help_text=_("Toujours calculé : dépense − montant justifié."),
     )
     allowed_actions = serializers.SerializerMethodField()
+    #: La ligne a-t-elle une pièce exploitable (décision 107) ? Dit par le
+    #: serveur : l'interface n'a pas à connaître la règle.
+    has_proof = serializers.SerializerMethodField()
 
     class Meta:
         model = Expense
@@ -603,7 +649,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "original_currency", "original_amount", "original_rate",
             "payment_method", "payment_method_display",
             "status", "status_display", "note", "control_note", "created_by",
-            "allowed_actions", "created_at", "updated_at",
+            "allowed_actions", "has_proof", "created_at", "updated_at",
         ]
         # Le statut ne se modifie que par les actions de workflow ;
         # l'imputation budgétaire et le taux appliqué sont résolus par le
@@ -623,6 +669,13 @@ class ExpenseSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_budget_label(self, expense):
         return str(expense.budget) if expense.budget_id else None
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_has_proof(self, expense):
+        """Lu sur l'annotation ``avec_la_preuve`` ; à défaut, une requête."""
+        if hasattr(expense, "a_une_preuve"):
+            return expense.a_une_preuve
+        return not expense.dossier.lignes_sans_preuve().filter(pk=expense.pk).exists()
 
     @extend_schema_field(
         serializers.ListField(child=serializers.ChoiceField(choices=TRANSITION_CHOICES))
@@ -823,7 +876,7 @@ class ExpenseProofSerializer(serializers.ModelSerializer):
     class Meta:
         model = Proof
         fields = [
-            "id", "original_name", "kind", "kind_display",
+            "id", "expense", "original_name", "kind", "kind_display",
             "status", "status_display", "is_complete", "sha256", "version",
         ]
 
@@ -836,9 +889,7 @@ class ExpenseRegisterSerializer(ExpenseSerializer):
     détail de la dépense n'est écarté.
     """
 
-    proofs = ExpenseProofSerializer(
-        source="dossier.proofs", many=True, read_only=True
-    )
+    proofs = serializers.SerializerMethodField()
     dossier_label = serializers.CharField(source="dossier.label", read_only=True)
     expense_title_label = serializers.CharField(
         source="expense_title.label", read_only=True, allow_null=True
@@ -854,13 +905,27 @@ class ExpenseRegisterSerializer(ExpenseSerializer):
             "proofs", "has_proof",
         ]
 
+    @staticmethod
+    def _pieces_de_la_ligne(expense):
+        """Les pièces de la ligne (décision 107), et celles d'avant la 2.0
+        déposées sur tout le dossier, faute de mieux. Lues dans le
+        préchargement du dossier : aucune requête par ligne."""
+        return [
+            proof for proof in expense.dossier.proofs.all()
+            if proof.expense_id in (expense.pk, None)
+        ]
+
+    @extend_schema_field(ExpenseProofSerializer(many=True))
+    def get_proofs(self, expense):
+        return ExpenseProofSerializer(self._pieces_de_la_ligne(expense), many=True).data
+
     @extend_schema_field(serializers.BooleanField())
     def get_has_proof(self, expense):
         """Une pièce rejetée ou archivée ne prouve rien."""
         return any(
             proof.status
             not in (Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED)
-            for proof in expense.dossier.proofs.all()
+            for proof in self._pieces_de_la_ligne(expense)
         )
 
 
@@ -921,6 +986,8 @@ class DossierSerializer(serializers.ModelSerializer):
     totals = serializers.SerializerMethodField()
     expense_count = serializers.SerializerMethodField()
     proof_count = serializers.SerializerMethodField()
+    #: Lignes sans pièce exploitable (décision 107), comptées par le serveur.
+    lignes_sans_preuve = serializers.SerializerMethodField()
     allowed_actions = serializers.SerializerMethodField()
 
     class Meta:
@@ -934,8 +1001,8 @@ class DossierSerializer(serializers.ModelSerializer):
             "team", "team_name",
             "owner", "owner_name", "date",
             "status", "status_display", "note", "reopen_note", "totals",
-            "expense_count", "proof_count", "allowed_actions", "created_by",
-            "created_at", "updated_at",
+            "expense_count", "proof_count", "lignes_sans_preuve", "allowed_actions",
+            "created_by", "created_at", "updated_at",
         ]
         # Le motif de réouverture est posé par l'action ``reopen`` seule ;
         # le numéro et le rang par ``expenses.numerotation`` ; la référence
@@ -948,6 +1015,12 @@ class DossierSerializer(serializers.ModelSerializer):
     @extend_schema_field(DossierTotalsSerializer)
     def get_totals(self, dossier):
         return {key: str(value) for key, value in dossier.totals().items()}
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_lignes_sans_preuve(self, dossier):
+        if hasattr(dossier, "lines_sans_preuve"):
+            return 0 if dossier.piece_d_avant else dossier.lines_sans_preuve
+        return dossier.lignes_sans_preuve().count()
 
     @extend_schema_field(serializers.IntegerField())
     def get_expense_count(self, dossier):
@@ -1209,3 +1282,68 @@ class AuditLogSerializer(serializers.ModelSerializer):
             "label", "country", "country_name", "detail", "ip_address",
             "user_agent", "created_at",
         ]
+
+
+class CompteursAuditSerializer(serializers.Serializer):
+    """Les compteurs de la synthèse d'audit (décision 111)."""
+
+    circuit = serializers.IntegerField(read_only=True)
+    referentiel = serializers.IntegerField(read_only=True)
+    declarations = serializers.IntegerField(read_only=True)
+    decisions = serializers.IntegerField(read_only=True)
+    reouvertures = serializers.IntegerField(read_only=True)
+    rectifications = serializers.IntegerField(read_only=True)
+    refus = serializers.IntegerField(read_only=True)
+    pieces = serializers.IntegerField(read_only=True)
+    sorties = serializers.IntegerField(read_only=True)
+    imports = serializers.IntegerField(read_only=True)
+    suppressions = serializers.IntegerField(read_only=True)
+    renommages = serializers.IntegerField(read_only=True)
+    changements_de_droits = serializers.IntegerField(read_only=True)
+    echecs_de_connexion = serializers.IntegerField(read_only=True)
+    reinitialisations_2fa = serializers.IntegerField(read_only=True)
+    desactivations = serializers.IntegerField(read_only=True)
+    projets = serializers.IntegerField(read_only=True)
+
+
+class JourAuditSerializer(serializers.Serializer):
+    jour = serializers.DateField(read_only=True)
+    circuit = serializers.IntegerField(read_only=True)
+    referentiel = serializers.IntegerField(read_only=True)
+
+
+class UtilisateurAuditSerializer(serializers.Serializer):
+    user = serializers.CharField(read_only=True)
+    count = serializers.IntegerField(read_only=True)
+
+
+class PaysAuditSerializer(serializers.Serializer):
+    country = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    count = serializers.IntegerField(read_only=True)
+
+
+class SyntheseAuditSerializer(serializers.Serializer):
+    """Tout ce que l'audit doit montrer d'un coup d'œil, calculé en base."""
+
+    debut = serializers.DateField(read_only=True)
+    fin = serializers.DateField(read_only=True)
+    compteurs = CompteursAuditSerializer(read_only=True)
+    par_jour = JourAuditSerializer(many=True, read_only=True)
+    par_utilisateur = UtilisateurAuditSerializer(many=True, read_only=True)
+    par_pays = PaysAuditSerializer(many=True, read_only=True)
+    a_surveiller = EntreeHistoriqueSerializer(many=True, read_only=True)
+
+
+class SyntheseRequeteSerializer(serializers.Serializer):
+    """Les bornes d'une synthèse d'audit : période et pays, tous facultatifs."""
+
+    debut = serializers.DateField(required=False)
+    fin = serializers.DateField(required=False)
+    country = serializers.IntegerField(required=False)
+
+    def validate(self, attrs):
+        debut, fin = attrs.get("debut"), attrs.get("fin")
+        if debut and fin and debut > fin:
+            raise serializers.ValidationError({"debut": _("La période commence après sa fin.")})
+        return attrs

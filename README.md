@@ -116,7 +116,7 @@ super administrateur supervise.
 
 | Rôle | Libellé | Qui | Périmètre | Peut |
 |------|---------|-----|-----------|------|
-| `manager` | Manager (pays) | responsable dans une filiale | **son pays**, obligatoire, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | **seul à déclarer** : ouvrir les dossiers de son pays, saisir les lignes, déposer les justificatifs, **soumettre**, importer un classeur ; le référentiel de son pays est tenu par la RH |
+| `manager` | Manager (pays) | responsable dans une filiale | **son pays**, obligatoire, restreint à ses équipes (`UserProfile.teams`) ; sans équipe rattachée, tout son pays | **seul à déclarer** : ouvrir les projets de son pays (ils naissent avec leurs dossiers), saisir les lignes, déposer le justificatif de chaque ligne, **soumettre**, importer un classeur ; le référentiel de son pays est tenu par la RH |
 | `admin` | Administrateur (RH) | ressources humaines, au siège | tous pays, toujours | **seul à contrôler, de bout en bout** : mise en contrôle, justification ou refus, clôture, contrôle des pièces, **réouverture**, **décision sur une rectification** ; et l'administration : comptes et rôles, pays et référentiel, **journal d'audit**, **exports**, double authentification, **matrice des droits** ; il **lit** les enveloppes sans les fixer |
 | `super_admin` | Super administrateur (DG, DO, CEO, DEV) | direction et développeurs | tous pays, toujours | **superviser et allouer** : tout lire, relire le journal d'audit, administrer à égalité avec l'administrateur, et **seul attribuer, modifier et supprimer les enveloppes**, arbitrer les réallocations, tenir les taux de change (décision 91) — sans déclarer ni contrôler |
 
@@ -159,21 +159,40 @@ celui qui a saisi une dépense ne la contrôle pas.
 **Projets, puis dossiers (version 2.0).** Le projet est la rubrique
 principale : un congrès, un voyage ou un soutien financier (`kind`), avec
 une référence calculée à sa création, `TG-P-2026-001` — code du pays,
-année, rang dans le pays et l'année. Le pays ouvre ses projets
-(`POST /api/projects/`, capacité `projets.create`) ; le siège les modifie,
-les type et les désactive (`referentiel.update`). Un dossier s'ouvre **dans
-un projet** actif et typé, sous un **type de dossier** de ce type de projet
-(`POST /api/dossiers/` avec `project` et `kind`) : Stands, Voyages, Billets…
-— une liste commune aux filiales, tenue par le siège
-(`/api/dossier-kinds/`). Son numéro est calculé, `TG-P-2026-001-D001`, et ne
-se saisit plus ; ses lignes portent le projet du dossier. Le titre d'un
-dossier se renomme **à tout moment**, même clôturé, par un manager du pays
-(`POST /api/dossiers/{id}/rename/`, capacité `dossiers.rename`), et chaque
-changement est tracé (décisions 100 à 104). Dans l'interface, « Projets »
-remplace « Dossiers » dans la navigation : la liste des projets
-(`GET /api/projects/`, onglets par pays par `GET /api/projects/par-pays/`)
-mène à la fiche d'un projet, qui liste ses dossiers par type et en ouvre de
-nouveaux quand le serveur le permet (`accepte_des_dossiers`, décision 105).
+année, rang dans le pays et l'année. Le manager ouvre ses projets
+(`POST /api/projects/` avec `country`, `kind`, `name`, `team` ; capacité
+`projets.create`, au pays seul) et **chacun naît avec ses dossiers
+prédéfinis**, un par type de dossier de son type de projet : congrès —
+Stands, T-shirts, Collations, Voyages ; voyage — Billets, Carburant,
+Hôtellerie, Repas, Forfait ; soutien financier — Soutien financier
+(décision 106). La liste des types est commune aux filiales et tenue par
+le seul super administrateur (`/api/dossier-kinds/`, `dossier_kinds.manage`).
+Aucun dossier ne se crée ni ne se supprime par l'API : `POST` et `DELETE
+/api/dossiers/` répondent 405. Le numéro d'un dossier est calculé,
+`TG-P-2026-001-D001` ; ses lignes portent le projet du dossier.
+
+Le manager corrige le titre d'un projet (`POST /api/projects/{id}/rename/`,
+`{name, motif}`, `projets.rename`) ; le siège le modifie — hors titre —, le
+désactive ou type un projet d'avant la 2.0 (`PATCH /api/projects/{id}/` avec
+`motif`, `projets.update`), et le complète des dossiers prédéfinis qui lui
+manquent (`POST /api/projects/{id}/completer/`). Un projet qui ne recevrait
+aucun dossier ne se crée pas. **Toute modification d'un projet ou d'un type de dossier
+exige un motif**, gardé au journal (`ChangeLog.motif`, décision 109). Le
+titre d'un dossier se renomme **jusqu'à la clôture**, par un manager du
+pays (`POST /api/dossiers/{id}/rename/`, `dossiers.rename`), et chaque
+changement est tracé (décisions 104 et 108). **Chaque ligne a sa pièce** :
+`POST /api/proofs/` exige `expense`, la ligne que la pièce prouve
+(décision 107) ; des lignes sans pièce se soumettent avec un avertissement
+qui les compte, et le dossier ne se justifie pas tant que chacune n'a pas
+la sienne. La fiche d'un projet a son historique —
+`GET /api/projects/{id}/historique/`, projet, dossiers, lignes et pièces en
+une seule chronologie, lue avec `audit.read` (décision 110) — et l'audit son tableau de bord —
+`GET /api/audit/synthese/?debut=&fin=&country=` (décision 111) ; le journal
+d'audit se filtre par période et par projet (`?debut=&fin=&projet=`).
+Dans l'interface, « Projets » remplace « Dossiers » dans la navigation : la
+liste des projets (`GET /api/projects/`, onglets par pays par
+`GET /api/projects/par-pays/`) mène à la fiche d'un projet, qui liste ses
+dossiers par type (décision 105).
 
 **Un dossier appartient à un pays.** Son pays est attribué à la création,
 dans le périmètre de son auteur, et ne change plus. Seul ce pays remplit
@@ -475,7 +494,7 @@ au sein de la livraison continue, en sept travaux indépendants :
 | Parcours complet | la pile livrable (backend en production sans code monté, frontend nginx, Caddy devant avec le Caddyfile livré) démarre, des comptes jetables entrent par `compose cp` et `seed_users`, `seed_demo --base-jetable` remplit des données, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console, `/admin/` répond l'application et non le back-office, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
 | Exploitation | syntaxe et `shellcheck` des scripts de `deploy/`, tests de `sauvegarder.sh` avec des doublures |
 | Pile de production | `deploy/docker-compose.prod.yml` s'interpole dans chacun de ses modes, la base archive un segment dans le volume que `sauvegardes-init` lui a donné, le service de sauvegarde prend une sauvegarde physique sous `postgres`, et la reprise à un instant donné retrouve, dans son conteneur, les lignes effacées juste après cet instant |
-| Dépendances | `pip-audit --strict` et `npm audit --audit-level=high`, **bloquants** |
+| Dépendances | `pip-audit --strict` et `npm audit` au seuil `high` hors avis tolérés (`frontend/scripts/auditer-dependances.mts`, décision 112), **bloquants** |
 
 **La plateforme tourne sur un serveur dédié** (Hetzner), joint par le
 domaine gratuit `178-105-215-49.sslip.io` en attendant un nom de domaine
@@ -751,12 +770,13 @@ l'envoi, jamais avant.
 ## Import Excel et N°ORDRE
 
 `POST /api/imports/expenses.xlsx` (champ `file`, le pays : `data.import`)
-importe **dans un projet, sous un type de dossier** : les paramètres
+importe **dans le dossier prédéfini d'un projet** : les paramètres
 `project` et `kind` (requête ou formulaire) sont obligatoires depuis la 2.0
-et suivent les règles d'une ouverture de dossier. Chaque N°ORDRE du classeur
-devient un dossier du projet, numéroté par le serveur ; le N°ORDRE est gardé
-comme référence d'origine (`external_ref`), et un classeur réimporté — ou
-un export réimporté — retrouve ses dossiers. Il lit deux classeurs :
+et désignent le dossier du type choisi, que le projet a reçu à sa création
+(décision 106). L'import n'ouvre plus de dossier : toutes les lignes vont
+dans celui-là, qui doit être un brouillon de l'importateur. Le N°ORDRE du
+classeur entre dans l'identité de chaque ligne, et un classeur réimporté —
+ou un export réimporté — ne recrée rien. Il lit deux classeurs :
 l'export de la plateforme, et le **classeur historique du
 client** — feuille « BASE DE DONNEES ACTIONS », titre et note en tête,
 en-tête en septième ligne, neuf colonnes (N°ORDRE, DATE, TEAM, OWNER,
@@ -768,13 +788,14 @@ obligatoires.
 - Le pays est celui du projet. Un paramètre `country`, s'il est donné, doit
   être le même ; une cellule PAYS d'un autre pays est une erreur de ligne.
   Un projet inconnu et un projet hors périmètre reçoivent le même refus.
-- Le **N°ORDRE désigne un dossier du projet** : une ligne rejoint le dossier
-  du projet qui porte ce N°ORDRE (référence d'origine ou numéro) s'il est
-  encore en brouillon, sinon elle le crée ; un entier est lu en texte
-  (« 12 », jamais « 12.0 »).
-- **Une ligne importée n'existe qu'une fois par dossier.** Son identité est
-  l'empreinte de son jour, de son libellé et de son montant
-  (`Expense.import_key`) : la validation la compare aux lignes déjà en
+- Le **N°ORDRE** n'ouvre plus de dossier : il distingue deux lignes
+  identiques de deux N°ORDRE ; un entier est lu en texte (« 12 », jamais
+  « 12.0 »).
+- **Une ligne importée n'existe qu'une fois.** Son identité est
+  l'empreinte de son N°ORDRE, de son jour, de son libellé et de son montant
+  (`Expense.import_key`) ; la même ligne déjà déclarée dans un autre projet
+  du pays — le même classeur importé deux fois, ou rangé sous
+  « Historique » — est refusée, elle consommerait deux fois l'enveloppe : la validation la compare aux lignes déjà en
   base, et la base (`ligne_importee_unique_par_dossier`) tranche ce que la
   validation ne peut pas voir — un autre import du même classeur écrit au
   même instant. Le second import est refusé entier, sans rien écrire, et
@@ -788,7 +809,7 @@ obligatoires.
   ECART et STATUT sont ignorés — le siège constate. La mention de la colonne
   PIECES JUSTIFICATIVES est gardée en remarque de la ligne
   (« Pièce : Reçu(justif incomplet) ») ; la pièce elle-même se dépose ensuite
-  sur le dossier.
+  sur la ligne (décision 107).
 - Une équipe ou un manager que le pays ne connaît pas est **créé dans le
   pays** (et journalisé dans l'historique) **si l'importateur a ce droit sur
   le référentiel** (`referentiel.create`, `managers.create` — la RH par
@@ -796,7 +817,7 @@ obligatoires.
   et nomme ce qu'il faut demander. Un homonyme d'un autre pays n'est jamais
   réutilisé. Un manager rattaché à des équipes n'importe que pour elles, et
   jamais dans le brouillon d'un collègue. `?dry_run=true` valide tout, compte ce qui serait créé
-  (`dossiers_crees`, `lignes_creees`, `equipes_creees`, `managers_crees`) et
+  (`lignes_creees`, `equipes_creees`, `managers_crees`) et
   n'écrit rien.
 - Rien n'est écrit tant qu'une ligne est en erreur ; chaque erreur porte le
   numéro de ligne **du classeur**, tel qu'Excel l'affiche. Réimporter le même

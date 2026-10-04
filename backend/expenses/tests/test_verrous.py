@@ -89,10 +89,12 @@ class CourseTestCase(TransactionTestCase):
         client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
         return client
 
-    def _dossier(self, numero, montant, statut=Status.DRAFT):
+    def _dossier(self, numero, montant, statut=Status.DRAFT, kind=None):
         dossier = Dossier.objects.create(
+            # Sans type par défaut : un projet n'a qu'un dossier par type
+            # (décision 106), et ces courses en ouvrent plusieurs.
             number=numero, label=f"Mission {numero}", country=self.togo,
-            project=self.projet, kind=self.stands,
+            project=self.projet, kind=kind, predefini=kind is not None,
             team=self.team, owner=self.manager, date=date(self.year, 3, 15),
             status=statut, created_by=self.owner.username,
         )
@@ -251,7 +253,7 @@ class CourseSurLeCircuit(CourseTestCase):
         def deposer():
             return self._client(self.owner).post(
                 "/api/proofs/",
-                {"dossier": dossier.pk, "kind": "invoice",
+                {"expense": dossier.expenses.get().pk, "kind": "invoice",
                  "file": SimpleUploadedFile("recu.pdf", contenu, content_type="application/pdf")},
                 format="multipart",
             )
@@ -323,26 +325,27 @@ class CourseSurLaSaisie(CourseTestCase):
         ligne.refresh_from_db()
         self.assertEqual((ligne.title, ligne.amount), ("Péage", Decimal("2000.00")))
 
-    def test_une_ligne_ajoutee_pendant_le_retrait_du_dossier_ne_casse_rien(self):
-        """L'auteur retire son brouillon pendant qu'une ligne s'y ajoute :
-        l'ajout attend le verrou du dossier, puis apprend qu'il n'existe
-        plus — pas de 500, pas de ligne orpheline, pas de fichier perdu."""
+    def test_une_piece_deposee_pendant_le_retrait_de_sa_ligne_ne_casse_rien(self):
+        """L'auteur retire sa ligne pendant qu'une pièce s'y dépose : le dépôt
+        attend le verrou de la ligne, puis apprend qu'elle n'est plus — pas
+        de 500, pas de pièce orpheline (décision 107)."""
         dossier = self._dossier("N-0013", "1000.00")
+        ligne = dossier.expenses.get()
 
         premiere, seconde = self._en_course(
-            lambda: self._client(self.owner).delete(f"/api/dossiers/{dossier.pk}/"),
+            lambda: self._client(self.owner).delete(f"/api/expenses/{ligne.pk}/"),
             lambda: self._client(self.owner).post(
-                "/api/expenses/",
-                {"dossier": dossier.pk, "country": self.togo.pk, "date": timezone.now().isoformat(),
-                 "title": "Ajout tardif", "amount": "10.00", "team": self.team.pk, "owner": self.manager.pk},
-                format="json",
+                "/api/proofs/",
+                {"expense": ligne.pk, "file": SimpleUploadedFile(
+                    "tardif.pdf", b"%PDF-1.4 tardif", content_type="application/pdf")},
+                format="multipart",
             ),
         )
 
         self.assertEqual(premiere.status_code, status.HTTP_204_NO_CONTENT, premiere.data)
-        self.assertEqual(seconde.status_code, status.HTTP_404_NOT_FOUND, seconde.data)
-        self.assertFalse(Dossier.objects.filter(pk=dossier.pk).exists())
-        self.assertFalse(Expense.objects.filter(title="Ajout tardif").exists())
+        self.assertEqual(seconde.status_code, status.HTTP_400_BAD_REQUEST, seconde.data)
+        self.assertFalse(Expense.objects.filter(pk=ligne.pk).exists())
+        self.assertFalse(Proof.objects.filter(original_name="tardif.pdf").exists())
 
 
 class CourseSurLImport(CourseTestCase):
@@ -372,6 +375,10 @@ class CourseSurLImport(CourseTestCase):
         contenu = BytesIO()
         workbook.save(contenu)
         return contenu.getvalue()
+
+    def _dossier(self, numero, montant, statut=Status.DRAFT, kind=None):
+        # L'import se verse dans le dossier « Stands » du projet (décision 106).
+        return super()._dossier(numero, montant, statut, kind=self.stands)
 
     def _importer(self, contenu):
         # L'import est une déclaration : l'auteur des brouillons du pays

@@ -20,7 +20,7 @@ from rest_framework import status
 from accounts.permissions import get_access
 from core.journal import Trace
 from expenses import stockage, transitions
-from expenses.models import AuditLog, Dossier, FichierASupprimer, Proof
+from expenses.models import AuditLog, Dossier, Expense, FichierASupprimer, Proof
 from expenses.serializers import ProofSerializer
 from expenses.stockage import DELAI_DE_REPRISE, ESSAIS_MAX
 
@@ -50,7 +50,7 @@ class StockageTestCase(ExpenseTestCase):
         response = self.client.post(
             "/api/proofs/",
             {
-                "dossier": (dossier or self.dossier).pk,
+                "expense": self.ligne_de_preuve(dossier).pk,
                 "file": SimpleUploadedFile(nom, contenu, content_type="application/pdf"),
             },
             format="multipart",
@@ -59,7 +59,8 @@ class StockageTestCase(ExpenseTestCase):
         return Proof.objects.get(pk=response.data["id"])
 
     def retirer(self):
-        return self.client.delete(f"/api/dossiers/{self.dossier.pk}/")
+        """Retire le brouillon de ligne, et ses pièces avec lui (décision 107)."""
+        return self.client.delete(f"/api/expenses/{self.ligne_de_preuve().pk}/")
 
     def assert_piece_intacte(self, piece, chemin):
         """La fiche est là, le fichier aussi, avec la même empreinte."""
@@ -107,7 +108,7 @@ class RetraitTests(StockageTestCase):
         with self.captureOnCommitCallbacks(execute=True), \
                 self.assertRaises(RuntimeError), transaction.atomic():
             transitions.retirer_brouillon(
-                self.dossier, get_access(self.owner), Trace.depuis_compte(self.owner)
+                self.ligne_de_preuve(), get_access(self.owner), Trace.depuis_compte(self.owner)
             )
             self.assertFalse(Proof.objects.filter(pk=piece.pk).exists())
             raise RuntimeError("annulation après le retrait")
@@ -123,7 +124,7 @@ class RetraitTests(StockageTestCase):
         chemin = piece.file.name
 
         with mock.patch.object(
-            Dossier, "delete", side_effect=ProtectedError("ligne ajoutée entre-temps", set())
+            Expense, "delete", side_effect=ProtectedError("pièce ajoutée entre-temps", set())
         ), self.captureOnCommitCallbacks(execute=True):
             response = self.retirer()
 
@@ -214,7 +215,7 @@ class DepotRefuseTests(StockageTestCase):
             response = self.client.post(
                 "/api/proofs/",
                 {
-                    "dossier": self.dossier.pk,
+                    "expense": self.ligne_de_preuve().pk,
                     "file": SimpleUploadedFile("recu.pdf", PDF, content_type="application/pdf"),
                 },
                 format="multipart",
@@ -248,7 +249,7 @@ class TransactionExterieureTests(StockageTestCase):
         ), self.assertRaises(OSError):
             self.client.post(
                 "/api/proofs/",
-                {"dossier": self.dossier.pk,
+                {"expense": self.ligne_de_preuve().pk,
                  "file": SimpleUploadedFile("recu.pdf", PDF, content_type="application/pdf")},
                 format="multipart",
             )
@@ -329,7 +330,7 @@ class TelechargementTests(StockageTestCase):
             response = self.client.post(
                 "/api/proofs/",
                 {
-                    "dossier": self.dossier.pk,
+                    "expense": self.ligne_de_preuve().pk,
                     "file": SimpleUploadedFile(
                         "panne.pdf", PDF, content_type="application/pdf"
                     ),

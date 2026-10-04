@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from django.apps import apps
 
 from .models import ChangeLog
-from .requetes import client_ip, get_current_request
+from .requetes import client_ip, get_current_request, motif_courant
 
 FAMILLES_HISTORIQUE = frozenset({"referentiel", "compte", "configuration", "session"})
 FAMILLES_AUDIT = frozenset({"circuit", "piece", "fichier", "import", "export"})
@@ -138,7 +138,8 @@ def _entree_historique(trace, action, instance, famille, avant, apres, label,
 
     ``detail`` admet ce que l'appelant a déjà calculé — ``entite``,
     ``from_value``, ``to_value``, ``changed_fields``, ``diff``,
-    ``performed_by`` — ; le reste est déduit.
+    ``performed_by``, ``motif`` — ; le reste est déduit. Sans ``motif``,
+    celui que la vue a posé (``core.requetes.motif_du_journal``).
     """
     entite = detail.pop("entite", None) or _ENTITE_PAR_FAMILLE.get(famille)
     if entite is None:
@@ -155,6 +156,9 @@ def _entree_historique(trace, action, instance, famille, avant, apres, label,
     if to_value is None:
         to_value = str(instance) if instance is not None else ""
     from_value = detail.pop("from_value", "")
+    motif = detail.pop("motif", None)
+    if motif is None:
+        motif = motif_courant()
     if detail:
         raise TypeError(
             "Paramètres inconnus pour une entrée d'historique : "
@@ -176,6 +180,7 @@ def _entree_historique(trace, action, instance, famille, avant, apres, label,
         diff=diff or {},
         performed_by=performed_by,
         ip_address=trace.ip,
+        motif=motif,
     )
 
 

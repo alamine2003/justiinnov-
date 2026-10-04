@@ -4,14 +4,14 @@ import hashlib
 from datetime import date
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-
-#: Un fichier n'est une pièce que si son contenu confirme son extension.
-PDF = b"%PDF-1.4 "
 from rest_framework import status
 
 from expenses.models import AuditLog, Dossier, Proof
 
 from .base import ExpenseTestCase, in_memory_storage
+
+#: Un fichier n'est une pièce que si son contenu confirme son extension.
+PDF = b"%PDF-1.4 "
 
 CONTENT = b"%PDF-1.4 recu de mission"
 
@@ -27,7 +27,7 @@ def pdf(name="recu.pdf", content=CONTENT):
 @in_memory_storage
 class ProofUploadTests(ExpenseTestCase):
     def upload(self, **extra):
-        payload = {"dossier": self.dossier.pk, "kind": "receipt", "file": pdf()}
+        payload = {"expense": self.ligne_de_preuve().pk, "kind": "receipt", "file": pdf()}
         payload.update(extra)
         return self.client.post("/api/proofs/", payload, format="multipart")
 
@@ -65,7 +65,7 @@ class ProofUploadTests(ExpenseTestCase):
             response.data["download_url"], f"/api/proofs/{response.data['id']}/download/"
         )
 
-    def test_doublon_sur_le_meme_dossier_refuse(self):
+    def test_doublon_sur_la_meme_ligne_refuse(self):
         self.upload()
 
         response = self.upload()
@@ -73,18 +73,47 @@ class ProofUploadTests(ExpenseTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("file", response.data)
 
-    def test_meme_fichier_sur_un_autre_dossier_autorise(self):
-        """La détection de doublon vaut à l'intérieur d'un ensemble
-        documentaire, pas entre dossiers distincts."""
+    def test_meme_fichier_sur_une_autre_ligne_autorise(self):
+        """Une même facture peut prouver deux lignes : le doublon vaut sur
+        une ligne, pas entre lignes (décision 107)."""
+        self.upload()
+        autre = self.make_expense(title="Péage")
+
+        response = self.upload(expense=autre.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(Proof.objects.get(pk=response.data["id"]).dossier, self.dossier)
+
+    def test_sans_ligne_le_depot_est_refuse(self):
+        """Une pièce prouve une ligne (décision 107) : déposée sur le seul
+        dossier, elle est refusée."""
+        response = self.client.post(
+            "/api/proofs/", {"dossier": self.dossier.pk, "file": pdf()}, format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("expense", response.data)
+
+    def test_le_dossier_fourni_doit_etre_celui_de_la_ligne(self):
         autre = Dossier.objects.create(
             number="N-0002", label="Autre mission", country=self.togo,
             date=self.dossier.date,
         )
-        self.upload()
 
         response = self.upload(dossier=autre.pk)
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("dossier", response.data)
+
+    def test_la_piece_est_rangee_sous_le_dossier_de_sa_ligne(self):
+        response = self.upload()
+
+        piece = Proof.objects.get(pk=response.data["id"])
+        self.assertEqual(piece.expense, self.ligne_de_preuve())
+        self.assertEqual(piece.dossier, self.dossier)
+        self.assertIn("upload", self.client.get(
+            f"/api/expenses/{piece.expense_id}/"
+        ).data["allowed_actions"])
 
     def test_fichier_trop_volumineux_refuse(self):
         with self.settings(MAX_PROOF_SIZE=10):
@@ -109,11 +138,12 @@ class ProofUploadTests(ExpenseTestCase):
             number="CI-0001", label="Mission Abidjan", country=self.ivoire,
             date=self.dossier.date,
         )
+        ligne = self.ligne_de_preuve(ivoirien)
 
-        response = self.upload(dossier=ivoirien.pk)
+        response = self.upload(expense=ligne.pk)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("dossier", response.data)
+        self.assertIn("expense", response.data)
         self.assertEqual(ivoirien.proofs.count(), 0)
 
     def test_la_completude_ne_se_coche_pas_au_depot(self):
@@ -134,7 +164,7 @@ class ProofImmutabilityTests(ExpenseTestCase):
         self.login(self.owner)
         self.proof_id = self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "kind": "receipt", "file": pdf()},
+            {"expense": self.ligne_de_preuve().pk, "kind": "receipt", "file": pdf()},
             format="multipart",
         ).data["id"]
         self.autre = Dossier.objects.create(
@@ -208,7 +238,7 @@ class ProofVersionTests(ExpenseTestCase):
         self.login(self.owner)
         self.first = self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "kind": "receipt", "file": pdf()},
+            {"expense": self.ligne_de_preuve().pk, "kind": "receipt", "file": pdf()},
             format="multipart",
         ).data
 
@@ -216,7 +246,7 @@ class ProofVersionTests(ExpenseTestCase):
         response = self.client.post(
             "/api/proofs/",
             {
-                "dossier": self.dossier.pk,
+                "expense": self.ligne_de_preuve().pk,
                 "kind": "receipt",
                 "file": pdf("recu-v2.pdf", b"%PDF-1.4 recu corrige"),
                 "replaces": self.first["id"],
@@ -235,7 +265,7 @@ class ProofVersionTests(ExpenseTestCase):
         self.client.post(
             "/api/proofs/",
             {
-                "dossier": self.dossier.pk,
+                "expense": self.ligne_de_preuve().pk,
                 "file": pdf("v2.pdf", b"version 2"),
                 "replaces": self.first["id"],
             },
@@ -245,7 +275,7 @@ class ProofVersionTests(ExpenseTestCase):
         response = self.client.post(
             "/api/proofs/",
             {
-                "dossier": self.dossier.pk,
+                "expense": self.ligne_de_preuve().pk,
                 "file": pdf("v3.pdf", b"version 3"),
                 "replaces": self.first["id"],
             },
@@ -259,7 +289,7 @@ class ProofVersionTests(ExpenseTestCase):
         self.client.post(
             "/api/proofs/",
             {
-                "dossier": self.dossier.pk,
+                "expense": self.ligne_de_preuve().pk,
                 "file": pdf("recu-v2.pdf", b"autre contenu"),
                 "replaces": self.first["id"],
             },
@@ -286,7 +316,7 @@ class ProofVersionTests(ExpenseTestCase):
         response = self.client.post(
             "/api/proofs/",
             {
-                "dossier": autre.pk,
+                "expense": self.ligne_de_preuve(autre).pk,
                 "file": pdf("v2.pdf", b"version 2"),
                 "replaces": self.first["id"],
             },
@@ -314,7 +344,7 @@ class ProofVersionTests(ExpenseTestCase):
         response = self.client.post(
             "/api/proofs/",
             {
-                "dossier": self.dossier.pk,
+                "expense": self.ligne_de_preuve().pk,
                 "file": pdf("v2.pdf", b"version 2"),
                 "replaces": piece_ivoirienne.pk,
             },
@@ -334,7 +364,7 @@ class ProofReviewTests(ExpenseTestCase):
         self.login(self.owner)
         self.proof_id = self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "kind": "invoice", "file": pdf()},
+            {"expense": self.ligne_de_preuve().pk, "kind": "invoice", "file": pdf()},
             format="multipart",
         ).data["id"]
 
@@ -472,7 +502,7 @@ class ProofReviewTests(ExpenseTestCase):
         )
 
     def test_dossier_avec_justificatif_peut_etre_justifie(self):
-        ligne = self.make_expense()
+        ligne = self.ligne_de_preuve()
         self.submit_dossier()
         self.login(self.controller)
         self.client.post(f"/api/expenses/{ligne.pk}/justify/")
@@ -489,14 +519,14 @@ class ProofReviewTests(ExpenseTestCase):
 
         response = self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "file": pdf("complement.pdf", b"complement")},
+            {"expense": self.ligne_de_preuve().pk, "file": pdf("complement.pdf", b"complement")},
             format="multipart",
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_dossier_cloture_refuse_un_nouveau_justificatif(self):
-        depense = self.make_expense()
+        depense = self.ligne_de_preuve()
         self.submit_dossier()
         self.login(self.controller)
         # La ligne doit être tranchée avant la clôture : un dossier ne se
@@ -509,7 +539,7 @@ class ProofReviewTests(ExpenseTestCase):
 
         response = self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "file": pdf("tardif.pdf", b"tardif")},
+            {"expense": self.ligne_de_preuve().pk, "file": pdf("tardif.pdf", b"tardif")},
             format="multipart",
         )
 
@@ -523,7 +553,7 @@ class ProofDownloadTests(ExpenseTestCase):
         self.login(self.owner)
         self.proof_id = self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "file": pdf()},
+            {"expense": self.ligne_de_preuve().pk, "file": pdf()},
             format="multipart",
         ).data["id"]
 
@@ -563,7 +593,7 @@ class TypeFigeAvecLeDossierTests(ExpenseTestCase):
         self.login(self.owner)
         self.proof_id = self.client.post(
             "/api/proofs/",
-            {"dossier": self.dossier.pk, "kind": "receipt", "file": pdf()},
+            {"expense": self.ligne_de_preuve().pk, "kind": "receipt", "file": pdf()},
             format="multipart",
         ).data["id"]
         self.make_expense()

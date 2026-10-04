@@ -245,8 +245,10 @@ class HistoriqueTests(ExpenseTestCase):
         self.assertEqual(creation.country, self.togo)
         self.assertEqual(creation.performed_by, self.doo.username)
 
-        telephone, activite = self.entrees(action=ChangeLog.Actions.UPDATED).order_by("pk")
+        telephone = self.entrees(action=ChangeLog.Actions.UPDATED).get()
         self.assertEqual(telephone.diff, {"phone": ["+228 22 21 00 00", "+228 22 21 99 99"]})
+        # Une désactivation se lit comme telle (décision 109).
+        activite = self.entrees(action=ChangeLog.Actions.DEACTIVATED).get()
         self.assertEqual(activite.diff, {"is_active": [True, False]})
         self.assertEqual(activite.performed_by, self.doo.username)
 

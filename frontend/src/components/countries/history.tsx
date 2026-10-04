@@ -9,7 +9,7 @@ import { fetchHistory } from "@/lib/countries"
 import { ACTION_STYLE } from "@/lib/status-styles"
 import type { ChangeLogEntry } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
-import { formatDate } from "@/lib/utils"
+import { formatAmount, formatDate } from "@/lib/utils"
 
 /** Ce qui a changé, selon l'action, à partir des valeurs du serveur. */
 function describe(t: TFunction, entry: ChangeLogEntry): string {
@@ -38,26 +38,66 @@ function hasDiff(entry: ChangeLogEntry): boolean {
   return Boolean(entry.diff && Object.keys(entry.diff).length > 0)
 }
 
-/** Une valeur du journal, lisible : « — » pour le vide, JSON pour un objet. */
-function formatDiffValue(t: TFunction, value: unknown): string {
+/**
+ * Champs monétaires du journal : ils se lisent formatés, comme partout.
+ * Pas `budget` : dans le journal du circuit, c'est l'enveloppe imputée — un
+ * identifiant —, et un identifiant ne se formate pas en montant.
+ */
+const MONTANTS = new Set(["amount", "justified_amount", "original_amount"])
+
+/** Le libellé d'un champ, traduit quand l'interface le connaît. */
+function libelleDuChamp(t: TFunction, champ: string): string {
+  return t(`champs.${champ}` as "champs.name", { defaultValue: champ })
+}
+
+/**
+ * Une valeur du journal, lisible : « — » pour le vide, un statut par son
+ * libellé (circuit, pièce ou projet), un montant formaté, JSON pour un
+ * objet. Mettre en forme n'est pas calculer : la valeur est celle du
+ * serveur.
+ */
+function formatDiffValue(t: TFunction, champ: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return t("commun.aucun")
   if (typeof value === "boolean") return value ? t("commun.oui") : t("commun.non")
   if (typeof value === "object") return JSON.stringify(value)
+  if (champ === "status" && typeof value === "string") {
+    return t(`libelles.workflow.${value}` as "libelles.workflow.draft", {
+      defaultValue: t(`libelles.piece_statut.${value}` as "libelles.piece_statut.received", {
+        defaultValue: t(`libelles.projet_statut.${value}` as "libelles.projet_statut.active", {
+          defaultValue: value,
+        }),
+      }),
+    })
+  }
+  if (MONTANTS.has(champ) && (typeof value === "string" || typeof value === "number")) {
+    return formatAmount(String(value))
+  }
   return String(value)
 }
 
-/** Ancienne et nouvelle valeur, champ par champ. */
+/**
+ * Ancienne et nouvelle valeur, champ par champ — seulement ce qui a changé,
+ * sous le nom du champ plutôt que son code.
+ */
 export function DiffList({ diff }: { diff: Record<string, [unknown, unknown]> }) {
   const { t } = useTranslation()
+  const lignes = Object.entries(diff)
+    .map(([champ, [avant, apres]]) => ({
+      champ,
+      avant: formatDiffValue(t, champ, avant),
+      apres: formatDiffValue(t, champ, apres),
+    }))
+    .filter((ligne) => ligne.avant !== ligne.apres)
+  if (lignes.length === 0) return null
   return (
     <dl className="mt-1 grid gap-0.5 text-xs text-muted-foreground">
-      {Object.entries(diff).map(([champ, [avant, apres]]) => (
+      {lignes.map(({ champ, avant, apres }) => (
         <div key={champ} className="flex flex-wrap gap-x-1">
-          <dt className="font-medium">{champ}{t("commun.separateur_libelle")}</dt>
+          <dt className="font-medium">{libelleDuChamp(t, champ)}{t("commun.separateur_libelle")}</dt>
           <dd>
-            <span className="line-through">{formatDiffValue(t, avant)}</span>
+            <span className="line-through">{avant}</span>
             {" → "}
-            <span className="text-foreground">{formatDiffValue(t, apres)}</span>
+            <span className="text-foreground">{apres}</span>
           </dd>
         </div>
       ))}

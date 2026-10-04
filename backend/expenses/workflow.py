@@ -158,7 +158,7 @@ SAISIE_CAPACITES = {
     "add_line": "expenses.create",
     "upload": "proofs.upload",
     "delete": "expenses.delete",
-    # Le titre d'un dossier, à tout moment (décision 104) : seul ce qui ne
+    # Le titre d'un dossier, jusqu'à la clôture (décisions 104 et 108) : seul ce qui ne
     # porte ni montant ni preuve se modifie après la déclaration.
     "rename": "dossiers.rename",
 }
@@ -281,11 +281,14 @@ def breaks_four_eyes(action, author, username):
 
 #: Actions d'une ligne, dans l'ordre où l'interface les propose : la saisie
 #: d'abord, le contrôle ensuite.
-EXPENSE_ACTIONS = ("edit", "delete", "review", "justify", "reject", "close")
+#: Une pièce se dépose sur la ligne qu'elle prouve (décision 107).
+EXPENSE_ACTIONS = ("edit", "upload", "delete", "review", "justify", "reject", "close")
 
 #: Actions d'un dossier, dans le même ordre que le circuit.
+#: Un dossier ne se crée ni ne se retire : il est prédéfini par son projet
+#: (décision 106) ; ses pièces se déposent sur ses lignes (décision 107).
 DOSSIER_ACTIONS = (
-    "edit", "rename", "add_line", "upload", "delete",
+    "edit", "rename", "add_line",
     "submit", "review", "justify", "reject", "close", "reopen",
 )
 
@@ -322,9 +325,9 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
         return False
     auteur_ou_anonyme = not objet.created_by or objet.created_by == username
     if action == "rename":
-        # Quel que soit l'état, même clôturé, et par tout compte qui a la
+        # Jusqu'à la clôture (décision 108), par tout compte qui a la
         # capacité — pas seulement l'auteur (décision 104).
-        return True
+        return objet.status not in PROOF_LOCKED_STATUSES
     if action == "delete":
         return (
             objet.status in DELETABLE_STATUSES
@@ -338,7 +341,10 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
             objet, role, username
         )
     if action == "upload":
-        return objet.status not in PROOF_LOCKED_STATUSES
+        # Sur une ligne, la pièce se dépose jusqu'à la clôture de son
+        # dossier : une preuve arrivée après coup peut encore justifier.
+        dossier = getattr(objet, "dossier", None) or objet
+        return dossier.status not in PROOF_LOCKED_STATUSES
     if action == "add_line":
         # Ajouter une ligne, c'est modifier le brouillon : son auteur seul,
         # comme à l'import (décision 46).
@@ -488,7 +494,7 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
         if action == "submit" and lines["total"] == 0:
             continue
         if action == "justify" and (
-            lines["pending"] or lines["unjustified"] or dossier.usable_proof_count() == 0
+            lines["pending"] or lines["unjustified"] or dossier.a_des_lignes_sans_preuve()
         ):
             continue
         if action in ("reject", "close") and lines["pending"]:

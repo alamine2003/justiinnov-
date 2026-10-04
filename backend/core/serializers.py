@@ -178,6 +178,19 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
     a_typer = serializers.SerializerMethodField()
     dossier_count = serializers.IntegerField(read_only=True, default=0)
     accepte_des_dossiers = serializers.BooleanField(read_only=True)
+    #: Équipe des dossiers prédéfinis, à la création seulement (décision
+    #: 106) : elle va sur chaque dossier, donc sur chaque ligne. La vue la
+    #: revalide contre le périmètre du compte.
+    team = serializers.PrimaryKeyRelatedField(
+        queryset=Team.objects.all(), write_only=True, required=False, allow_null=True,
+        label=_("Équipe"),
+    )
+    #: Pourquoi le projet change : exigé à chaque modification (décision
+    #: 109), gardé au journal.
+    motif = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, max_length=1000,
+        label=_("Motif"),
+    )
     RELATIONS_QUI_RETIENNENT = ("expenses", "budgets", "dossiers")
 
     class Meta:
@@ -187,7 +200,7 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
             "status", "status_display", "budget",
             "kind", "kind_display", "year", "sequence", "reference",
             "is_historical", "a_typer", "dossier_count", "accepte_des_dossiers",
-            "is_active", "created_at", "updated_at",
+            "is_active", "created_at", "updated_at", "team", "motif",
         ]
         read_only_fields = ["year", "sequence", "reference", "is_historical"]
         validators = [
@@ -211,7 +224,23 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"kind": _("Indiquez le type du projet : congrès, voyage ou soutien financier.")}
                 )
+            equipe = attrs.get("team")
+            if equipe is not None and equipe.country_id != attrs["country"].pk:
+                raise serializers.ValidationError(
+                    {"team": _("Cette équipe appartient à un autre pays.")}
+                )
             return attrs
+        attrs.pop("team", None)
+        # Le titre est l'affaire du pays (décision 108) : il passe par
+        # « Renommer » (``projets.rename``), verrouillé au siège.
+        if "name" in attrs and attrs["name"] != instance.name:
+            raise serializers.ValidationError(
+                {"name": _("Le titre d'un projet se change par « Renommer », côté pays.")}
+            )
+        if not (attrs.get("motif") or "").strip():
+            raise serializers.ValidationError(
+                {"motif": _("Indiquez le motif de la modification : il reste au journal.")}
+            )
         if "kind" in attrs and attrs["kind"] != instance.kind:
             if instance.is_historical:
                 raise serializers.ValidationError(
@@ -237,12 +266,17 @@ class DossierKindSerializer(serializers.ModelSerializer):
     project_kind_display = serializers.CharField(
         source="get_project_kind_display", read_only=True
     )
+    #: Pourquoi le type change : exigé à chaque modification (décision 109).
+    motif = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, max_length=1000,
+        label=_("Motif"),
+    )
 
     class Meta:
         model = DossierKind
         fields = [
             "id", "project_kind", "project_kind_display", "name", "description",
-            "is_active", "created_at", "updated_at",
+            "is_active", "created_at", "updated_at", "motif",
         ]
         validators = [
             UniqueTogetherValidator(
@@ -263,6 +297,10 @@ class DossierKindSerializer(serializers.ModelSerializer):
         ):
             raise serializers.ValidationError(
                 {"project_kind": _("Des dossiers emploient ce type : son type de projet ne change plus.")}
+            )
+        if instance is not None and not (attrs.get("motif") or "").strip():
+            raise serializers.ValidationError(
+                {"motif": _("Indiquez le motif de la modification : il reste au journal.")}
             )
         return attrs
 
@@ -398,7 +436,7 @@ class ChangeLogSerializer(serializers.ModelSerializer):
             "id", "model_name", "model_name_display", "object_id", "label",
             "action", "action_display", "country", "country_name",
             "from_value", "to_value", "changed_fields", "diff",
-            "performed_by", "ip_address", "created_at",
+            "performed_by", "ip_address", "motif", "created_at",
         ]
 
 
@@ -568,3 +606,36 @@ class ParPaysSerializer(serializers.Serializer):
 
     total = serializers.IntegerField(read_only=True)
     pays = PaysCompteSerializer(many=True, read_only=True)
+
+
+class RenommerProjetSerializer(serializers.Serializer):
+    """Le nouveau titre d'un projet et son motif (décisions 108 et 109)."""
+
+    name = serializers.CharField(max_length=180, trim_whitespace=True, label=_("Titre"))
+    motif = serializers.CharField(max_length=1000, trim_whitespace=True, label=_("Motif"))
+
+
+class EntreeHistoriqueSerializer(serializers.Serializer):
+    """Une entrée de l'historique d'un projet : référentiel ou circuit (décision 110)."""
+
+    source = serializers.ChoiceField(choices=["referentiel", "circuit"], read_only=True)
+    id = serializers.IntegerField(read_only=True)
+    action = serializers.CharField(read_only=True)
+    action_display = serializers.CharField(read_only=True)
+    objet = serializers.CharField(read_only=True)
+    object_id = serializers.IntegerField(read_only=True, allow_null=True)
+    label = serializers.CharField(read_only=True)
+    user = serializers.CharField(read_only=True)
+    ip_address = serializers.CharField(read_only=True, allow_null=True)
+    motif = serializers.CharField(read_only=True)
+    avant = serializers.JSONField(read_only=True, allow_null=True)
+    apres = serializers.JSONField(read_only=True, allow_null=True)
+    note = serializers.CharField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class HistoriqueDeProjetSerializer(serializers.Serializer):
+    """L'historique d'un projet, du plus récent au plus ancien, plafonné."""
+
+    entrees = EntreeHistoriqueSerializer(many=True, read_only=True)
+    tronque = serializers.BooleanField(read_only=True)

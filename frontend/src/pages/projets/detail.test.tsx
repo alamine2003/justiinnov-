@@ -7,15 +7,21 @@ import { invalidateReferentiel } from "@/lib/referentiel"
 const fetchProject = vi.fn()
 const fetchDossierKinds = vi.fn()
 const fetchDossiers = vi.fn()
-const createDossier = vi.fn()
+const renameProject = vi.fn()
+const updateProject = vi.fn()
+const completerProject = vi.fn()
+const fetchProjectHistory = vi.fn()
 vi.mock("@/lib/countries", () => ({
   fetchProject: (...args: unknown[]) => fetchProject(...args),
   fetchDossierKinds: (...args: unknown[]) => fetchDossierKinds(...args),
   fetchCountry: () => Promise.resolve({ teams: [], managers: [] }),
+  renameProject: (...args: unknown[]) => renameProject(...args),
+  updateProject: (...args: unknown[]) => updateProject(...args),
+  completerProject: (...args: unknown[]) => completerProject(...args),
+  fetchProjectHistory: (...args: unknown[]) => fetchProjectHistory(...args),
 }))
 vi.mock("@/lib/expenses", () => ({
   fetchDossiers: (...args: unknown[]) => fetchDossiers(...args),
-  createDossier: (...args: unknown[]) => createDossier(...args),
 }))
 let droits: Record<string, boolean> = {}
 vi.mock("@/context/use-auth", () => ({
@@ -35,9 +41,9 @@ const congres = {
 const stands = { id: 3, project_kind: "congres", name: "Stands", is_active: true }
 const collations = { id: 4, project_kind: "congres", name: "Collations", is_active: true }
 
-function afficher() {
+function afficher(adresse = "/projets/7") {
   return render(
-    <MemoryRouter initialEntries={["/projets/7"]}>
+    <MemoryRouter initialEntries={[adresse]}>
       <Routes>
         <Route path="/projets/:id" element={<ProjetDetailPage />} />
         <Route path="/dossiers/:id" element={<p>Fiche du dossier</p>} />
@@ -47,7 +53,7 @@ function afficher() {
 }
 
 beforeEach(() => {
-  droits = { "expenses.create": true, "data.import": true }
+  droits = { "expenses.create": true, "data.import": true, "projets.rename": true }
   invalidateReferentiel()
   fetchProject.mockReset()
   fetchProject.mockResolvedValue(congres)
@@ -55,7 +61,10 @@ beforeEach(() => {
   fetchDossierKinds.mockResolvedValue(page([stands, collations]))
   fetchDossiers.mockReset()
   fetchDossiers.mockResolvedValue(page([]))
-  createDossier.mockReset()
+  renameProject.mockReset()
+  updateProject.mockReset()
+  completerProject.mockReset()
+  fetchProjectHistory.mockReset()
 })
 
 describe("ProjetDetailPage", () => {
@@ -87,17 +96,15 @@ describe("ProjetDetailPage", () => {
     )
   })
 
-  it("n'ouvre pas de dossier dans un projet à typer, et dit pourquoi", async () => {
+  it("n'importe pas dans un projet à typer, et dit pourquoi", async () => {
     fetchProject.mockResolvedValue({ ...congres, kind: "", a_typer: true, accepte_des_dossiers: false })
     afficher()
 
     expect(await screen.findByText(/n'a pas encore de type/)).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Nouveau dossier" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Importer" })).toBeNull()
   })
 
-  it("ne propose rien au siège, qui ne déclare pas", async () => {
-    droits = {}
+  it("n'ouvre jamais de dossier à la main : le projet est né avec les siens", async () => {
     afficher()
 
     await screen.findByRole("heading", { name: "Congrès de Lomé" })
@@ -105,44 +112,129 @@ describe("ProjetDetailPage", () => {
   })
 })
 
-describe("Nouveau dossier dans un projet", () => {
-  it("le titre reprend le type choisi, puis la fiche du dossier s'ouvre", async () => {
-    createDossier.mockResolvedValue({ id: 42 })
+describe("Renommer le projet, côté pays", () => {
+  it("exige un motif, puis affiche le nouveau titre", async () => {
+    renameProject.mockResolvedValue({ ...congres, name: "Congrès de Lomé 2026" })
     afficher()
-    fireEvent.click(await screen.findByRole("button", { name: "Nouveau dossier" }))
-    const type = await screen.findByLabelText("Type de dossier")
-    await waitFor(() => expect(screen.getByRole("option", { name: "Stands" })).toBeInTheDocument())
+    fireEvent.click(await screen.findByRole("button", { name: "Renommer" }))
+    fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Congrès de Lomé 2026" } })
+    fireEvent.click(screen.getByRole("button", { name: "Renommer" }))
 
-    fireEvent.change(type, { target: { value: String(stands.id) } })
-    expect(screen.getByLabelText("Libellé")).toHaveValue("Stands")
-    fireEvent.click(screen.getByRole("button", { name: "Créer" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent("Indiquez le motif")
+    expect(renameProject).not.toHaveBeenCalled()
 
-    expect(await screen.findByText("Fiche du dossier")).toBeInTheDocument()
-    expect(createDossier).toHaveBeenCalledWith(
-      expect.objectContaining({ project: 7, kind: stands.id, label: "Stands" }),
+    fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Année oubliée" } })
+    fireEvent.click(screen.getByRole("button", { name: "Renommer" }))
+
+    expect(await screen.findByRole("heading", { name: "Congrès de Lomé 2026" })).toBeInTheDocument()
+    expect(renameProject).toHaveBeenCalledWith(7, "Congrès de Lomé 2026", "Année oubliée")
+  })
+
+  it("garde le dialogue ouvert sur un refus du serveur", async () => {
+    const { ApiError } = await import("@/lib/api")
+    renameProject.mockRejectedValue(
+      new ApiError(400, "Requête invalide", { name: ["Ce projet existe déjà pour ce pays."] }),
     )
-    // Ni pays ni numéro : le serveur les tire du projet.
-    expect(createDossier.mock.calls[0][0]).not.toHaveProperty("number")
-    expect(createDossier.mock.calls[0][0]).not.toHaveProperty("country")
+    afficher()
+    fireEvent.click(await screen.findByRole("button", { name: "Renommer" }))
+    fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Doublon" } })
+    fireEvent.click(screen.getByRole("button", { name: "Renommer" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ce projet existe déjà pour ce pays.")
+    expect(screen.getByRole("dialog")).toBeInTheDocument()
   })
 
-  it("garde le titre écrit à la main quand le type change", async () => {
+  it("n'est pas proposé sans le droit", async () => {
+    droits = {}
     afficher()
-    fireEvent.click(await screen.findByRole("button", { name: "Nouveau dossier" }))
-    await waitFor(() => expect(screen.getByRole("option", { name: "Stands" })).toBeInTheDocument())
 
-    fireEvent.change(screen.getByLabelText("Libellé"), { target: { value: "Stands du hall A" } })
-    fireEvent.change(screen.getByLabelText("Type de dossier"), { target: { value: String(stands.id) } })
+    await screen.findByRole("heading", { name: "Congrès de Lomé" })
+    expect(screen.queryByRole("button", { name: "Renommer" })).toBeNull()
+  })
+})
 
-    expect(screen.getByLabelText("Libellé")).toHaveValue("Stands du hall A")
+describe("Modifier et compléter le projet, côté siège", () => {
+  beforeEach(() => {
+    droits = { "projets.update": true, "audit.read": true }
   })
 
-  it("exige un type avant d'envoyer", async () => {
+  it("modifie sans jamais toucher au titre, motif à l'appui", async () => {
+    updateProject.mockResolvedValue({ ...congres, status: "completed", status_display: "Terminé" })
     afficher()
-    fireEvent.click(await screen.findByRole("button", { name: "Nouveau dossier" }))
-    fireEvent.click(await screen.findByRole("button", { name: "Créer" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Modifier" }))
+    expect(screen.queryByLabelText("Nom")).toBeNull()
+    fireEvent.change(screen.getByLabelText("Statut"), { target: { value: "completed" } })
+    fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Congrès tenu" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Choisissez le type du dossier.")
-    expect(createDossier).not.toHaveBeenCalled()
+    await waitFor(() => expect(updateProject).toHaveBeenCalled())
+    const [id, donnees] = updateProject.mock.calls[0]
+    expect(id).toBe(7)
+    expect(donnees).toMatchObject({ status: "completed", motif: "Congrès tenu" })
+    expect(donnees).not.toHaveProperty("name")
+    expect(donnees).not.toHaveProperty("kind")
+  })
+
+  it("type un projet d'avant la 2.0", async () => {
+    const aTyper = { ...congres, kind: "", a_typer: true, accepte_des_dossiers: false }
+    fetchProject.mockResolvedValue(aTyper)
+    updateProject.mockResolvedValue({ ...congres })
+    afficher()
+    fireEvent.click(await screen.findByRole("button", { name: "Modifier" }))
+    fireEvent.change(screen.getByLabelText("Type de projet"), { target: { value: "voyage" } })
+    fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Reprise" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() =>
+      expect(updateProject).toHaveBeenCalledWith(7, expect.objectContaining({ kind: "voyage" })),
+    )
+  })
+
+  it("complète le projet de ses dossiers manquants, après confirmation", async () => {
+    completerProject.mockResolvedValue(congres)
+    afficher()
+    fireEvent.click(await screen.findByRole("button", { name: "Compléter les dossiers" }))
+    fireEvent.click(screen.getByRole("button", { name: "Compléter" }))
+
+    await waitFor(() => expect(completerProject).toHaveBeenCalledWith(7))
+    await waitFor(() => expect(fetchDossiers.mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it("ne propose ni Renommer ni Nouveau dossier au siège", async () => {
+    afficher()
+
+    await screen.findByRole("button", { name: "Modifier" })
+    expect(screen.queryByRole("button", { name: "Renommer" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Nouveau dossier" })).toBeNull()
+  })
+
+  it("l'onglet Historique relit le journal du projet", async () => {
+    fetchProjectHistory.mockResolvedValue({
+      tronque: false,
+      entrees: [
+        {
+          source: "referentiel", id: 1, action: "updated", action_display: "Mise à jour",
+          objet: "Projet", object_id: 7, label: "Congrès de Lomé", user: "owner.togo",
+          ip_address: "10.0.0.2", motif: "Année oubliée",
+          avant: { name: "Congrès de Lomé" }, apres: { name: "Congrès de Lomé 2026" },
+          note: "", created_at: "2026-10-01T08:00:00Z",
+        },
+      ],
+    })
+    afficher("/projets/7?onglet=historique")
+
+    expect(await screen.findByText("Année oubliée")).toBeInTheDocument()
+    expect(screen.getByText("Congrès de Lomé 2026")).toBeInTheDocument()
+    expect(fetchProjectHistory).toHaveBeenCalledWith(7, expect.anything())
+  })
+})
+
+describe("Historique du projet", () => {
+  it("n'existe pas sans audit.read", async () => {
+    afficher("/projets/7?onglet=historique")
+
+    await screen.findByRole("heading", { name: "Congrès de Lomé" })
+    expect(screen.queryByRole("tab", { name: "Historique" })).toBeNull()
+    expect(fetchProjectHistory).not.toHaveBeenCalled()
   })
 })

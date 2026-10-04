@@ -66,6 +66,10 @@ class DossierAdmin(BrouillonSeulementMixin, admin.ModelAdmin):
     readonly_fields = ("status", "created_by", "reopen_note")
     inlines = [ExpenseInline, ProofInline]
 
+    def has_add_permission(self, request):
+        # Un dossier naît avec son projet (décision 106).
+        return False
+
 
 @admin.register(Expense)
 class ExpenseAdmin(BrouillonSeulementMixin, admin.ModelAdmin):

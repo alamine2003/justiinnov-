@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { AlertTriangle, ChevronRight, FileText, Loader2, Plus, RotateCcw } from "lucide-react"
+import { AlertTriangle, ChevronRight, FileText, FileWarning, Loader2, Plus, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -207,10 +207,13 @@ export function DossierDetailPage() {
 
   // Ce qui se saisit encore vient du serveur (`allowed_actions`) : brouillon
   // ou non, droit ou non, l'interface ne recopie aucune règle. Une pièce se
-  // dépose jusqu'à la clôture : une preuve arrivée après coup peut encore
-  // justifier ce qui ne l'était pas.
+  // dépose sur sa ligne (`upload` dans les actions de la ligne), jusqu'à la
+  // clôture.
   const canAddLine = dossier.allowed_actions.includes("add_line")
-  const canUpload = dossier.allowed_actions.includes("upload")
+  // Les pièces de chaque ligne (décision 107), et celles d'avant la 2.0,
+  // déposées sur tout le dossier : un rangement, pas un calcul.
+  const piecesDeLaLigne = (id: number) => dossier.proofs.filter((proof) => proof.expense === id)
+  const piecesDAvant = dossier.proofs.filter((proof) => proof.expense === null)
   // Un libellé, pas une règle : le panneau des pièces explique pourquoi le
   // dépôt est fermé ; le droit de déposer, lui, vient de `allowed_actions`.
   const closed = estCloture(dossier.status)
@@ -441,6 +444,11 @@ export function DossierDetailPage() {
                     onTransition={runExpenseTransition}
                     onRequestRectification={requestLineRectification}
                     onError={setActionError}
+                    proofs={piecesDeLaLigne(expense.id)}
+                    closed={closed}
+                    onProofsChanged={async () => {
+                      query.reload()
+                    }}
                   />
                 ))}
               </ul>
@@ -449,19 +457,33 @@ export function DossierDetailPage() {
         </Card>
 
         <div className="space-y-4">
-          <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
-              <ProofPanel
-                dossierId={dossier.id}
-                proofs={dossier.proofs}
-                canUpload={canUpload}
-                closed={closed}
-                onChanged={async () => {
-                  query.reload()
-                }}
-              />
-            </CardContent>
-          </Card>
+          {dossier.lignes_sans_preuve > 0 && (
+            <Alert>
+              <FileWarning className="h-4 w-4" />
+              <AlertTitle>
+                {t("pieces.dossier.sans_justificatif", { count: dossier.lignes_sans_preuve })}
+              </AlertTitle>
+              <AlertDescription>{t("pieces.dossier.sans_justificatif_aide")}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Les pièces d'avant la 2.0, déposées sur tout le dossier : elles
+              se lisent et se contrôlent encore, il ne s'en dépose plus. */}
+          {piecesDAvant.length > 0 && (
+            <Card className="border-border/60 shadow-sm">
+              <CardContent className="pt-6">
+                <ProofPanel
+                  expenseId={null}
+                  proofs={piecesDAvant}
+                  canUpload={false}
+                  closed={closed}
+                  onChanged={async () => {
+                    query.reload()
+                  }}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {(rectifications.data?.results.length ?? 0) > 0 && (
             <Card className="border-border/60 shadow-sm">

@@ -37,14 +37,18 @@ import { useAuth } from "@/context/use-auth"
 import {
   createProject,
   fetchCountries,
+  fetchCountry,
+  fetchDossierKinds,
   fetchProjects,
   fetchProjectsParPays,
 } from "@/lib/countries"
 import { PROJECT_KINDS, projectKindLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, invalidateReferentiel, useReferentiel } from "@/lib/referentiel"
+import { scopedTeams, teamRequired } from "@/lib/teams"
 import type { CountrySummary, ProjectKind } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
+import { ApiError } from "@/lib/api"
 
 /**
  * Les projets : la rubrique principale depuis la 2.0 (décision 100).
@@ -267,7 +271,10 @@ export function ProjetsPage() {
 
 /**
  * Ouvre un projet. Sa référence (`TG-P-2026-001`) est attribuée par le
- * serveur ; le type se choisit ici et ne changera plus.
+ * serveur ; le type se choisit ici et ne changera plus. Le projet naît avec
+ * ses dossiers prédéfinis, un par type de dossier de son type (décision
+ * 106) : le formulaire les annonce, lus dans la liste commune du serveur.
+ * L'équipe choisie va sur chaque dossier, donc sur chaque ligne.
  */
 function ProjectForm({
   countries,
@@ -281,6 +288,7 @@ function ProjectForm({
   onSaved: (id: number) => void
 }) {
   const { t } = useTranslation()
+  const { me } = useAuth()
   const [choix, setCountry] = useState<number | "">("")
   // Un compte d'un seul pays n'a rien à choisir — y compris quand la liste
   // arrive après l'ouverture du dialogue.
@@ -288,8 +296,26 @@ function ProjectForm({
   const [name, setName] = useState("")
   const [kind, setKind] = useState<ProjectKind | "">("")
   const [description, setDescription] = useState("")
+  const [team, setTeam] = useState<number | "">("")
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+
+  // Les équipes du pays, depuis sa fiche ; un manager rattaché à des
+  // équipes n'ouvre un projet que pour l'une des siennes.
+  const detail = useReferentiel(
+    `country:${country}`,
+    () => fetchCountry(Number(country)),
+    { enabled: country !== "" },
+  )
+  const teams = scopedTeams((detail.data?.teams ?? []).filter((equipe) => equipe.is_active), me)
+  // Les dossiers que le projet recevra : ceux du type, dans la liste commune.
+  const kinds = useReferentiel(
+    `dossier-kinds:${kind}`,
+    () => fetchDossierKinds({ project_kind: kind, is_active: true, page_size: REFERENTIEL_PAGE_SIZE }),
+    { enabled: kind !== "" },
+  )
+  const dossiersPrevus = kind === "" ? [] : (kinds.data?.results ?? []).map((k) => k.name)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -305,14 +331,28 @@ function ProjectForm({
       setError(t("projets.formulaire.type_requis"))
       return
     }
+    if (teamRequired(me) && team === "") {
+      setError(t("dossiers.formulaire.equipe_requise"))
+      return
+    }
     setSaving(true)
     setError(null)
+    setFieldErrors({})
     try {
-      const projet = await createProject({ country, name: name.trim(), kind, description })
+      const projet = await createProject({
+        country, name: name.trim(), kind, description, team: team === "" ? null : team,
+      })
       onSaved(projet.id)
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("dossiers.formulaire.creation_impossible"))
+      const champs = err instanceof ApiError ? err.fields : {}
+      const sousLesChamps = Object.fromEntries(
+        ["kind", "team", "name"].filter((cle) => champs[cle]?.length).map((cle) => [cle, champs[cle][0]]),
+      )
+      setFieldErrors(sousLesChamps)
+      if (Object.keys(sousLesChamps).length === 0) {
+        setError(err instanceof Error ? err.message : t("dossiers.formulaire.creation_impossible"))
+      }
     } finally {
       setSaving(false)
     }
@@ -333,7 +373,11 @@ function ProjectForm({
             <NativeSelect
               id="projet-country"
               value={country}
-              onChange={(e) => setCountry(e.target.value === "" ? "" : Number(e.target.value))}
+              onChange={(e) => {
+                setCountry(e.target.value === "" ? "" : Number(e.target.value))
+                // Une équipe appartient à un pays : elle ne suit pas le changement.
+                setTeam("")
+              }}
               required
             >
               <option value="">
@@ -358,6 +402,7 @@ function ProjectForm({
               placeholder={t("projets.formulaire.nom_placeholder")}
               required
             />
+            <ChampEnErreur message={fieldErrors.name} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="projet-kind">{t("projets.type")}</Label>
@@ -374,7 +419,31 @@ function ProjectForm({
                 </option>
               ))}
             </NativeSelect>
-            <p className="text-xs text-muted-foreground">{t("projets.formulaire.type_aide")}</p>
+            <ChampEnErreur message={fieldErrors.kind} />
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              {dossiersPrevus.length > 0
+                ? t("projets.formulaire.dossiers_prevus", { dossiers: dossiersPrevus.join(", ") })
+                : t("projets.formulaire.type_aide")}
+            </p>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="projet-team">{t("champs.team")}</Label>
+            <NativeSelect
+              id="projet-team"
+              value={team}
+              onChange={(e) => setTeam(e.target.value === "" ? "" : Number(e.target.value))}
+              disabled={country === "" || detail.loading}
+              required={teamRequired(me)}
+            >
+              <option value="">{t("commun.aucun")}</option>
+              {teams.map((equipe) => (
+                <option key={equipe.id} value={equipe.id}>
+                  {equipe.name}
+                </option>
+              ))}
+            </NativeSelect>
+            <ChampEnErreur message={fieldErrors.team} />
+            <p className="text-xs text-muted-foreground">{t("projets.formulaire.equipe_aide")}</p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="projet-description">
@@ -403,4 +472,10 @@ function ProjectForm({
       </DialogContent>
     </Dialog>
   )
+}
+
+/** Le refus du serveur sous le champ qu'il vise. */
+function ChampEnErreur({ message }: { message?: string }) {
+  if (!message) return null
+  return <p role="alert" className="text-xs text-destructive">{message}</p>
 }

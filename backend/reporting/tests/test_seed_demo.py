@@ -41,7 +41,7 @@ class SeedDemoTests(TestCase):
             call_command("seed_demo")
 
         self.assertEqual(self._etat(), avant)
-        self.assertFalse(Dossier.objects.filter(number=TEMOIN).exists())
+        self.assertFalse(Dossier.objects.filter(external_ref=TEMOIN).exists())
 
     def test_deux_executions_meme_etat(self):
         self._lancer()
@@ -56,7 +56,8 @@ class SeedDemoTests(TestCase):
         self._lancer()
 
         etats = dict(
-            Dossier.objects.filter(number__startswith="DEMO-").values_list("number", "status")
+            Dossier.objects.filter(external_ref__startswith="DEMO-")
+            .values_list("external_ref", "status")
         )
         self.assertEqual(
             etats,
@@ -67,7 +68,7 @@ class SeedDemoTests(TestCase):
                 "DEMO-0004": Status.SUBMITTED,
             },
         )
-        partiel = Dossier.objects.get(number="DEMO-0003")
+        partiel = Dossier.objects.get(external_ref="DEMO-0003")
         self.assertEqual(
             sorted(partiel.expenses.values_list("status", flat=True)),
             sorted([Status.JUSTIFIED, Status.JUSTIFIED, Status.SUBMITTED]),
@@ -76,18 +77,26 @@ class SeedDemoTests(TestCase):
         self.assertGreater(totaux["justified"], 0)
         self.assertGreater(totaux["gap"], 0)
         self.assertEqual(
-            Dossier.objects.get(number="DEMO-0004").expenses.get().status,
+            Dossier.objects.get(external_ref="DEMO-0004").expenses.get().status,
             Status.UNJUSTIFIED,
         )
-        # Rouvert puis resoumis : le motif reste lisible, la pièce a une
-        # seconde version et la première est archivée.
-        rouvert = Dossier.objects.get(number="DEMO-0002")
+        # Rouvert puis resoumis : le motif reste lisible, la pièce de la
+        # salle a une seconde version et la première est archivée ; une
+        # ligne reste sans pièce. Chaque pièce est celle d'une ligne.
+        rouvert = Dossier.objects.get(external_ref="DEMO-0002")
         self.assertIn("illisible", rouvert.reopen_note)
+        salle = rouvert.expenses.get(title="Location de la salle")
         self.assertEqual(
-            sorted(rouvert.proofs.values_list("status", flat=True)),
+            sorted(salle.proofs.values_list("status", flat=True)),
             [Proof.ProofStatus.ARCHIVED, Proof.ProofStatus.RECEIVED],
         )
-        self.assertFalse(Dossier.objects.get(number=TEMOIN).proofs.exists())
+        self.assertEqual(rouvert.lignes_sans_preuve().count(), 1)
+        self.assertFalse(Proof.objects.filter(expense=None).exists())
+        self.assertFalse(Dossier.objects.get(external_ref=TEMOIN).proofs.exists())
+        # Les dossiers sont ceux des projets : un par type (décision 106).
+        for dossier in Dossier.objects.all():
+            self.assertEqual(dossier.kind.project_kind, dossier.project.kind)
+        self.assertEqual(partiel.label, "Stands — lancement à Lomé")
         self.assertEqual(Country.objects.filter(code__in=["TG", "CI"]).count(), 2)
         self.assertTrue(Expense.objects.filter(original_currency="EUR").exists())
 
@@ -100,7 +109,7 @@ class SeedDemoTests(TestCase):
                 AuditLog.Action.CREATED, AuditLog.Action.SUBMITTED,
                 AuditLog.Action.REOPENED, AuditLog.Action.JUSTIFIED,
                 AuditLog.Action.UNJUSTIFIED, AuditLog.Action.PROOF_UPLOADED,
-                AuditLog.Action.PROOF_REPLACED,
+                AuditLog.Action.PROOF_REPLACED, AuditLog.Action.RENAMED,
             },
             actions,
         )
@@ -129,7 +138,7 @@ class SeedDemoTests(TestCase):
         self._lancer()
 
         self.assertEqual(Country.objects.filter(code="TG").count(), 1)
-        self.assertTrue(Dossier.objects.filter(number=TEMOIN, country__code="TG").exists())
+        self.assertTrue(Dossier.objects.filter(external_ref=TEMOIN, country__code="TG").exists())
 
     def test_rien_ne_se_supprime_pas_meme_la_demonstration(self):
         with self.assertRaises(CommandError):

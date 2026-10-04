@@ -1,4 +1,4 @@
-"""Le titre d'un dossier se renomme à tout moment, et c'est tracé (décision 104)."""
+"""Le titre d'un dossier se renomme jusqu'à la clôture, et c'est tracé (décisions 104 et 108)."""
 
 from rest_framework import status
 
@@ -18,8 +18,8 @@ class RenommerTests(ExpenseTestCase):
             f"/api/dossiers/{(dossier or self.dossier).pk}/rename/", {"label": label}, format="json"
         )
 
-    def test_un_manager_du_pays_renomme_meme_un_dossier_cloture(self):
-        for statut in (Status.DRAFT, Status.SUBMITTED, Status.CLOSED):
+    def test_un_manager_du_pays_renomme_tant_que_non_cloture(self):
+        for statut in (Status.DRAFT, Status.SUBMITTED, Status.JUSTIFIED):
             with self.subTest(statut=statut):
                 Dossier.objects.filter(pk=self.dossier.pk).update(status=statut)
                 titre = f"Stands — {statut}"
@@ -29,6 +29,16 @@ class RenommerTests(ExpenseTestCase):
                 self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
                 self.assertEqual(reponse.data["label"], titre)
                 self.assertEqual(reponse.data["status"], statut)
+
+    def test_cloture_le_titre_ne_change_plus(self):
+        Dossier.objects.filter(pk=self.dossier.pk).update(status=Status.CLOSED)
+
+        reponse = self.renommer(self.owner, "Après coup")
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.label, "Mission Lomé")
+        self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.RENAMED).exists())
 
     def test_pas_seulement_l_auteur(self):
         """Tout manager du pays, pas seulement celui qui l'a ouvert."""
@@ -84,10 +94,21 @@ class RenommerTests(ExpenseTestCase):
                     self.renommer(user, "Titre du siège").status_code, status.HTTP_403_FORBIDDEN
                 )
 
-    def test_la_matrice_peut_l_accorder_au_siege(self):
+    def test_la_matrice_ne_l_accorde_pas_au_siege(self):
+        """Verrouillé (décision 108) : même enregistré en base, le réglage
+        ne l'ouvre pas au siège — les verrous valent à la lecture."""
         configurer(capability_roles={"dossiers.rename": ["manager", "admin"]})
 
-        self.assertEqual(self.renommer(self.controller, "Titre RH").status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.renommer(self.controller, "Titre RH").status_code, status.HTTP_403_FORBIDDEN
+        )
+        self.login(self.controller)
+        reponse = self.client.patch(
+            "/api/permissions/",
+            {"capabilities": {"dossiers.rename": ["manager", "admin"]}},
+            format="json",
+        )
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_un_dossier_du_voisin_est_introuvable(self):
         self.assertEqual(
@@ -95,13 +116,18 @@ class RenommerTests(ExpenseTestCase):
         )
 
     def test_l_action_est_proposee_dans_allowed_actions(self):
-        Dossier.objects.filter(pk=self.dossier.pk).update(status=Status.CLOSED)
+        Dossier.objects.filter(pk=self.dossier.pk).update(status=Status.JUSTIFIED)
         self.login(self.owner)
 
         actions = self.client.get(f"/api/dossiers/{self.dossier.pk}/").data["allowed_actions"]
 
         self.assertIn("rename", actions)
         self.login(self.controller)
+        self.assertNotIn(
+            "rename", self.client.get(f"/api/dossiers/{self.dossier.pk}/").data["allowed_actions"]
+        )
+        Dossier.objects.filter(pk=self.dossier.pk).update(status=Status.CLOSED)
+        self.login(self.owner)
         self.assertNotIn(
             "rename", self.client.get(f"/api/dossiers/{self.dossier.pk}/").data["allowed_actions"]
         )

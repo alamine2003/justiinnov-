@@ -350,6 +350,9 @@ class ChangeLog(models.Model):
     diff = models.JSONField(_("Différences"), default=dict, blank=True)
     performed_by = models.CharField(_("Par"), max_length=180, blank=True)
     ip_address = models.GenericIPAddressField(_("Adresse IP"), null=True, blank=True)
+    #: Pourquoi : exigé pour modifier un projet ou un type de dossier
+    #: (décision 109), vide ailleurs.
+    motif = models.TextField(_("Motif"), blank=True)
     created_at = models.DateTimeField(_("Le"), auto_now_add=True)
 
     class Meta:

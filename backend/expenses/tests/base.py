@@ -91,7 +91,7 @@ class ExpenseTestCase(APITestCase):
 
         cls.dossier = Dossier.objects.create(
             number="N-0001", label="Mission Lomé", country=cls.togo,
-            project=cls.projet, kind=cls.stands,
+            project=cls.projet, kind=cls.stands, predefini=True,
             team=cls.team, owner=cls.manager, date=date(cls.year, 3, 15),
             status=cls.dossier_status, created_by=cls.owner.username,
         )
@@ -130,6 +130,18 @@ class ExpenseTestCase(APITestCase):
             expense.budget = resolve_budget(expense)
         expense.save()
         return expense
+
+    def ligne_de_preuve(self, dossier=None):
+        """La ligne qui portera une pièce (décision 107) : la première du
+        dossier, créée au besoin, dans son pays et son équipe."""
+        dossier = dossier or self.dossier
+        ligne = dossier.expenses.order_by("pk").first()
+        if ligne is None:
+            ligne = self.make_expense(
+                dossier=dossier, country=dossier.country, project=dossier.project,
+                team=dossier.team,
+            )
+        return ligne
 
     def submit_dossier(self, dossier=None, user=None):
         """Le chemin réel du pays : le dossier emporte ses lignes."""

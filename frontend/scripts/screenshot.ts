@@ -201,16 +201,32 @@ async function main() {
   await goto(hq, "/projets", 1200)
   expect((await hq.textContent("h1"))?.includes("Projets") ?? false, "la page Projets s'ouvre")
   await shot(hq, "projets")
-  const premierProjet = hq.locator("tbody tr").getByRole("link").first()
+  // Le congrès togolais du jeu de démonstration, s'il est là : il a des
+  // dossiers remplis et un historique ; à défaut, le premier projet.
+  const congresDemo = hq.getByRole("link", { name: "Lancement gamme pédiatrique" })
+  const premierProjet = (await congresDemo.count())
+    ? congresDemo.first()
+    : hq.locator("tbody tr").getByRole("link").first()
   if (await premierProjet.count()) {
     await premierProjet.click()
     await hq.waitForURL("**/projets/*", { timeout: 15000 })
     await hq.waitForTimeout(1200)
+    // Décision 106 : un projet naît avec ses dossiers, personne n'en ouvre.
     expect(
       (await hq.getByRole("button", { name: /Nouveau dossier/ }).count()) === 0,
-      "le siège n'ouvre pas de dossier dans un projet",
+      "aucun dossier ne s'ouvre à la main dans un projet",
+    )
+    // Décision 108 : le siège modifie, motif à l'appui ; il ne renomme pas.
+    expect(
+      (await hq.getByRole("button", { name: "Modifier" }).count()) === 1 &&
+        (await hq.getByRole("button", { name: "Renommer" }).count()) === 0,
+      "le siège modifie le projet sans le renommer",
     )
     await shot(hq, "projet_detail")
+    await hq.getByRole("tab", { name: "Historique" }).click()
+    await hq.waitForTimeout(1200)
+    expectData((await hq.locator("ol li").count()) > 0, "l'historique du projet a des entrées")
+    await shot(hq, "projet_historique")
   }
 
   await goto(hq, "/dossiers")
@@ -229,13 +245,21 @@ async function main() {
   )
   await shot(hq, "dossiers")
 
-  // Premier dossier : lignes de dépenses, justificatifs, workflow, aperçu.
-  const firstDossier = hq.locator("tbody tr").getByRole("link").first()
+  // Un dossier aux lignes justifiées par leur pièce (décision 107) : celui
+  // des stands du jeu de démonstration, à défaut le premier.
+  const standsDemo = hq.locator("tbody tr", { hasText: "Stands — lancement" }).getByRole("link")
+  const firstDossier = (await standsDemo.count())
+    ? standsDemo.first()
+    : hq.locator("tbody tr").getByRole("link").first()
   if (await firstDossier.count()) {
     await firstDossier.click()
     await hq.waitForURL("**/dossiers/*", { timeout: 15000 })
     await hq.waitForTimeout(1200)
     expect(Boolean(await hq.textContent("h1")), "la fiche du dossier porte son N°ORDRE")
+    expectData(
+      (await hq.getByText("Justificatif", { exact: true }).count()) > 0,
+      "une ligne porte son justificatif",
+    )
     await shot(hq, "dossier_detail")
 
     // Un dialogue : la justification ou, à défaut, le dépôt de pièce.
@@ -271,9 +295,21 @@ async function main() {
   )
   await shot(hq, "registre")
 
-  await goto(hq, "/audit", 1200)
-  expectData((await hq.locator("tbody tr").count()) > 0, "le journal d'audit a des entrées")
-  await shot(hq, "audit")
+  // Décision 111 : l'audit en tableau de bord, puis ses deux journaux.
+  await goto(hq, "/audit", 1500)
+  expect(
+    (await hq.getByText("Dossiers soumis").count()) > 0,
+    "la vue d'ensemble de l'audit compte les dossiers soumis",
+  )
+  await shot(hq, "audit_vue_ensemble")
+  await hq.getByRole("tab", { name: "Circuit" }).click()
+  await hq.waitForTimeout(1200)
+  expectData((await hq.locator("tbody tr").count()) > 0, "le journal du circuit a des entrées")
+  await shot(hq, "audit_circuit")
+  await hq.getByRole("tab", { name: "Référentiel et comptes" }).click()
+  await hq.waitForTimeout(1200)
+  expectData((await hq.locator("tbody tr").count()) > 0, "l'historique du référentiel a des entrées")
+  await shot(hq, "audit_referentiel")
 
   await goto(hq, "/countries")
   const hqCountries = await hq.locator("tbody tr").count()
@@ -325,6 +361,14 @@ async function main() {
     await hq.getByRole("tab", { name: onglet }).click()
     await hq.waitForTimeout(900)
     expectData((await hq.locator("tbody tr").count()) > 0, `Configuration › ${onglet} a des lignes`)
+    if (onglet === "Types de dossiers") {
+      // Décision 108 : la liste est au super administrateur seul ; le
+      // compte de capture du siège est administrateur (RH), il la lit.
+      expect(
+        (await hq.getByRole("button", { name: "Ajouter" }).count()) === 0,
+        "la RH lit les types de dossiers sans pouvoir les modifier",
+      )
+    }
     await shot(hq, nom)
   }
 
@@ -348,22 +392,34 @@ async function main() {
   await rep.keyboard.press("Escape")
   await goto(rep, "/projets", 1200)
   await shot(rep, "projets_representant")
-  // Le pays ouvre un dossier dans un projet typé : type choisi, titre repris.
+  // Le pays crée ses projets : le type choisi annonce les dossiers qu'il
+  // recevra (décision 106). Le dialogue s'ouvre sans être soumis — la base
+  // de capture est partagée par les trois scripts.
+  const nouveauProjet = rep.getByRole("button", { name: "Nouveau projet" })
+  expect((await nouveauProjet.count()) === 1, "le pays peut créer un projet")
+  if (await nouveauProjet.count()) {
+    await nouveauProjet.click()
+    await rep.waitForTimeout(800)
+    await rep.getByLabel("Type de projet").selectOption("congres")
+    await rep.waitForTimeout(800)
+    expect(
+      (await rep.getByText(/Le projet recevra ses dossiers/).count()) === 1,
+      "le dialogue annonce les dossiers prédéfinis du type",
+    )
+    await shot(rep, "projet_nouveau")
+    await rep.keyboard.press("Escape")
+    await rep.waitForTimeout(400)
+  }
   const projetOuvert = rep.locator("tbody tr").getByRole("link").first()
   if (await projetOuvert.count()) {
     await projetOuvert.click()
     await rep.waitForURL("**/projets/*", { timeout: 15000 })
     await rep.waitForTimeout(1200)
+    expect(
+      (await rep.getByRole("button", { name: /Nouveau dossier/ }).count()) === 0,
+      "le pays remplit les dossiers du projet, il n'en ouvre pas",
+    )
     await shot(rep, "projet_detail_representant")
-    const nouveauDossier = rep.getByRole("button", { name: "Nouveau dossier" })
-    if (await nouveauDossier.count()) {
-      await nouveauDossier.click()
-      await rep.waitForTimeout(800)
-      expect((await rep.getByRole("dialog").count()) > 0, "le dialogue « Nouveau dossier » s'ouvre")
-      await shot(rep, "dossier_nouveau")
-      await rep.keyboard.press("Escape")
-      await rep.waitForTimeout(400)
-    }
   }
 
   await goto(rep, "/dossiers")

@@ -65,8 +65,8 @@ l'application.
   créées ; les autres le seront à leur entrée dans le dispositif. Ouvrir une
   filiale demande de modifier ce fichier, donc une décision explicite.
 - **Trois rôles, pas un de plus** (décision 89). Côté pays, le `manager`
-  ouvre les dossiers **de son pays**, saisit les lignes, dépose les pièces,
-  soumet et importe. Au siège, l'`admin` (RH) **contrôle chaque dossier de
+  ouvre les projets **de son pays** (qui naissent avec leurs dossiers),
+  saisit les lignes, dépose la pièce de chaque ligne, soumet et importe. Au siège, l'`admin` (RH) **contrôle chaque dossier de
   bout en bout, à lui seul** — mise en contrôle, justification ou refus,
   clôture, contrôle des pièces, réouverture, décision sur une
   rectification — et tient les comptes, le référentiel, l'audit et les
@@ -92,9 +92,10 @@ l'application.
   s'applique à la requête suivante, côté vues, services, notifications et
   `allowed_actions`. **Quatre verrous ne se règlent pas** (décisions 89
   et 91) :
-  **la déclaration est au pays seul** (`expenses.create`,
-  `expenses.update`, `expenses.delete`, `proofs.upload`,
-  `dossiers.submit` : le `manager`, fixe, jamais le siège ; `data.import`
+  **la déclaration est au pays seul** (`projets.create`,
+  `expenses.create`, `expenses.update`, `expenses.delete`,
+  `proofs.upload`, `dossiers.submit` : le `manager`, fixe, jamais le
+  siège ; `data.import`
   au pays par défaut, retirable, jamais au siège) ; **le contrôle est à
   l'administrateur seul** (`expenses.review`, `expenses.validate`,
   `expenses.close`, `proofs.review`, `dossiers.reopen`,
@@ -103,7 +104,9 @@ l'application.
   (`budgets.create`, `budgets.update`, `budgets.delete`,
   `reallocations.request`, `reallocations.decide`, `rates.manage` :
   `super_admin`, fixe, jamais l'`admin` — qui règle la matrice et se les
-  rouvrirait sinon) ; **l'administration est aux administrateurs** —
+  rouvrirait sinon) — de même que **la liste des types de dossiers**
+  (`dossier_kinds.manage`, décision 108), qui fixe les dossiers de chaque
+  projet ; **l'administration est aux administrateurs** —
   `admin` et `super_admin` gardent comptes, configuration, référentiel,
   audit et exports et règlent toute la matrice (décision 58).
   Le `manager` ne reçoit jamais l'administration (comptes, configuration,
@@ -160,11 +163,12 @@ l'application.
   `rectify` : un constat ne se défait qu'en approuvant une demande
   (`transitions.approuver_rectification`). Une ligne contestée un jour ne
   se retire plus, même rouverte au brouillon : elle se corrige et se
-  resoumet. **Le titre d'un dossier, lui, se renomme à tout moment**,
-  même clôturé (`POST /api/dossiers/{id}/rename/`, capacité
-  `dossiers.rename` : `manager` par défaut, auteur ou non) : il ne porte
-  ni montant ni preuve, rien d'autre ne bouge, et l'ancien titre reste au
-  journal (`AuditLog` `renamed`, décision 104).
+  resoumet. **Le titre d'un dossier, lui, se renomme jusqu'à la
+  clôture** (`POST /api/dossiers/{id}/rename/`, capacité
+  `dossiers.rename` : `manager` par défaut, auteur ou non, jamais le
+  siège) : il ne porte ni montant ni preuve, rien d'autre ne bouge, et
+  l'ancien titre reste au journal (`AuditLog` `renamed`, décisions 104 et
+  108). Clôturé, plus rien ne bouge, pas même le titre.
 - **Un brouillon appartient à son auteur.** Il ne se retire, ne se
   modifie et ne se soumet que par lui — jamais par un collègue du pays,
   jamais par le siège, qui ne déclare pas
@@ -173,24 +177,35 @@ l'application.
   ceux que le siège avait ouverts, rendus au pays par la migration
   `expenses.0017`.
 - **Le projet est la rubrique principale** (version 2.0, décisions 100 à
-  103) : Pays › Projet › Dossier › Lignes. Un projet a un type (congrès,
+  111) : Pays › Projet › Dossier › Lignes. Un projet a un type (congrès,
   voyage, soutien financier) et une référence calculée, `TG-P-2026-001`
-  (`core.numerotation`). Le pays l'ouvre (`projets.create`) ; le siège le
-  modifie, le type et le désactive (`referentiel.update`). Un dossier
-  s'ouvre **dans un projet** actif et typé, sous un type de dossier de ce
-  type de projet (`DossierKind`, liste commune aux filiales tenue par le
-  siège avec `configuration.manage`) ; son numéro est calculé,
-  `TG-P-2026-001-D001` (`expenses.numerotation`), et ne se saisit plus ;
-  projet et type ne changent plus ; ses lignes portent son projet. Les
-  dossiers d'avant la 2.0 sont rangés sous le projet « Historique » de
-  leur pays, leurs lignes intactes. Un classeur s'importe dans un projet,
-  sous un type de dossier. Dans l'interface, « Projets » remplace
-  « Dossiers » dans la navigation, et ce qu'un projet permet vient du
-  serveur (`accepte_des_dossiers`, décision 105).
+  (`core.numerotation`). Le pays l'ouvre (`projets.create`, au pays seul)
+  et en corrige le titre (`projets.rename`) ; le siège le modifie, le
+  type et le désactive (`projets.update`) ; **toute modification exige un
+  motif**, gardé au journal (`ChangeLog.motif`, décision 109). **Un projet
+  naît avec ses dossiers prédéfinis** (décision 106) : un par type actif
+  de son type de projet (`DossierKind`, liste commune aux filiales tenue
+  par le seul `super_admin`), dans la même transaction
+  (`expenses.predefinis`), signés par le manager qui crée le projet, dans
+  l'équipe qu'il choisit. **Aucun dossier ne se crée ni ne se supprime par
+  l'API** (405) ; un dossier prédéfini par type et par projet
+  (`Dossier.predefini`, `unique_type_par_projet`). Un projet qui n'en
+  recevrait aucun ne se crée pas ; le siège complète à la demande un projet
+  des dossiers qui lui manquent (`POST /api/projects/{id}/completer/`). Son numéro est calculé,
+  `TG-P-2026-001-D001` (`expenses.numerotation`) ; projet et type ne
+  changent plus ; ses lignes portent son projet. Les dossiers d'avant la
+  2.0 sont rangés sous le projet « Historique » de leur pays, leurs
+  lignes intactes. Un classeur s'importe dans le dossier prédéfini d'un
+  projet. La fiche projet a son historique (`/api/projects/{id}/historique/`,
+  `audit.read`, décision 110) ; l'audit a son tableau de bord (`/api/audit/synthese/`,
+  décision 111). Dans l'interface, « Projets » remplace « Dossiers » dans
+  la navigation, et ce qu'un projet permet vient du serveur
+  (`accepte_des_dossiers`, décision 105).
 - **Un dossier appartient à un pays** (décision 89). Son pays est
   attribué à la création, dans le périmètre de son auteur, et ne change
   plus jamais — même vide. Seul ce pays remplit ses lignes et ses pièces :
-  une ligne porte le pays de son dossier, une pièce se range sous lui, et
+  une ligne porte le pays de son dossier, **une pièce appartient à sa
+  ligne** (`Proof.expense`, décision 107) et se range sous son dossier, et
   tout le reste répond « introuvable ». La liste des dossiers se filtre
   par pays (`?country=`) dès que le compte en voit plusieurs.
 - **Une pièce est ce qu'elle prétend être.** Les premiers octets d'un
@@ -232,11 +247,23 @@ l'application.
   intitulés, catégories, bénéficiaires) est tenu par `admin` et
   `super_admin` sur tous les pays (`referentiel.create`,
   `referentiel.update`) ; le `manager` ne le modifie pas par défaut — sauf
-  pour **ouvrir un projet** de son pays (`projets.create`, décision 100).
-  `admin` et `super_admin` sont toujours globaux.
-- **Déclarer tient en une action.** Le manager remplit ses lignes, joint la
-  pièce et soumet le dossier : ses lignes partent avec lui. Un dossier vide ne
-  se soumet pas ; un dossier sans pièce se soumet avec un avertissement.
+  pour **ouvrir un projet** de son pays et en corriger le titre
+  (`projets.create`, `projets.rename`, décisions 100 et 108). `admin` et
+  `super_admin` sont toujours globaux.
+- **Le manager a le moindre privilège** (décision 108). Par défaut, il
+  porte la déclaration et rien d'autre : `projets.create`,
+  `projets.rename`, `dossiers.rename`, `expenses.create`,
+  `expenses.update`, `expenses.delete`, `proofs.upload`,
+  `dossiers.submit`, `data.import`, `rectifications.request`. La matrice
+  peut lui ouvrir `history.read`, `managers.*`, `referentiel.*`,
+  `reallocations.request` et `data.export` ; tout le reste lui est
+  verrouillé. `accounts/tests/test_matrice_des_droits.py` tient la liste
+  exacte : un droit de plus au manager se décide, il ne s'ajoute pas.
+- **Déclarer tient en une action.** Le manager remplit ses lignes, joint à
+  chacune sa pièce et soumet le dossier : ses lignes partent avec lui. Un
+  dossier vide ne se soumet pas ; des lignes sans pièce se soumettent avec
+  un avertissement qui les compte, mais le dossier ne se justifie pas tant
+  que chacune n'a pas la sienne (décision 107).
 - **La double authentification est proposée, pas imposée** — décision
   reportée par la direction. `GET /api/me/` expose `totp_required`
   (politique du serveur, `DJANGO_TOTP_REQUIRED`, faux par défaut) et

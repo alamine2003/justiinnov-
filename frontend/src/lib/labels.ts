@@ -140,7 +140,51 @@ export const AUDIT_ACTIONS = [
   "rectification_decided",
   "rectified",
   "imported",
+  "renamed",
 ] as const
+
+/** Actions de l'historique du référentiel et des comptes (`ChangeLog`). */
+export const HISTORY_ACTIONS = [
+  "created",
+  "updated",
+  "reassigned",
+  "deactivated",
+  "reactivated",
+  "deleted",
+  "password_reset",
+  "password_changed",
+  "login",
+  "login_failed",
+  "logout",
+  "totp_confirmed",
+  "totp_reset",
+] as const
+
+export function historyActionLabel(t: TFunction, action: (typeof HISTORY_ACTIONS)[number]): string {
+  return t(`libelles.historique_action.${action}`)
+}
+
+/** Entités que l'historique suit, pour filtrer l'onglet « Référentiel et comptes ». */
+export const HISTORY_MODELS = [
+  "project",
+  "dossier_kind",
+  "workflow_configuration",
+  "user",
+  "country",
+  "team",
+  "manager",
+  "beneficiary",
+  "budget",
+  "reallocation",
+  "exchange_rate",
+  "cost_center",
+  "expense_title",
+  "marketing_category",
+] as const
+
+export function historyModelLabel(t: TFunction, model: (typeof HISTORY_MODELS)[number]): string {
+  return t(`libelles.historique_objet.${model}`)
+}
 
 export function auditActionLabel(t: TFunction, action: string): string {
   return t(`libelles.audit_action.${action as (typeof AUDIT_ACTIONS)[number]}`, {

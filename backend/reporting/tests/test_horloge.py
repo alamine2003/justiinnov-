@@ -20,7 +20,9 @@ from accounts.tests.test_scoping import make_user
 from budget.models import Budget
 from core.models import Country, Project, ProjectKind, Team, WorkflowConfiguration
 from core.numerotation import creer_projet
+from core.tests.aides import trace
 from expenses.models import Dossier, Expense
+from expenses.predefinis import creer_les_dossiers_predefinis
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
 from reporting import alerts as alert_rules
@@ -137,10 +139,13 @@ class ImportTests(HorlogeTestCase):
         # L'import est une déclaration du pays (décision 89) : un manager de
         # Djibouti, dont le responsable est déjà inscrit dans le pays.
         self.djibouti.managers.add(self.manager)
-        self.login(make_user("djibouti.innov", Role.MANAGER, [self.djibouti]))
+        importateur = make_user("djibouti.innov", Role.MANAGER, [self.djibouti])
+        self.login(importateur)
+        # Le classeur se verse dans le dossier prédéfini du type (décision 106).
         projet = creer_projet(Project(
             country=self.djibouti, name="Congrès de Djibouti", kind=ProjectKind.CONGRES,
         ))
+        creer_les_dossiers_predefinis(projet, auteur=importateur.username, trace=trace(importateur))
 
         response = self.client.post(
             "/api/imports/expenses.xlsx",

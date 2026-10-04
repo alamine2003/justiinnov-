@@ -1385,6 +1385,84 @@ de 2 à 4, sortie complète de `verifier_restauration`, écarts constatés,
 limites restantes. Un écart inexpliqué est un incident, pas une note de
 bas de page.
 
+### Répéter une migration sur une copie de la production
+
+Une version qui migre des données (la 2.0 range chaque dossier dans un
+projet) se répète **avant la fusion**, sur un poste, avec le dump de la
+nuit. La production n'est pas touchée : on y lit un fichier, rien d'autre.
+Le passage de la **1.3.2 à la 2.0** joue cinq migrations (`core.0016`,
+`core.0017`, `expenses.0019` à `0021`), celles de `main` comprises.
+
+**Le dump contient des données personnelles, les jetons de session et les
+secrets TOTP en clair.** Il reste sur un disque chiffré (FileVault), le
+temps de la répétition, et s'efface après — il n'est ni envoyé, ni
+partagé, ni versionné.
+
+**1. Rapatrier le dump de la nuit** (sur le serveur, lecture seule) :
+
+```bash
+ssh root@<hôte-production>
+ls -lt /var/lib/docker/volumes/justi-innov_sauvegardes/_data/base/ | head -3
+exit
+mkdir -p ~/repetition && chmod 700 ~/repetition
+scp root@<hôte-production>:/var/lib/docker/volumes/justi-innov_sauvegardes/_data/base/<dump> ~/repetition/
+```
+
+Un `.dump.enc` (`SAUVEGARDE_CLE_PUBLIQUE`) se déchiffre sur le Mac avec la
+clé privée, comme au paragraphe « Chiffrement » ci-dessus.
+
+**2. Le restaurer dans une base jetable de la pile de développement**,
+depuis le dépôt sur la branche à répéter (la base de développement
+`justi_innov` n'est pas touchée) :
+
+```bash
+git fetch origin && git checkout <branche>
+docker compose build backend && docker compose up -d db
+docker compose exec db createdb -U justi justi_repetition
+docker compose exec -T db pg_restore -U justi -d justi_repetition --no-owner --no-acl < ~/repetition/<dump>.dump
+```
+
+`--no-owner --no-acl` : les rôles de la production (`justi_app`)
+n'existent pas ici. Production et développement ont le même Postgres
+(16.15) : le dump se relit tel quel.
+
+**3. Empreintes avant, migration chronométrée, empreintes après :**
+
+```bash
+docker compose exec -T db psql -U justi -d justi_repetition -X -q -f - < deploy/empreintes_de_la_base.sql > ~/repetition/avant.txt
+time docker compose run --rm -e POSTGRES_DB=justi_repetition -e EMAIL_BACKEND_CONSOLE=1 --entrypoint python backend manage.py migrate
+docker compose exec -T db psql -U justi -d justi_repetition -X -q -f - < deploy/empreintes_de_la_base.sql > ~/repetition/apres.txt
+diff ~/repetition/avant.txt ~/repetition/apres.txt
+```
+
+**4. Lire le `diff`.** `deploy/empreintes_de_la_base.sql` tourne à
+l'identique sur les deux schémas ; il ne doit montrer **que** :
+
+- les nombres d'entrées d'audit et d'historique, qui grandissent — la
+  migration trace ce qu'elle fait ;
+- la section « 2.0 », qui n'existe qu'après : `0` dossier sans projet,
+  `0` projet d'un autre pays, un projet « Historique (avant 2.0) » par
+  pays qui avait des dossiers, `0` projet sans référence.
+
+Lignes par statut et par enveloppe, montants, montants justifiés,
+enveloppes et les quatre empreintes (lignes, dossiers, pièces,
+enveloppes) sortent **identiques**. Tout autre écart arrête la livraison :
+on ne fusionne pas, on transmet le `diff` — jamais le dump. Notez la durée
+de `migrate` : la production sera indisponible au moins ce temps-là.
+
+Répétée sur le jeu de démonstration (`seed_demo` en 1.3.2, puis la
+branche de la 2.0), le 4 octobre 2026 : seuls l'audit (37 → 41) et
+l'historique (18 → 31) ont bougé, quatre dossiers dans « Historique (avant
+2.0) » du Togo.
+
+**5. Effacer** la base et le dump, puis **consigner** (date, nom du dump,
+durée de `migrate`, `diff` complet) dans le journal d'exploitation :
+
+```bash
+docker compose exec db dropdb -U justi justi_repetition
+rm -rf ~/repetition
+```
+
 ## Reprise à un instant donné
 
 Le dump de 02:00 dit où l'on était cette nuit-là. **Les segments de journal

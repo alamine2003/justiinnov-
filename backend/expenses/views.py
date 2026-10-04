@@ -12,27 +12,29 @@ import logging
 from django.db import IntegrityError, transaction
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, MethodNotAllowed, ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import RolePermission, get_access
 from accounts.perimetre import compter_par_pays, filtrer
 from accounts.scoping import CountryScopedMixin
 from core.journal import Trace
+from core.models import ChangeLog
 from core.serializers import ParPaysSerializer
 from core.mixins import NoDestroyModelViewSet
-from core.regles import traduire_les_regles
+from core.regles import RegleViolee, traduire_les_regles
 
 from . import stockage, transitions
-from .numerotation import creer_dossier
 from .audit import champs_journalises, journaliser_la_modification, photographier, record
 from .mixins import DraftDeletableViewSet
+from .filtres import AuditLogFilter
+from .synthese_audit import synthese
 from .models import (
     AuditLog,
     Beneficiary,
@@ -43,6 +45,8 @@ from .models import (
 )
 from .serializers import (
     AuditLogSerializer,
+    SyntheseAuditSerializer,
+    SyntheseRequeteSerializer,
     BeneficiarySerializer,
     DossierDetailSerializer,
     DossierSerializer,
@@ -213,8 +217,13 @@ class BeneficiaryViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         "submit", "review", "justify", "reject", "close", "reopen",
     )
 )
-class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
-    """Dossiers de justification, ouverts dans un projet (décision 102)."""
+class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
+    """Dossiers de justification, prédéfinis par leur projet (décision 106).
+
+    Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+    ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+    ses lignes, le renomme jusqu'à la clôture et le soumet.
+    """
 
     queryset = (
         Dossier.objects.select_related("country", "team", "owner", "project", "kind")
@@ -264,7 +273,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         prefetch : la règle n'est pas récrite ici.
         """
         return filtrer(
-            Expense.objects.avec_les_relations().with_rectification(),
+            Expense.objects.avec_les_relations().with_rectification().avec_la_preuve(),
             get_access(self.request.user),
             pays=ExpenseViewSet.country_lookup,
             equipe=ExpenseViewSet.team_lookup,
@@ -310,7 +319,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     @extend_schema(request=RenommerSerializer, responses=DossierDetailSerializer)
     @action(detail=True, methods=["post"])
     def rename(self, request, pk=None):
-        """Change le titre du dossier, à tout moment (décision 104)."""
+        """Change le titre du dossier, jusqu'à sa clôture (décisions 104 et 108)."""
         dossier = self.get_object()
         demande = RenommerSerializer(data=request.data)
         demande.is_valid(raise_exception=True)
@@ -331,13 +340,10 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         """Renvoie un dossier déclaré au brouillon (``transitions.rouvrir``)."""
         return self.perform_transition(request, "reopen")
 
-    def perform_create(self, serializer):
-        self._check_country_scope(serializer)
-        # Le numéro est calculé, projet verrouillé (décision 102).
-        serializer.instance = creer_dossier(
-            Dossier(**serializer.validated_data, created_by=self.request.user.username)
-        )
-        record(self.request, AuditLog.Action.CREATED, serializer.instance)
+    @extend_schema(exclude=True)
+    def create(self, request, *args, **kwargs):
+        """Un dossier ne se crée pas : son projet l'a reçu d'office (décision 106)."""
+        raise MethodNotAllowed(request.method)
 
     def perform_update(self, serializer):
         # Relecture sous verrou : l'instance validée a été lue sans verrou,
@@ -376,7 +382,7 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
 
     # ``with_rectification`` : ``allowed_actions`` dit si une rectification
     # peut être demandée sans une requête par ligne.
-    queryset = Expense.objects.avec_les_relations().with_rectification()
+    queryset = Expense.objects.avec_les_relations().with_rectification().avec_la_preuve()
     serializer_class = ExpenseSerializer
     transition_serializer_class = ExpenseTransitionSerializer
     permission_classes = [RolePermission]
@@ -479,6 +485,13 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
                     dossier_vise, get_access(self.request.user),
                     _("Seul l'auteur d'un brouillon peut y ajouter une ligne."),
                 )
+                # Ses pièces sont rangées sous son dossier : une ligne qui
+                # en porte ne change plus de dossier (décision 107).
+                if serializer.instance.proofs.exists():
+                    raise RegleViolee(
+                        "dossier",
+                        _("Cette ligne porte des justificatifs : elle ne change plus de dossier."),
+                    )
         # Le taux figé et le montant justifié ne s'écrivent pas par la charge
         # utile, mais la modification les fait bouger : ils sont de la trace.
         champs = champs_journalises(serializer, "original_rate", "justified_amount")
@@ -496,12 +509,12 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
     ),
 )
 class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
-    """Pièces justificatives, rattachées au dossier."""
+    """Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107)."""
 
     queryset = Proof.objects.select_related("dossier__country").all()
     serializer_class = ProofSerializer
     permission_classes = [RolePermission]
-    filterset_fields = ["dossier", "kind", "status", "is_complete"]
+    filterset_fields = ["dossier", "expense", "kind", "status", "is_complete"]
     search_fields = ["original_name", "dossier__number"]
     ordering_fields = ["created_at", "version"]
     # La preuve n'a pas de pays propre : elle suit celui de son dossier —
@@ -560,11 +573,19 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
                 _("Le dossier est clôturé : plus aucun justificatif ne peut y être ajouté.")
             )
         serializer.validated_data["dossier"] = dossier
+        ligne = serializer.validated_data["expense"]
+        # Relue sous le verrou du dossier : une ligne qui en serait sortie
+        # entre-temps ne range pas sa pièce dans l'ancien (décision 107).
+        # Sous verrou : un retrait de la ligne au même instant est attendu,
+        # puis relu.
+        if Expense.objects.select_for_update().filter(pk=ligne.pk, dossier=dossier).first() is None:
+            raise ValidationError({"expense": [_("Cette ligne n'est plus dans ce dossier.")]})
         replaced = serializer.validated_data.get("replaces")
         if replaced is not None:
             # Revalidé ici, hors sérialiseur : la pièce remplacée change
-            # d'état, elle doit relever du même dossier que la nouvelle.
-            ProofSerializer.verifier_le_remplacement(replaced, dossier)
+            # d'état, elle doit relever du même dossier — et de la même
+            # ligne — que la nouvelle.
+            ProofSerializer.verifier_le_remplacement(replaced, dossier, ligne)
             replaced = Proof.objects.select_for_update().get(pk=replaced.pk)
         try:
             serializer.save(
@@ -574,7 +595,7 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         except IntegrityError as exc:
             # Deux dépôts simultanés du même fichier : la base a tranché.
             raise ValidationError(
-                {"file": [_("Ce fichier est déjà rattaché à ce dossier (doublon).")]}
+                {"file": [_("Ce fichier est déjà rattaché à cette ligne (doublon).")]}
             ) from exc
         proof = serializer.instance
         if replaced is not None:
@@ -586,6 +607,7 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
                 proof,
                 country=dossier.country,
                 dossier=dossier.number,
+                expense=ligne.pk,
                 sha256=proof.sha256,
                 version=proof.version,
                 before={"sha256": replaced.sha256, "version": replaced.version},
@@ -599,6 +621,7 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
             proof,
             country=dossier.country,
             dossier=dossier.number,
+            expense=ligne.pk,
             sha256=proof.sha256,
             version=proof.version,
         )
@@ -757,6 +780,30 @@ class AuditLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     serializer_class = AuditLogSerializer
     permission_classes = [RolePermission]
     read_capability = "audit.read"
-    filterset_fields = ["user", "action", "object_type", "country"]
+    filterset_class = AuditLogFilter
     search_fields = ["label", "user"]
     ordering_fields = ["created_at"]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("debut", OpenApiTypes.DATE, description=gettext_lazy("Premier jour (défaut : il y a 30 jours).")),
+            OpenApiParameter("fin", OpenApiTypes.DATE, description=gettext_lazy("Dernier jour (défaut : aujourd'hui).")),
+            OpenApiParameter("country", OpenApiTypes.INT, description=gettext_lazy("Un pays.")),
+        ],
+        responses=SyntheseAuditSerializer,
+    )
+    @action(detail=False, methods=["get"])
+    def synthese(self, request):
+        """Le tableau de bord de l'audit : les deux journaux, comptés en base (décision 111)."""
+        bornes = SyntheseRequeteSerializer(data=request.query_params)
+        bornes.is_valid(raise_exception=True)
+        circuit = super().get_queryset()
+        referentiel = filtrer(ChangeLog.objects.all(), get_access(request.user))
+        pays = bornes.validated_data.get("country")
+        if pays is not None:
+            circuit = circuit.filter(country=pays)
+            referentiel = referentiel.filter(country=pays)
+        return Response(SyntheseAuditSerializer(synthese(
+            circuit, referentiel,
+            debut=bornes.validated_data.get("debut"), fin=bornes.validated_data.get("fin"),
+        )).data)

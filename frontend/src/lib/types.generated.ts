@@ -46,6 +46,23 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/audit/synthese/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /** @description Le tableau de bord de l'audit : les deux journaux, comptés en base (décision 111). */
+        get: operations["audit_synthese_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/beneficiaries/": {
         parameters: {
             query?: never
@@ -376,24 +393,22 @@ export interface paths {
         /**
          * @description La liste commune des types de dossiers (décision 101).
          *
-         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
-         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
-         *     Elle s'écrit comme la configuration (``configuration.manage``,
-         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
-         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
-         *     sinon « Stands » pour les dix-sept filiales.
+         *     Lue par tout compte connecté, tenue par le super administrateur seul
+         *     (``dossier_kinds.manage``, verrouillé à la RH et au pays, décision
+         *     108) : elle fixe les dossiers que chaque projet reçoit d'office
+         *     (décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Toute modification exige un motif (décision 109).
          */
         get: operations["dossier_kinds_list"]
         put?: never
         /**
          * @description La liste commune des types de dossiers (décision 101).
          *
-         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
-         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
-         *     Elle s'écrit comme la configuration (``configuration.manage``,
-         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
-         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
-         *     sinon « Stands » pour les dix-sept filiales.
+         *     Lue par tout compte connecté, tenue par le super administrateur seul
+         *     (``dossier_kinds.manage``, verrouillé à la RH et au pays, décision
+         *     108) : elle fixe les dossiers que chaque projet reçoit d'office
+         *     (décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Toute modification exige un motif (décision 109).
          */
         post: operations["dossier_kinds_create"]
         delete?: never
@@ -412,23 +427,21 @@ export interface paths {
         /**
          * @description La liste commune des types de dossiers (décision 101).
          *
-         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
-         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
-         *     Elle s'écrit comme la configuration (``configuration.manage``,
-         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
-         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
-         *     sinon « Stands » pour les dix-sept filiales.
+         *     Lue par tout compte connecté, tenue par le super administrateur seul
+         *     (``dossier_kinds.manage``, verrouillé à la RH et au pays, décision
+         *     108) : elle fixe les dossiers que chaque projet reçoit d'office
+         *     (décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Toute modification exige un motif (décision 109).
          */
         get: operations["dossier_kinds_retrieve"]
         /**
          * @description La liste commune des types de dossiers (décision 101).
          *
-         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
-         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
-         *     Elle s'écrit comme la configuration (``configuration.manage``,
-         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
-         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
-         *     sinon « Stands » pour les dix-sept filiales.
+         *     Lue par tout compte connecté, tenue par le super administrateur seul
+         *     (``dossier_kinds.manage``, verrouillé à la RH et au pays, décision
+         *     108) : elle fixe les dossiers que chaque projet reçoit d'office
+         *     (décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Toute modification exige un motif (décision 109).
          */
         put: operations["dossier_kinds_update"]
         post?: never
@@ -438,12 +451,11 @@ export interface paths {
         /**
          * @description La liste commune des types de dossiers (décision 101).
          *
-         *     Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
-         *     tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
-         *     Elle s'écrit comme la configuration (``configuration.manage``,
-         *     administrateurs, verrouillé au pays) et non comme le référentiel d'un
-         *     pays, que l'organisation peut ouvrir au pays : un manager désactiverait
-         *     sinon « Stands » pour les dix-sept filiales.
+         *     Lue par tout compte connecté, tenue par le super administrateur seul
+         *     (``dossier_kinds.manage``, verrouillé à la RH et au pays, décision
+         *     108) : elle fixe les dossiers que chaque projet reçoit d'office
+         *     (décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.
+         *     Toute modification exige un motif (décision 109).
          */
         patch: operations["dossier_kinds_partial_update"]
         trace?: never
@@ -455,11 +467,16 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
+        /**
+         * @description Dossiers de justification, prédéfinis par leur projet (décision 106).
+         *
+         *     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+         *     ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+         *     ses lignes, le renomme jusqu'à la clôture et le soumet.
+         */
         get: operations["dossiers_list"]
         put?: never
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
-        post: operations["dossiers_create"]
+        post?: never
         delete?: never
         options?: never
         head?: never
@@ -473,16 +490,33 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
+        /**
+         * @description Dossiers de justification, prédéfinis par leur projet (décision 106).
+         *
+         *     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+         *     ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+         *     ses lignes, le renomme jusqu'à la clôture et le soumet.
+         */
         get: operations["dossiers_retrieve"]
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
+        /**
+         * @description Dossiers de justification, prédéfinis par leur projet (décision 106).
+         *
+         *     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+         *     ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+         *     ses lignes, le renomme jusqu'à la clôture et le soumet.
+         */
         put: operations["dossiers_update"]
         post?: never
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
-        delete: operations["dossiers_destroy"]
+        delete?: never
         options?: never
         head?: never
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
+        /**
+         * @description Dossiers de justification, prédéfinis par leur projet (décision 106).
+         *
+         *     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+         *     ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+         *     ses lignes, le renomme jusqu'à la clôture et le soumet.
+         */
         patch: operations["dossiers_partial_update"]
         trace?: never
     }
@@ -495,7 +529,13 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
+        /**
+         * @description Dossiers de justification, prédéfinis par leur projet (décision 106).
+         *
+         *     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+         *     ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+         *     ses lignes, le renomme jusqu'à la clôture et le soumet.
+         */
         post: operations["dossiers_close_create"]
         delete?: never
         options?: never
@@ -512,7 +552,13 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
+        /**
+         * @description Dossiers de justification, prédéfinis par leur projet (décision 106).
+         *
+         *     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+         *     ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+         *     ses lignes, le renomme jusqu'à la clôture et le soumet.
+         */
         post: operations["dossiers_justify_create"]
         delete?: never
         options?: never
@@ -529,7 +575,13 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
+        /**
+         * @description Dossiers de justification, prédéfinis par leur projet (décision 106).
+         *
+         *     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+         *     ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+         *     ses lignes, le renomme jusqu'à la clôture et le soumet.
+         */
         post: operations["dossiers_reject_create"]
         delete?: never
         options?: never
@@ -546,7 +598,7 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Change le titre du dossier, à tout moment (décision 104). */
+        /** @description Change le titre du dossier, jusqu'à sa clôture (décisions 104 et 108). */
         post: operations["dossiers_rename_create"]
         delete?: never
         options?: never
@@ -580,7 +632,13 @@ export interface paths {
         }
         get?: never
         put?: never
-        /** @description Dossiers de justification, ouverts dans un projet (décision 102). */
+        /**
+         * @description Dossiers de justification, prédéfinis par leur projet (décision 106).
+         *
+         *     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
+         *     ni n'en retire (``POST`` et ``DELETE`` répondent 405). Le pays y saisit
+         *     ses lignes, le renomme jusqu'à la clôture et le soumet.
+         */
         post: operations["dossiers_review_create"]
         delete?: never
         options?: never
@@ -1510,18 +1568,26 @@ export interface paths {
         /**
          * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
          *
-         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
-         *     et les désactive (``referentiel.update``). La référence est attribuée à
-         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         *     Le pays les crée (``projets.create``, déclaration : jamais le siège) et
+         *     chacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en
+         *     corrige le titre (``projets.rename``) ; le siège en change le statut,
+         *     la description, les désactive et type ceux d'avant la 2.0
+         *     (``projets.update``). Toute modification exige un motif, gardé au
+         *     journal (décision 109). La référence est attribuée à la création, ligne
+         *     du pays verrouillée (``core.numerotation``).
          */
         get: operations["projects_list"]
         put?: never
         /**
          * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
          *
-         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
-         *     et les désactive (``referentiel.update``). La référence est attribuée à
-         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         *     Le pays les crée (``projets.create``, déclaration : jamais le siège) et
+         *     chacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en
+         *     corrige le titre (``projets.rename``) ; le siège en change le statut,
+         *     la description, les désactive et type ceux d'avant la 2.0
+         *     (``projets.update``). Toute modification exige un motif, gardé au
+         *     journal (décision 109). La référence est attribuée à la création, ligne
+         *     du pays verrouillée (``core.numerotation``).
          */
         post: operations["projects_create"]
         delete?: never
@@ -1540,17 +1606,25 @@ export interface paths {
         /**
          * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
          *
-         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
-         *     et les désactive (``referentiel.update``). La référence est attribuée à
-         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         *     Le pays les crée (``projets.create``, déclaration : jamais le siège) et
+         *     chacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en
+         *     corrige le titre (``projets.rename``) ; le siège en change le statut,
+         *     la description, les désactive et type ceux d'avant la 2.0
+         *     (``projets.update``). Toute modification exige un motif, gardé au
+         *     journal (décision 109). La référence est attribuée à la création, ligne
+         *     du pays verrouillée (``core.numerotation``).
          */
         get: operations["projects_retrieve"]
         /**
          * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
          *
-         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
-         *     et les désactive (``referentiel.update``). La référence est attribuée à
-         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         *     Le pays les crée (``projets.create``, déclaration : jamais le siège) et
+         *     chacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en
+         *     corrige le titre (``projets.rename``) ; le siège en change le statut,
+         *     la description, les désactive et type ceux d'avant la 2.0
+         *     (``projets.update``). Toute modification exige un motif, gardé au
+         *     journal (décision 109). La référence est attribuée à la création, ligne
+         *     du pays verrouillée (``core.numerotation``).
          */
         put: operations["projects_update"]
         post?: never
@@ -1560,11 +1634,73 @@ export interface paths {
         /**
          * @description Les projets : la rubrique principale depuis la 2.0 (décision 100).
          *
-         *     Le pays les crée (``projets.create``) ; le siège les modifie, les type
-         *     et les désactive (``referentiel.update``). La référence est attribuée à
-         *     la création, ligne du pays verrouillée (``core.numerotation``).
+         *     Le pays les crée (``projets.create``, déclaration : jamais le siège) et
+         *     chacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en
+         *     corrige le titre (``projets.rename``) ; le siège en change le statut,
+         *     la description, les désactive et type ceux d'avant la 2.0
+         *     (``projets.update``). Toute modification exige un motif, gardé au
+         *     journal (décision 109). La référence est attribuée à la création, ligne
+         *     du pays verrouillée (``core.numerotation``).
          */
         patch: operations["projects_partial_update"]
+        trace?: never
+    }
+    "/api/projects/{id}/completer/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        /**
+         * @description Ouvre les dossiers prédéfinis qui manquent au projet (décision 106).
+         *
+         *     Un projet réactivé, un type de dossier ajouté depuis, un projet typé
+         *     avant la décision : le siège le complète à la demande, jamais
+         *     d'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils
+         *     reviennent au pays.
+         */
+        post: operations["projects_completer_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/projects/{id}/historique/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /** @description Tout ce qui est arrivé au projet et à ses dossiers (décision 110). */
+        get: operations["projects_historique_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/projects/{id}/rename/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        get?: never
+        put?: never
+        /** @description Change le titre du projet, motif à l'appui (décisions 108 et 109). */
+        post: operations["projects_rename_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
         trace?: never
     }
     "/api/projects/par-pays/": {
@@ -1596,7 +1732,7 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Pièces justificatives, rattachées au dossier. */
+        /** @description Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107). */
         get: operations["proofs_list"]
         put?: never
         /**
@@ -1625,15 +1761,15 @@ export interface paths {
             path?: never
             cookie?: never
         }
-        /** @description Pièces justificatives, rattachées au dossier. */
+        /** @description Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107). */
         get: operations["proofs_retrieve"]
-        /** @description Pièces justificatives, rattachées au dossier. */
+        /** @description Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107). */
         put: operations["proofs_update"]
         post?: never
         delete?: never
         options?: never
         head?: never
-        /** @description Pièces justificatives, rattachées au dossier. */
+        /** @description Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107). */
         patch: operations["proofs_partial_update"]
         trace?: never
     }
@@ -2388,6 +2524,7 @@ export interface components {
             performed_by: string
             /** Adresse IP */
             ip_address: string | null
+            motif: string
             /**
              * Le
              * Format: date-time
@@ -2432,6 +2569,26 @@ export interface components {
         ChangePasswordRequest: {
             current_password: string
             new_password: string
+        }
+        /** @description Les compteurs de la synthèse d'audit (décision 111). */
+        CompteursAudit: {
+            readonly circuit: number
+            readonly referentiel: number
+            readonly declarations: number
+            readonly decisions: number
+            readonly reouvertures: number
+            readonly rectifications: number
+            readonly refus: number
+            readonly pieces: number
+            readonly sorties: number
+            readonly imports: number
+            readonly suppressions: number
+            readonly renommages: number
+            readonly changements_de_droits: number
+            readonly echecs_de_connexion: number
+            readonly reinitialisations_2fa: number
+            readonly desactivations: number
+            readonly projets: number
         }
         /** @description Réglages effectifs de la plateforme (``/api/configuration/``). */
         Configuration: {
@@ -2814,6 +2971,7 @@ export interface components {
             readonly totals: components["schemas"]["DossierTotals"]
             readonly expense_count: number
             readonly proof_count: number
+            readonly lignes_sans_preuve: number
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
             /** Ouvert par */
             readonly created_by: string
@@ -2876,6 +3034,7 @@ export interface components {
             readonly totals: components["schemas"]["DossierTotals"]
             readonly expense_count: number
             readonly proof_count: number
+            readonly lignes_sans_preuve: number
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
             /** Ouvert par */
             readonly created_by: string
@@ -2935,6 +3094,7 @@ export interface components {
             description?: string
             /** Actif */
             is_active?: boolean
+            motif?: string
         }
         /**
          * @description Un dossier, ouvert dans un projet avec un type (décision 102).
@@ -3014,6 +3174,7 @@ export interface components {
             readonly totals: components["schemas"]["DossierTotals"]
             readonly expense_count: number
             readonly proof_count: number
+            readonly lignes_sans_preuve: number
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
             /** Ouvert par */
             readonly created_by: string
@@ -3030,6 +3191,24 @@ export interface components {
             readonly expenses: components["schemas"]["Expense"][]
             readonly proofs: components["schemas"]["Proof"][]
             readonly warning?: string
+        }
+        /** @description Une entrée de l'historique d'un projet : référentiel ou circuit (décision 110). */
+        EntreeHistorique: {
+            readonly source: components["schemas"]["SourceEnum"]
+            readonly id: number
+            readonly action: string
+            readonly action_display: string
+            readonly objet: string
+            readonly object_id: number | null
+            readonly label: string
+            readonly user: string
+            readonly ip_address: string | null
+            readonly motif: string
+            readonly avant: unknown
+            readonly apres: unknown
+            readonly note: string
+            /** Format: date-time */
+            readonly created_at: string
         }
         ExchangeRate: {
             readonly id: number
@@ -3161,6 +3340,7 @@ export interface components {
             /** Saisie par */
             readonly created_by: string
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
+            readonly has_proof: boolean
             /**
              * Créé le
              * Format: date-time
@@ -3175,6 +3355,8 @@ export interface components {
         /** @description Pièce vue depuis une dépense : de quoi juger sans ouvrir le dossier. */
         ExpenseProof: {
             readonly id: number
+            /** Ligne de dépense */
+            expense: number | null
             /** Nom d'origine */
             original_name: string
             /** Type */
@@ -3282,6 +3464,7 @@ export interface components {
             /** Saisie par */
             readonly created_by: string
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
+            readonly has_proof: boolean
             /**
              * Créé le
              * Format: date-time
@@ -3296,7 +3479,6 @@ export interface components {
             readonly expense_title_label: string | null
             readonly marketing_category_name: string | null
             readonly proofs: components["schemas"]["ExpenseProof"][]
-            readonly has_proof: boolean
         }
         ExpenseRequest: {
             dossier: number
@@ -3462,6 +3644,7 @@ export interface components {
             /** Saisie par */
             readonly created_by: string
             readonly allowed_actions: components["schemas"]["TransitionEnum"][]
+            readonly has_proof: boolean
             /**
              * Créé le
              * Format: date-time
@@ -3487,6 +3670,11 @@ export interface components {
          * @enum {string}
          */
         HealthStatusEnum: "ok" | "indisponible" | "replique"
+        /** @description L'historique d'un projet, du plus récent au plus ancien, plafonné. */
+        HistoriqueDeProjet: {
+            readonly entrees: components["schemas"]["EntreeHistorique"][]
+            readonly tronque: boolean
+        }
         ImportError: {
             readonly ligne: number
             readonly motif: string
@@ -3500,12 +3688,17 @@ export interface components {
             country?: number
         }
         ImportResult: {
-            readonly dossiers_crees: number
             readonly lignes_creees: number
             readonly equipes_creees: number
             readonly managers_crees: number
             readonly erreurs: components["schemas"]["ImportError"][]
             readonly dry_run: boolean
+        }
+        JourAudit: {
+            /** Format: date */
+            readonly jour: string
+            readonly circuit: number
+            readonly referentiel: number
         }
         /**
          * @description * `fr` - Français
@@ -4116,6 +4309,7 @@ export interface components {
             description?: string
             /** Actif */
             is_active?: boolean
+            motif?: string
         }
         /**
          * @description Un dossier, ouvert dans un projet avec un type (décision 102).
@@ -4284,9 +4478,20 @@ export interface components {
             kind?: components["schemas"]["ProjectKindEnum"] | components["schemas"]["BlankEnum"]
             /** Actif */
             is_active?: boolean
+            /** Équipe */
+            team?: number | null
+            motif?: string
         }
+        /**
+         * @description Une pièce justificative, déposée sur la ligne qu'elle prouve (décision 107).
+         *
+         *     Le dossier se déduit de la ligne ; fourni, il doit être le sien. Les
+         *     pièces d'avant la 2.0, sans ligne, restent lisibles et se remplacent
+         *     sur une ligne de leur dossier.
+         */
         PatchedProofRequest: {
             dossier?: number
+            expense?: number | null
             /**
              * Fichier
              * Format: binary
@@ -4387,6 +4592,11 @@ export interface components {
          * @enum {string}
          */
         PaymentMethodEnum: "cash" | "transfer" | "mobile" | "card" | "check" | "other"
+        PaysAudit: {
+            readonly country: number
+            readonly name: string
+            readonly count: number
+        }
         /** @description Un pays du périmètre et le nombre de ses objets visibles. */
         PaysCompte: {
             readonly id: number
@@ -4442,8 +4652,14 @@ export interface components {
             readonly "managers.update": boolean
             /** @description Ajouter une équipe, un centre de coûts, un projet, un intitulé, une catégorie, un bénéficiaire. */
             readonly "referentiel.create": boolean
-            /** @description Ouvrir un congrès, un voyage ou un soutien financier dans son pays ; sa référence est attribuée. */
+            /** @description Ouvrir un congrès, un voyage ou un soutien financier dans son pays : il reçoit ses dossiers prédéfinis. */
             readonly "projets.create": boolean
+            /** @description Changer le titre d'un projet de son pays, motif à l'appui ; l'ancien titre reste au journal. */
+            readonly "projets.rename": boolean
+            /** @description Changer le statut ou la description d'un projet, le désactiver, typer un projet d'avant la 2.0 ; motif obligatoire. */
+            readonly "projets.update": boolean
+            /** @description Ajouter, renommer ou désactiver un type de dossier de la liste commune aux filiales. */
+            readonly "dossier_kinds.manage": boolean
             /** @description Renommer, rattacher, activer ou désactiver une entité du référentiel. */
             readonly "referentiel.update": boolean
             /** @description Créer une enveloppe annuelle ou une sous-enveloppe. */
@@ -4458,13 +4674,13 @@ export interface components {
             readonly "reallocations.decide": boolean
             /** @description Ajouter ou corriger un taux vers la devise de consolidation. */
             readonly "rates.manage": boolean
-            /** @description Ouvrir un dossier dans son pays, y ajouter des lignes de dépense. */
+            /** @description Saisir les lignes de dépense dans les dossiers prédéfinis des projets de son pays. */
             readonly "expenses.create": boolean
             /** @description Corriger son dossier ou sa ligne tant qu'ils ne sont pas soumis. */
             readonly "expenses.update": boolean
-            /** @description Retirer un dossier ou une ligne jamais soumis. Son auteur seulement. */
+            /** @description Retirer une ligne jamais soumise, avec ses pièces. Son auteur seulement. */
             readonly "expenses.delete": boolean
-            /** @description Joindre un justificatif, ou le remplacer, jusqu'à la clôture. */
+            /** @description Joindre à une ligne son justificatif, ou le remplacer, jusqu'à la clôture. */
             readonly "proofs.upload": boolean
             /** @description Déclarer un dossier : ses lignes partent avec lui, sans retour. */
             readonly "dossiers.submit": boolean
@@ -4482,11 +4698,11 @@ export interface components {
             readonly "rectifications.request": boolean
             /** @description Approuver — la ligne revient en contrôle — ou refuser une demande. Jamais la sienne. */
             readonly "rectifications.decide": boolean
-            /** @description Changer le titre d'un dossier de son pays, même soumis ou clôturé ; l'ancien titre reste au journal. */
+            /** @description Changer le titre d'un dossier de son pays tant qu'il n'est pas clôturé ; l'ancien titre reste au journal. */
             readonly "dossiers.rename": boolean
             /** @description Télécharger le registre en Excel, CSV, Word ou PDF. */
             readonly "data.export": boolean
-            /** @description Charger un classeur de dépenses de son pays en brouillons. */
+            /** @description Verser un classeur de dépenses de son pays, en brouillons, dans le dossier prédéfini d'un projet. */
             readonly "data.import": boolean
         }
         /**
@@ -4569,6 +4785,9 @@ export interface components {
             kind?: components["schemas"]["ProjectKindEnum"] | components["schemas"]["BlankEnum"]
             /** Actif */
             is_active?: boolean
+            /** Équipe */
+            team?: number | null
+            motif?: string
         }
         /**
          * @description * `planned` - Planifié
@@ -4578,9 +4797,17 @@ export interface components {
          * @enum {string}
          */
         ProjectStatusEnum: "planned" | "active" | "on_hold" | "completed"
+        /**
+         * @description Une pièce justificative, déposée sur la ligne qu'elle prouve (décision 107).
+         *
+         *     Le dossier se déduit de la ligne ; fourni, il doit être le sien. Les
+         *     pièces d'avant la 2.0, sans ligne, restent lisibles et se remplacent
+         *     sur une ligne de leur dossier.
+         */
         Proof: {
             readonly id: number
             dossier: number
+            expense: number | null
             /** Nom d'origine */
             readonly original_name: string
             /** Type */
@@ -4631,8 +4858,16 @@ export interface components {
          * @enum {string}
          */
         ProofKindEnum: "receipt" | "invoice" | "discharge" | "deliverable" | "other"
+        /**
+         * @description Une pièce justificative, déposée sur la ligne qu'elle prouve (décision 107).
+         *
+         *     Le dossier se déduit de la ligne ; fourni, il doit être le sien. Les
+         *     pièces d'avant la 2.0, sans ligne, restent lisibles et se remplacent
+         *     sur une ligne de leur dossier.
+         */
         ProofRequest: {
-            dossier: number
+            dossier?: number
+            expense?: number | null
             /**
              * Fichier
              * Format: binary
@@ -4750,6 +4985,12 @@ export interface components {
          * @enum {string}
          */
         RectificationStatusEnum: "pending" | "approved" | "refused"
+        /** @description Le nouveau titre d'un projet et son motif (décisions 108 et 109). */
+        RenommerProjetRequest: {
+            /** Titre */
+            name: string
+            motif: string
+        }
         /** @description Le nouveau titre d'un dossier (décision 104). */
         RenommerRequest: {
             label: string
@@ -4838,6 +5079,24 @@ export interface components {
             name: string
             /** Pays */
             country: number
+        }
+        /**
+         * @description * `referentiel` - referentiel
+         *     * `circuit` - circuit
+         * @enum {string}
+         */
+        SourceEnum: "referentiel" | "circuit"
+        /** @description Tout ce que l'audit doit montrer d'un coup d'œil, calculé en base. */
+        SyntheseAudit: {
+            /** Format: date */
+            readonly debut: string
+            /** Format: date */
+            readonly fin: string
+            readonly compteurs: components["schemas"]["CompteursAudit"]
+            readonly par_jour: components["schemas"]["JourAudit"][]
+            readonly par_utilisateur: components["schemas"]["UtilisateurAudit"][]
+            readonly par_pays: components["schemas"]["PaysAudit"][]
+            readonly a_surveiller: components["schemas"]["EntreeHistorique"][]
         }
         /**
          * @description Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
@@ -5041,6 +5300,10 @@ export interface components {
             teams?: number[]
             password?: string
         }
+        UtilisateurAudit: {
+            readonly user: string
+            readonly count: number
+        }
         /**
          * @description Modification partielle de la politique du circuit.
          *
@@ -5116,6 +5379,8 @@ export interface operations {
                  */
                 action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "renamed" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
                 country?: number
+                debut?: string
+                fin?: string
                 object_type?: string
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
@@ -5123,6 +5388,7 @@ export interface operations {
                 page?: number
                 /** @description Nombre de résultats à retourner par page. */
                 page_size?: number
+                projet?: number
                 /** @description Un terme de recherche. */
                 search?: string
                 user?: string
@@ -5161,6 +5427,32 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["AuditLog"]
+                }
+            }
+        }
+    }
+    audit_synthese_retrieve: {
+        parameters: {
+            query?: {
+                /** @description Un pays. */
+                country?: number
+                /** @description Premier jour (défaut : il y a 30 jours). */
+                debut?: string
+                /** @description Dernier jour (défaut : aujourd'hui). */
+                fin?: string
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["SyntheseAudit"]
                 }
             }
         }
@@ -6037,31 +6329,6 @@ export interface operations {
             }
         }
     }
-    dossiers_create: {
-        parameters: {
-            query?: never
-            header?: never
-            path?: never
-            cookie?: never
-        }
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DossierRequest"]
-                "application/x-www-form-urlencoded": components["schemas"]["DossierRequest"]
-                "multipart/form-data": components["schemas"]["DossierRequest"]
-            }
-        }
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown
-                }
-                content: {
-                    "application/json": components["schemas"]["Dossier"]
-                }
-            }
-        }
-    }
     dossiers_retrieve: {
         parameters: {
             query?: never
@@ -6109,27 +6376,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Dossier"]
                 }
-            }
-        }
-    }
-    dossiers_destroy: {
-        parameters: {
-            query?: never
-            header?: never
-            path: {
-                /** @description Un(une) valeur entière unique identifiant ce(cette) Dossier de justification. */
-                id: number
-            }
-            cookie?: never
-        }
-        requestBody?: never
-        responses: {
-            /** @description No response body */
-            204: {
-                headers: {
-                    [name: string]: unknown
-                }
-                content?: never
             }
         }
     }
@@ -7226,6 +7472,8 @@ export interface operations {
                  */
                 action?: "created" | "deactivated" | "deleted" | "login" | "login_failed" | "logout" | "password_changed" | "password_reset" | "reactivated" | "reassigned" | "totp_confirmed" | "totp_reset" | "updated"
                 country?: number
+                debut?: string
+                fin?: string
                 /**
                  * @description * `country` - Pays
                  *     * `manager` - Manager
@@ -7243,12 +7491,16 @@ export interface operations {
                  *     * `dossier_kind` - Type de dossier
                  */
                 model_name?: "beneficiary" | "budget" | "cost_center" | "country" | "dossier_kind" | "exchange_rate" | "expense_title" | "manager" | "marketing_category" | "project" | "reallocation" | "team" | "user" | "workflow_configuration"
+                object_id?: number
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
                 /** @description Un numéro de page de l'ensemble des résultats. */
                 page?: number
                 /** @description Nombre de résultats à retourner par page. */
                 page_size?: number
+                performed_by?: string
+                /** @description Un terme de recherche. */
+                search?: string
             }
             header?: never
             path?: never
@@ -8034,6 +8286,78 @@ export interface operations {
             }
         }
     }
+    projects_completer_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Projet. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Project"]
+                }
+            }
+        }
+    }
+    projects_historique_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Projet. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["HistoriqueDeProjet"]
+                }
+            }
+        }
+    }
+    projects_rename_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Projet. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenommerProjetRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["RenommerProjetRequest"]
+                "multipart/form-data": components["schemas"]["RenommerProjetRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["Project"]
+                }
+            }
+        }
+    }
     projects_par_pays_retrieve: {
         parameters: {
             query?: never
@@ -8057,6 +8381,7 @@ export interface operations {
         parameters: {
             query?: {
                 dossier?: number
+                expense?: number
                 is_complete?: boolean
                 /**
                  * @description * `receipt` - Reçu

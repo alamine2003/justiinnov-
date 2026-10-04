@@ -115,7 +115,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       setupFiles: "./src/test/setup.ts",
       // Les captures Playwright ne sont pas des tests unitaires.
-      include: ["src/**/*.test.{ts,tsx}"],
+      include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mts"],
       // Fuseau épinglé à l'ouest de Greenwich. Sans lui, la CI tournait en
       // UTC : `new Date("2026-03-15")` y vaut déjà le 15, et les tests de
       // `parseLocalDate` passaient même en supprimant la fonction qu'ils

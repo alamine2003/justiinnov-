@@ -127,7 +127,10 @@
     "is_active": "Actif",
     "teams": "Équipes",
     "phone": "Téléphone",
-    "contact": "Autres coordonnées"
+    "contact": "Autres coordonnées",
+    "control_note": "Note de contrôle",
+    "reopen_note": "Motif de réouverture",
+    "description": "Description"
   },
   "libelles": {
     "roles": {
@@ -194,7 +197,8 @@
       "rectified": "Rectification d'un constat",
       "proof_incomplete": "Justificatif incomplet",
       "proof_to_review": "Justificatif à contrôler",
-      "imported": "Import"
+      "imported": "Import",
+      "renamed": "Renommage"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",
@@ -216,6 +220,37 @@
       "congres": "Congrès",
       "voyage": "Voyage",
       "soutien_financier": "Soutien financier"
+    },
+    "historique_action": {
+      "created": "Création",
+      "updated": "Modification",
+      "reassigned": "Changement de pays",
+      "deactivated": "Désactivation",
+      "reactivated": "Réactivation",
+      "deleted": "Suppression",
+      "password_reset": "Réinitialisation du mot de passe",
+      "password_changed": "Changement de mot de passe",
+      "login": "Connexion",
+      "login_failed": "Échec de connexion",
+      "logout": "Déconnexion",
+      "totp_confirmed": "Activation de la double authentification",
+      "totp_reset": "Réinitialisation de la double authentification"
+    },
+    "historique_objet": {
+      "project": "Projets",
+      "dossier_kind": "Types de dossiers",
+      "workflow_configuration": "Configuration et droits",
+      "user": "Comptes",
+      "country": "Pays",
+      "team": "Équipes",
+      "manager": "Managers",
+      "beneficiary": "Bénéficiaires",
+      "budget": "Enveloppes",
+      "reallocation": "Réallocations",
+      "exchange_rate": "Taux de change",
+      "cost_center": "Centres de coûts",
+      "expense_title": "Intitulés de dépenses",
+      "marketing_category": "Catégories marketing"
     }
   },
   "layout": {
@@ -312,7 +347,6 @@
     "liste": {
       "titre": "Dossiers de justification",
       "description": "Tous les dossiers visibles, quel que soit leur projet. Un dossier s'ouvre dans son projet, depuis la rubrique Projets.",
-      "nouveau": "Nouveau dossier",
       "chargement_impossible": "Impossible de charger les dossiers",
       "recherche_placeholder": "Numéro, titre ou projet…",
       "recherche_aria": "Rechercher un dossier",
@@ -329,7 +363,7 @@
       },
       "vide": {
         "titre": "Aucun dossier",
-        "aide_creer": "Ouvrez un projet, puis créez-y vos dossiers.",
+        "aide_creer": "Créez un projet : ses dossiers sont ouverts d'office, il ne reste qu'à les remplir.",
         "aide_filtres": "Aucun dossier ne correspond à ces filtres."
       }
     },
@@ -400,7 +434,7 @@
     },
     "import": {
       "titre": "Importer un classeur",
-      "description": "Les dépenses de votre pays, depuis un classeur, dans un projet et sous un type de dossier : elles arrivent en brouillon, à votre nom, et suivent ensuite le même circuit que les dépenses saisies. Simulez d'abord : rien n'est écrit tant que le classeur contient une erreur.",
+      "description": "Les dépenses de votre pays, depuis un classeur, versées dans le dossier prédéfini d'un projet — qui doit être un brouillon à votre nom. Elles arrivent en brouillon et suivent ensuite le même circuit que les dépenses saisies ; la pièce de chaque ligne se dépose ensuite sur la ligne. Simulez d'abord : rien n'est écrit tant que le classeur contient une erreur.",
       "classeur": "Classeur Excel (.xlsx)",
       "fichier": "Fichier",
       "fichier_aide": "Export des dépenses ou classeur historique, au format .xlsx.",
@@ -417,18 +451,17 @@
       "managers_crees": "Managers créés",
       "rien_ecrit": "Un classeur en erreur n'est pas importé : corrigez les lignes signalées, puis recommencez.",
       "ligne": "Ligne {{numero}}",
-      "dossiers_crees": "Dossiers créés",
       "bouton": "Importer",
       "choisir_projet": "Choisissez un projet…",
       "aucun_projet": "Aucun projet ouvert aux dossiers",
       "projet_aide": "Le classeur s'importe dans ce projet, et dans son pays.",
       "projet_requis": "Choisissez le projet dans lequel importer.",
-      "type_aide": "Le type des dossiers que le classeur ouvrira."
+      "type_aide": "Le dossier du projet qui reçoit les lignes du classeur."
     },
     "renommer": {
       "bouton": "Renommer",
       "titre": "Renommer le dossier {{numero}}",
-      "description": "Seul le titre change : montants, lignes, pièces et statut restent tels quels. L'ancien titre est conservé dans le journal d'audit.",
+      "description": "Seul le titre change : montants, lignes, pièces et statut restent tels quels. L'ancien titre est conservé dans le journal d'audit. Une fois le dossier clôturé, il ne change plus.",
       "titre_requis": "Indiquez le nouveau titre.",
       "impossible": "Renommage impossible"
     }
@@ -529,8 +562,8 @@
     }
   },
   "pieces": {
-    "titre": "Pièces justificatives",
-    "description": "Rattachées au dossier ; chaque fichier porte son empreinte SHA-256.",
+    "titre": "Pièces d'avant la 2.0",
+    "description": "Déposées sur tout le dossier avant que chaque ligne ait la sienne ; chaque fichier porte son empreinte SHA-256.",
     "deposer": "Déposer",
     "telechargement_impossible": "Téléchargement impossible",
     "colonnes": {
@@ -555,7 +588,7 @@
       "titre": "Déposer un justificatif",
       "formats": "Formats acceptés : {{formats}}.",
       "formats_generique": "PDF, image ou document.",
-      "doublon": "Un fichier déjà présent sur ce dossier est refusé, sauf s'il remplace explicitement une version antérieure.",
+      "doublon": "Un fichier déjà présent sur cette ligne est refusé, sauf s'il remplace explicitement une version antérieure.",
       "fichier_requis": "Sélectionnez un fichier.",
       "trop_gros": "Le fichier pèse {{taille}} ; la limite est de {{limite}}.",
       "impossible": "Dépôt impossible",
@@ -582,6 +615,18 @@
       "indisponible": "Aperçu indisponible",
       "chargement": "Chargement de l'aperçu…",
       "version": "version {{version}}"
+    },
+    "ligne": {
+      "justificatif": "Justificatif",
+      "sans_justificatif": "Sans justificatif",
+      "remplacer_ou_ajouter": "Déposer une autre pièce",
+      "motif_rejet": "Rejetée : {{motif}}",
+      "deposer_aria": "Déposer la pièce de « {{ligne}} »"
+    },
+    "dossier": {
+      "sans_justificatif_one": "{{count}} ligne sans justificatif",
+      "sans_justificatif_other": "{{count}} lignes sans justificatif",
+      "sans_justificatif_aide": "Chaque ligne a sa pièce, déposée depuis la ligne. Le dossier ne se justifie pas tant qu'une ligne en manque."
     }
   },
   "registre": {
@@ -912,7 +957,7 @@
     "projets": {
       "nom_placeholder": "Projet 2026",
       "budget_placeholder": "0",
-      "description": "Le pays ouvre ses projets depuis la rubrique Projets. Le siège les modifie, type les projets d'avant la version 2.0 et les désactive."
+      "description": "Le pays ouvre ses projets depuis la rubrique Projets et en corrige le titre ; le siège les modifie, les type et les désactive depuis leur fiche, motif à l'appui."
     },
     "depenses": {
       "intitule_placeholder": "Frais de déplacement"
@@ -1135,15 +1180,16 @@
     },
     "types_dossiers": {
       "titre": "Types de dossiers",
-      "description": "La liste commune aux filiales : le pays choisit le type d'un dossier parmi ceux du type de son projet. Un type se désactive, il ne se supprime pas.",
+      "description": "La liste commune aux filiales : chaque nouveau projet reçoit d'office un dossier par type actif de son type de projet. Tenue par le super administrateur ; un type se désactive, il ne se supprime pas.",
       "chargement_impossible": "Impossible de charger les types de dossiers",
       "nom_placeholder": "Stands",
-      "noun_pluriel": "types de dossiers"
+      "noun_pluriel": "types de dossiers",
+      "motif_mention": "obligatoire pour une modification"
     }
   },
   "audit": {
     "titre": "Journal d'audit",
-    "description": "Qui a fait quoi, quand et depuis quelle adresse. Les entrées ne sont ni modifiables ni supprimables.",
+    "description": "Qui a fait quoi, quand, depuis quelle adresse et pourquoi : une vue d'ensemble, puis les journaux du circuit et du référentiel. Rien ne s'y modifie ni ne s'y supprime.",
     "chargement_impossible": "Impossible de charger le journal",
     "recherche_placeholder": "Utilisateur ou libellé…",
     "recherche_aria": "Rechercher dans le journal",
@@ -1160,7 +1206,87 @@
     "detail_montant": "montant {{avant}} → {{apres}}",
     "detail_empreinte": "empreinte {{empreinte}}…",
     "noun_singulier": "entrée",
-    "noun_pluriel": "entrées"
+    "noun_pluriel": "entrées",
+    "source": {
+      "circuit": "Circuit",
+      "referentiel": "Référentiel et comptes"
+    },
+    "evenement": {
+      "motif": "Motif :",
+      "note": "Note :",
+      "numero": "{{type}} n° {{id}}"
+    },
+    "onglets": {
+      "aria": "Vues du journal d'audit",
+      "vue": "Vue d'ensemble",
+      "circuit": "Circuit",
+      "referentiel": "Référentiel et comptes"
+    },
+    "filtres": {
+      "debut": "Du",
+      "fin": "Au",
+      "objet_aria": "Filtrer par objet",
+      "tous_objets": "Tous les objets",
+      "utilisateur": "Utilisateur : {{nom}}",
+      "projet": "Projet n° {{id}}",
+      "objets": {
+        "Dossier": "Dossiers",
+        "Expense": "Lignes",
+        "Proof": "Justificatifs",
+        "Rectification": "Rectifications",
+        "BudgetReallocation": "Réallocations",
+        "Export": "Exports",
+        "ExpenseImport": "Imports"
+      },
+      "retirer": "Retirer le filtre « {{filtre}} »"
+    },
+    "referentiel": {
+      "recherche_placeholder": "Utilisateur, libellé ou motif…",
+      "recherche_aria": "Rechercher dans l'historique",
+      "col_motif": "Motif"
+    },
+    "synthese": {
+      "indisponible": "Synthèse indisponible",
+      "periode": "Du {{debut}} au {{fin}} : {{circuit}} événement(s) du circuit, {{referentiel}} du référentiel et des comptes.",
+      "compteurs": {
+        "declarations": "Dossiers soumis",
+        "decisions": "Lignes tranchées",
+        "reouvertures": "Réouvertures",
+        "rectifications": "Rectifications demandées",
+        "refus": "Refus",
+        "pieces": "Justificatifs déposés",
+        "renommages": "Renommages",
+        "suppressions": "Brouillons retirés",
+        "imports": "Imports",
+        "sorties": "Sorties de données",
+        "changements_de_droits": "Changements de droits",
+        "echecs_de_connexion": "Échecs de connexion",
+        "reinitialisations_2fa": "2FA réinitialisées",
+        "desactivations": "Désactivations",
+        "projets": "Mouvements de projets",
+        "circuit": "Circuit",
+        "referentiel": "Référentiel"
+      },
+      "par_jour": "Activité par jour",
+      "detail_par_jour": "Les chiffres, jour par jour",
+      "jour": "{{jour}} : {{circuit}} circuit, {{referentiel}} référentiel",
+      "rien": "Rien sur la période.",
+      "par_utilisateur": "Les plus actifs",
+      "par_pays": "Par pays (circuit)",
+      "evenements": "Événements",
+      "a_surveiller": "À surveiller",
+      "a_surveiller_aide": "Les derniers événements sensibles de la période : réouvertures, rectifications, refus, retraits, imports, échecs de connexion, réinitialisations, changements de droits.",
+      "rien_a_surveiller": "Aucun événement sensible sur la période."
+    },
+    "objet": {
+      "Dossier": "Dossier",
+      "Expense": "Ligne",
+      "Proof": "Justificatif",
+      "Rectification": "Rectification",
+      "BudgetReallocation": "Réallocation",
+      "Export": "Export",
+      "ExpenseImport": "Import"
+    }
   },
   "exports": {
     "exporter": "Exporter",
@@ -1189,7 +1315,7 @@
     "desactive": "Désactivé",
     "liste": {
       "titre": "Projets",
-      "description": "Un projet — congrès, voyage, soutien financier — contient ses dossiers. Ouvrez un projet pour y voir et y créer ses dossiers.",
+      "description": "Un projet — congrès, voyage, soutien financier — naît avec ses dossiers. Ouvrez un projet pour y remplir ses dossiers.",
       "nouveau": "Nouveau projet",
       "chargement_impossible": "Impossible de charger les projets",
       "recherche_placeholder": "Nom ou référence…",
@@ -1201,18 +1327,20 @@
       },
       "vide": {
         "titre": "Aucun projet",
-        "aide_creer": "Créez un projet, puis ouvrez-y vos dossiers.",
+        "aide_creer": "Créez un projet : ses dossiers sont ouverts d'office.",
         "aide_filtres": "Aucun projet ne correspond à ces filtres.",
         "aide_lecture": "Aucun projet n'a encore été ouvert dans votre périmètre."
       }
     },
     "formulaire": {
-      "description": "La référence du projet est attribuée à la création. Son type fixe les dossiers qu'on pourra y ouvrir et ne changera plus.",
+      "description": "La référence du projet est attribuée à la création. Son type fixe les dossiers qu'il reçoit d'office, et ne changera plus.",
       "nom_placeholder": "Congrès de cardiologie 2026",
       "choisir_type": "Choisissez un type…",
-      "type_aide": "Congrès : stands, t-shirts, collations, voyages. Voyage : billets, carburant, hôtellerie, repas, forfait. Soutien financier.",
+      "type_aide": "Le projet reçoit d'office un dossier par type de dossier de son type.",
       "nom_requis": "Indiquez le nom du projet.",
-      "type_requis": "Choisissez le type du projet."
+      "type_requis": "Choisissez le type du projet.",
+      "dossiers_prevus": "Le projet recevra ses dossiers : {{dossiers}}.",
+      "equipe_aide": "L'équipe de ses dossiers, donc de leurs lignes."
     },
     "fiche": {
       "chargement": "Chargement du projet…",
@@ -1221,20 +1349,49 @@
       "introuvable_texte": "Ce projet n'existe pas ou n'est pas dans votre périmètre.",
       "actualisation": "Actualisation du projet",
       "filtrer_type": "Filtrer par type de dossier",
-      "historique_aide": "Ce projet range les dossiers ouverts avant la version 2.0. Il n'accepte pas de nouveau dossier : ouvrez-les dans un projet typé.",
-      "a_typer_aide": "Ce projet date d'avant la version 2.0 et n'a pas encore de type. Le siège le type depuis la fiche du pays ; d'ici là, il n'accepte pas de nouveau dossier.",
-      "desactive_aide": "Ce projet est désactivé : ses dossiers restent lisibles, il n'en accepte plus de nouveau.",
-      "vide_creer": "Ouvrez le premier dossier de ce projet : choisissez son type, le titre suivra.",
-      "vide_lecture": "Ce projet n'a pas encore de dossier : le pays les y ouvre."
+      "historique_aide": "Ce projet range les dossiers ouverts avant la version 2.0. Il n'en reçoit pas de nouveau.",
+      "a_typer_aide": "Ce projet date d'avant la version 2.0 et n'a pas encore de type. Le siège le type depuis « Modifier » : il reçoit alors ses dossiers prédéfinis.",
+      "desactive_aide": "Ce projet est désactivé : ses dossiers restent lisibles.",
+      "vide_lecture": "Ce projet n'a pas de dossier.",
+      "onglets": "Contenu du projet"
     },
     "dossier": {
-      "titre": "Nouveau dossier — {{projet}}",
-      "description": "Le numéro du dossier est attribué à la création, à la suite de ceux du projet. Le titre reprend le type ; il se renomme à tout moment.",
       "choisir_type": "Choisissez un type…",
-      "aucun_type": "Aucun type de dossier pour ce projet",
-      "type_requis": "Choisissez le type du dossier.",
-      "titre_placeholder": "Stands du hall A",
-      "titre_aide": "Par défaut, le nom du type."
+      "type_requis": "Choisissez le type du dossier."
+    },
+    "renommer": {
+      "bouton": "Renommer",
+      "titre": "Renommer le projet {{reference}}",
+      "description": "Seul le titre change : type, référence et dossiers restent tels quels. L'ancien titre et votre motif restent au journal.",
+      "impossible": "Renommage impossible"
+    },
+    "motif": {
+      "libelle": "Motif",
+      "placeholder": "Pourquoi ce changement ?",
+      "aide": "Obligatoire : il reste au journal, avec le nom de qui l'a écrit.",
+      "requis": "Indiquez le motif de la modification : il reste au journal."
+    },
+    "modifier": {
+      "bouton": "Modifier",
+      "titre": "Modifier le projet {{reference}}",
+      "description": "Statut, budget, description et activité du projet. Le titre se change par « Renommer », côté pays.",
+      "typer_aide": "Typé, le projet reçoit ses dossiers prédéfinis ; le type ne changera plus.",
+      "actif": "Projet actif",
+      "impossible": "Modification impossible"
+    },
+    "completer": {
+      "bouton": "Compléter les dossiers",
+      "titre": "Compléter le projet {{reference}}",
+      "description": "Ouvre les dossiers prédéfinis qui manquent à ce projet — un type de dossier ajouté depuis, un projet réactivé. Ils n'ont pas d'auteur : le pays les remplit. Rien n'est ouvert deux fois.",
+      "confirmer": "Compléter",
+      "impossible": "Complétion impossible"
+    },
+    "historique_onglet": {
+      "titre": "Historique",
+      "indisponible": "Historique indisponible",
+      "vide": "Rien n'est encore arrivé à ce projet.",
+      "tronque": "Seuls les événements les plus récents sont affichés.",
+      "journal_complet": "Voir le journal complet du projet"
     }
   }
 }

@@ -186,8 +186,10 @@ def _track_creation_update(sender, instance, model_name=None,
             country_resolver=country_resolver,
         )
 
-    # 2. Activation / désactivation d'un pays.
-    if is_country and "is_active" in changes:
+    # 2. Activation / désactivation : d'un pays, d'un projet, de toute
+    # entité du référentiel. Une désactivation se lit comme telle dans le
+    # journal, pas comme une « mise à jour » parmi d'autres (décision 109).
+    if "is_active" in changes:
         action = (
             ChangeLog.Actions.REACTIVATED
             if instance.is_active

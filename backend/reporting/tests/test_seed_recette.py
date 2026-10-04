@@ -24,7 +24,7 @@ from core.journal import Trace
 from core.models import Country
 from core.regles import RegleViolee
 from expenses import transitions
-from expenses.models import Dossier, Rectification
+from expenses.models import Dossier, Proof, Rectification
 from expenses.tests.base import in_memory_storage
 from expenses.workflow import dossier_allowed_actions
 from reporting.management.commands import seed_recette
@@ -77,8 +77,14 @@ class SeedRecetteTests(TestCase):
             {"super_admin", "admin", "manager"},
         )
         etats = Counter(Dossier.objects.values_list("status", flat=True))
-        self.assertEqual(etats, {"draft": 34, "submitted": 34, "in_review": 34,
+        # Dix dossiers prédéfinis par pays, dont deux restent vides
+        # (décision 106).
+        self.assertEqual(etats, {"draft": 68, "submitted": 34, "in_review": 34,
                                  "unjustified": 17, "closed": 17})
+        for dossier in Dossier.objects.select_related("kind", "project"):
+            self.assertEqual(dossier.kind.project_kind, dossier.project.kind)
+        # Chaque pièce est celle d'une ligne (décision 107).
+        self.assertFalse(Proof.objects.filter(expense=None).exists())
         self.assertEqual(Rectification.objects.filter(status="pending").count(), 17)
         self.assertEqual(
             Counter(BudgetReallocation.objects.values_list("status", flat=True)),
@@ -105,10 +111,10 @@ class SeedRecetteTests(TestCase):
         self._lancer()
         manager = User.objects.get(username="recette.ml.manager")
         with self.assertRaises(RegleViolee):
-            transitions.executer(Dossier.objects.get(number="R-ML-01"), "submit",
+            transitions.executer(Dossier.objects.get(external_ref="R-ML-01"), "submit",
                                  get_access(manager), Trace.depuis_compte(manager))
 
-        collegue = Dossier.objects.get(number="R-TG-02")
+        collegue = Dossier.objects.get(external_ref="R-TG-02")
         self.assertNotIn("submit", dossier_allowed_actions(
             collegue, role="manager", username="recette.tg.manager"))
         self.assertIn("submit", dossier_allowed_actions(

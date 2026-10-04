@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Count, F, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Count, Exists, F, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import pgettext_lazy
@@ -125,6 +125,20 @@ class DossierQuerySet(models.QuerySet):
         )
         money = models.DecimalField(max_digits=16, decimal_places=2)
         entier = models.IntegerField()
+        # Lignes sans pièce exploitable (décision 107), pour dire si le
+        # dossier se justifie sans requête par dossier : même règle que
+        # ``Dossier.lignes_sans_preuve``.
+        utilisables = Proof.objects.exclude(
+            status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED]
+        )
+        sans_preuve = (
+            Expense.objects.filter(dossier=OuterRef("pk"))
+            .exclude(Exists(utilisables.filter(expense=OuterRef("pk"))))
+            .order_by()
+            .values("dossier")
+            .annotate(n=Count("id"))
+            .values("n")
+        )
 
         def compteur(nom):
             return Coalesce(
@@ -149,6 +163,8 @@ class DossierQuerySet(models.QuerySet):
             lines_pending=compteur("pending"),
             lines_unjustified=compteur("unjustified"),
             lines_settled=compteur("settled"),
+            lines_sans_preuve=Coalesce(Subquery(sans_preuve[:1], output_field=entier), Value(0)),
+            piece_d_avant=Exists(utilisables.filter(dossier=OuterRef("pk"), expense=None)),
             total_proofs=Count("proofs", distinct=True),
             # Une pièce rejetée ou archivée ne prouve rien.
             usable_proofs=Count(
@@ -211,6 +227,10 @@ class Dossier(TimeStampedModel):
     external_ref = models.CharField(
         _("Référence d'origine"), max_length=50, blank=True
     )
+    #: Ouvert d'office avec son projet, un par type (décision 106). Faux
+    #: pour les dossiers d'avant : ouverts à la main, plusieurs peuvent
+    #: partager un type.
+    predefini = models.BooleanField(_("Prédéfini"), default=False, editable=False)
     date = models.DateField(_("Date"))
     status = models.CharField(
         _("Statut"), max_length=20, choices=Status.choices, default=Status.DRAFT
@@ -244,6 +264,15 @@ class Dossier(TimeStampedModel):
                 fields=["project", "external_ref"],
                 condition=~models.Q(external_ref=""),
                 name="unique_reference_d_origine_par_projet",
+            ),
+            # Un projet reçoit un dossier prédéfini par type, et un seul
+            # (décision 106) : deux créations simultanées n'en feraient pas
+            # deux. Les dossiers ouverts à la main avant elle ne comptent
+            # pas — rien n'est deviné de ceux qui coexistent sous un type.
+            models.UniqueConstraint(
+                fields=["project", "kind"],
+                condition=models.Q(predefini=True),
+                name="unique_type_par_projet",
             ),
         ]
         indexes = [
@@ -305,6 +334,27 @@ class Dossier(TimeStampedModel):
             "unjustified": self.lines_unjustified,
             "settled": self.lines_settled,
         }
+
+    def lignes_sans_preuve(self):
+        """Les lignes du dossier qu'aucune pièce exploitable ne prouve (décision 107).
+
+        Une ligne est prouvée par une pièce déposée sur elle, ni rejetée ni
+        archivée. Une pièce d'avant la 2.0, déposée sur tout le dossier,
+        prouve encore toutes ses lignes : on ne devine pas laquelle elle
+        visait.
+        """
+        utilisables = ~Q(status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED])
+        if self.proofs.filter(utilisables, expense=None).exists():
+            return self.expenses.none()
+        prouvees = Proof.objects.filter(utilisables, dossier=self).values("expense_id")
+        return self.expenses.exclude(pk__in=prouvees)
+
+    def a_des_lignes_sans_preuve(self):
+        """Vrai si une ligne n'a pas de pièce exploitable — lu sur les
+        annotations de ``with_totals`` quand elles sont là."""
+        if hasattr(self, "lines_sans_preuve"):
+            return bool(self.lines_sans_preuve) and not self.piece_d_avant
+        return self.lignes_sans_preuve().exists()
 
     def usable_proof_count(self):
         """Pièces qui prouvent encore quelque chose : ni rejetées ni archivées."""
@@ -374,6 +424,19 @@ class ExpenseQuerySet(models.QuerySet):
         l'appui.
         """
         return self.prefetch_related(*EXPENSE_RELATIONS)
+
+    def avec_la_preuve(self):
+        """Annote ``a_une_preuve`` : la ligne a-t-elle une pièce exploitable
+        (décision 107) ? La sienne, ni rejetée ni archivée — ou une pièce
+        d'avant la 2.0, déposée sur tout son dossier. Même règle que
+        ``Dossier.lignes_sans_preuve``, sans requête par ligne."""
+        utilisables = Proof.objects.exclude(
+            status__in=[Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED]
+        )
+        return self.annotate(
+            a_une_preuve=Exists(utilisables.filter(expense=OuterRef("pk")))
+            | Exists(utilisables.filter(dossier=OuterRef("dossier"), expense=None))
+        )
 
     def with_rectification(self):
         """Annote la ligne de son histoire de rectification, pour
@@ -687,6 +750,14 @@ class Proof(TimeStampedModel):
         Dossier, on_delete=models.PROTECT, related_name="proofs",
         verbose_name=_("Dossier"),
     )
+    #: La ligne que la pièce prouve (décision 107). Vide pour une pièce
+    #: déposée avant la 2.0 sur le dossier entier : on ne devine pas à
+    #: quelle ligne elle se rapportait. ``dossier`` reste, recopié de la
+    #: ligne : le cloisonnement, le rangement et la clôture passent par lui.
+    expense = models.ForeignKey(
+        "Expense", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="proofs", verbose_name=_("Ligne de dépense"),
+    )
     file = models.FileField(_("Fichier"), upload_to=proof_upload_path)
     original_name = models.CharField(_("Nom d'origine"), max_length=255, blank=True)
     kind = models.CharField(
@@ -723,13 +794,20 @@ class Proof(TimeStampedModel):
             models.Index(fields=["dossier", "status"], name="piece_dossier_statut"),
         ]
         constraints = [
-            # Deux dépôts simultanés du même fichier sur le même dossier : la
+            # Deux dépôts simultanés du même fichier sur la même ligne : la
             # vérification du sérialiseur ne voit pas l'autre transaction, la
             # base, si. Un remplacement explicite garde le droit de redéposer
-            # le même contenu (§5.4).
+            # le même contenu (§5.4). Depuis la 2.0, l'unicité est par ligne
+            # (décision 107) ; les pièces d'avant, sans ligne, la gardent par
+            # dossier.
+            models.UniqueConstraint(
+                fields=["expense", "sha256"],
+                condition=Q(replaces__isnull=True, expense__isnull=False),
+                name="piece_unique_par_ligne",
+            ),
             models.UniqueConstraint(
                 fields=["dossier", "sha256"],
-                condition=Q(replaces__isnull=True),
+                condition=Q(replaces__isnull=True, expense__isnull=True),
                 name="piece_unique_par_dossier",
             ),
         ]
@@ -828,7 +906,7 @@ class AuditLog(models.Model):
         PROOF_REPLACED = "proof_replaced", _("Remplacement de justificatif")
         DOWNLOADED = "downloaded", _("Téléchargement")
         IMPORTED = "imported", _("Import Excel")
-        # Le titre d'un dossier se renomme à tout moment (décision 104) :
+        # Le titre d'un dossier se renomme jusqu'à la clôture (décisions 104 et 108) :
         # l'entrée porte l'ancien et le nouveau titre.
         RENAMED = "renamed", _("Renommage")
 

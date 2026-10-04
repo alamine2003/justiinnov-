@@ -37,7 +37,7 @@ from budget.aggregates import convert
 from core.journal import tracer
 from core.models import Country, Manager, Team
 from expenses.models import AuditLog, Dossier, Expense
-from expenses.numerotation import creer_dossier, refus_d_ouverture
+from expenses.numerotation import refus_d_ouverture
 from expenses.workflow import Status, agit_en_auteur
 
 from .scope import fuseau_de
@@ -374,31 +374,52 @@ def _empreinte(number, jour, title, amount):
     return (number, jour, title, amount)
 
 
-def cle_d_import(jour, title, amount):
+def cle_d_import(jour, title, amount, number=""):
     """Identité d'une ligne importée dans son dossier (``Expense.import_key``).
 
     La même chose que :func:`_empreinte`, sans le dossier — qui est l'autre
     colonne de la contrainte —, résumée en une empreinte de taille fixe.
     La validation la compare aux lignes déjà en base ; la base la compare
     à ce que la validation ne peut pas voir, l'autre import en cours.
+    Depuis la 2.0, tout un classeur se verse dans un seul dossier
+    prédéfini (décision 106) : le N°ORDRE du classeur entre dans
+    l'identité, pour ne pas confondre deux lignes identiques de deux
+    opérations différentes.
     """
     texte = f"{jour.isoformat()}|{title}|{Decimal(amount):.2f}"
+    if number:
+        texte = f"{number}|{texte}"
     return hashlib.sha256(texte.encode("utf-8")).hexdigest()
 
 
 def _lignes_en_base(dossier, cache, number):
-    """Empreintes des lignes déjà présentes dans un dossier, lues une fois.
+    """Ce qui identifie les lignes déjà présentes dans le dossier, lu une fois.
 
-    ``number`` est le N°ORDRE sous lequel le classeur désigne ce dossier :
-    son numéro, ou sa référence d'origine s'il vient d'un import.
+    Deux ensembles : les clés d'import des lignes venues d'un classeur
+    (``import_key``, N°ORDRE compris), et les empreintes ``(jour, libellé,
+    montant)`` de toutes ses lignes — un classeur exporté de ce dossier
+    porte son numéro en N°ORDRE, et ses lignes saisies à la main n'ont pas
+    de clé d'import.
     """
     if dossier.pk not in cache:
         fuseau = fuseau_de(dossier.country)
-        cache[dossier.pk] = {
-            _empreinte(number, timezone.localtime(instant, fuseau).date(), title, amount)
-            for instant, title, amount in dossier.expenses.values_list("date", "title", "amount")
-        }
+        lignes = list(dossier.expenses.values_list("date", "title", "amount", "import_key"))
+        cache[dossier.pk] = (
+            {cle for *_reste, cle in lignes if cle},
+            {
+                (timezone.localtime(instant, fuseau).date(), title, amount)
+                for instant, title, amount, _cle in lignes
+            },
+        )
     return cache[dossier.pk]
+
+
+def _deja_dans_le_dossier(dossier, cache, number, jour, title, amount):
+    """La ligne du classeur est-elle déjà dans le dossier ?"""
+    cles, empreintes = _lignes_en_base(dossier, cache, number)
+    if cle_d_import(jour, title, amount, number) in cles:
+        return True
+    return number in (dossier.number, dossier.external_ref) and (jour, title, amount) in empreintes
 
 
 def _lignes_hors_du_projet(country, project, number, cache):
@@ -414,14 +435,29 @@ def _lignes_hors_du_projet(country, project, number, cache):
     cle = (country.pk, project.pk, number)
     if cle not in cache:
         fuseau = fuseau_de(country)
-        lignes = Expense.objects.filter(dossier__country=country).exclude(
+        ailleurs = Expense.objects.filter(dossier__country=country).exclude(
             dossier__project=project
-        ).filter(Q(dossier__external_ref=number) | Q(dossier__number=number))
+        )
+        lignes = ailleurs.filter(Q(dossier__external_ref=number) | Q(dossier__number=number))
         cache[cle] = {
             _empreinte(number, timezone.localtime(instant, fuseau).date(), title, amount)
             for instant, title, amount in lignes.values_list("date", "title", "amount")
         }
+        # Depuis la 2.0, un classeur se verse dans un dossier prédéfini : le
+        # N°ORDRE n'est plus celui d'un dossier, il vit dans la clé
+        # d'import de chaque ligne (décision 106).
+        if ("cles", country.pk, project.pk) not in cache:
+            cache[("cles", country.pk, project.pk)] = set(
+                ailleurs.exclude(import_key=None).values_list("import_key", flat=True)
+            )
     return cache[cle]
+
+
+def _cle_hors_du_projet(country, project, cache, jour, title, amount, number):
+    """La clé d'import de la ligne existe-t-elle dans un autre projet du pays ?"""
+    return cle_d_import(jour, title, amount, number) in cache.get(
+        ("cles", country.pk, project.pk), set()
+    )
 
 
 def _resoudre_le_pays(row, avec_colonne_pays, pays_par_nom, pays_impose, access):
@@ -442,14 +478,13 @@ def _resoudre_le_pays(row, avec_colonne_pays, pays_par_nom, pays_impose, access)
 def importer_depenses(uploaded, user, dry_run=False, country=None, project=None, kind=None):
     """Valide tout le classeur, puis le crée atomiquement si demandé.
 
-    Depuis la 2.0 (décision 102), un classeur s'importe **dans un projet**,
-    sous un **type de dossier** : ``project`` et ``kind``, déjà vérifiés
-    contre le périmètre par la vue, sont obligatoires et suivent les règles
-    d'une ouverture de dossier (``refus_d_ouverture``). Chaque N°ORDRE du
-    classeur devient un dossier du projet, numéroté par
-    ``expenses.numerotation`` ; le N°ORDRE est gardé comme référence
-    d'origine (``external_ref``) : réimporter le classeur retrouve ses
-    dossiers au lieu d'en créer d'autres.
+    Depuis la 2.0, un classeur s'importe **dans un projet**, sous un **type
+    de dossier** : ``project`` et ``kind``, déjà vérifiés contre le
+    périmètre par la vue, sont obligatoires. Ses lignes se versent dans le
+    **dossier prédéfini** de ce type (décision 106) — l'import n'ouvre plus
+    de dossier —, qui doit être un brouillon de l'importateur. Le N°ORDRE
+    du classeur entre dans l'identité de chaque ligne (``import_key``) :
+    réimporter le classeur ne recrée rien.
 
     Le pays est celui du projet. ``country``, s'il est donné, doit être le
     même ; une cellule PAYS d'une autre filiale est refusée.
@@ -457,19 +492,28 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
     try:
         lignes, colonnes = _charger_lignes(uploaded)
     except ValueError as exc:
-        return _resultat(0, 0, [_erreur(1, str(exc))], dry_run)
+        return _resultat(0, [_erreur(1, str(exc))], dry_run)
 
     refus = refus_d_ouverture(project, kind)
     if refus is None and country is not None and country.pk != project.country_id:
         refus = ("project", _("Ce projet appartient à un autre pays que celui de l'import."))
     if refus is not None:
-        return _resultat(0, 0, [_erreur(1, refus[1])], dry_run)
+        return _resultat(0, [_erreur(1, refus[1])], dry_run)
     country = project.country
+    cible = (
+        Dossier.objects.select_related("team", "country")
+        .filter(project=project, kind=kind, predefini=True).first()
+    )
+    if cible is None:
+        return _resultat(0, [_erreur(1, _(
+            "Ce projet n'a pas de dossier « %(kind)s » : il a été créé avant "
+            "ce type de dossier."
+        ) % {"kind": kind.name})], dry_run)
 
     avec_colonne_pays = "PAYS" in colonnes
     if not avec_colonne_pays and country is None:
         return _resultat(
-            0, 0,
+            0,
             [_erreur(1, _(
                 "Le classeur n'a pas de colonne PAYS : indiquez le pays "
                 "de l'import (paramètre « country »)."
@@ -496,7 +540,6 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
     managers_a_creer = {}
     erreurs = []
     valides = []
-    dossiers_existants = {}
     # Lignes déjà en base ou déjà vues dans ce classeur : réimporter le même
     # fichier — ou le même classeur collé deux fois — ne doit rien créer.
     empreintes_vues = {}
@@ -548,35 +591,26 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
                     )
                 managers_a_creer.setdefault(cle_manager, (pays_ligne, owner_name))
 
-            # Le N°ORDRE du classeur désigne un dossier **du projet**, jamais
-            # ailleurs : celui qu'un import précédent a créé (sa référence
-            # d'origine), ou celui qui porte ce numéro — un classeur exporté
-            # puis réimporté retrouve ainsi ses dossiers.
-            cle_dossier = (project.pk, number)
-            if cle_dossier not in dossiers_existants:
-                dossiers_existants[cle_dossier] = (
-                    Dossier.objects.select_related("team")
-                    .filter(project=project)
-                    .filter(Q(external_ref=number) | Q(number=number))
-                    .order_by("pk")
-                    .first()
+            # Toutes les lignes vont au dossier prédéfini du type choisi
+            # (décision 106).
+            dossier = cible
+            cle_dossier = dossier.pk
+            if dossier.status != Status.DRAFT:
+                raise ValueError(
+                    _("Le dossier « %(number)s » est déjà déclaré") % {"number": dossier.number}
                 )
-            dossier = dossiers_existants[cle_dossier]
-            if dossier is not None and dossier.status != Status.DRAFT:
-                raise ValueError(_("Le dossier « %(number)s » est déjà déclaré") % {"number": number})
             # Un brouillon appartient à son auteur (décision 46) : l'import
             # n'y ajoute pas de lignes au nom d'un collègue.
-            if dossier is not None and not agit_en_auteur(dossier, access.role, access.username):
+            if not agit_en_auteur(dossier, access.role, access.username):
                 raise ValueError(
                     _("Le dossier « %(number)s » est le brouillon d'un autre compte")
-                    % {"number": number}
+                    % {"number": dossier.number}
                 )
             # Le dossier est lu par l'équipe qu'il porte (``ExpenseSerializer``) :
             # une ligne d'une autre équipe y serait visible par la première
             # et invisible pour la seconde.
             if (
-                dossier is not None
-                and dossier.team_id is not None
+                dossier.team_id is not None
                 and team_name
                 and (team is None or team.pk != dossier.team_id)
             ):
@@ -584,24 +618,26 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
                     _(
                         "Le dossier « %(number)s » porte l'équipe « %(team)s » : "
                         "la ligne doit porter la même."
-                    ) % {"number": number, "team": dossier.team.name}
+                    ) % {"number": dossier.number, "team": dossier.team.name}
                 )
 
-            empreinte = _empreinte(cle_dossier, date_ligne.date(), title, amount)
+            empreinte = _empreinte(number, date_ligne.date(), title, amount)
             deja = empreintes_vues.get(empreinte)
             if deja is not None:
                 raise ValueError(_("Ligne identique à la ligne %(ligne)s du classeur") % {"ligne": deja})
-            if dossier is not None and _empreinte(
-                number, date_ligne.date(), title, amount
-            ) in _lignes_en_base(dossier, lignes_en_base, number):
+            if _deja_dans_le_dossier(
+                dossier, lignes_en_base, number, date_ligne.date(), title, amount
+            ):
                 raise ValueError(
                     _(
                         "Ligne déjà présente dans le dossier « %(number)s » : "
-                        "même date, même libellé, même montant"
-                    ) % {"number": number}
+                        "même N°ORDRE, même date, même libellé, même montant"
+                    ) % {"number": dossier.number}
                 )
             if _empreinte(number, date_ligne.date(), title, amount) in _lignes_hors_du_projet(
                 pays_ligne, project, number, lignes_hors_projet
+            ) or _cle_hors_du_projet(
+                pays_ligne, project, lignes_hors_projet, date_ligne.date(), title, amount, number
             ):
                 raise ValueError(
                     _(
@@ -633,12 +669,8 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
         except ValueError as exc:
             erreurs.append(_erreur(numero_ligne, str(exc)))
 
-    nouveaux_dossiers = len({
-        ligne["cle_dossier"] for ligne in valides
-        if dossiers_existants[ligne["cle_dossier"]] is None
-    })
     resultat = _resultat(
-        nouveaux_dossiers, len(valides), erreurs, dry_run,
+        len(valides), erreurs, dry_run,
         equipes_creees=len(equipes_a_creer), managers_crees=len(managers_a_creer),
     )
     if erreurs or dry_run:
@@ -647,11 +679,11 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
     try:
         with transaction.atomic():
             _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
-                    dossiers_existants)
+                    cible)
     except _LigneEnErreur as exc:
         # La transaction est défaite : rien n'a été écrit, comme pour une
         # erreur relevée à la validation.
-        return _resultat(0, 0, [_erreur(exc.ligne, exc.motif)], dry_run)
+        return _resultat(0, [_erreur(exc.ligne, exc.motif)], dry_run)
     return resultat
 
 
@@ -664,43 +696,11 @@ class _LigneEnErreur(Exception):
         self.motif = motif
 
 
-def _creer_le_dossier(ligne, user):
-    """Crée le dossier d'une ligne, ou signale qu'un autre import l'a fait.
+def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer, cible):
+    """Écrit référentiel et lignes, dans la transaction de l'appelant.
 
-    Le dossier était absent à la validation, mais deux imports du même
-    classeur peuvent se croiser : le second heurtait la contrainte d'unicité
-    (pays, N°ORDRE) et répondait 500, en ayant perdu tout le classeur.
-    ``get_or_create`` absorbe la course ; si le dossier existe désormais, la
-    ligne est refusée avec son numéro — ses doublons n'ont pas été vérifiés
-    contre ce dossier-là — et l'import se relance.
+    Les lignes vont au dossier prédéfini ``cible``, relu sous verrou.
     """
-    motif = _(
-        "Le dossier « %(number)s » vient d'être créé par un autre import : "
-        "relancez l'import."
-    ) % {"number": ligne["number"]}
-    try:
-        with transaction.atomic():
-            return creer_dossier(Dossier(
-                project=ligne["project"],
-                kind=ligne["kind"],
-                country=ligne["country"],
-                external_ref=ligne["number"],
-                label=ligne["title"] or ligne["number"],
-                team=ligne["team"],
-                owner=ligne["owner"],
-                date=ligne["date"].date(),
-                status=Status.DRAFT,
-                created_by=user.username,
-            ))
-    except IntegrityError:
-        # La contrainte (projet, référence d'origine) : un autre import du
-        # même classeur a créé ce dossier entre la validation et l'écriture.
-        raise _LigneEnErreur(ligne["ligne"], motif)
-
-
-def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
-            dossiers_existants):
-    """Écrit référentiel, dossiers et lignes, dans la transaction de l'appelant."""
     # Le référentiel manquant d'abord : les lignes s'y rattachent.
     # ``create`` un par un, et non ``bulk_create`` : la création doit
     # passer par les signaux d'historisation (``ChangeLog``).
@@ -711,21 +711,13 @@ def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
         pays_manager.managers.add(manager)
         managers[cle] = manager
 
-    dossiers = {}
     depenses = []
+    dossier = _verrouiller_le_dossier(cible, valides[0]) if valides else cible
     for ligne in valides:
         if ligne["team"] is None and ligne["cle_equipe"] is not None:
             ligne["team"] = equipes[ligne["cle_equipe"]]
         if ligne["owner"] is None and ligne["cle_manager"] is not None:
             ligne["owner"] = managers[ligne["cle_manager"]]
-        dossier = dossiers.get(ligne["cle_dossier"])
-        if dossier is None:
-            dossier = dossiers_existants[ligne["cle_dossier"]]
-            if dossier is None:
-                dossier = _creer_le_dossier(ligne, user)
-            else:
-                dossier = _verrouiller_le_dossier(dossier, ligne)
-            dossiers[ligne["cle_dossier"]] = dossier
         depenses.append(
             Expense(
                 dossier=dossier,
@@ -746,7 +738,9 @@ def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
                 note=ligne["note"],
                 status=Status.DRAFT,
                 created_by=user.username,
-                import_key=cle_d_import(ligne["date"].date(), ligne["title"], ligne["amount"]),
+                import_key=cle_d_import(
+                    ligne["date"].date(), ligne["title"], ligne["amount"], ligne["number"]
+                ),
             )
         )
     # Aucun signal n'écoute ``Expense`` : l'insertion par lots ne fait
@@ -777,14 +771,13 @@ def _verrouiller_le_dossier(dossier, ligne):
     if verrouille.status != Status.DRAFT:
         raise _LigneEnErreur(
             ligne["ligne"],
-            _("Le dossier « %(number)s » est déjà déclaré") % {"number": ligne["number"]},
+            _("Le dossier « %(number)s » est déjà déclaré") % {"number": dossier.number},
         )
     return verrouille
 
 
-def _resultat(dossiers, lignes, erreurs, dry_run, *, equipes_creees=0, managers_crees=0):
+def _resultat(lignes, erreurs, dry_run, *, equipes_creees=0, managers_crees=0):
     return {
-        "dossiers_crees": dossiers,
         "lignes_creees": lignes,
         "equipes_creees": equipes_creees,
         "managers_crees": managers_crees,

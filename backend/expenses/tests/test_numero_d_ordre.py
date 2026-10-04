@@ -5,9 +5,9 @@ Le classeur du client numérote ses dossiers de 1 à n dans chaque pays : le
 unicité globale refusait le second — et son message trahissait l'existence
 du premier à qui n'avait pas à le connaître.
 
-Depuis la 2.0 (décision 102), le numéro d'un nouveau dossier est calculé —
-``TG-P-2026-001-D001`` — et ne se saisit plus : un numéro fourni dans la
-charge utile est ignoré, et ne se modifie pas.
+Depuis la 2.0 (décisions 102 et 106), le numéro d'un nouveau dossier est
+calculé — ``TG-P-2026-001-D001`` — à la création de son projet, et ne se
+modifie pas.
 """
 
 from datetime import date
@@ -21,15 +21,6 @@ from .base import ExpenseTestCase
 
 
 class NumeroParPaysTests(ExpenseTestCase):
-    def _dossier(self, **extra):
-        data = {
-            "number": "N-0001", "label": "Salon", "country": self.togo.pk,
-            "project": self.projet.pk, "kind": self.stands.pk,
-            "date": f"{self.year}-04-01",
-        }
-        data.update(extra)
-        return self.client.post("/api/dossiers/", data)
-
     def test_deux_pays_peuvent_porter_le_meme_numero(self):
         voisin = Dossier.objects.create(
             number="N-0001", label="Mission Abidjan", country=self.ivoire,
@@ -46,31 +37,27 @@ class NumeroParPaysTests(ExpenseTestCase):
                 date=date(self.year, 3, 16),
             )
 
-    def test_l_api_calcule_le_numero_et_ignore_celui_qu_on_lui_donne(self):
-        """Le N-0001 fourni existe déjà au Togo : peu importe, le numéro
-        d'un nouveau dossier est celui que le serveur calcule."""
+    def test_les_dossiers_predefinis_portent_le_numero_calcule(self):
+        """Le N-0001 existe déjà au Togo : peu importe, le numéro d'un
+        nouveau dossier est celui que le serveur calcule (décision 106)."""
         self.login(self.owner)
 
-        response = self._dossier()
+        response = self.client.post(
+            "/api/projects/",
+            {"country": self.togo.pk, "name": "Congrès de Kara", "kind": "congres"},
+            format="json",
+        )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        self.assertEqual(response.data["number"], f"{self.projet.reference}-D001")
-        self.assertEqual(Dossier.objects.filter(country=self.togo).count(), 2)
-
-    def test_l_api_accepte_le_numero_deja_pris_par_un_autre_pays(self):
-        """Le responsable ivoirien ne voit pas le N-0001 togolais : il doit
-        pouvoir ouvrir le sien, sans qu'aucun message n'évoque le voisin."""
-        self.login(self.rep_ivoire)
-
-        response = self._dossier(country=self.ivoire.pk, project=self.projet_ivoire.pk)
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        self.assertTrue(response.data["number"].startswith("CI-P-"))
+        numeros = list(
+            Dossier.objects.filter(project_id=response.data["id"]).values_list("number", flat=True)
+        )
+        self.assertTrue(numeros)
+        self.assertTrue(all(n.startswith(response.data["reference"] + "-D") for n in numeros))
 
     def test_le_numero_d_un_brouillon_ne_se_modifie_pas(self):
         autre = Dossier.objects.create(
-            number="N-0002", label="Autre", country=self.togo,
-            project=self.projet, kind=self.stands,
+            number="N-0002", label="Autre", country=self.togo, project=self.projet,
             date=date(self.year, 3, 16), created_by=self.owner.username,
         )
         self.login(self.owner)

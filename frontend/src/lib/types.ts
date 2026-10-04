@@ -136,6 +136,11 @@ export type BreakdownRow = Schema<"BreakdownRow">
 export type Breakdown = Schema<"Breakdown">
 export type AppNotification = Schema<"Notification">
 export type AuditEntry = Schema<"AuditLog">
+/** Une entrée de l'historique d'un projet ou de la liste « à surveiller » (décisions 110, 111). */
+export type EntreeHistorique = Schema<"EntreeHistorique">
+export type HistoriqueDeProjet = Schema<"HistoriqueDeProjet">
+/** Le tableau de bord de l'audit, compté par le serveur (décision 111). */
+export type SyntheseAudit = Schema<"SyntheseAudit">
 
 // ---------------------------------------------------------------------------
 // Back-office

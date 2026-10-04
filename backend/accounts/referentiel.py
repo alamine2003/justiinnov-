@@ -6,8 +6,11 @@ que ``core`` ne connaît pas : ``core`` est au bas de l'ordre des
 dépendances, ``accounts`` juste au-dessus (décision 40).
 """
 
+from django.db import transaction
 from django.db.models import Count, Q
+from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
+import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import filters, serializers, viewsets
@@ -38,12 +41,16 @@ from core.serializers import (
     ExpenseTitleSerializer,
     ManagerSerializer,
     MarketingCategorySerializer,
+    HistoriqueDeProjetSerializer,
     ParPaysSerializer,
     ProjectSerializer,
+    RenommerProjetSerializer,
     TeamSerializer,
 )
 
+from core.journal import Trace
 from core.numerotation import creer_projet
+from core.requetes import motif_du_journal
 
 from .perimetre import ChampCloisonne, compter_par_pays
 from .permissions import RolePermission, get_access, roles_pour
@@ -300,9 +307,13 @@ class CostCenterViewSet(ScopedViewSet):
 class ProjectViewSet(ScopedViewSet):
     """Les projets : la rubrique principale depuis la 2.0 (décision 100).
 
-    Le pays les crée (``projets.create``) ; le siège les modifie, les type
-    et les désactive (``referentiel.update``). La référence est attribuée à
-    la création, ligne du pays verrouillée (``core.numerotation``).
+    Le pays les crée (``projets.create``, déclaration : jamais le siège) et
+    chacun naît avec ses dossiers prédéfinis (décision 106) ; le pays en
+    corrige le titre (``projets.rename``) ; le siège en change le statut,
+    la description, les désactive et type ceux d'avant la 2.0
+    (``projets.update``). Toute modification exige un motif, gardé au
+    journal (décision 109). La référence est attribuée à la création, ligne
+    du pays verrouillée (``core.numerotation``).
     """
 
     queryset = Project.objects.select_related("country").all().order_by("-created_at")
@@ -310,8 +321,14 @@ class ProjectViewSet(ScopedViewSet):
     filterset_fields = ["country", "status", "is_active", "kind", "is_historical"]
     search_fields = ["name", "reference"]
     ordering_fields = ["created_at", "name", "reference"]
-    write_capability = "referentiel.update"
-    action_write_capabilities = {"create": "projets.create"}
+    write_capability = "projets.update"
+    action_write_capabilities = {
+        "create": "projets.create", "rename": "projets.rename", "completer": "projets.update",
+    }
+    # L'historique d'un projet lit le journal d'audit de ses dossiers : il
+    # en suit la capacité, jamais ouverte au pays (``audit.read``), pas
+    # celle de l'historique du référentiel, que la matrice peut lui ouvrir.
+    action_read_capabilities = {"historique": "audit.read"}
 
     def get_queryset(self):
         # Le nombre de dossiers est celui que le lecteur verra en ouvrant le
@@ -326,9 +343,120 @@ class ProjectViewSet(ScopedViewSet):
             dossier_count=Count("dossiers", filter=visibles, distinct=True)
         )
 
+    def get_serializer_class(self):
+        if self.action == "rename":
+            return RenommerProjetSerializer
+        return super().get_serializer_class()
+
+    def _equipe_des_dossiers(self, equipe):
+        """L'équipe des dossiers prédéfinis, revalidée contre le périmètre.
+
+        Un manager rattaché à des équipes en choisit une des siennes : ses
+        dossiers, et leurs lignes, lui resteraient sinon invisibles
+        (cloisonnement par équipe).
+        """
+        access = get_access(self.request.user)
+        if access is None or access.team_ids is None:
+            return equipe
+        if equipe is None:
+            raise serializers.ValidationError({"team": _("Choisissez une de vos équipes.")})
+        if equipe.pk not in access.team_ids:
+            raise serializers.ValidationError({"team": _("Choisissez une de vos équipes.")})
+        return equipe
+
     def perform_create(self, serializer):
+        # Import local : ``accounts`` précède ``expenses`` dans l'ordre des
+        # applications (``core/tests/test_dependances.py``) ; la création
+        # d'un projet ouvre ses dossiers, qui sont des dépenses.
+        from expenses.predefinis import creer_les_dossiers_predefinis
+
         self._check_country_scope(serializer)
-        serializer.instance = creer_projet(Project(**serializer.validated_data))
+        donnees = dict(serializer.validated_data)
+        donnees.pop("motif", None)
+        equipe = self._equipe_des_dossiers(donnees.pop("team", None))
+        with transaction.atomic():
+            projet = creer_projet(Project(**donnees))
+            crees = creer_les_dossiers_predefinis(
+                projet, auteur=self.request.user.username, equipe=equipe,
+                trace=Trace.depuis_requete(self.request),
+            )
+            # Un projet sans dossier ne servirait à rien, et le pays n'a
+            # aucun moyen d'en ouvrir : il ne se crée pas.
+            if not crees:
+                raise serializers.ValidationError({"kind": _(
+                    "Ce projet ne recevrait aucun dossier : il doit être actif, et son "
+                    "type de projet doit avoir des types de dossiers actifs."
+                )})
+        # Relu par le queryset de la vue : la réponse compte ses dossiers.
+        serializer.instance = self.get_queryset().get(pk=projet.pk)
+
+    def perform_update(self, serializer):
+        # Import local, comme à la création.
+        from expenses.predefinis import creer_les_dossiers_predefinis
+
+        motif = serializer.validated_data.pop("motif", "").strip()
+        a_typer = not serializer.instance.kind and not serializer.instance.is_historical
+        with transaction.atomic(), motif_du_journal(motif):
+            projet = serializer.save()
+            # Un projet d'avant la 2.0 que le siège vient de typer reçoit
+            # ses dossiers prédéfinis ; ils reviennent au pays (sans auteur).
+            if a_typer and projet.kind:
+                creer_les_dossiers_predefinis(
+                    projet, trace=Trace.depuis_requete(self.request),
+                )
+
+    @extend_schema(request=RenommerProjetSerializer, responses=ProjectSerializer)
+    @action(detail=True, methods=["post"])
+    def rename(self, request, pk=None):
+        """Change le titre du projet, motif à l'appui (décisions 108 et 109)."""
+        projet = self.get_object()
+        entree = RenommerProjetSerializer(data=request.data)
+        entree.is_valid(raise_exception=True)
+        nom = entree.validated_data["name"]
+        with transaction.atomic():
+            projet = Project.objects.select_for_update().get(pk=projet.pk)
+            if nom != projet.name:
+                if Project.objects.filter(country=projet.country, name=nom).exclude(pk=projet.pk).exists():
+                    raise serializers.ValidationError(
+                        {"name": _("Ce projet existe déjà pour ce pays.")}
+                    )
+                projet.name = nom
+                with motif_du_journal(entree.validated_data["motif"]):
+                    projet.save(update_fields=["name", "updated_at"])
+        lu = self.get_queryset().get(pk=projet.pk)
+        return Response(ProjectSerializer(lu, context=self.get_serializer_context()).data)
+
+    @extend_schema(request=None, responses=ProjectSerializer)
+    @action(detail=True, methods=["post"])
+    def completer(self, request, pk=None):
+        """Ouvre les dossiers prédéfinis qui manquent au projet (décision 106).
+
+        Un projet réactivé, un type de dossier ajouté depuis, un projet typé
+        avant la décision : le siège le complète à la demande, jamais
+        d'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils
+        reviennent au pays.
+        """
+        # Import local, comme à la création.
+        from expenses.predefinis import creer_les_dossiers_predefinis
+
+        projet = self.get_object()
+        if not projet.accepte_des_dossiers:
+            raise serializers.ValidationError({"project": _(
+                "Ce projet n'accepte pas de dossier : il doit être actif et typé."
+            )})
+        creer_les_dossiers_predefinis(projet, trace=Trace.depuis_requete(request))
+        lu = self.get_queryset().get(pk=projet.pk)
+        return Response(ProjectSerializer(lu, context=self.get_serializer_context()).data)
+
+    @extend_schema(responses=HistoriqueDeProjetSerializer)
+    @action(detail=True, methods=["get"])
+    def historique(self, request, pk=None):
+        """Tout ce qui est arrivé au projet et à ses dossiers (décision 110)."""
+        # Import local : le journal du circuit vit dans ``expenses``.
+        from expenses.historique import historique_du_projet
+
+        projet = self.get_object()
+        return Response(historique_du_projet(projet))
 
     @extend_schema(responses=ParPaysSerializer)
     @action(detail=False, methods=["get"], url_path="par-pays")
@@ -345,12 +473,11 @@ class ProjectViewSet(ScopedViewSet):
 class DossierKindViewSet(NoDestroyModelViewSet):
     """La liste commune des types de dossiers (décision 101).
 
-    Lue par tout compte connecté — le pays y choisit le type d'un dossier —,
-    tenue par le siège. Elle n'appartient à aucun pays : pas de cloisonnement.
-    Elle s'écrit comme la configuration (``configuration.manage``,
-    administrateurs, verrouillé au pays) et non comme le référentiel d'un
-    pays, que l'organisation peut ouvrir au pays : un manager désactiverait
-    sinon « Stands » pour les dix-sept filiales.
+    Lue par tout compte connecté, tenue par le super administrateur seul
+    (``dossier_kinds.manage``, verrouillé à la RH et au pays, décision
+    108) : elle fixe les dossiers que chaque projet reçoit d'office
+    (décision 106). Elle n'appartient à aucun pays : pas de cloisonnement.
+    Toute modification exige un motif (décision 109).
     """
 
     queryset = DossierKind.objects.all()
@@ -358,7 +485,16 @@ class DossierKindViewSet(NoDestroyModelViewSet):
     permission_classes = [RolePermission]
     filterset_fields = ["project_kind", "is_active"]
     search_fields = ["name"]
-    write_capability = "configuration.manage"
+    write_capability = "dossier_kinds.manage"
+
+    def perform_update(self, serializer):
+        motif = serializer.validated_data.pop("motif", "").strip()
+        with motif_du_journal(motif):
+            serializer.save()
+
+    def perform_create(self, serializer):
+        serializer.validated_data.pop("motif", None)
+        serializer.save()
 
 
 class ExpenseTitleViewSet(ScopedViewSet):
@@ -381,6 +517,17 @@ class MarketingCategoryViewSet(ScopedViewSet):
     action_write_capabilities = {"create": "referentiel.create"}
 
 
+class ChangeLogFilter(django_filters.FilterSet):
+    """Par pays, entité, objet, action et période (décision 111)."""
+
+    debut = django_filters.DateFilter(field_name="created_at", lookup_expr="date__gte")
+    fin = django_filters.DateFilter(field_name="created_at", lookup_expr="date__lte")
+
+    class Meta:
+        model = ChangeLog
+        fields = ["country", "model_name", "object_id", "action", "performed_by"]
+
+
 class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     """Historique des changements de rattachement et de configuration."""
 
@@ -388,8 +535,11 @@ class ChangeLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
     serializer_class = ChangeLogSerializer
     permission_classes = [RolePermission]
     read_capability = "history.read"
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["country", "model_name", "action"]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = ChangeLogFilter
+    # Le motif se cherche comme le reste : « pourquoi » est une question
+    # qu'on pose au journal (décision 109).
+    search_fields = ["label", "performed_by", "motif", "from_value", "to_value"]
     ordering_fields = ["created_at"]
 
     #: Entrées qui relèvent de l'administration : la vie des comptes (rôles,

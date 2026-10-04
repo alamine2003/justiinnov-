@@ -8,8 +8,12 @@ const fetchCountries = vi.fn()
 const fetchProjects = vi.fn()
 const fetchProjectsParPays = vi.fn()
 const createProject = vi.fn()
+const fetchCountry = vi.fn()
+const fetchDossierKinds = vi.fn()
 vi.mock("@/lib/countries", () => ({
   fetchCountries: () => fetchCountries(),
+  fetchCountry: (...args: unknown[]) => fetchCountry(...args),
+  fetchDossierKinds: (...args: unknown[]) => fetchDossierKinds(...args),
   fetchProjects: (...args: unknown[]) => fetchProjects(...args),
   fetchProjectsParPays: (...args: unknown[]) => fetchProjectsParPays(...args),
   createProject: (...args: unknown[]) => createProject(...args),
@@ -63,6 +67,15 @@ beforeEach(() => {
   fetchCountries.mockReset()
   fetchCountries.mockResolvedValue(page([togo, ivoire]))
   createProject.mockReset()
+  fetchCountry.mockReset()
+  fetchCountry.mockResolvedValue({ teams: [{ id: 5, name: "Équipe Lomé", is_active: true }], managers: [] })
+  fetchDossierKinds.mockReset()
+  fetchDossierKinds.mockResolvedValue(
+    page([
+      { id: 3, project_kind: "congres", name: "Stands", is_active: true },
+      { id: 4, project_kind: "congres", name: "Collations", is_active: true },
+    ]),
+  )
 })
 
 describe("ProjetsPage — la liste", () => {
@@ -155,7 +168,54 @@ describe("ProjetsPage — nouveau projet", () => {
 
     expect(await screen.findByText("Fiche du projet")).toBeInTheDocument()
     expect(createProject).toHaveBeenCalledWith({
-      country: togo.id, name: "Congrès de Kara", kind: "congres", description: "",
+      country: togo.id, name: "Congrès de Kara", kind: "congres", description: "", team: null,
     })
+  })
+
+  it("annonce les dossiers que le type ouvrira, lus dans la liste du serveur", async () => {
+    fetchCountries.mockResolvedValue(page([togo]))
+    afficher()
+    fireEvent.click(await screen.findByRole("button", { name: "Nouveau projet" }))
+
+    fireEvent.change(await screen.findByLabelText("Type de projet"), { target: { value: "congres" } })
+
+    expect(
+      await screen.findByText("Le projet recevra ses dossiers : Stands, Collations."),
+    ).toBeInTheDocument()
+    expect(fetchDossierKinds).toHaveBeenCalledWith(
+      expect.objectContaining({ project_kind: "congres", is_active: true }),
+    )
+  })
+
+  it("envoie l'équipe choisie, qui ira sur chaque dossier", async () => {
+    fetchCountries.mockResolvedValue(page([togo]))
+    createProject.mockResolvedValue({ ...congres, id: 12 })
+    afficher()
+    fireEvent.click(await screen.findByRole("button", { name: "Nouveau projet" }))
+    await waitFor(() => expect(screen.getByRole("option", { name: "Équipe Lomé" })).toBeInTheDocument())
+
+    fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Congrès de Kara" } })
+    fireEvent.change(screen.getByLabelText("Type de projet"), { target: { value: "congres" } })
+    fireEvent.change(screen.getByLabelText("Équipe"), { target: { value: "5" } })
+    fireEvent.click(screen.getByRole("button", { name: "Créer" }))
+
+    await screen.findByText("Fiche du projet")
+    expect(createProject).toHaveBeenCalledWith(expect.objectContaining({ team: 5 }))
+  })
+
+  it("montre sous le champ le refus du serveur sur l'équipe", async () => {
+    const { ApiError } = await import("@/lib/api")
+    fetchCountries.mockResolvedValue(page([togo]))
+    createProject.mockRejectedValue(
+      new ApiError(400, "Requête invalide", { team: ["Choisissez une de vos équipes."] }),
+    )
+    afficher()
+    fireEvent.click(await screen.findByRole("button", { name: "Nouveau projet" }))
+    fireEvent.change(await screen.findByLabelText("Nom"), { target: { value: "Congrès" } })
+    fireEvent.change(screen.getByLabelText("Type de projet"), { target: { value: "congres" } })
+    fireEvent.click(screen.getByRole("button", { name: "Créer" }))
+
+    expect(await screen.findByText("Choisissez une de vos équipes.")).toBeInTheDocument()
+    expect(screen.queryByText("Fiche du projet")).toBeNull()
   })
 })

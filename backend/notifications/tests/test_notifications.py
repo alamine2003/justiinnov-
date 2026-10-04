@@ -77,6 +77,7 @@ class CloisonnementTests(NotificationTestCase):
     def test_un_pays_ne_recoit_jamais_l_alerte_d_un_autre(self):
         self.dossier.status = Status.SUBMITTED
         self.dossier.save()
+        self.make_expense(status=Status.SUBMITTED)
 
         call_command("notify_alerts", year=self.year, verbosity=0)
 
@@ -317,6 +318,7 @@ class LangueTests(NotificationTestCase):
         anglais chez un destinataire anglophone."""
         self.dossier.status = Status.SUBMITTED
         self.dossier.save()
+        self.make_expense(status=Status.SUBMITTED)
         self.anglophone(self.controller)
 
         call_command("notify_alerts", year=self.year, verbosity=0)
@@ -325,7 +327,7 @@ class LangueTests(NotificationTestCase):
             recipient=self.controller, kind=Notification.Kind.PROOF_MISSING
         )
         self.assertEqual(notification.title, "Missing supporting document — N-0001")
-        self.assertIn("without any proof", notification.body)
+        self.assertIn("without proof", notification.body)
 
     def test_la_langue_vient_du_profil(self):
         self.controller.profile.language = "en"
