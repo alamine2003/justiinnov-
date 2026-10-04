@@ -148,3 +148,22 @@ describe("DossiersPage — import", () => {
     expect(screen.queryByRole("button", { name: "Nouveau dossier" })).toBeNull()
   })
 })
+
+/**
+ * Régression : un filtre sans résultat invitait à créer un projet, comme si
+ * le pays n'avait aucun dossier.
+ */
+describe("DossiersPage — état vide", () => {
+  it("dit que les filtres n'ont rien trouvé, sans inviter à créer", async () => {
+    droits = { "expenses.create": true }
+
+    render(
+      <MemoryRouter initialEntries={["/dossiers?status=closed"]}>
+        <DossiersPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText("Aucun dossier ne correspond à ces filtres.")).toBeInTheDocument()
+    expect(screen.queryByText(/Créez un projet/)).toBeNull()
+  })
+})

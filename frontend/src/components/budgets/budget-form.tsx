@@ -40,7 +40,7 @@ export interface BudgetFormValues {
 /** Dimensions selon lesquelles une enveloppe pays peut être découpée (§5.2). */
 const SCOPES = ["country", "project", "team", "manager"] as const
 
-type Scope = (typeof SCOPES)[number]
+export type Scope = (typeof SCOPES)[number]
 
 interface BudgetFormProps {
   open: boolean
@@ -54,6 +54,10 @@ interface BudgetFormProps {
   defaultPolicy?: OverrunPolicy
   /** Exercice affiché par la page, proposé par défaut. */
   defaultYear?: number
+  /** Pays ouvert par la page : une sous-enveloppe se découpe dans le sien. */
+  defaultCountry?: number
+  /** Portée proposée : « projet » pour découper une enveloppe de pays. */
+  defaultScope?: Scope
 }
 
 
@@ -83,13 +87,17 @@ function BudgetFormBody({
   editing,
   defaultPolicy = "block",
   defaultYear = currentYear(),
+  defaultCountry,
+  defaultScope = "country",
 }: Omit<BudgetFormProps, "open">) {
   const { t } = useTranslation()
   // Lus au rendu : le formulaire vit dans une application qui reste ouverte.
   const years = yearChoices({ before: 2, after: 2 })
-  const [country, setCountry] = useState<number | "">(editing?.country ?? countries[0]?.id ?? "")
+  // Ni le premier pays de la liste ni un choix implicite : « Découper » sur le
+  // Togo ouvrait le formulaire sur la Côte d'Ivoire, et ses équipes.
+  const [country, setCountry] = useState<number | "">(editing?.country ?? defaultCountry ?? "")
   const [year, setYear] = useState(editing?.year ?? defaultYear)
-  const [scope, setScope] = useState<Scope>(editing?.scope_kind ?? "country")
+  const [scope, setScope] = useState<Scope>(editing?.scope_kind ?? defaultScope)
   const [project, setProject] = useState<number | "">(editing?.project ?? "")
   const [team, setTeam] = useState<number | "">(editing?.team ?? "")
   const [manager, setManager] = useState<number | "">(editing?.manager ?? "")
@@ -166,6 +174,11 @@ function BudgetFormBody({
             }}
             disabled={Boolean(editing)}
           >
+            {/* L'option vide dit l'état réel : sans elle, la liste montrait
+                le premier pays alors que rien n'était choisi. */}
+            <option value="" disabled>
+              {t("budgets.choisir_pays_option")}
+            </option>
             {countries.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.country_ref ? `${c.country_ref} — ` : ""}

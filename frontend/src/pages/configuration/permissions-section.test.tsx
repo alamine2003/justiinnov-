@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { MatriceDesDroits } from "./permissions-section"
+import { MatriceDesDroits, PermissionsSection } from "./permissions-section"
 import type { PermissionMatrix } from "@/lib/types"
 
 // jsdom n'a pas d'événement pointeur ; l'interrupteur de base-ui en construit
@@ -16,8 +16,9 @@ vi.mock("@/context/use-auth", () => ({
 }))
 
 const updatePermissionMatrix = vi.fn()
+const fetchPermissionMatrix = vi.fn()
 vi.mock("@/lib/accounts", () => ({
-  fetchPermissionMatrix: vi.fn(),
+  fetchPermissionMatrix: (...args: unknown[]) => fetchPermissionMatrix(...args),
   fetchConfiguration: vi.fn(),
   updatePermissionMatrix: (...args: unknown[]) => updatePermissionMatrix(...args),
   updateWorkflowConfiguration: vi.fn(),
@@ -177,6 +178,34 @@ describe("MatriceDesDroits", () => {
 
     expect(
       await screen.findByText("Ce droit ne se retire pas à : Super administrateur."),
+    ).toBeInTheDocument()
+  })
+})
+
+/**
+ * Régression : la vraie section remontait le formulaire après chaque
+ * enregistrement (`key`) et la confirmation disparaissait aussitôt. Le test
+ * précédent passait parce que son hôte n'avait pas de clé.
+ */
+describe("PermissionsSection", () => {
+  it("garde la confirmation après l'enregistrement", async () => {
+    const base = matrice()
+    fetchPermissionMatrix.mockResolvedValue(base)
+    updatePermissionMatrix.mockResolvedValue(
+      matrice({
+        capabilities: [
+          { ...base.capabilities[0], roles: ["admin", "super_admin", "manager"] },
+          base.capabilities[1],
+        ],
+      }),
+    )
+    render(<PermissionsSection />)
+
+    fireEvent.click(await screen.findByRole("switch", { name: "Exporter pour Manager (pays)" }))
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    expect(
+      await screen.findByText("Droits enregistrés : ils s'appliquent dès maintenant."),
     ).toBeInTheDocument()
   })
 })

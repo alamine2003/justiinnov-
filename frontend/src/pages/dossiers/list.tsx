@@ -171,8 +171,14 @@ export function DossiersPage() {
             dossiers={dossiers}
             loading={query.loading}
             colonne="projet"
+            // Un filtre sans résultat le dit, plutôt que d'inviter à créer
+            // un projet comme si le pays n'en avait aucun.
             vide={
-              canCreate ? t("dossiers.liste.vide.aide_creer") : t("dossiers.liste.vide.aide_filtres")
+              debouncedSearch || statusFilter || countryFilter !== ""
+                ? t("dossiers.liste.vide.aide_filtres")
+                : canCreate
+                  ? t("dossiers.liste.vide.aide_creer")
+                  : t("dossiers.liste.vide.aide_filtres")
             }
           />
 

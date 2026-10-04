@@ -38,7 +38,7 @@ export function createDossier(data: unknown) {
 }
 
 /**
- * Change le titre d'un dossier, à tout moment, même clôturé (décision 104).
+ * Change le titre d'un dossier, jusqu'à sa clôture (décisions 104 et 108).
  * Rien d'autre ne bouge ; l'ancien titre reste au journal d'audit.
  */
 export function renameDossier(id: number, label: string) {

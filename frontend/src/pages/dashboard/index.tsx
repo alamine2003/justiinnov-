@@ -95,6 +95,12 @@ export function DashboardPage() {
     : me?.has_global_scope
       ? t("pilotage.charge.aide.dossiers_ouverts")
       : perimetre.map((pays) => pays.name).join(", ")
+  // L'exercice et le pays des tuiles, repris par le registre qu'elles ouvrent.
+  const filtreDuRegistre = new URLSearchParams({
+    from: `${year}-01-01`,
+    to: `${year}-12-31`,
+    ...(countryId !== "" ? { country: String(countryId) } : {}),
+  }).toString()
   const query = useQuery(
     // Le périmètre entre dans la clé : il décide si la répartition peut être
     // demandée sans nommer de pays, et il n'est connu qu'une fois le profil
@@ -208,35 +214,36 @@ export function DashboardPage() {
       {data && <BandeauConsolide data={data} devise={consolidatedSymbol} annee={year} />}
 
       {/* Les trois premiers comptes portent sur des lignes : ils mènent au
-          registre, filtré sur le même statut. Le dernier compte des
-          dossiers. */}
+          registre, filtré sur le même statut, le même exercice et le même
+          pays — sans quoi la liste ouverte ne disait pas le chiffre de la
+          tuile. Le dernier compte des dossiers. */}
       <div className="grid shrink-0 gap-4 court:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Charge
           label={t("pilotage.charge.a_controler")}
           hint={t("pilotage.charge.aide.a_controler")}
-          value={data?.workload.expenses_to_review ?? 0}
+          value={data?.workload.expenses_to_review}
           tone="border-l-statut-attente"
-          to="/registre?status__in=submitted,in_review"
+          to={`/registre?status__in=submitted,in_review&${filtreDuRegistre}`}
         />
         <Charge
           label={t("pilotage.charge.brouillon")}
           hint={t("pilotage.charge.aide.brouillon")}
-          value={data?.workload.expenses_draft ?? 0}
+          value={data?.workload.expenses_draft}
           tone="border-l-statut-neutre"
-          to="/registre?status=draft"
+          to={`/registre?status=draft&${filtreDuRegistre}`}
         />
         <Charge
           label={t("pilotage.charge.non_justifiees")}
           hint={t("pilotage.charge.aide.non_justifiees")}
-          value={data?.workload.expenses_unjustified ?? 0}
+          value={data?.workload.expenses_unjustified}
           tone="border-l-destructive"
           alarme={(data?.workload.expenses_unjustified ?? 0) > 0}
-          to="/registre?status=unjustified"
+          to={`/registre?status=unjustified&${filtreDuRegistre}`}
         />
         <Charge
           label={t("pilotage.charge.dossiers_ouverts")}
           hint={portee}
-          value={data?.workload.dossiers_open ?? 0}
+          value={data?.workload.dossiers_open}
           tone="border-l-marque"
           to="/dossiers"
         />
@@ -246,19 +253,23 @@ export function DashboardPage() {
         <p className="shrink-0 text-sm text-muted-foreground">{t("pilotage.choisir_pays")}</p>
       )}
 
-      <div
-        className={cn(
-          "grid gap-4 court:gap-3 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]",
-          (data?.alerts.length ?? 0) > 0 && "lg:grid-cols-[minmax(0,1fr)_22rem]",
-        )}
-      >
-        {breakdown ? (
-          <Analyse breakdown={breakdown} annee={year} rows={data?.countries ?? []} symbolOf={symbolOf} />
-        ) : (
-          <ParPays rows={data?.countries ?? []} symbolOf={symbolOf} />
-        )}
-        <Alertes alerts={data?.alerts ?? []} total={data?.alerts_total ?? 0} />
-      </div>
+      {/* Sans tableau de bord (chargement ou échec), pas de panneaux : leur
+          état vide dirait « aucune enveloppe » là où rien n'a été lu. */}
+      {data && (
+        <div
+          className={cn(
+            "grid gap-4 court:gap-3 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]",
+            data.alerts.length > 0 && "lg:grid-cols-[minmax(0,1fr)_22rem]",
+          )}
+        >
+          {breakdown ? (
+            <Analyse breakdown={breakdown} annee={year} rows={data.countries} symbolOf={symbolOf} />
+          ) : (
+            <ParPays rows={data.countries} symbolOf={symbolOf} />
+          )}
+          <Alertes alerts={data.alerts} total={data.alerts_total} />
+        </div>
+      )}
     </div>
   )
 }
@@ -381,7 +392,8 @@ function Charge({
 }: {
   label: string
   hint: string
-  value: number
+  /** Absent tant que le tableau de bord n'est pas chargé — ou s'il a échoué. */
+  value: number | undefined
   tone: string
   to: string
   alarme?: boolean
@@ -404,7 +416,9 @@ function Charge({
           alarme && "text-destructive",
         )}
       >
-        {value}
+        {/* « — » et non « 0 » : un compte qui n'a pas pu se charger n'est
+            pas un compte nul (`use-query`). */}
+        {value ?? "—"}
       </span>
     </Link>
   )

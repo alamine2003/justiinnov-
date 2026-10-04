@@ -10,7 +10,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { StatCard } from "@/components/ui/stat-card"
 import { PageHeader } from "@/components/ui/page-header"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
-import { BudgetForm, type BudgetFormValues } from "@/components/budgets/budget-form"
+import { BudgetForm, type BudgetFormValues, type Scope } from "@/components/budgets/budget-form"
 import { EnveloppeDuPays, SousEnveloppes } from "@/components/budgets/country-envelope"
 import { Reallocations } from "@/components/budgets/reallocations"
 import { useAuth } from "@/context/use-auth"
@@ -92,6 +92,9 @@ export function BudgetsPage() {
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
+  // Portée proposée à l'ouverture : « projet » quand on découpe l'enveloppe
+  // du pays ouvert, « pays » pour une attribution.
+  const [porteeProposee, setPorteeProposee] = useState<Scope>("country")
 
   const symbolOf = (id: number, fallback: string) =>
     countries.data?.results.find((c) => c.id === id)?.currency_symbol || fallback
@@ -126,8 +129,9 @@ export function BudgetsPage() {
     query.reload()
   }
 
-  const ouvrirFormulaire = (budget: Budget | null) => {
+  const ouvrirFormulaire = (budget: Budget | null, portee: Scope = "country") => {
     setEditing(budget)
+    setPorteeProposee(portee)
     setFormOpen(true)
   }
 
@@ -211,19 +215,20 @@ export function BudgetsPage() {
         <StatCard
           icon={Wallet}
           label={t("budgets.indicateurs.pays_dotes")}
-          value={rows.length}
+          // « — » tant que rien n'est lu : un échec n'est pas un compte nul.
+          value={summary ? rows.length : "—"}
         />
         <StatCard
           icon={Wallet}
           label={t("budgets.indicateurs.enveloppes")}
-          value={query.data?.budgets.count ?? 0}
+          value={query.data?.budgets.count ?? "—"}
         />
       </div>
 
       {/* Sous les indicateurs, enveloppes et réallocations défilent dès
           `lg` : en-tête et totaux restent en vue (DESIGN.md, « Hauteur d'écran »). */}
       <div className="defile -mx-1 space-y-6 px-1 pb-1 court:space-y-3">
-        {rows.length === 0 && !query.loading ? (
+        {!summary ? null : rows.length === 0 ? (
           <Card className="border-border/60 shadow-sm">
             <CardContent>
               <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
@@ -252,7 +257,7 @@ export function BudgetsPage() {
               row={selected}
               canCreate={canCreate}
               canEdit={canEdit}
-              onCreate={() => ouvrirFormulaire(null)}
+              onCreate={() => ouvrirFormulaire(null, "project")}
               onEdit={ouvrirFormulaire}
               onDelete={supprimer}
             />
@@ -284,6 +289,8 @@ export function BudgetsPage() {
         teams={teams.data?.results ?? []}
         editing={editing}
         defaultYear={year}
+        defaultCountry={selected?.country}
+        defaultScope={porteeProposee}
         defaultPolicy={configuration.data?.workflow.default_overrun_policy}
       />
     </div>

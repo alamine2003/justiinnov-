@@ -47,6 +47,18 @@ function readStatusFilter(params: URLSearchParams): WorkflowStatus | typeof TO_R
   return (WORKFLOW_STATUSES as string[]).includes(status) ? (status as WorkflowStatus) : ""
 }
 
+/** Un identifiant de pays lu dans l'URL, ou rien. */
+function lirePays(params: URLSearchParams): number | "" {
+  const valeur = Number(params.get("country"))
+  return Number.isInteger(valeur) && valeur > 0 ? valeur : ""
+}
+
+/** Un jour `AAAA-MM-JJ` lu dans l'URL, ou rien. */
+function lireJour(params: URLSearchParams, cle: "from" | "to"): string {
+  const valeur = params.get(cle) ?? ""
+  return /^\d{4}-\d{2}-\d{2}$/.test(valeur) ? valeur : ""
+}
+
 export function RegisterPage() {
   const { t } = useTranslation()
   const { me } = useAuth()
@@ -57,9 +69,11 @@ export function RegisterPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
-  const [countryId, setCountryId] = useState<number | "">("")
-  const [from, setFrom] = useState("")
-  const [to, setTo] = useState("")
+  // Pays et période peuvent venir de l'adresse : une tuile du Pilotage ouvre
+  // le registre sur son exercice et son pays.
+  const [countryId, setCountryId] = useState<number | "">(() => lirePays(params))
+  const [from, setFrom] = useState(() => lireJour(params, "from"))
+  const [to, setTo] = useState(() => lireJour(params, "to"))
   const [exportError, setExportError] = useState<string | null>(null)
 
   const countries = useReferentiel(

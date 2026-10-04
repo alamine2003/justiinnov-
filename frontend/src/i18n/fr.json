@@ -794,7 +794,8 @@
       "description": "Cette enveloppe n'a jamais servi : aucune dépense imputée, aucune réallocation, aucune sous-enveloppe. Elle disparaît de l'application ; l'historique garde qui l'a supprimée et quand. Une enveloppe qui a servi se désactive au lieu de se supprimer.",
       "confirmer": "Supprimer",
       "impossible": "Suppression impossible"
-    }
+    },
+    "choisir_pays_option": "Choisissez un pays…"
   },
   "pilotage": {
     "titre": "Pilotage",

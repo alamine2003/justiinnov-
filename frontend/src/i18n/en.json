@@ -794,7 +794,8 @@
       "description": "This budget was never used: no expense charged to it, no reallocation, no sub-budget. It disappears from the application; the history keeps who deleted it and when. A budget that has been used is deactivated instead of deleted.",
       "confirmer": "Delete",
       "impossible": "Deletion failed"
-    }
+    },
+    "choisir_pays_option": "Choose a country…"
   },
   "pilotage": {
     "titre": "Overview",

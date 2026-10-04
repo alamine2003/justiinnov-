@@ -210,11 +210,10 @@ export function VueDEnsemble() {
                     <TableBody>
                       {synthese.par_utilisateur.map((ligne) => (
                         <TableRow key={ligne.user}>
-                          <TableCell>
-                            <Link to={lien("circuit", { user: ligne.user })} className="font-medium hover:underline">
-                              {ligne.user}
-                            </Link>
-                          </TableCell>
+                          {/* Pas de lien : le compte réunit circuit et référentiel,
+                              le journal ouvert n'en montrait qu'un — et une liste
+                              vide pour qui n'avait touché qu'au référentiel. */}
+                          <TableCell className="font-medium">{ligne.user}</TableCell>
                           <TableCell className="text-right tabular-nums">{ligne.count}</TableCell>
                         </TableRow>
                       ))}

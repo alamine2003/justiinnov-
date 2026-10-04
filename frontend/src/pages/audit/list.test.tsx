@@ -97,6 +97,15 @@ describe("Audit — vue d'ensemble", () => {
     expect(screen.getByText("Facture illisible")).toBeInTheDocument()
   })
 
+  it("ne lie pas le compte par utilisateur à un journal qui n'en montrerait qu'une part", async () => {
+    fetchAuditSynthese.mockResolvedValue(synthese())
+
+    afficher("/audit")
+
+    expect(await screen.findByText("owner.togo")).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "owner.togo" })).toBeNull()
+  })
+
   it("sans période dans l'adresse, la tuile emporte celle que le serveur a comptée", async () => {
     fetchAuditSynthese.mockResolvedValue(synthese())
 
@@ -154,6 +163,15 @@ describe("Audit — journal du circuit", () => {
 
     await waitFor(() => expect(screen.getByText("Brouillon → Soumis")).toBeInTheDocument())
     expect(screen.queryByText("draft → submitted")).toBeNull()
+  })
+
+  it("nomme l'objet dans la langue de l'interface, pas par sa classe", async () => {
+    fetchAudit.mockResolvedValue({ count: 1, results: [entree({})] })
+
+    afficher("/audit?onglet=circuit")
+
+    expect(await screen.findByText(/Ligne #7/)).toBeInTheDocument()
+    expect(screen.queryByText(/Expense #7/)).toBeNull()
   })
 
   it("formate les montants", async () => {

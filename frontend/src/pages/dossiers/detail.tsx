@@ -38,6 +38,7 @@ import { fetchCountry } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import { scopedTeams, teamRequired } from "@/lib/teams"
 import {
+  type Beneficiary,
   type Expense,
   type ExpenseTransitionName,
   type TransitionName,
@@ -45,10 +46,19 @@ import {
 import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatDay } from "@/lib/utils"
 
+/**
+ * La fiche est remontée à chaque dossier (`key`) : en passant du 12 au 13
+ * — une notification, « Retour » —, l'avertissement, l'erreur ou le
+ * dialogue ouvert du 12 ne restent pas affichés sur le 13. `keepPreviousData`
+ * ne protégeait que les données chargées, pas l'état de la page.
+ */
 export function DossierDetailPage() {
-  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const dossierId = Number(id)
+  return <FicheDossier key={id} dossierId={Number(id)} />
+}
+
+function FicheDossier({ dossierId }: { dossierId: number }) {
+  const { t } = useTranslation()
   const { me } = useAuth()
 
   // Le dossier est celui de l'URL : en passant du 12 au 13, rien du 12 ne
@@ -232,12 +242,32 @@ export function DossierDetailPage() {
   // Une ligne porte le projet de son dossier (décision 102) : le choix n'est
   // offert que dans le projet « Historique », dont les dossiers d'avant la
   // 2.0 gardent les projets de leurs lignes.
+  //
+  // Une valeur désactivée depuis la saisie reste proposée pour la ligne qui
+  // la porte : retirée de la liste, elle s'affichait « Aucun » et repartait
+  // pourtant telle quelle au serveur.
   const projects = dossier.project_is_historical
-    ? (country.data?.projects ?? []).filter((p) => p.is_active && !p.is_historical)
+    ? (country.data?.projects ?? []).filter(
+        (p) => (p.is_active && !p.is_historical) || p.id === editing?.project,
+      )
     : []
-  const expenseTitles = (country.data?.expense_titles ?? []).filter((titre) => titre.is_active)
-  const marketingCategories = (country.data?.marketing_categories ?? []).filter((c) => c.is_active)
-  const managers = (country.data?.managers ?? []).filter((m) => m.is_active)
+  const expenseTitles = (country.data?.expense_titles ?? []).filter(
+    (titre) => titre.is_active || titre.id === editing?.expense_title,
+  )
+  const marketingCategories = (country.data?.marketing_categories ?? []).filter(
+    (c) => c.is_active || c.id === editing?.marketing_category,
+  )
+  const managers = (country.data?.managers ?? []).filter((m) => m.is_active || m.id === editing?.owner)
+  // Les bénéficiaires viennent du serveur, actifs seulement : celui de la
+  // ligne s'y ajoute s'il a été désactivé, sous le nom qu'elle porte.
+  const beneficiairesActifs = beneficiaries.data?.results ?? []
+  const beneficiaires =
+    editing?.beneficiary != null && !beneficiairesActifs.some((b) => b.id === editing.beneficiary)
+      ? [
+          ...beneficiairesActifs,
+          { id: editing.beneficiary, name: editing.beneficiary_name ?? "" } as Beneficiary,
+        ]
+      : beneficiairesActifs
 
   const saveExpense = async (values: Record<string, unknown>) => {
     if (editing) {
@@ -523,7 +553,7 @@ export function DossierDetailPage() {
         editing={editing}
         teams={teams}
         projects={projects}
-        beneficiaries={beneficiaries.data?.results ?? []}
+        beneficiaries={beneficiaires}
         expenseTitles={expenseTitles}
         marketingCategories={marketingCategories}
         managers={managers}
