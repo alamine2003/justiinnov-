@@ -172,7 +172,9 @@ l'application.
 - **Un brouillon appartient à son auteur.** Il ne se retire, ne se
   modifie et ne se soumet que par lui — jamais par un collègue du pays,
   jamais par le siège, qui ne déclare pas
-  (`transitions.exiger_l_auteur_du_brouillon`, décisions 46 et 89). Un
+  (`transitions.exiger_l_auteur_du_brouillon`, décisions 46 et 89). Soumettre
+  un dossier n'emporte pas la ligne brouillon d'un collègue : le service
+  refuse (décision 114). Un
   brouillon sans auteur connu se complète par le pays : c'est le cas de
   ceux que le siège avait ouverts, rendus au pays par la migration
   `expenses.0017`.
@@ -267,8 +269,8 @@ l'application.
 - **Déclarer tient en une action.** Le manager remplit ses lignes, joint à
   chacune sa pièce et soumet le dossier : ses lignes partent avec lui. Un
   dossier vide ne se soumet pas ; des lignes sans pièce se soumettent avec
-  un avertissement qui les compte, mais le dossier ne se justifie pas tant
-  que chacune n'a pas la sienne (décision 107).
+  un avertissement qui les compte, mais le dossier ne se justifie ni ne se
+  clôture tant que chacune n'a pas la sienne (décisions 107 et 115).
 - **La double authentification est proposée, pas imposée** — décision
   reportée par la direction. `GET /api/me/` expose `totp_required`
   (politique du serveur, `DJANGO_TOTP_REQUIRED`, faux par défaut) et

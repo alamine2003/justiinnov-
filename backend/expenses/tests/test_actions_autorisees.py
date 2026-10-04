@@ -65,8 +65,12 @@ class ActionsDeLigneTests(ExpenseTestCase):
             number="N-0002", label="Mission de la RH", country=self.togo,
             date=date(self.year, 3, 16), created_by=self.owner.username,
         )
-        propre = self.make_expense(dossier=dossier, created_by=self.controller.username)
+        # Signée après la soumission, que seul l'auteur d'une ligne emporte
+        # (décision 114).
+        propre = self.make_expense(dossier=dossier, created_by="")
         self.submit_dossier(dossier)
+        Expense.objects.filter(pk=propre.pk).update(created_by=self.controller.username)
+        propre.refresh_from_db()
 
         self.assertEqual(self._actions(self.controller, propre), [])
         autre = make_user("rh2.innov", Role.ADMIN)

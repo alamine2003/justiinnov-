@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from io import BytesIO, StringIO
 
+from django.db.models import DecimalField, OuterRef, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from docx import Document
@@ -39,7 +41,7 @@ from reportlab.platypus import (
 
 from budget.aggregates import budget_figures, seuil_d_alerte
 from core.statuts import Status
-from expenses.models import Proof
+from expenses.models import Expense, Proof
 
 from .scope import fuseau_de
 
@@ -255,6 +257,36 @@ def lignes_depenses(expenses):
     return tableau
 
 
+def _avec_les_totaux_declares(dossiers):
+    """Annote chaque dossier de ce que ses lignes **déclarées** totalisent.
+
+    La ligne TOTAL du rapprochement suit la règle de l'export des dépenses
+    et des écrans (décision 54) : un brouillon n'est pas une dépense, son
+    dossier est listé avec ses montants mais ne compte pas dans le total.
+    Une sous-requête, comme ``with_totals`` : une jointure sur les lignes
+    multiplierait les montants par le nombre de pièces.
+    """
+    argent = DecimalField(max_digits=16, decimal_places=2)
+    declarees = (
+        Expense.objects.filter(dossier=OuterRef("pk"))
+        .exclude(status=Status.DRAFT)
+        .order_by()
+        .values("dossier")
+        .annotate(montant=Sum("amount"), justifie=Sum("justified_amount"))
+    )
+
+    def somme(nom):
+        return Coalesce(
+            Subquery(declarees.values(nom)[:1], output_field=argent),
+            Value(ZERO),
+            output_field=argent,
+        )
+
+    return dossiers.annotate(
+        montant_declare=somme("montant"), justifie_declare=somme("justifie")
+    )
+
+
 def tableaux_rapprochement(budgets, dossiers):
     """Rapprochement enveloppe par enveloppe, puis dossier par dossier."""
     enveloppes = Tableau("Rapprochement budgets", RECONCILIATION_COLUMNS)
@@ -292,11 +324,15 @@ def tableaux_rapprochement(budgets, dossiers):
     detail = Tableau("Rapprochement dossiers", DOSSIER_COLUMNS)
     totaux = {"amount": ZERO, "justified": ZERO, "gap": ZERO}
     devises = set()
-    for dossier in dossiers.select_related("country", "project", "kind"):
+    source = _avec_les_totaux_declares(
+        dossiers.select_related("country", "project", "kind")
+    )
+    for dossier in source:
         totals = dossier.totals()
         devises.add(dossier.country.currency)
-        for cle in totaux:
-            totaux[cle] += totals[cle]
+        totaux["amount"] += dossier.montant_declare
+        totaux["justified"] += dossier.justifie_declare
+        totaux["gap"] += dossier.montant_declare - dossier.justifie_declare
         detail.lignes.append([
             dossier.number,
             dossier.label,

@@ -1004,11 +1004,14 @@ class DossierSerializer(serializers.ModelSerializer):
             "expense_count", "proof_count", "lignes_sans_preuve", "allowed_actions",
             "created_by", "created_at", "updated_at",
         ]
-        # Le motif de réouverture est posé par l'action ``reopen`` seule ;
-        # le numéro et le rang par ``expenses.numerotation`` ; la référence
-        # d'origine par l'import.
+        # La remarque de contrôle et le motif de réouverture sont posés par
+        # les transitions du siège seules : le pays qui modifie son
+        # brouillon rouvert ne réécrit pas ce que le siège lui reproche
+        # (décision 116). Le numéro et le rang viennent de
+        # ``expenses.numerotation`` ; la référence d'origine, de l'import.
         read_only_fields = [
-            "status", "created_by", "reopen_note", "number", "sequence", "external_ref",
+            "status", "created_by", "note", "reopen_note", "number", "sequence",
+            "external_ref",
         ]
         extra_kwargs = {"label": {"required": False}}
 

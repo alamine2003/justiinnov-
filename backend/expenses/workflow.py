@@ -455,7 +455,8 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
     Mêmes règles que pour la ligne, plus celles qui lient le dossier à ses
     lignes et à ses pièces : un dossier vide ne se soumet pas, ne se justifie
     pas sans pièce exploitable ni sans que chaque ligne le soit, ne se
-    rejette ni ne se clôt sur une ligne en suspens, et ne se rouvre pas dès
+    rejette ni ne se clôt sur une ligne en suspens, ne se clôt pas sur une
+    ligne sans pièce exploitable (décision 115), et ne se rouvre pas dès
     qu'une ligne a été constatée. Les compteurs viennent du dossier
     (:meth:`Dossier.line_counts`), annotés par ``with_totals`` sur une
     liste pour ne pas coûter une requête par dossier.
@@ -469,7 +470,9 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
     les règles que le service seul vérifie, parce qu'elles demandent des
     lectures que cette liste ne fait pas : ``submit`` exige une équipe et
     un manager sur **chaque ligne** en brouillon
-    (``transitions._exiger_equipe_et_owner``), et une enveloppe active
+    (``transitions._exiger_equipe_et_owner``), aucune ligne en brouillon
+    saisie par un autre compte (``transitions._exiger_les_auteurs_des_lignes``,
+    décision 114), et une enveloppe active
     pour chaque ligne à imputer ; la politique de dépassement se juge au
     montant engagé sur l'enveloppe. La liste dit ce que le demandeur *peut
     tenter*, pas ce qui aboutira.
@@ -498,6 +501,14 @@ def dossier_allowed_actions(dossier, *, role, username, configuration=None):
         ):
             continue
         if action in ("reject", "close") and lines["pending"]:
+            continue
+        # Le compteur annoté d'abord : la requête précise ne se fait que
+        # si une ligne manque de pièce, ce qui est rare sur un dossier
+        # justifié.
+        if action == "close" and (
+            dossier.a_des_lignes_sans_preuve()
+            and dossier.lignes_a_prouver_pour_clore().exists()
+        ):
             continue
         if action == "reopen" and lines["settled"]:
             continue

@@ -6266,7 +6266,7 @@
         "/api/projects/{id}/completer/": {
             "post": {
                 "operationId": "projects_completer_create",
-                "description": "Ouvre les dossiers prédéfinis qui manquent au projet (décision 106).\n\nUn projet réactivé, un type de dossier ajouté depuis, un projet typé\navant la décision : le siège le complète à la demande, jamais\nd'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils\nreviennent au pays.",
+                "description": "Ouvre les dossiers prédéfinis qui manquent au projet (décision 106).\n\nUn projet réactivé, un type de dossier ajouté depuis, un projet typé\navant la décision : le siège le complète à la demande, jamais\nd'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils\nreviennent au pays. Ils prennent l'équipe que portent tous les\ndossiers prédéfinis du projet, s'il n'y en a qu'une : sans elle, le\nmanager de cette équipe ne verrait pas le dossier ajouté.",
                 "parameters": [
                     {
                         "in": "path",
@@ -10498,6 +10498,7 @@
                     },
                     "note": {
                         "type": "string",
+                        "readOnly": true,
                         "title": "Remarque de contrôle"
                     },
                     "reopen_note": {
@@ -10712,6 +10713,7 @@
                     },
                     "note": {
                         "type": "string",
+                        "readOnly": true,
                         "title": "Remarque de contrôle"
                     },
                     "reopen_note": {
@@ -10942,10 +10944,6 @@
                     "date": {
                         "type": "string",
                         "format": "date"
-                    },
-                    "note": {
-                        "type": "string",
-                        "title": "Remarque de contrôle"
                     }
                 },
                 "required": [
@@ -11105,6 +11103,7 @@
                     },
                     "note": {
                         "type": "string",
+                        "readOnly": true,
                         "title": "Remarque de contrôle"
                     },
                     "reopen_note": {
@@ -14039,10 +14038,6 @@
                     "date": {
                         "type": "string",
                         "format": "date"
-                    },
-                    "note": {
-                        "type": "string",
-                        "title": "Remarque de contrôle"
                     }
                 }
             },

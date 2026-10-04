@@ -349,6 +349,15 @@ class Dossier(TimeStampedModel):
         prouvees = Proof.objects.filter(utilisables, dossier=self).values("expense_id")
         return self.expenses.exclude(pk__in=prouvees)
 
+    def lignes_a_prouver_pour_clore(self):
+        """Les lignes sans pièce exploitable qui empêchent la clôture (décision 115).
+
+        Les mêmes que :meth:`lignes_sans_preuve`, hors celles que le siège a
+        constatées non justifiées : l'absence de preuve y est la décision
+        même, et c'est l'écart qui la montre.
+        """
+        return self.lignes_sans_preuve().exclude(status=Status.UNJUSTIFIED)
+
     def a_des_lignes_sans_preuve(self):
         """Vrai si une ligne n'a pas de pièce exploitable — lu sur les
         annotations de ``with_totals`` quand elles sont là."""

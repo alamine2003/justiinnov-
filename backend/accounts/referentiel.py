@@ -392,7 +392,7 @@ class ProjectViewSet(ScopedViewSet):
 
     def perform_update(self, serializer):
         # Import local, comme à la création.
-        from expenses.predefinis import creer_les_dossiers_predefinis
+        from expenses.predefinis import EQUIPE_DU_PROJET, creer_les_dossiers_predefinis
 
         motif = serializer.validated_data.pop("motif", "").strip()
         a_typer = not serializer.instance.kind and not serializer.instance.is_historical
@@ -402,7 +402,8 @@ class ProjectViewSet(ScopedViewSet):
             # ses dossiers prédéfinis ; ils reviennent au pays (sans auteur).
             if a_typer and projet.kind:
                 creer_les_dossiers_predefinis(
-                    projet, trace=Trace.depuis_requete(self.request),
+                    projet, equipe=EQUIPE_DU_PROJET,
+                    trace=Trace.depuis_requete(self.request),
                 )
 
     @extend_schema(request=RenommerProjetSerializer, responses=ProjectSerializer)
@@ -434,17 +435,21 @@ class ProjectViewSet(ScopedViewSet):
         Un projet réactivé, un type de dossier ajouté depuis, un projet typé
         avant la décision : le siège le complète à la demande, jamais
         d'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils
-        reviennent au pays.
+        reviennent au pays. Ils prennent l'équipe que portent tous les
+        dossiers prédéfinis du projet, s'il n'y en a qu'une : sans elle, le
+        manager de cette équipe ne verrait pas le dossier ajouté.
         """
         # Import local, comme à la création.
-        from expenses.predefinis import creer_les_dossiers_predefinis
+        from expenses.predefinis import EQUIPE_DU_PROJET, creer_les_dossiers_predefinis
 
         projet = self.get_object()
         if not projet.accepte_des_dossiers:
             raise serializers.ValidationError({"project": _(
                 "Ce projet n'accepte pas de dossier : il doit être actif et typé."
             )})
-        creer_les_dossiers_predefinis(projet, trace=Trace.depuis_requete(request))
+        creer_les_dossiers_predefinis(
+            projet, equipe=EQUIPE_DU_PROJET, trace=Trace.depuis_requete(request)
+        )
         lu = self.get_queryset().get(pk=projet.pk)
         return Response(ProjectSerializer(lu, context=self.get_serializer_context()).data)
 

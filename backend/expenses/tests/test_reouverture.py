@@ -205,6 +205,26 @@ class ReouvertureTests(ReouvertureTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["reopen_note"], MOTIF)
 
+    def test_la_remarque_du_siege_ne_se_modifie_pas_a_la_main(self):
+        """La remarque de contrôle est celle du siège : le pays qui corrige
+        son brouillon rouvert ne la réécrit ni ne l'efface (décision 116).
+        Seules les transitions l'écrivent."""
+        remarque = "Pièces illisibles, montant douteux"
+        Dossier.objects.filter(pk=self.dossier.pk).update(note=remarque)
+        self.reopen()
+        self.login(self.owner)
+
+        for valeur in ("Tout est en ordre", ""):
+            with self.subTest(valeur=valeur):
+                response = self.client.patch(
+                    f"/api/dossiers/{self.dossier.pk}/", {"note": valeur}, format="json"
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+                self.assertEqual(response.data["note"], remarque)
+                self.dossier.refresh_from_db()
+                self.assertEqual(self.dossier.note, remarque)
+
 
 class TraceDeReouvertureTests(ReouvertureTestCase):
     def test_le_dossier_et_chaque_ligne_sont_journalises(self):

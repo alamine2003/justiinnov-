@@ -109,6 +109,38 @@ class DossiersPredefinisTests(ExpenseTestCase):
             len(self.types_du(ProjectKind.CONGRES)),
         )
 
+    def test_le_dossier_ajoute_reste_lisible_par_l_equipe_du_projet(self):
+        """Le dossier complété prend l'équipe commune des dossiers déjà là :
+        sans elle, le manager rattaché à cette équipe ne le voyait pas."""
+        cloisonne = make_user("equipe.togo", Role.MANAGER, [self.togo], teams=[self.team])
+        projet_id = self.creer(cloisonne).data["id"]
+        badges = DossierKind.objects.create(project_kind=ProjectKind.CONGRES, name="Badges")
+        self.login(self.controller)
+
+        reponse = self.client.post(f"/api/projects/{projet_id}/completer/")
+
+        self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
+        ajoute = Dossier.objects.get(project_id=projet_id, kind=badges)
+        self.assertEqual(ajoute.team, self.team)
+        self.login(cloisonne)
+        self.assertEqual(
+            self.client.get(f"/api/dossiers/{ajoute.pk}/").status_code, status.HTTP_200_OK
+        )
+
+    def test_sans_equipe_commune_le_dossier_ajoute_n_en_devine_pas(self):
+        """Deux équipes parmi les dossiers déjà là : rien ne se devine."""
+        projet_id = self.creer().data["id"]
+        autre = Team.objects.create(country=self.togo, name="Équipe Kara")
+        Dossier.objects.filter(pk=Dossier.objects.filter(project_id=projet_id).first().pk).update(
+            team=autre
+        )
+        badges = DossierKind.objects.create(project_kind=ProjectKind.CONGRES, name="Badges")
+        self.login(self.controller)
+
+        self.client.post(f"/api/projects/{projet_id}/completer/")
+
+        self.assertIsNone(Dossier.objects.get(project_id=projet_id, kind=badges).team)
+
     def test_un_projet_inactif_ne_se_complete_pas(self):
         self.projet.is_active = False
         self.projet.save()

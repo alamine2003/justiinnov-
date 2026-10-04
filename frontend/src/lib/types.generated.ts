@@ -1660,7 +1660,9 @@ export interface paths {
          *     Un projet réactivé, un type de dossier ajouté depuis, un projet typé
          *     avant la décision : le siège le complète à la demande, jamais
          *     d'office. Les dossiers ouverts ainsi n'ont pas d'auteur : ils
-         *     reviennent au pays.
+         *     reviennent au pays. Ils prennent l'équipe que portent tous les
+         *     dossiers prédéfinis du projet, s'il n'y en a qu'une : sans elle, le
+         *     manager de cette équipe ne verrait pas le dossier ajouté.
          */
         post: operations["projects_completer_create"]
         delete?: never
@@ -2966,7 +2968,7 @@ export interface components {
             readonly status: components["schemas"]["WorkflowStatusEnum"]
             readonly status_display: string
             /** Remarque de contrôle */
-            note: string
+            readonly note: string
             /** Motif de la réouverture */
             readonly reopen_note: string
             readonly totals: components["schemas"]["DossierTotals"]
@@ -3029,7 +3031,7 @@ export interface components {
             readonly status: components["schemas"]["WorkflowStatusEnum"]
             readonly status_display: string
             /** Remarque de contrôle */
-            note: string
+            readonly note: string
             /** Motif de la réouverture */
             readonly reopen_note: string
             readonly totals: components["schemas"]["DossierTotals"]
@@ -3116,8 +3118,6 @@ export interface components {
             owner?: number | null
             /** Format: date */
             date: string
-            /** Remarque de contrôle */
-            note?: string
         }
         /** @description Totaux d'un dossier, calculés en base (``Dossier.totals``). */
         DossierTotals: {
@@ -3169,7 +3169,7 @@ export interface components {
             readonly status: components["schemas"]["WorkflowStatusEnum"]
             readonly status_display: string
             /** Remarque de contrôle */
-            note: string
+            readonly note: string
             /** Motif de la réouverture */
             readonly reopen_note: string
             readonly totals: components["schemas"]["DossierTotals"]
@@ -4331,8 +4331,6 @@ export interface components {
             owner?: number | null
             /** Format: date */
             date?: string
-            /** Remarque de contrôle */
-            note?: string
         }
         PatchedExchangeRateRequest: {
             /**

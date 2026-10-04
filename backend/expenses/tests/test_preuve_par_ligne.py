@@ -9,6 +9,7 @@ encore tout son dossier.
 from rest_framework import status
 
 from expenses.models import Proof
+from expenses.workflow import Status
 
 from .base import ExpenseTestCase
 
@@ -75,3 +76,48 @@ class PreuveParLigneTests(ExpenseTestCase):
 
         self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
         self.assertTrue(reponse.data["has_proof"])
+
+
+class ClotureSansPreuveTests(ExpenseTestCase):
+    """Un dossier ne se clôt pas sur une ligne sans pièce exploitable
+    (décisions 107 et 115) : la pièce rejetée après la justification
+    laissait clôturer un constat que plus rien ne soutenait."""
+
+    def setUp(self):
+        super().setUp()
+        self.ligne = self.make_expense(
+            title="Taxi", status=Status.JUSTIFIED, justified_amount="100000.00"
+        )
+        self.dossier.status = Status.JUSTIFIED
+        self.dossier.save()
+        self.piece = Proof.objects.create(
+            dossier=self.dossier, expense=self.ligne, file="justificatifs/f.pdf",
+            original_name="facture.pdf", sha256="a" * 64,
+        )
+        self.login(self.controller)
+
+    def _actions(self):
+        return self.client.get(f"/api/dossiers/{self.dossier.pk}/").data["allowed_actions"]
+
+    def test_la_piece_rejetee_bloque_la_cloture(self):
+        rejet = self.client.post(
+            f"/api/proofs/{self.piece.pk}/review/",
+            {"status": Proof.ProofStatus.REJECTED, "reason": "illisible"}, format="json",
+        )
+
+        self.assertEqual(rejet.status_code, status.HTTP_200_OK, rejet.data)
+        self.assertNotIn("close", self._actions())
+        cloture = self.client.post(f"/api/dossiers/{self.dossier.pk}/close/", {}, format="json")
+        self.assertEqual(cloture.status_code, status.HTTP_400_BAD_REQUEST, cloture.data)
+        self.assertIn("proofs", cloture.data)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.JUSTIFIED)
+
+    def test_avec_sa_piece_le_dossier_se_clot(self):
+        self.assertIn("close", self._actions())
+
+        cloture = self.client.post(f"/api/dossiers/{self.dossier.pk}/close/", {}, format="json")
+
+        self.assertEqual(cloture.status_code, status.HTTP_200_OK, cloture.data)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.CLOSED)

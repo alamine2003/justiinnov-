@@ -89,7 +89,7 @@ from expenses.models import AuditLog, Beneficiary, Dossier, Expense
 from expenses.predefinis import creer_les_dossiers_predefinis
 from expenses.services import committed_total
 from expenses.views import ProofViewSet
-from expenses.workflow import CONSUMING_STATUSES, Status
+from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 from reporting.management.commands.seed_demo import _pdf
 from reporting.scope import fuseau_de
 
@@ -507,15 +507,17 @@ class Command(BaseCommand):
     def _calibrer(self):
         """Ramène chaque enveloppe au niveau visé, maintenant que tout est joué.
 
-        Le niveau (`execution_level`) se lit sur la part **consommée** : lignes
-        justifiées, non justifiées, clôturées. Une enveloppe sans consommation
-        garde son montant.
+        Le niveau (`execution_level`) se lit sur la part **mobilisée** :
+        lignes consommées (justifiées, non justifiées, clôturées) et engagées
+        (soumises, en contrôle), comme partout (décision 54). Une enveloppe
+        sans rien de mobilisé garde son montant.
         """
+        mobilisants = list(CONSUMING_STATUSES) + list(ENGAGING_STATUSES)
         for code, env in self.enveloppes.items():
             for budget in env.values():
                 budget.refresh_from_db()
                 consomme = sum(
-                    (e.amount for e in budget.expenses.filter(status__in=CONSUMING_STATUSES)),
+                    (e.amount for e in budget.expenses.filter(status__in=mobilisants)),
                     Decimal("0"),
                 )
                 part = EN_ALERTE.get(code) or EN_DEPASSEMENT.get(code)
