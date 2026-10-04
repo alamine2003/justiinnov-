@@ -124,7 +124,7 @@ export function ProjetsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="ecran-plein space-y-6 court:space-y-3">
       <PageHeader title={t("projets.liste.titre")} description={t("projets.liste.description")}>
         {canCreate && (
           <Button onClick={() => setFormOpen(true)}>
@@ -184,9 +184,9 @@ export function ProjetsPage() {
         />
       </div>
 
-      <Card className="border-border/60 shadow-sm">
-        <CardContent>
-          <div className="overflow-x-auto rounded-lg border border-border/60">
+      <Card className="remplit border-border/60 shadow-sm">
+        <CardContent className="remplit">
+          <div className="defile overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>
                 <TableRow>

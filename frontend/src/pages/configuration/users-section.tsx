@@ -95,7 +95,7 @@ export function UsersSection() {
   const error = actionError ?? query.error ?? countries.error ?? matrix.error
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 court:space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-sm font-semibold">{t("configuration.utilisateurs.titre")}</h2>

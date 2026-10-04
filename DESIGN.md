@@ -134,7 +134,8 @@ Le titre de page passe par `<PageHeader>` : ne le réécrivez pas à la main.
 
 ## Espacement et rayons
 
-- Rythme vertical d'une page : `space-y-6`. À l'intérieur d'une carte :
+- Rythme vertical d'une page : `space-y-6`, `court:space-y-3` sur écran
+  bas (voir « Hauteur d'écran »). À l'intérieur d'une carte :
   `space-y-3`. Entre un libellé et son champ : `gap-2`.
 - Grille de cartes : `grid gap-4 sm:grid-cols-2 lg:grid-cols-4`.
 - Contenu de carte : `CardContent` **sans** marge haute ajoutée — la carte a
@@ -162,6 +163,77 @@ un graphique défile, dans sa propre boîte.
   (11 sur 1 000 : 9 px au plus étroit, 13 px sur une carte de bureau), qu'une
   réduction rendrait illisible et qu'un agrandissement rendrait énorme.
 - **Frise du circuit** : 56 px par étape sous `sm`, 112 au-delà.
+- **Grand écran** : le contenu s'élargit à `2xl:max-w-[96rem]` (1 536 px),
+  `max-w-7xl` en dessous ; au-delà, les lignes de chiffres se liraient de
+  trop loin.
+
+### Hauteur d'écran
+
+Dès `lg`, **les écrans principaux tiennent dans la fenêtre** : la page ne
+défile pas, c'est son tableau ou son détail qui défile, dans sa boîte, sous
+un en-tête et des filtres qui restent en vue. Ce sont Pilotage, Projets et
+la fiche d'un projet, Dossiers, Registre, Audit, Budgets et Configuration.
+`scripts/screenshot.ts` le vérifie à 1 366 × 768, 1 366 × 657 (le même
+portable, barre du navigateur déduite), 1 024 × 768 et 1 920 × 1 080. La
+fiche d'un dossier, celle d'un pays et l'import, formulaires et détails
+longs, gardent le défilement de page. Sous `lg`, et sous 36 rem (576 px)
+de fenêtre, la page défile normalement : le contenu y déborderait de
+boîtes plafonnées, hors du cadre de sa carte, et la barre latérale partirait
+avec le défilement.
+
+- **`--hauteur-page`**, posée sur `<main>` par `AppLayout` : la fenêtre
+  moins l'en-tête et les marges de `<main>` (`calc(100dvh - 7rem - 1px)`,
+  6 rem sur écran bas ; le pixel est le filet de l'en-tête), moins la
+  ligne du bouton « Retour » quand il s'affiche (`--retour`, 2,75 rem,
+  2,25 sur écran bas). On ne la recalcule pas dans une page : on la lit.
+  L'avis d'une redirection (« réservée au siège »), ponctuel, n'est pas
+  retranché : la page défile alors de sa hauteur.
+- **Variante `court:`** (`index.css`, `max-height: 860px` — un portable
+  1 366 × 768) : l'espace vertical se resserre — `court:space-y-3` au lieu
+  de `space-y-6` à la racine d'une page, titre de page en `text-xl`, tuiles
+  (`StatCard`) en 12 px de marge et chiffre en `text-xl`, bandeau et jauge
+  du pilotage réduits. On resserre l'espace, jamais le texte courant ni les
+  cibles cliquables.
+- **Une liste** : trois utilitaires de `index.css`, sans rien d'autre à
+  écrire —
+  ```tsx
+  <div className="ecran-plein space-y-6 court:space-y-3">  {/* racine */}
+    <PageHeader … />  {/* filtres, alertes : ne rétrécissent pas */}
+    <Card className="remplit …">
+      <CardContent className="remplit">
+        <div className="defile overflow-x-auto rounded-lg border …"><Table>…</Table></div>
+        <Pagination … />
+      </CardContent>
+    </Card>
+  </div>
+  ```
+  `ecran-plein` plafonne la racine à `--hauteur-page` ; `remplit` va sur
+  **chaque** conteneur entre elle et le tableau (onglets compris) ;
+  `defile` fait défiler l'enveloppe du tableau et colle ses titres de
+  colonnes en haut. Une liste courte garde sa hauteur naturelle ; sous
+  8 rem de tableau, c'est la page qui défile, et la carte qui `remplit` ne
+  rogne pas sa pagination (`overflow: visible`). Les autres enfants ne
+  rétrécissent jamais — une carte, `overflow-hidden`, s'écrasait sous son
+  contenu (les filtres du registre l'ont fait).
+- **Un tableau de bord long** (vue d'ensemble de l'audit, budgets,
+  sections de la configuration, historique d'un projet) : ce qui situe
+  (en-tête, période, indicateurs, onglets) reste en vue, le reste va dans
+  un `defile -mx-1 px-1 pb-1` — la marge rend aux cartes l'ombre et
+  l'anneau de focus que le défilement rognerait.
+- **Pilotage** remplit exactement la fenêtre (`lg:h-(--hauteur-page)`,
+  plancher 34 rem) : bandeau et tuiles en haut, puis deux panneaux côte à
+  côte qui défilent chacun — l'analyse (onglets Mois · Répartition · Pays ;
+  la répartition se lit un axe à la fois, choisi dans une liste) ou la
+  liste des pays, et les alertes.
+- **Une zone qui défile est positionnée** (`relative`, que `defile` pose) :
+  un `sr-only`, en position absolue, s'échappe sinon d'un `overflow-auto`
+  non positionné et rallonge la page — 54 px sur le pilotage.
+- **Le pied de page** passe dans le bas de la barre latérale dès `lg`
+  (copyright, version, auteur ; la version seule quand elle est repliée) :
+  sous le contenu, il ne se voyait qu'en défilant. Sous `lg`, il reste
+  sous le contenu.
+- **Le bouton « Retour »** ne s'affiche pas, dès `lg`, sur une entrée du
+  menu : la barre latérale y mène déjà (voir « Bouton « Retour » »).
 
 ### Navigation
 
@@ -223,6 +295,8 @@ shadcn, dont l'API diffère de Radix : pour les listes déroulantes, préférez
   `text-xs text-muted-foreground`.
 - Un tableau large va dans `overflow-x-auto` — jamais la page entière.
 - Toujours paginé via `<Pagination>` dès qu'il peut dépasser une page.
+- Dans une liste à hauteur d'écran, l'enveloppe porte `defile` : voir
+  « Hauteur d'écran ».
 
 ### Dialogues
 
@@ -391,7 +465,8 @@ sombre ; la version « maskable » garde le monogramme dans la zone sûre.
 La tuile vectorielle `favicon.svg` fait foi : les PNG s'en déduisent par
 `npx tsx scripts/generate-icons.mts` (dans `frontend/`).
 
-La **version** (pied de page, pastille de l'en-tête, écran de connexion)
+La **version** (pied de la barre latérale dès `lg`, pied de page en
+dessous, pastille de l'en-tête, écran de connexion)
 vient de `BRAND.version`, figée à la construction (`vite.config.ts`,
 `define`) : `APP_VERSION`, que la livraison pose à la version de
 `package.json`, seule, sans SHA (décision 98). On ne
@@ -412,7 +487,11 @@ l'application, sinon à la liste de la section (`lib/navigation.ts`,
 ouvert d'un lien direct revient à `/dossiers` ; son fil d'Ariane mène à
 son projet. Une page
 ne rajoute pas son propre lien « Retour aux… » : il y en a un, au même
-endroit partout.
+endroit partout. Dès `lg`, il se tait sur une entrée du menu (`/registre`,
+`/audit`…, celles qu'`AppLayout` affiche au compte, `dansLeMenu`) — la
+barre latérale, toujours visible, fait le même chemin et la ligne revient
+au contenu. Il reste partout ailleurs : sur les fiches, sur `/dossiers`
+(que le menu ne propose plus), et sous `lg`, où le menu est replié dans ☰.
 
 ### Sélecteur de langue
 

@@ -16,7 +16,7 @@ export function OfflineNotice() {
   if (online) return null
   return (
     <div aria-live="polite" className="sticky top-0 z-50 px-4 pt-4 sm:px-6">
-      <Alert variant="destructive" className="mx-auto max-w-7xl bg-card shadow-sm">
+      <Alert variant="destructive" className="mx-auto max-w-7xl bg-card shadow-sm 2xl:max-w-[96rem]">
         <WifiOff className="h-4 w-4" />
         <AlertTitle>{t("layout.hors_ligne_titre")}</AlertTitle>
         <AlertDescription>{t("layout.hors_ligne_texte")}</AlertDescription>

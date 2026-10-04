@@ -115,7 +115,7 @@ export function ImportPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 court:space-y-3">
       <PageHeader
         title={t("dossiers.import.titre")}
         description={t("dossiers.import.description")}

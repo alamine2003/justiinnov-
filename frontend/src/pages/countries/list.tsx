@@ -76,7 +76,7 @@ export function CountriesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 court:space-y-3">
       <PageHeader title={t("pays.liste.titre")} description={t("pays.liste.description")} />
 
       {(query.error || actionError) && (

@@ -3,21 +3,21 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom"
 import { describe, expect, it } from "vitest"
 import { BackButton } from "./back-button"
 
-function Ecran() {
+function Ecran({ dansLeMenu }: { dansLeMenu?: boolean }) {
   const { pathname } = useLocation()
   return (
     <>
-      <BackButton />
+      <BackButton dansLeMenu={dansLeMenu} />
       <p data-testid="chemin">{pathname}</p>
     </>
   )
 }
 
-function afficher(chemin: string) {
+function afficher(chemin: string, dansLeMenu?: boolean) {
   return render(
     <MemoryRouter initialEntries={[chemin]}>
       <Routes>
-        <Route path="*" element={<Ecran />} />
+        <Route path="*" element={<Ecran dansLeMenu={dansLeMenu} />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -47,5 +47,15 @@ describe("BackButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retour" }))
 
     expect(screen.getByTestId("chemin")).toHaveTextContent("/")
+  })
+
+  it("cède sa ligne à la barre latérale sur une entrée du menu, dès lg", () => {
+    afficher("/registre", true)
+    expect(screen.getByRole("button", { name: "Retour" }).parentElement).toHaveClass("lg:hidden")
+  })
+
+  it("reste en vue ailleurs", () => {
+    afficher("/projets/3")
+    expect(screen.getByRole("button", { name: "Retour" }).parentElement).not.toHaveClass("lg:hidden")
   })
 })

@@ -41,10 +41,10 @@ export function AuditPage() {
     })
 
   return (
-    <div className="space-y-6">
+    <div className="ecran-plein space-y-6 court:space-y-3">
       <PageHeader title={t("audit.titre")} description={t("audit.description")} />
 
-      <Tabs value={onglet} onValueChange={(value) => changeOnglet(String(value))}>
+      <Tabs className="remplit" value={onglet} onValueChange={(value) => changeOnglet(String(value))}>
         <TabsList
           variant="line"
           aria-label={t("audit.onglets.aria")}
@@ -56,13 +56,13 @@ export function AuditPage() {
             </TabsTrigger>
           ))}
         </TabsList>
-        <TabsContent value="vue" className="mt-4">
+        <TabsContent value="vue" className="remplit mt-4 court:mt-2">
           {onglet === "vue" && <VueDEnsemble />}
         </TabsContent>
-        <TabsContent value="circuit" className="mt-4">
+        <TabsContent value="circuit" className="remplit mt-4 court:mt-2">
           {onglet === "circuit" && <JournalDuCircuit />}
         </TabsContent>
-        <TabsContent value="referentiel" className="mt-4">
+        <TabsContent value="referentiel" className="remplit mt-4 court:mt-2">
           {onglet === "referentiel" && <JournalDuReferentiel />}
         </TabsContent>
       </Tabs>

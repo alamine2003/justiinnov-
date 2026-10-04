@@ -116,7 +116,7 @@ export function JournalDuCircuit() {
   const count = query.data?.count ?? 0
 
   return (
-    <div className="space-y-4">
+    <div className="remplit space-y-4 court:space-y-3">
       <BarreDePeriode lire={lire} changer={changer} />
 
       {query.error && (
@@ -195,9 +195,9 @@ export function JournalDuCircuit() {
         )}
       </div>
 
-      <Card className="border-border/60 shadow-sm">
-        <CardContent>
-          <div className="overflow-x-auto rounded-lg border border-border/60">
+      <Card className="remplit border-border/60 shadow-sm">
+        <CardContent className="remplit">
+          <div className="defile overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>
                 <TableRow>

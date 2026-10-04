@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AppLayout } from "./app-layout"
+import { BRAND, copyright } from "@/lib/brand"
 import type { Me } from "@/lib/types"
 
 let droits = new Set<string>()
@@ -24,12 +25,12 @@ vi.mock("@/components/layout/language-toggle", () => ({ LanguageToggle: () => nu
 vi.mock("@/components/layout/theme-toggle", () => ({ ThemeToggle: () => null }))
 vi.mock("@/lib/install-prompt", () => ({ useInstallPrompt: () => ({ available: false, install: vi.fn() }) }))
 
-function monter() {
+function monter(chemin = "/") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[chemin]}>
       <Routes>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<p>Accueil</p>} />
+          <Route path="*" element={<p>Page</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -88,9 +89,39 @@ describe("AppLayout — barre latérale", () => {
     expect(screen.getByRole("button", { name: "Déplier le menu" })).toBeInTheDocument()
   })
 
+  it("porte la version et le copyright en pied de menu, et la version seule repliée", () => {
+    monter()
+
+    const menu = barre().closest("aside") as HTMLElement
+    expect(menu).toHaveTextContent(`Version ${BRAND.version}`)
+    expect(menu).toHaveTextContent(copyright())
+
+    fireEvent.click(screen.getByRole("button", { name: "Réduire le menu" }))
+
+    expect(menu).toHaveTextContent(`Version ${BRAND.version}`)
+    expect(menu).not.toHaveTextContent(copyright())
+  })
+
   it("garde le périmètre dans l'en-tête", () => {
     monter()
 
     expect(screen.getByRole("banner")).toHaveTextContent("Siège — tous pays")
+  })
+
+  /**
+   * Régression : « Retour » se taisait dès `lg` sur toute page dont le
+   * parent est l'accueil, `/dossiers` compris — que le menu ne propose
+   * plus. Et sa ligne, restée au-dessus d'une fiche, la faisait défiler :
+   * la hauteur laissée à la page doit la retrancher.
+   */
+  it("tait « Retour » dès lg sur une entrée du menu seulement, et retranche sa ligne ailleurs", () => {
+    const { unmount } = monter("/registre")
+    expect(screen.getByRole("button", { name: "Retour" }).parentElement).toHaveClass("lg:hidden")
+    expect(screen.getByRole("main")).not.toHaveClass("[--retour:2.75rem]")
+    unmount()
+
+    monter("/dossiers")
+    expect(screen.getByRole("button", { name: "Retour" }).parentElement).not.toHaveClass("lg:hidden")
+    expect(screen.getByRole("main")).toHaveClass("[--retour:2.75rem]")
   })
 })

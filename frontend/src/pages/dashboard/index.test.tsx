@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DashboardPage } from "./index"
@@ -209,5 +209,41 @@ describe("Pilotage — portée des tuiles", () => {
 
     await waitFor(() => expect(fetchDashboard).toHaveBeenCalled())
     expect(screen.getByRole("link", { name: /Dossiers ouverts/ })).toHaveTextContent("tous pays")
+  })
+})
+
+/**
+ * L'analyse d'un pays tient en un panneau : trois onglets, et la répartition
+ * se lit un axe à la fois, choisi dans une liste — huit onglets ne tenaient
+ * pas sur une ligne et poussaient le panneau hors de l'écran.
+ */
+describe("Pilotage — analyse d'un pays", () => {
+  const ligne = (label: string) => ({ label, lines: 1, amount: "100", justified: "100", gap: "0" })
+
+  it("répartit selon l'axe choisi, un seul tableau à la fois", async () => {
+    profil = { has_global_scope: false, countries: [pays(2, "Togo")] } as Partial<Me>
+    fetchBreakdown.mockResolvedValue({
+      year: 2026,
+      by_team: [ligne("Équipe Lomé")],
+      by_owner: [],
+      by_project: [ligne("Congrès de Lomé")],
+      by_project_kind: [],
+      by_dossier_kind: [],
+      by_category: [],
+      by_expense_title: [],
+      by_month: [],
+    })
+
+    monter()
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Répartition" }))
+    const axe = await screen.findByRole("combobox", { name: "Répartir par" })
+    expect(screen.getByText("Équipe Lomé")).toBeInTheDocument()
+    expect(screen.queryByText("Congrès de Lomé")).toBeNull()
+
+    fireEvent.change(axe, { target: { value: "by_project" } })
+
+    expect(screen.getByText("Congrès de Lomé")).toBeInTheDocument()
+    expect(screen.queryByText("Équipe Lomé")).toBeNull()
   })
 })

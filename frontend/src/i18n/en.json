@@ -873,7 +873,8 @@
       "vide_titre": "No expense for this period",
       "vide_indication": "Change the year or the country to see a breakdown.",
       "par_type_projet": "By project type",
-      "par_type_dossier": "By file type"
+      "par_type_dossier": "By file type",
+      "axe": "Break down by"
     },
     "alertes_soustitre": "most serious first",
     "bandeau": {

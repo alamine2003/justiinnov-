@@ -1,4 +1,5 @@
 import { useState } from "react"
+import type { ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { AlertTriangle, Loader2, TrendingUp } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -36,6 +37,7 @@ import { fetchBreakdown, fetchDashboard } from "@/lib/reporting"
 import { alertLevelLabel, notificationKindIcon } from "@/lib/labels"
 import { EXECUTION_LEVEL_TEXT } from "@/lib/status-styles"
 import type {
+  Breakdown,
   BreakdownRow,
   Dashboard,
   DashboardAlert,
@@ -142,7 +144,12 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    // Dès `lg`, le Pilotage tient dans la hauteur de l'écran
+    // (`--hauteur-page`, AppLayout) : bandeau et tuiles en haut, puis deux
+    // panneaux qui se partagent le reste et défilent chacun en lui-même.
+    // Plancher de 34 rem : sur un écran plus bas, la page défile plutôt que
+    // d'écraser les panneaux.
+    <div className="flex flex-col gap-5 court:gap-3 lg:h-(--hauteur-page) lg:min-h-[34rem]">
       <PageHeader
         title={t("pilotage.titre")}
         description={
@@ -203,7 +210,7 @@ export function DashboardPage() {
       {/* Les trois premiers comptes portent sur des lignes : ils mènent au
           registre, filtré sur le même statut. Le dernier compte des
           dossiers. */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid shrink-0 gap-4 court:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Charge
           label={t("pilotage.charge.a_controler")}
           hint={t("pilotage.charge.aide.a_controler")}
@@ -235,88 +242,23 @@ export function DashboardPage() {
         />
       </div>
 
-      {breakdown && (
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-sm font-semibold">
-                  {t("pilotage.courbe.titre")}
-                </CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("pilotage.courbe.description")}
-                </p>
-              </div>
-              <Legende
-                items={[
-                  { tone: "bg-marque", label: t("pilotage.courbe.depense") },
-                  { tone: "border-marque-fort", label: t("pilotage.courbe.justifie"), dashed: true },
-                ]}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CourbeMensuelle
-              points={serieMensuelle(breakdown.by_month)}
-              title={t("pilotage.courbe.aria", { annee: year })}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
-        <ParPays rows={data?.countries ?? []} symbolOf={symbolOf} />
-        <Alertes
-          alerts={data?.alerts ?? []}
-          total={data?.alerts_total ?? 0}
-        />
-      </div>
-
       {!breakdown && !query.loading && me?.has_global_scope && (
-        <p className="text-sm text-muted-foreground">
-          {t("pilotage.choisir_pays")}
-        </p>
+        <p className="shrink-0 text-sm text-muted-foreground">{t("pilotage.choisir_pays")}</p>
       )}
 
-      {breakdown && (
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">{t("pilotage.repartition.titre")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* La courbe ci-dessus dit déjà les mois : l'onglet s'ouvre sur
-                les équipes, et « par mois » reste là pour les chiffres. */}
-            <Tabs defaultValue="by_team">
-              <TabsList className="flex w-full flex-wrap justify-start bg-muted/60">
-                <TabsTrigger value="by_team">{t("pilotage.repartition.par_equipe")}</TabsTrigger>
-                <TabsTrigger value="by_owner">{t("pilotage.repartition.par_manager")}</TabsTrigger>
-                <TabsTrigger value="by_project">{t("pilotage.repartition.par_projet")}</TabsTrigger>
-                <TabsTrigger value="by_project_kind">
-                  {t("pilotage.repartition.par_type_projet")}
-                </TabsTrigger>
-                <TabsTrigger value="by_dossier_kind">
-                  {t("pilotage.repartition.par_type_dossier")}
-                </TabsTrigger>
-                <TabsTrigger value="by_category">{t("pilotage.repartition.par_categorie")}</TabsTrigger>
-                <TabsTrigger value="by_expense_title">
-                  {t("pilotage.repartition.par_intitule")}
-                </TabsTrigger>
-                <TabsTrigger value="by_month">{t("pilotage.repartition.par_mois")}</TabsTrigger>
-              </TabsList>
-              {(
-                [
-                  "by_team", "by_owner", "by_project", "by_project_kind", "by_dossier_kind",
-                  "by_category", "by_expense_title", "by_month",
-                ] as const
-              ).map((key) => (
-                <TabsContent key={key} value={key} className="mt-4">
-                  <BreakdownTable rows={breakdown[key]} />
-                </TabsContent>
-              ))}
-            </Tabs>
-          </CardContent>
-        </Card>
-      )}
+      <div
+        className={cn(
+          "grid gap-4 court:gap-3 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]",
+          (data?.alerts.length ?? 0) > 0 && "lg:grid-cols-[minmax(0,1fr)_22rem]",
+        )}
+      >
+        {breakdown ? (
+          <Analyse breakdown={breakdown} annee={year} rows={data?.countries ?? []} symbolOf={symbolOf} />
+        ) : (
+          <ParPays rows={data?.countries ?? []} symbolOf={symbolOf} />
+        )}
+        <Alertes alerts={data?.alerts ?? []} total={data?.alerts_total ?? 0} />
+      </div>
     </div>
   )
 }
@@ -353,15 +295,15 @@ function BandeauConsolide({
   ]
 
   return (
-    <section className="rounded-xl bg-banniere px-6 py-5 text-banniere-foreground">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 flex-1 space-y-4">
+    <section className="shrink-0 rounded-xl bg-banniere px-6 py-5 text-banniere-foreground court:py-3">
+      <div className="flex flex-col gap-6 court:gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 flex-1 space-y-4 court:space-y-2">
           <div>
             <p className="text-[0.625rem] font-medium uppercase tracking-[0.1em] text-banniere-muted">
               {t("pilotage.bandeau.titre", { annee })}
             </p>
-            <p className="mt-2 flex flex-wrap items-baseline gap-2">
-              <span className="text-4xl font-semibold tracking-tight">
+            <p className="mt-2 flex flex-wrap items-baseline gap-2 court:mt-1">
+              <span className="text-4xl font-semibold tracking-tight court:text-3xl">
                 {formatAmount(totals.allocated)}
               </span>
               <span className="text-sm font-medium text-banniere-muted">{devise}</span>
@@ -386,6 +328,7 @@ function BandeauConsolide({
 
         <div className="flex items-center gap-5">
           <JaugeDouble
+            className="court:h-[100px] court:w-[100px]"
             executionRate={totals.execution_rate}
             justificationRate={totals.justification_rate}
             label={formatRate(totals.execution_rate)}
@@ -447,7 +390,7 @@ function Charge({
     <Link
       to={to}
       className={cn(
-        "flex items-center justify-between gap-3 rounded-lg border border-l-[3px] border-border/60 bg-card p-4 shadow-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex items-center justify-between gap-3 rounded-lg border border-l-[3px] border-border/60 bg-card p-4 shadow-sm transition-colors court:py-2.5 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         tone,
       )}
     >
@@ -481,11 +424,9 @@ function ParPays({
   symbolOf: (id: number, fallback: string) => string
 }) {
   const { t } = useTranslation()
-  const echelle = echelleCommune(rows)
-
   return (
-    <Card className="border-border/60 shadow-sm">
-      <CardHeader className="pb-3">
+    <Panneau
+      entete={
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-sm font-semibold">{t("pilotage.par_pays")}</CardTitle>
@@ -493,99 +434,121 @@ function ParPays({
               {t("pilotage.barres.description")}
             </p>
           </div>
-          <Legende
-            items={[
-              { tone: "bg-marque", label: t("pilotage.colonnes.consomme") },
-              { tone: "bg-marque-clair", label: t("pilotage.colonnes.engage") },
-              { tone: "bg-muted", label: t("pilotage.colonnes.disponible") },
-            ]}
-          />
+          <LegendeParPays />
         </div>
-      </CardHeader>
-      <CardContent>
-        {rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/60 p-6 text-center">
-            <p className="text-sm font-medium">{t("pilotage.vide.pays_titre")}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("pilotage.vide.pays_indication")}
-            </p>
-          </div>
-        ) : (
-          <ul className="space-y-4">
-            {rows.map((row) => {
-              const attribue = Number(row.allocated)
-              // Le dépassement est le disponible du serveur passé sous zéro.
-              // Le déduire d'une soustraction maison (`consomme - attribue`)
-              // le faisait diverger d'`execution_rate`, qui compte l'engagé :
-              // 120 % s'affichait en corail sans aucun montant en regard.
-              const depassement = -Number(row.remaining)
-              return (
-                <li key={row.country}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <span className="flex items-baseline gap-2">
-                      <span className="text-sm font-semibold">{row.country_name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {row.country_ref ?? t("commun.aucun")} ·{" "}
-                        {symbolOf(row.country, row.currency)}
-                      </span>
+      }
+    >
+      <ParPaysCorps rows={rows} symbolOf={symbolOf} />
+    </Panneau>
+  )
+}
+
+function LegendeParPays() {
+  const { t } = useTranslation()
+  return (
+    <Legende
+      items={[
+        { tone: "bg-marque", label: t("pilotage.colonnes.consomme") },
+        { tone: "bg-marque-clair", label: t("pilotage.colonnes.engage") },
+        { tone: "bg-muted", label: t("pilotage.colonnes.disponible") },
+      ]}
+    />
+  )
+}
+
+function ParPaysCorps({
+  rows,
+  symbolOf,
+}: {
+  rows: DashboardCountryRow[]
+  symbolOf: (id: number, fallback: string) => string
+}) {
+  const { t } = useTranslation()
+  const echelle = echelleCommune(rows)
+  return (
+    <>
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border/60 p-6 text-center">
+          <p className="text-sm font-medium">{t("pilotage.vide.pays_titre")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("pilotage.vide.pays_indication")}
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-4">
+          {rows.map((row) => {
+            const attribue = Number(row.allocated)
+            // Le dépassement est le disponible du serveur passé sous zéro.
+            // Le déduire d'une soustraction maison (`consomme - attribue`)
+            // le faisait diverger d'`execution_rate`, qui compte l'engagé :
+            // 120 % s'affichait en corail sans aucun montant en regard.
+            const depassement = -Number(row.remaining)
+            return (
+              <li key={row.country}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-sm font-semibold">{row.country_name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {row.country_ref ?? t("commun.aucun")} ·{" "}
+                      {symbolOf(row.country, row.currency)}
                     </span>
-                    <span className="flex items-baseline gap-2.5 text-xs">
-                      {depassement > 0 && (
-                        <span className="font-medium text-destructive">
-                          {t("pilotage.barres.depassement", {
-                            montant: formatAmount(String(depassement)),
-                          })}
-                        </span>
-                      )}
-                      {/* Le serveur a comparé le taux aux seuils d'alerte
-                          (`execution_level`) : un manager et un administrateur
-                          lisent la même teinte, sans lire la configuration. */}
-                      <span
-                        className={cn("font-semibold", EXECUTION_LEVEL_TEXT[row.execution_level])}
-                      >
-                        {formatRate(row.execution_rate)}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {t("pilotage.barres.attribues", { montant: formatAmount(row.allocated) })}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="mt-1.5">
-                    <BarreEnveloppe
-                      consumed={Number(row.consumed)}
-                      engaged={Number(row.engaged)}
-                      allocated={attribue}
-                      scale={echelle}
-                      title={t("pilotage.barres.aria", {
-                        pays: row.country_name,
-                        taux: formatRate(row.execution_rate),
-                      })}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    {t("pilotage.barres.detail", {
-                      consomme: formatAmount(row.consumed),
-                      engage: formatAmount(row.engaged),
-                      justifie: formatAmount(row.justified),
-                      disponible: formatAmount(row.remaining),
-                    })}
-                    {Number(row.gap) > 0 && (
+                  </span>
+                  <span className="flex items-baseline gap-2.5 text-xs">
+                    {depassement > 0 && (
                       <span className="font-medium text-destructive">
-                        {" · "}
-                        {t("pilotage.barres.sans_preuve", { montant: formatAmount(row.gap) })}
+                        {t("pilotage.barres.depassement", {
+                          montant: formatAmount(String(depassement)),
+                        })}
                       </span>
                     )}
-                  </p>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        <p className="mt-4 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-          {t("pilotage.barres.echelle")}
-        </p>
-      </CardContent>
-    </Card>
+                    {/* Le serveur a comparé le taux aux seuils d'alerte
+                        (`execution_level`) : un manager et un administrateur
+                        lisent la même teinte, sans lire la configuration. */}
+                    <span
+                      className={cn("font-semibold", EXECUTION_LEVEL_TEXT[row.execution_level])}
+                    >
+                      {formatRate(row.execution_rate)}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t("pilotage.barres.attribues", { montant: formatAmount(row.allocated) })}
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-1.5">
+                  <BarreEnveloppe
+                    consumed={Number(row.consumed)}
+                    engaged={Number(row.engaged)}
+                    allocated={attribue}
+                    scale={echelle}
+                    title={t("pilotage.barres.aria", {
+                      pays: row.country_name,
+                      taux: formatRate(row.execution_rate),
+                    })}
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {t("pilotage.barres.detail", {
+                    consomme: formatAmount(row.consumed),
+                    engage: formatAmount(row.engaged),
+                    justifie: formatAmount(row.justified),
+                    disponible: formatAmount(row.remaining),
+                  })}
+                  {Number(row.gap) > 0 && (
+                    <span className="font-medium text-destructive">
+                      {" · "}
+                      {t("pilotage.barres.sans_preuve", { montant: formatAmount(row.gap) })}
+                    </span>
+                  )}
+                </p>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <p className="mt-4 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+        {t("pilotage.barres.echelle")}
+      </p>
+    </>
   )
 }
 
@@ -601,8 +564,8 @@ function Alertes({ alerts, total }: { alerts: DashboardAlert[]; total: number })
   }
 
   return (
-    <Card className="border-border/60 shadow-sm">
-      <CardHeader className="pb-3">
+    <Panneau
+      entete={
         <div className="flex items-baseline justify-between gap-2">
           <CardTitle className="text-sm font-semibold">
             {t("pilotage.alertes", { count: total })}
@@ -611,34 +574,145 @@ function Alertes({ alerts, total }: { alerts: DashboardAlert[]; total: number })
             {t("pilotage.alertes_soustitre")}
           </span>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {alerts.slice(0, VISIBLE_ALERTS).map((alert) => {
-          const Icone = notificationKindIcon(alert.kind) ?? AlertTriangle
-          return (
-            <Link
-              key={alert.key}
-              to={alert.link || "/dossiers"}
-              className={cn(
-                "flex items-start gap-2.5 rounded-lg border p-3 transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                TEINTE[alert.level],
-              )}
-            >
-              <Icone className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-foreground">{alert.title}</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">{alert.detail}</span>
-                <span className="sr-only">{alertLevelLabel(t, alert.level)}</span>
-              </span>
-            </Link>
-          )
-        })}
-        {total > VISIBLE_ALERTS && (
-          <p className="pt-1 text-xs text-muted-foreground">
-            {t("pilotage.autres_alertes", { count: total - VISIBLE_ALERTS })}
-          </p>
-        )}
+      }
+      className="space-y-2"
+    >
+      {alerts.slice(0, VISIBLE_ALERTS).map((alert) => {
+        const Icone = notificationKindIcon(alert.kind) ?? AlertTriangle
+        return (
+          <Link
+            key={alert.key}
+            to={alert.link || "/dossiers"}
+            className={cn(
+              "flex items-start gap-2.5 rounded-lg border p-3 transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              TEINTE[alert.level],
+            )}
+          >
+            <Icone className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-foreground">{alert.title}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{alert.detail}</span>
+              <span className="sr-only">{alertLevelLabel(t, alert.level)}</span>
+            </span>
+          </Link>
+        )
+      })}
+      {total > VISIBLE_ALERTS && (
+        <p className="pt-1 text-xs text-muted-foreground">
+          {t("pilotage.autres_alertes", { count: total - VISIBLE_ALERTS })}
+        </p>
+      )}
+    </Panneau>
+  )
+}
+
+/**
+ * Un panneau du Pilotage. Dès `lg`, il prend la hauteur que la page lui
+ * laisse : son en-tête reste, son contenu défile en lui-même.
+ */
+function Panneau({
+  entete,
+  className,
+  children,
+}: {
+  entete?: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <Card className="border-border/60 shadow-sm lg:min-h-0">
+      {entete && <CardHeader className="shrink-0">{entete}</CardHeader>}
+      {/* `relative` : les textes réservés aux lecteurs d'écran (`sr-only`,
+          positionnés en absolu) restent dans la zone qui défile ; sans lui,
+          ceux du bas de la liste allongeaient la page de 54 px. */}
+      <CardContent className={cn("lg:relative lg:min-h-0 lg:flex-1 lg:overflow-y-auto", className)}>
+        {children}
       </CardContent>
+    </Card>
+  )
+}
+
+const AXES_DE_REPARTITION = [
+  ["by_team", "pilotage.repartition.par_equipe"],
+  ["by_owner", "pilotage.repartition.par_manager"],
+  ["by_project", "pilotage.repartition.par_projet"],
+  ["by_project_kind", "pilotage.repartition.par_type_projet"],
+  ["by_dossier_kind", "pilotage.repartition.par_type_dossier"],
+  ["by_category", "pilotage.repartition.par_categorie"],
+  ["by_expense_title", "pilotage.repartition.par_intitule"],
+  ["by_month", "pilotage.repartition.par_mois"],
+] as const
+
+type AxeDeRepartition = (typeof AXES_DE_REPARTITION)[number][0]
+
+/**
+ * L'analyse d'un pays, en un panneau à onglets : la courbe des mois, la
+ * répartition (un axe à la fois, choisi dans une liste — huit onglets
+ * passaient à la ligne) et la barre du pays. Empilées, elles faisaient
+ * défiler la page sur trois écrans.
+ */
+function Analyse({
+  breakdown,
+  annee,
+  rows,
+  symbolOf,
+}: {
+  breakdown: Breakdown
+  annee: number
+  rows: DashboardCountryRow[]
+  symbolOf: (id: number, fallback: string) => string
+}) {
+  const { t } = useTranslation()
+  const [axe, setAxe] = useState<AxeDeRepartition>("by_team")
+  return (
+    <Card className="border-border/60 shadow-sm lg:min-h-0">
+      <Tabs defaultValue="mois" className="gap-0 lg:min-h-0 lg:flex-1">
+        <CardHeader className="shrink-0">
+          <TabsList variant="line" className="-ml-1.5 flex-wrap">
+            <TabsTrigger value="mois">{t("pilotage.courbe.titre")}</TabsTrigger>
+            <TabsTrigger value="repartition">{t("pilotage.repartition.titre")}</TabsTrigger>
+            <TabsTrigger value="pays">{t("pilotage.par_pays")}</TabsTrigger>
+          </TabsList>
+        </CardHeader>
+        <CardContent className="pt-3 lg:relative lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+          <TabsContent value="mois" className="space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="text-xs text-muted-foreground">{t("pilotage.courbe.description")}</p>
+              <Legende
+                items={[
+                  { tone: "bg-marque", label: t("pilotage.courbe.depense") },
+                  { tone: "border-marque-fort", label: t("pilotage.courbe.justifie"), dashed: true },
+                ]}
+              />
+            </div>
+            <CourbeMensuelle
+              points={serieMensuelle(breakdown.by_month)}
+              title={t("pilotage.courbe.aria", { annee })}
+            />
+          </TabsContent>
+          <TabsContent value="repartition" className="space-y-3">
+            <NativeSelect
+              value={axe}
+              onChange={(e) => setAxe(e.target.value as AxeDeRepartition)}
+              aria-label={t("pilotage.repartition.axe")}
+              className="w-60"
+            >
+              {AXES_DE_REPARTITION.map(([cle, libelle]) => (
+                <option key={cle} value={cle}>
+                  {t(libelle)}
+                </option>
+              ))}
+            </NativeSelect>
+            <BreakdownTable rows={breakdown[axe]} />
+          </TabsContent>
+          <TabsContent value="pays" className="space-y-3">
+            <div className="flex justify-end">
+              <LegendeParPays />
+            </div>
+            <ParPaysCorps rows={rows} symbolOf={symbolOf} />
+          </TabsContent>
+        </CardContent>
+      </Tabs>
     </Card>
   )
 }
