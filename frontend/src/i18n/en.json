@@ -58,7 +58,15 @@
     "supervision": "Monitoring",
     "activer_2fa": "Enable two-factor authentication",
     "totp_active": "2FA active",
-    "projets": "Projects"
+    "projets": "Projects",
+    "groupe": {
+      "suivi": "Tracking",
+      "budget": "Budget",
+      "controle": "Control",
+      "administration": "Administration"
+    },
+    "reduire_menu": "Collapse menu",
+    "deplier_menu": "Expand menu"
   },
   "erreurs": {
     "injoignable": "Server unreachable. Check your connection.",
