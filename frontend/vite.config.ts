@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
   return {
     // La version affichée dans l'interface est figée à la construction :
     // `APP_VERSION`, posée par la CI et le Dockerfile (celle de
-    // `package.json` suivie du SHA court), sinon celle de `package.json`.
+    // `package.json`, sans SHA : décision 98), sinon celle de `package.json`.
     define: {
       __APP_VERSION__: JSON.stringify(env.APP_VERSION || versionDuPaquet),
     },

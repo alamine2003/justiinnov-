@@ -13,9 +13,8 @@ RUN npm ci
 # Étape « build » : compilation des fichiers statiques.
 FROM deps AS build
 # Version affichée dans l'interface (`vite.config.ts`, `define`) : la CI
-# passe celle de `package.json` suivie du SHA court
-# (`--build-arg APP_VERSION=1.3.1+55a5dcbbaa1b`) ; sans elle — une
-# construction locale — c'est celle de `package.json` seule.
+# passe celle de `package.json` (`--build-arg APP_VERSION=2.0.1`, sans SHA :
+# décision 98) ; sans elle — une construction locale — c'est la même.
 ARG APP_VERSION=""
 ENV APP_VERSION=${APP_VERSION}
 COPY . .

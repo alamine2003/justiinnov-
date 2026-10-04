@@ -524,9 +524,9 @@ entier sur le serveur : pile, Caddyfile, scripts de sauvegarde et de
 restauration, configuration Prometheus et provisioning Grafana. **La
 version affichée dans l'interface** (pied de page et en-tête) est figée à
 la construction de l'image frontend (`APP_VERSION`, `frontend/Dockerfile`,
-`vite.config.ts`) : celle de `frontend/package.json` suivie du SHA court
-(`1.3.1+55a5dcbbaa1b`), sur `main` comme sur un tag — les deux livraisons
-d'un même commit publient la même image. **Avant de taguer `vX.Y.Z`,
+`vite.config.ts`) : celle de `frontend/package.json`, seule (`2.0.1`), sur
+`main` comme sur un tag — les deux livraisons d'un même commit publient la
+même image, que le SHA court nomme (`sha-…`, décision 98). **Avant de taguer `vX.Y.Z`,
 relevez `version` à `X.Y.Z` dans `frontend/package.json`** (`npm version
 X.Y.Z --no-git-tag-version`, qui met aussi `package-lock.json` à jour) et
 fusionnez ; la livraison refuse un tag qui ne correspond pas au paquet. La
