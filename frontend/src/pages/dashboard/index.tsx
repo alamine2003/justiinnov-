@@ -85,6 +85,14 @@ export function DashboardPage() {
   const perimetre = me?.countries ?? []
   const paysChoisissables = me?.has_global_scope ? (countries.data?.results ?? []) : perimetre
   const choixPaysVisible = Boolean(me?.has_global_scope) || perimetre.length > 1
+  // Ce que comptent les tuiles : le pays choisi, sinon tout le périmètre du
+  // compte. « tous pays » écrit en dur trompait un manager, qui n'en voit qu'un.
+  const paysChoisi = paysChoisissables.find((pays) => pays.id === countryId)
+  const portee = paysChoisi
+    ? paysChoisi.name
+    : me?.has_global_scope
+      ? t("pilotage.charge.aide.dossiers_ouverts")
+      : perimetre.map((pays) => pays.name).join(", ")
   const query = useQuery(
     // Le périmètre entre dans la clé : il décide si la répartition peut être
     // demandée sans nommer de pays, et il n'est connu qu'une fois le profil
@@ -220,7 +228,7 @@ export function DashboardPage() {
         />
         <Charge
           label={t("pilotage.charge.dossiers_ouverts")}
-          hint={t("pilotage.charge.aide.dossiers_ouverts")}
+          hint={portee}
           value={data?.workload.dossiers_open ?? 0}
           tone="border-l-marque"
           to="/dossiers"

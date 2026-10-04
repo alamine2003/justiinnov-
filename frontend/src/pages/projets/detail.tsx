@@ -234,7 +234,7 @@ export function ProjetDetailPage() {
           )}
 
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent>
               <DossiersTable
                 dossiers={dossiers.data?.results ?? []}
                 loading={dossiers.loading}

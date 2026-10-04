@@ -165,7 +165,7 @@ export function DossiersPage() {
       </div>
 
       <Card className="border-border/60 shadow-sm">
-        <CardContent className="pt-6">
+        <CardContent>
           <DossiersTable
             dossiers={dossiers}
             loading={query.loading}

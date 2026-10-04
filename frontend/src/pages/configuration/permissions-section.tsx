@@ -117,7 +117,7 @@ export function MatriceDesDroits({
       </Alert>
 
       <Card className="border-border/60 shadow-sm">
-        <CardContent className="space-y-4 pt-6">
+        <CardContent className="space-y-4">
           <div className="overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>

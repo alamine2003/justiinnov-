@@ -39,7 +39,10 @@ export function FriseDuCircuit({ status }: { status: WorkflowStatus }) {
                 className={cn("mt-[13px] h-0.5 flex-1", faite || ici ? "bg-marque-fort" : "bg-border")}
               />
             )}
-            <span className="flex w-28 shrink-0 flex-col items-center gap-2 px-1">
+            {/* Cinq étapes de 112 px font 560 px : sur un téléphone, elles se
+                serraient au point que les libellés se chevauchaient. Sous
+                `sm`, 56 px par étape, libellés sur deux lignes. */}
+            <span className="flex w-14 shrink-0 flex-col items-center gap-2 px-0.5 sm:w-28 sm:px-1">
               <Pastille faite={faite} ici={ici} manque={constatManque} />
               <span
                 className={cn(

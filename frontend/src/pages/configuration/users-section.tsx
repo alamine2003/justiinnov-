@@ -124,7 +124,7 @@ export function UsersSection() {
       <TruncatedNotice page={countries.data} noun={t("configuration.pays.noun_pluriel")} />
 
       <Card className="border-border/60 shadow-sm">
-        <CardContent className="pt-6">
+        <CardContent>
           <div className="overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>

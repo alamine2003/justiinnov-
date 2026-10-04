@@ -43,7 +43,7 @@ import {
   type TransitionName,
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
-import { formatAmount, formatDay } from "@/lib/utils"
+import { cn, formatAmount, formatDay } from "@/lib/utils"
 
 export function DossierDetailPage() {
   const { t } = useTranslation()
@@ -214,6 +214,10 @@ export function DossierDetailPage() {
   // déposées sur tout le dossier : un rangement, pas un calcul.
   const piecesDeLaLigne = (id: number) => dossier.proofs.filter((proof) => proof.expense === id)
   const piecesDAvant = dossier.proofs.filter((proof) => proof.expense === null)
+  const railOccupe =
+    dossier.lignes_sans_preuve > 0 ||
+    piecesDAvant.length > 0 ||
+    (rectifications.data?.results.length ?? 0) > 0
   // Un libellé, pas une règle : le panneau des pièces explique pourquoi le
   // dépôt est fermé ; le droit de déposer, lui, vient de `allowed_actions`.
   const closed = estCloture(dossier.status)
@@ -358,7 +362,7 @@ export function DossierDetailPage() {
 
       {/* Le circuit en frise : où en est le dossier, avant tout chiffre. */}
       <Card className="border-border/60 shadow-sm">
-        <CardContent className="overflow-x-auto pt-6">
+        <CardContent className="overflow-x-auto">
           <FriseDuCircuit status={dossier.status} />
         </CardContent>
       </Card>
@@ -391,10 +395,16 @@ export function DossierDetailPage() {
       </div>
 
       {/* Les lignes à gauche, les preuves et les rectifications dans un rail
-          à droite : on justifie une ligne en regardant la pièce. */}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
+          à droite : on justifie une ligne en regardant la pièce. Un rail
+          vide ne garde pas sa colonne : les lignes prennent la largeur. */}
+      <div
+        className={cn(
+          "grid gap-4",
+          railOccupe && "xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start",
+        )}
+      >
         <Card className="border-border/60 shadow-sm">
-          <CardContent className="space-y-3 pt-6">
+          <CardContent className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold">
@@ -456,47 +466,49 @@ export function DossierDetailPage() {
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
-          {dossier.lignes_sans_preuve > 0 && (
-            <Alert>
-              <FileWarning className="h-4 w-4" />
-              <AlertTitle>
-                {t("pieces.dossier.sans_justificatif", { count: dossier.lignes_sans_preuve })}
-              </AlertTitle>
-              <AlertDescription>{t("pieces.dossier.sans_justificatif_aide")}</AlertDescription>
-            </Alert>
-          )}
+        {railOccupe && (
+          <div className="space-y-4">
+            {dossier.lignes_sans_preuve > 0 && (
+              <Alert>
+                <FileWarning className="h-4 w-4" />
+                <AlertTitle>
+                  {t("pieces.dossier.sans_justificatif", { count: dossier.lignes_sans_preuve })}
+                </AlertTitle>
+                <AlertDescription>{t("pieces.dossier.sans_justificatif_aide")}</AlertDescription>
+              </Alert>
+            )}
 
-          {/* Les pièces d'avant la 2.0, déposées sur tout le dossier : elles
-              se lisent et se contrôlent encore, il ne s'en dépose plus. */}
-          {piecesDAvant.length > 0 && (
-            <Card className="border-border/60 shadow-sm">
-              <CardContent className="pt-6">
-                <ProofPanel
-                  expenseId={null}
-                  proofs={piecesDAvant}
-                  canUpload={false}
-                  closed={closed}
-                  onChanged={async () => {
-                    query.reload()
-                  }}
-                />
-              </CardContent>
-            </Card>
-          )}
+            {/* Les pièces d'avant la 2.0, déposées sur tout le dossier : elles
+                se lisent et se contrôlent encore, il ne s'en dépose plus. */}
+            {piecesDAvant.length > 0 && (
+              <Card className="border-border/60 shadow-sm">
+                <CardContent>
+                  <ProofPanel
+                    expenseId={null}
+                    proofs={piecesDAvant}
+                    canUpload={false}
+                    closed={closed}
+                    onChanged={async () => {
+                      query.reload()
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            )}
 
-          {(rectifications.data?.results.length ?? 0) > 0 && (
-            <Card className="border-border/60 shadow-sm">
-              <CardContent className="pt-6">
-                <RectificationPanel
-                  rows={rectifications.data?.results ?? []}
-                  currency={currencySymbol}
-                  onDecided={afterRectificationDecided}
-                />
-              </CardContent>
-            </Card>
-          )}
-        </div>
+            {(rectifications.data?.results.length ?? 0) > 0 && (
+              <Card className="border-border/60 shadow-sm">
+                <CardContent>
+                  <RectificationPanel
+                    rows={rectifications.data?.results ?? []}
+                    currency={currencySymbol}
+                    onDecided={afterRectificationDecided}
+                  />
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
       </div>
 
       <ExpenseForm

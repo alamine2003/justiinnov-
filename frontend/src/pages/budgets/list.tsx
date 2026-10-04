@@ -222,7 +222,7 @@ export function BudgetsPage() {
 
       {rows.length === 0 && !query.loading ? (
         <Card className="border-border/60 shadow-sm">
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
               <Wallet className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
               <p className="mt-2 text-sm font-medium">{t("budgets.vide.pays_titre")}</p>
@@ -259,7 +259,7 @@ export function BudgetsPage() {
       )}
 
       <Card className="border-border/60 shadow-sm">
-        <CardContent className="pt-6">
+        <CardContent>
           <Reallocations
             budgets={budgets}
             canRequest={canRequest}

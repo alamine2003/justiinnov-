@@ -173,7 +173,7 @@ export function CountryDetailPage() {
 
         <TabsContent value="managers" className="mt-4">
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent>
               <ManageManagers
                 countryId={countryId}
                 managers={country.managers}
@@ -186,7 +186,7 @@ export function CountryDetailPage() {
 
         <TabsContent value="equipes" className="mt-4">
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent>
               <ManageRows<CountryDetail["teams"][number]>
                 title={t("pays.fiche.equipes")}
                 description={t("pays.equipes.description")}
@@ -217,7 +217,7 @@ export function CountryDetailPage() {
 
         <TabsContent value="costs" className="mt-4">
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent>
               <ManageRows<CountryDetail["cost_centers"][number]>
                 title={t("pays.fiche.centres_couts")}
                 rows={country.cost_centers}
@@ -253,7 +253,7 @@ export function CountryDetailPage() {
 
         <TabsContent value="projets" className="mt-4">
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent>
               <ManageRows<CountryDetail["projects"][number]>
                 title={t("pays.fiche.projets")}
                 rows={country.projects}
@@ -312,7 +312,7 @@ export function CountryDetailPage() {
 
         <TabsContent value="depenses" className="mt-4">
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent>
               <ManageRows<CountryDetail["expense_titles"][number]>
                 title={t("pays.fiche.intitules_depenses")}
                 rows={country.expense_titles}
@@ -344,7 +344,7 @@ export function CountryDetailPage() {
 
         <TabsContent value="marketing" className="mt-4">
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent>
               <ManageRows<CountryDetail["marketing_categories"][number]>
                 title={t("pays.fiche.categories_marketing")}
                 rows={country.marketing_categories}
@@ -376,7 +376,7 @@ export function CountryDetailPage() {
 
         <TabsContent value="beneficiaires" className="mt-4">
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent>
               <ManageBeneficiaries countryId={countryId} canManage={canManage} />
             </CardContent>
           </Card>

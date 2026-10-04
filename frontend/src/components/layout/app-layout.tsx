@@ -42,29 +42,35 @@ import { cn } from "@/lib/utils"
 function NavItem({
   to,
   icon: Icon,
-  children,
+  label,
+  compact,
   onNavigate,
 }: {
   to: string
   icon: typeof Globe
-  children: React.ReactNode
+  label: string
+  /** Dans la barre : icône seule de `lg` à `xl`, libellé dès `xl`. */
+  compact: boolean
   onNavigate?: () => void
 }) {
   return (
     <NavLink
       to={to}
       onClick={onNavigate}
+      title={compact ? label : undefined}
       className={({ isActive }) =>
         cn(
-          "inline-flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex items-center rounded-lg py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          compact ? "px-2.5 xl:px-3" : "px-3",
           isActive
             ? "bg-accent text-accent-foreground"
             : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
         )
       }
     >
-      <Icon className="mr-2 h-4 w-4" aria-hidden />
-      {children}
+      <Icon className={cn("h-4 w-4", compact ? "xl:mr-2" : "mr-2")} aria-hidden />
+      {/* Masqué à l'œil mais lu : l'icône seule garde un nom accessible. */}
+      <span className={compact ? "sr-only xl:not-sr-only" : undefined}>{label}</span>
     </NavLink>
   )
 }
@@ -93,32 +99,18 @@ export function AppLayout() {
   // double authentification enrôlée : chaque entrée mènerait à une page que
   // le serveur refuse de servir.
   const closed = platformClosed(me)
-  const navigation = closed ? null : (
+  const navigation = (compact: boolean) => closed ? null : (
     <>
-      <NavItem to="/" icon={LayoutDashboard} onNavigate={() => setMenuOpen(false)}>
-        {t("nav.pilotage")}
-      </NavItem>
-      <NavItem to="/projets" icon={Briefcase} onNavigate={() => setMenuOpen(false)}>
-        {t("nav.projets")}
-      </NavItem>
-      <NavItem to="/registre" icon={ListChecks} onNavigate={() => setMenuOpen(false)}>
-        {t("nav.registre")}
-      </NavItem>
-      <NavItem to="/budgets" icon={Wallet} onNavigate={() => setMenuOpen(false)}>
-        {t("nav.budgets")}
-      </NavItem>
-      <NavItem to="/countries" icon={Globe} onNavigate={() => setMenuOpen(false)}>
-        {t("nav.pays")}
-      </NavItem>
+      <NavItem to="/" icon={LayoutDashboard} label={t("nav.pilotage")} compact={compact} onNavigate={() => setMenuOpen(false)} />
+      <NavItem to="/projets" icon={Briefcase} label={t("nav.projets")} compact={compact} onNavigate={() => setMenuOpen(false)} />
+      <NavItem to="/registre" icon={ListChecks} label={t("nav.registre")} compact={compact} onNavigate={() => setMenuOpen(false)} />
+      <NavItem to="/budgets" icon={Wallet} label={t("nav.budgets")} compact={compact} onNavigate={() => setMenuOpen(false)} />
+      <NavItem to="/countries" icon={Globe} label={t("nav.pays")} compact={compact} onNavigate={() => setMenuOpen(false)} />
       {can("audit.read") && (
-        <NavItem to="/audit" icon={ScrollText} onNavigate={() => setMenuOpen(false)}>
-          {t("nav.audit")}
-        </NavItem>
+        <NavItem to="/audit" icon={ScrollText} label={t("nav.audit")} compact={compact} onNavigate={() => setMenuOpen(false)} />
       )}
       {can("configuration.manage") && (
-        <NavItem to="/configuration" icon={Settings} onNavigate={() => setMenuOpen(false)}>
-          {t("nav.configuration")}
-        </NavItem>
+        <NavItem to="/configuration" icon={Settings} label={t("nav.configuration")} compact={compact} onNavigate={() => setMenuOpen(false)} />
       )}
     </>
   )
@@ -142,24 +134,26 @@ export function AppLayout() {
             </div>
           </Link>
 
-          {/* Sous `md`, les sept entrées ne tiennent pas : elles passent dans
-              un panneau latéral, pour que la page ne défile jamais
-              horizontalement. */}
-          <nav aria-label={t("nav.principale")} className="hidden items-center gap-1 md:flex">
-            {navigation}
+          {/* Les sept entrées du siège, libellés compris, demandent 1 280 px.
+              En dessous de `lg`, elles passent dans un panneau latéral ; de
+              `lg` à `xl`, la barre ne garde que leurs icônes. La page ne
+              défile jamais horizontalement (à 768 px, elle débordait de
+              163 px). */}
+          <nav aria-label={t("nav.principale")} className="hidden items-center gap-1 lg:flex">
+            {navigation(true)}
           </nav>
 
           <div className="flex items-center gap-1">
             {!closed && <NotificationBell />}
             <LanguageToggle persistOnServer />
             <ThemeToggle />
-            <div className="hidden md:block">
+            <div className="hidden lg:block">
               <UserMenu onLogout={() => void handleLogout()} />
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="lg:hidden"
               aria-label={t("nav.ouvrir_menu")}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen(true)}
@@ -182,7 +176,7 @@ export function AppLayout() {
             </SheetDescription>
           </SheetHeader>
           <nav aria-label={t("nav.principale")} className="flex flex-col gap-1 px-4">
-            {navigation}
+            {navigation(false)}
           </nav>
           {/* Les entrées du menu du compte, que le menu replié remplace sous `md`. */}
           <div className="mt-auto space-y-2 px-4 pb-6">
