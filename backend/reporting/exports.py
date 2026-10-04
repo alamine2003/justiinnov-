@@ -323,13 +323,21 @@ def tableaux_rapprochement(budgets, dossiers):
 
     detail = Tableau("Rapprochement dossiers", DOSSIER_COLUMNS)
     totaux = {"amount": ZERO, "justified": ZERO, "gap": ZERO}
+    # Chaque ligne affiche les montants de son dossier, brouillons compris
+    # (on y lit ce qui est en cours) ; le TOTAL n'additionne que le déclaré
+    # (décision 54). Il ne s'écrit qu'à devise unique — celle des dossiers
+    # qui l'alimentent : un brouillon en GNF ne fait pas taire un total en
+    # FCFA auquel il n'ajoute rien.
     devises = set()
+    devises_de_tous = set()
     source = _avec_les_totaux_declares(
         dossiers.select_related("country", "project", "kind")
     )
     for dossier in source:
         totals = dossier.totals()
-        devises.add(dossier.country.currency)
+        devises_de_tous.add(dossier.country.currency)
+        if dossier.montant_declare:
+            devises.add(dossier.country.currency)
         totaux["amount"] += dossier.montant_declare
         totaux["justified"] += dossier.justifie_declare
         totaux["gap"] += dossier.montant_declare - dossier.justifie_declare
@@ -348,7 +356,7 @@ def tableaux_rapprochement(budgets, dossiers):
         ])
     # Le total se lit dans LIBELLE, N°ORDRE restant vide : comme dans le
     # classeur des dépenses, la colonne des numéros ne porte que des numéros.
-    detail.total = _total_si_devise_unique(devises, [
+    detail.total = _total_si_devise_unique(devises or devises_de_tous, [
         None, "TOTAL", None, None, None,
         totaux["amount"], totaux["justified"], totaux["gap"], None, None, None,
     ])

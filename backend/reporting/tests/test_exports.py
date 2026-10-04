@@ -375,6 +375,24 @@ class FormatsTests(DashboardTestCase):
         self.assertIn(";TOTAL;", texte.splitlines()[-1])
         self.assertIn(";500000,00;", texte.splitlines()[-1])
 
+    def test_un_brouillon_d_une_autre_devise_ne_fait_pas_taire_le_total(self):
+        """Relecture de la 2.0.5 : le TOTAL ne s'écrit qu'à devise unique,
+        celle des dossiers qui l'alimentent. Un brouillon en GNF, qui n'y
+        ajoute rien, ne le tait pas."""
+        self.ivoire.currency = "GNF"
+        self.ivoire.save()
+        abidjan = Dossier.objects.create(
+            number="CI-BROUILLON", label="Brouillon ivoirien", country=self.ivoire,
+            date=date(self.year, 4, 2), status=Status.DRAFT,
+        )
+        self.make_expense(dossier=abidjan, country=self.ivoire, team=None, owner=None, status=Status.DRAFT)
+
+        _, detail = exports.tableaux_rapprochement(Budget.objects.none(), Dossier.objects.all())
+
+        self.assertIn("Brouillon ivoirien", [ligne[1] for ligne in detail.lignes])
+        self.assertIsNotNone(detail.total)
+        self.assertEqual(detail.total[5], 500000)
+
     def test_les_totaux_ne_melangent_pas_les_devises(self):
         """Additionner des francs CFA et des francs guinéens donnerait un
         chiffre sans unité : le total est tu, comme au tableau de bord."""

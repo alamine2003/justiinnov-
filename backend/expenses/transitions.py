@@ -359,10 +359,18 @@ def _exiger_les_auteurs_des_lignes(brouillons, acteur):
     que les autres n'avaient pas fini de saisir (décision 114). Une ligne
     sans auteur connu reste soumise par qui déclare le dossier, comme
     avant (migration ``expenses.0017``).
+
+    La règle ne vise que les lignes **jamais déclarées** : une ligne déjà
+    soumise, revenue au brouillon par une réouverture, a été déclarée par
+    son auteur. Elle repart avec le dossier — sans quoi un dossier rouvert
+    dont une ligne porte un autre auteur (un collègue parti, des données
+    d'avant la décision 89) ne se resoumettait plus jamais : ni
+    modifiable, ni retirable, ni déclarable.
     """
     autrui = [
         ligne for ligne in brouillons
         if ligne.created_by and ligne.created_by != acteur.username
+        and not a_ete_declare(ligne)
     ]
     if autrui:
         raise PermissionRefusee(
@@ -1042,6 +1050,12 @@ def controler_piece(proof, statut, acteur, *, motif="", trace):
     """
     exiger_la_capacite("proofs.review", acteur)
     motif = (motif or "").strip()
+    # Le dossier, puis la pièce (décision 53) : sans le verrou du dossier,
+    # une pièce se rejetait pendant que le dossier se clôturait, chacun
+    # croyant l'autre inchangé — et le dossier se fermait sur une pièce
+    # rejetée, ce que la décision 115 refuse.
+    dossier_id = Proof.objects.values_list("dossier_id", flat=True).get(pk=proof.pk)
+    Dossier.objects.select_for_update().filter(pk=dossier_id).first()
     piece = (
         Proof.objects.select_related("dossier__country")
         .select_for_update(of=("self",))

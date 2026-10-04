@@ -11,7 +11,7 @@ from rest_framework import status
 
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
-from expenses.models import Expense
+from expenses.models import AuditLog, Expense
 from expenses.workflow import Status
 
 from .base import ExpenseTestCase
@@ -205,6 +205,22 @@ class BrouillonDUnCollegueTests(ExpenseTestCase):
         self.dossier.refresh_from_db()
         self.assertEqual(self.dossier.status, Status.DRAFT)
         self.assertFalse(self.dossier.expenses.exclude(status=Status.DRAFT).exists())
+
+    def test_une_ligne_deja_declaree_repart_avec_le_dossier_rouvert(self):
+        """Relecture de la 2.0.5 : une ligne déclarée une fois par un collègue,
+        revenue au brouillon par une réouverture, ne bloque pas la
+        resoumission — sans quoi le dossier restait dans une impasse."""
+        ligne = self.make_expense(title="Ligne déjà déclarée", created_by=self.collegue.username)
+        AuditLog.objects.create(
+            action=AuditLog.Action.SUBMITTED, object_type="Expense", object_id=ligne.pk,
+            user=self.collegue.username,
+        )
+
+        response = self.submit_dossier(user=self.owner)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        ligne.refresh_from_db()
+        self.assertEqual(ligne.status, Status.SUBMITTED)
 
     def test_une_ligne_sans_auteur_part_avec_le_dossier(self):
         """Une ligne sans auteur connu n'est à personne : celui qui déclare

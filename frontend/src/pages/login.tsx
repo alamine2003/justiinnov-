@@ -208,7 +208,15 @@ export function LoginPage() {
                   id="password"
                   type={visible ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    // « Mot de passe accepté » ne vaut que pour celui qui l'a
+                    // été : un autre mot de passe repart du premier temps.
+                    if (totpRequired) {
+                      setTotpRequired(false)
+                      setCode("")
+                    }
+                  }}
                   autoComplete="current-password"
                   required
                   className="h-10 pr-10"

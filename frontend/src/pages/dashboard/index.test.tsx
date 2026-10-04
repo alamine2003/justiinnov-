@@ -254,11 +254,13 @@ describe("Pilotage — analyse d'un pays", () => {
  */
 describe("Pilotage — liens des tuiles", () => {
   it("transmettent l'exercice et le pays au registre", async () => {
-    profil = { has_global_scope: false, countries: [pays(2, "Togo")] } as Partial<Me>
+    profil = { has_global_scope: false, countries: [pays(1, "Cote d'Ivoire"), pays(2, "Togo")] } as Partial<Me>
 
     monter()
 
+    fireEvent.change(await screen.findByRole("combobox", { name: "Pays" }), { target: { value: "2" } })
     const lien = await screen.findByRole("link", { name: /Lignes en brouillon/ })
+    await waitFor(() => expect(lien.getAttribute("href")).toContain("country=2"))
     const adresse = new URL(lien.getAttribute("href") ?? "", "http://x")
     expect(adresse.pathname).toBe("/registre")
     expect(adresse.searchParams.get("status")).toBe("draft")

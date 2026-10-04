@@ -139,6 +139,18 @@ describe("connexion refusée par le profil", () => {
     expect(screen.getByLabelText("Identifiant")).toHaveValue("togo.innov")
   })
 
+  it("repart du premier temps quand le mot de passe change", async () => {
+    login.mockRejectedValueOnce(refusTotp("Ce champ est obligatoire."))
+    afficher()
+
+    saisirIdentifiants()
+    await screen.findByLabelText("Code de double authentification")
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "autre" } })
+
+    expect(screen.queryByLabelText("Code de double authentification")).toBeNull()
+    expect(screen.queryByText(/Mot de passe accepté/)).toBeNull()
+  })
+
   it("repart du premier temps quand l'identifiant change", async () => {
     login.mockRejectedValueOnce(refusTotp("Ce champ est obligatoire."))
     afficher()
@@ -166,6 +178,7 @@ describe("écran de connexion", () => {
   it("nomme la langue courante à côté de son icône", () => {
     afficher()
 
-    expect(screen.getByRole("button", { name: "Langue de l'interface" })).toHaveTextContent("FR")
+    // Le nom accessible contient le texte visible (WCAG 2.5.3).
+    expect(screen.getByRole("button", { name: "FR — Langue de l'interface" })).toHaveTextContent("FR")
   })
 })

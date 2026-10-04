@@ -226,6 +226,21 @@ class ServicesDuCircuitTests(ExpenseTestCase):
         )
         self.assertEqual(entree.detail["note"], "À voir de près")
 
+    def test_le_motif_d_une_mise_en_controle_passe_par_l_api(self):
+        """La route, pas seulement le service : ``note`` reçu par
+        ``POST /api/dossiers/{id}/review/`` arrive sur le dossier."""
+        self.soumettre()
+        self.login(self.controller)
+
+        response = self.client.post(
+            f"/api/dossiers/{self.dossier.pk}/review/", {"note": "À voir de près"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.note, "À voir de près")
+        self.assertEqual(response.data["note"], "À voir de près")
+
     def test_le_motif_d_une_cloture_est_garde(self):
         self.soumettre()
         self.trancher(self.ligne, "justify", self.controller)
