@@ -254,7 +254,7 @@ export function DossierDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 court:space-y-3">
       {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />

@@ -134,7 +134,7 @@ export function BudgetsPage() {
   const referentielError = countries.error ?? projects.error ?? teams.error
 
   return (
-    <div className="space-y-6">
+    <div className="ecran-plein space-y-6 court:space-y-3">
       <PageHeader
         title={t("budgets.titre")}
         description={t("budgets.description")}
@@ -220,53 +220,57 @@ export function BudgetsPage() {
         />
       </div>
 
-      {rows.length === 0 && !query.loading ? (
+      {/* Sous les indicateurs, enveloppes et réallocations défilent dès
+          `lg` : en-tête et totaux restent en vue (DESIGN.md, « Hauteur »). */}
+      <div className="defile -mx-1 space-y-6 px-1 pb-1 court:space-y-3">
+        {rows.length === 0 && !query.loading ? (
+          <Card className="border-border/60 shadow-sm">
+            <CardContent>
+              <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
+                <Wallet className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
+                <p className="mt-2 text-sm font-medium">{t("budgets.vide.pays_titre")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {canCreate
+                    ? t("budgets.vide.pays_indication_siege")
+                    : t("budgets.vide.pays_indication_pays")}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : selected ? (
+          <>
+            <EnveloppeDuPays
+              row={selected}
+              budget={enveloppePays}
+              thresholds={thresholds}
+              symbol={symbolOf(selected.country, selected.currency)}
+              onEdit={canEdit ? ouvrirFormulaire : undefined}
+              onDelete={supprimer}
+            />
+            <SousEnveloppes
+              budgets={sousEnveloppes}
+              row={selected}
+              canCreate={canCreate}
+              canEdit={canEdit}
+              onCreate={() => ouvrirFormulaire(null)}
+              onEdit={ouvrirFormulaire}
+              onDelete={supprimer}
+            />
+          </>
+        ) : (
+          <TousLesPays rows={rows} symbolOf={symbolOf} onChoose={setCountryId} />
+        )}
+
         <Card className="border-border/60 shadow-sm">
           <CardContent>
-            <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
-              <Wallet className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden />
-              <p className="mt-2 text-sm font-medium">{t("budgets.vide.pays_titre")}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {canCreate
-                  ? t("budgets.vide.pays_indication_siege")
-                  : t("budgets.vide.pays_indication_pays")}
-              </p>
-            </div>
+            <Reallocations
+              budgets={budgets}
+              canRequest={canRequest}
+              onChanged={query.reload}
+            />
           </CardContent>
         </Card>
-      ) : selected ? (
-        <>
-          <EnveloppeDuPays
-            row={selected}
-            budget={enveloppePays}
-            thresholds={thresholds}
-            symbol={symbolOf(selected.country, selected.currency)}
-            onEdit={canEdit ? ouvrirFormulaire : undefined}
-            onDelete={supprimer}
-          />
-          <SousEnveloppes
-            budgets={sousEnveloppes}
-            row={selected}
-            canCreate={canCreate}
-            canEdit={canEdit}
-            onCreate={() => ouvrirFormulaire(null)}
-            onEdit={ouvrirFormulaire}
-            onDelete={supprimer}
-          />
-        </>
-      ) : (
-        <TousLesPays rows={rows} symbolOf={symbolOf} onChoose={setCountryId} />
-      )}
-
-      <Card className="border-border/60 shadow-sm">
-        <CardContent>
-          <Reallocations
-            budgets={budgets}
-            canRequest={canRequest}
-            onChanged={query.reload}
-          />
-        </CardContent>
-      </Card>
+      </div>
 
       <BudgetForm
         open={formOpen}

@@ -158,8 +158,16 @@ async function main() {
   await shot(hq, "pilotage")
   await hq.getByLabel("Pays").selectOption({ index: 1 })
   await hq.waitForTimeout(1200)
-  expect((await hq.getByRole("tab").count()) >= 6, "la répartition d'un pays propose ses onglets")
+  // L'analyse d'un pays tient en un panneau : Mois, Répartition, Pays ; la
+  // répartition se lit un axe à la fois, choisi dans une liste (DESIGN.md,
+  // « Hauteur d'écran »).
+  expect((await hq.getByRole("tab").count()) === 3, "l'analyse d'un pays propose ses trois onglets")
   await shot(hq, "pilotage_pays")
+  await hq.getByRole("tab", { name: "Répartition" }).click()
+  const axe = hq.getByRole("combobox", { name: "Répartir par" })
+  expect((await axe.locator("option").count()) === 8, "la répartition propose ses huit axes")
+  await axe.selectOption("by_project")
+  await shot(hq, "pilotage_repartition")
 
   // Le sélecteur de langue est un groupe radio, comme celui du thème.
   await hq.getByRole("button", { name: "Langue de l'interface" }).click()

@@ -31,13 +31,16 @@ export function ConfigurationPage() {
   const onglet = demande && onglets.includes(demande as Onglet) ? demande : "general"
 
   return (
-    <div className="space-y-6">
+    <div className="ecran-plein space-y-6 court:space-y-3">
       <PageHeader
         title={t("configuration.titre")}
         description={t("configuration.description")}
       />
 
+      {/* Dès `lg`, les onglets restent en vue et la section défile
+          dessous (DESIGN.md, « Hauteur »). */}
       <Tabs
+        className="remplit"
         value={onglet}
         onValueChange={(value) => setParams({ onglet: value })}
       >
@@ -49,19 +52,19 @@ export function ConfigurationPage() {
           ))}
         </TabsList>
 
-        <TabsContent value="general" className="mt-4">
+        <TabsContent value="general" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
           <GeneralSection />
         </TabsContent>
-        <TabsContent value="utilisateurs" className="mt-4">
+        <TabsContent value="utilisateurs" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
           <UsersSection />
         </TabsContent>
-        <TabsContent value="pays" className="mt-4">
+        <TabsContent value="pays" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
           <CountriesSection />
         </TabsContent>
-        <TabsContent value="types-de-dossiers" className="mt-4">
+        <TabsContent value="types-de-dossiers" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
           <DossierKindsSection />
         </TabsContent>
-        <TabsContent value="permissions" className="mt-4">
+        <TabsContent value="permissions" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
           <PermissionsSection />
         </TabsContent>
       </Tabs>

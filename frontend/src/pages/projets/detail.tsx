@@ -131,7 +131,7 @@ export function ProjetDetailPage() {
   const count = dossiers.data?.count ?? 0
 
   return (
-    <div className="space-y-6">
+    <div className="ecran-plein space-y-6 court:space-y-3">
       {dossiers.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -197,7 +197,7 @@ export function ProjetDetailPage() {
         )
       )}
 
-      <Tabs value={onglet} onValueChange={(value) => changeOnglet(String(value))}>
+      <Tabs className="remplit" value={onglet} onValueChange={(value) => changeOnglet(String(value))}>
         <TabsList
           variant="line"
           aria-label={t("projets.fiche.onglets")}
@@ -212,7 +212,7 @@ export function ProjetDetailPage() {
             </TabsTrigger>
           )}
         </TabsList>
-        <TabsContent value="dossiers" className="mt-4 space-y-6">
+        <TabsContent value="dossiers" className="remplit mt-4 space-y-6 court:mt-2 court:space-y-3">
           {(kinds.data?.results ?? []).length > 0 && (
             <FilterChips
               label={t("projets.fiche.filtrer_type")}
@@ -233,9 +233,10 @@ export function ProjetDetailPage() {
             />
           )}
 
-          <Card className="border-border/60 shadow-sm">
-            <CardContent>
+          <Card className="remplit border-border/60 shadow-sm">
+            <CardContent className="remplit">
               <DossiersTable
+                className="defile"
                 dossiers={dossiers.data?.results ?? []}
                 loading={dossiers.loading}
                 colonne="type"
@@ -255,8 +256,11 @@ export function ProjetDetailPage() {
           </Card>
         </TabsContent>
         {avecHistorique && (
-          <TabsContent value="historique" className="mt-4">
-            <ProjectHistory projectId={projet.id} />
+          <TabsContent value="historique" className="remplit mt-4 court:mt-2">
+            {/* L'historique s'allonge sans fin : il défile sous les onglets. */}
+            <div className="defile -mx-1 px-1 pb-1">
+              <ProjectHistory projectId={projet.id} />
+            </div>
           </TabsContent>
         )}
       </Tabs>

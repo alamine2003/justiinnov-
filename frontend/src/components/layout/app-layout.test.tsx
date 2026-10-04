@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AppLayout } from "./app-layout"
+import { BRAND, copyright } from "@/lib/brand"
 import type { Me } from "@/lib/types"
 
 let droits = new Set<string>()
@@ -86,6 +87,19 @@ describe("AppLayout — barre latérale", () => {
     unmount()
     monter()
     expect(screen.getByRole("button", { name: "Déplier le menu" })).toBeInTheDocument()
+  })
+
+  it("porte la version et le copyright en pied de menu, et la version seule repliée", () => {
+    monter()
+
+    const menu = barre().closest("aside") as HTMLElement
+    expect(menu).toHaveTextContent(`Version ${BRAND.version}`)
+    expect(menu).toHaveTextContent(copyright())
+
+    fireEvent.click(screen.getByRole("button", { name: "Réduire le menu" }))
+
+    expect(menu).toHaveTextContent(`Version ${BRAND.version}`)
+    expect(menu).not.toHaveTextContent(copyright())
   })
 
   it("garde le périmètre dans l'en-tête", () => {

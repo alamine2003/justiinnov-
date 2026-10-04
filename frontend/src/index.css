@@ -4,6 +4,56 @@
 @import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
+/* Écran bas (portable 1366 × 768, fenêtre réduite) : l'espace vertical se
+   resserre pour qu'un écran tienne sans défiler (DESIGN.md, « Hauteur »). */
+@custom-variant court (@media (max-height: 860px));
+
+/* Liste à hauteur d'écran, dès `lg` (DESIGN.md, « Hauteur ») : la page ne
+   dépasse pas la fenêtre, le tableau défile à l'intérieur et garde ses
+   titres de colonnes. `ecran-plein` sur la racine de la page, `remplit` sur
+   chaque conteneur entre elle et le tableau, `defile` sur l'enveloppe du
+   tableau. Une liste courte garde sa hauteur naturelle ; sous 8 rem de
+   tableau, c'est la page qui défile. Le reste ne cède rien : une carte
+   (`overflow-hidden`) rétrécirait sous son contenu. */
+@utility ecran-plein {
+  @media (width >= 64rem) {
+    display: flex;
+    flex-direction: column;
+    max-height: var(--hauteur-page);
+    & > :not(.remplit, .defile) {
+      flex-shrink: 0;
+    }
+  }
+}
+@utility remplit {
+  @media (width >= 64rem) {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 0;
+    & > :not(.remplit, .defile) {
+      flex-shrink: 0;
+    }
+  }
+}
+@utility defile {
+  @media (width >= 64rem) {
+    position: relative;
+    flex: 0 1 auto;
+    min-height: 8rem;
+    overflow: auto;
+    & > [data-slot="table-container"] {
+      overflow: visible;
+    }
+    & thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--card);
+      box-shadow: inset 0 -1px var(--border);
+    }
+  }
+}
 
 @theme inline {
     --font-heading: var(--font-sans);

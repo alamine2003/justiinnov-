@@ -93,171 +93,177 @@ export function VueDEnsemble() {
     }).toString()}`
 
   return (
-    <div className="space-y-6">
+    <div className="remplit space-y-6 court:space-y-3">
       <BarreDePeriode lire={lire} changer={changer} />
 
-      {query.error && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>{t("commun.erreur")}</AlertTitle>
-          <AlertDescription>{query.error}</AlertDescription>
-        </Alert>
-      )}
+      {/* La synthèse est un tableau de bord long : dès `lg`, elle défile
+          sous la période, qui reste en vue (DESIGN.md, « Hauteur »). La
+          marge rend aux cartes l'ombre et l'anneau de focus que le
+          défilement rognerait. */}
+      <div className="defile -mx-1 space-y-6 px-1 pb-1 court:space-y-4">
+        {query.error && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>{t("commun.erreur")}</AlertTitle>
+            <AlertDescription>{query.error}</AlertDescription>
+          </Alert>
+        )}
 
-      {synthese && (
-        <>
-          <p className="text-sm text-muted-foreground">
-            {t("audit.synthese.periode", {
-              debut: formatDay(synthese.debut),
-              fin: formatDay(synthese.fin),
-              circuit: synthese.compteurs.circuit,
-              referentiel: synthese.compteurs.referentiel,
-            })}
-          </p>
+        {synthese && (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {t("audit.synthese.periode", {
+                debut: formatDay(synthese.debut),
+                fin: formatDay(synthese.fin),
+                circuit: synthese.compteurs.circuit,
+                referentiel: synthese.compteurs.referentiel,
+              })}
+            </p>
 
-          <section aria-labelledby="audit-tuiles-circuit" className="space-y-2">
-            <h3 id="audit-tuiles-circuit" className="text-sm font-semibold">
-              {t("audit.source.circuit")}
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {TUILES_CIRCUIT.map(({ cle, filtre, sensible }) => (
-                <Tuile key={cle} to={filtre && lien("circuit", filtre)}>
-                  <StatCard
-                    label={t(`audit.synthese.compteurs.${cle}`)}
-                    value={synthese.compteurs[cle]}
-                    tone={sensible && synthese.compteurs[cle] > 0 ? "danger" : undefined}
-                  />
-                </Tuile>
-              ))}
-            </div>
-          </section>
-
-          <section aria-labelledby="audit-tuiles-referentiel" className="space-y-2">
-            <h3 id="audit-tuiles-referentiel" className="text-sm font-semibold">
-              {t("audit.source.referentiel")}
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {TUILES_REFERENTIEL.map(({ cle, filtre, sensible }) => (
-                <Tuile key={cle} to={lien("referentiel", filtre)}>
-                  <StatCard
-                    label={t(`audit.synthese.compteurs.${cle}`)}
-                    value={synthese.compteurs[cle]}
-                    tone={sensible && synthese.compteurs[cle] > 0 ? "danger" : undefined}
-                  />
-                </Tuile>
-              ))}
-            </div>
-          </section>
-
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-sm">{t("audit.synthese.par_jour")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {synthese.par_jour.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("audit.synthese.rien")}</p>
-              ) : (
-                <>
-                  <Legende
-                    items={[
-                      { tone: "bg-marque", label: t("audit.source.circuit") },
-                      { tone: "bg-marque-clair", label: t("audit.source.referentiel") },
-                    ]}
-                  />
-                  <BarresParJour jours={synthese.par_jour} title={t("audit.synthese.par_jour")} />
-                  {/* Les chiffres en texte, comme sous chaque graphique (DESIGN.md). */}
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-muted-foreground">
-                      {t("audit.synthese.detail_par_jour")}
-                    </summary>
-                    <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {synthese.par_jour.map((jour) => (
-                        <li key={jour.jour}>
-                          {t("audit.synthese.jour", {
-                            jour: formatDay(jour.jour),
-                            circuit: jour.circuit,
-                            referentiel: jour.referentiel,
-                          })}
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-sm">{t("audit.synthese.par_utilisateur")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead scope="col">{t("audit.col_utilisateur")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("audit.synthese.evenements")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {synthese.par_utilisateur.map((ligne) => (
-                      <TableRow key={ligne.user}>
-                        <TableCell>
-                          <Link to={lien("circuit", { user: ligne.user })} className="font-medium hover:underline">
-                            {ligne.user}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{ligne.count}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-sm">{t("audit.synthese.par_pays")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead scope="col">{t("commun.pays")}</TableHead>
-                      <TableHead scope="col" className="text-right">{t("audit.synthese.evenements")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {synthese.par_pays.map((ligne) => (
-                      <TableRow key={ligne.country}>
-                        <TableCell>{ligne.name}</TableCell>
-                        <TableCell className="text-right tabular-nums">{ligne.count}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-
-          <section aria-labelledby="audit-a-surveiller" className="space-y-2">
-            <h3 id="audit-a-surveiller" className="flex items-center gap-2 text-sm font-semibold">
-              <ShieldAlert className="h-4 w-4 text-statut-attente" aria-hidden />
-              {t("audit.synthese.a_surveiller")}
-            </h3>
-            <p className="text-xs text-muted-foreground">{t("audit.synthese.a_surveiller_aide")}</p>
-            {synthese.a_surveiller.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("audit.synthese.rien_a_surveiller")}</p>
-            ) : (
-              <ol className="space-y-2">
-                {synthese.a_surveiller.map((entree) => (
-                  <Evenement key={`${entree.source}-${entree.id}`} entree={entree} />
+            <section aria-labelledby="audit-tuiles-circuit" className="space-y-2">
+              <h3 id="audit-tuiles-circuit" className="text-sm font-semibold">
+                {t("audit.source.circuit")}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                {TUILES_CIRCUIT.map(({ cle, filtre, sensible }) => (
+                  <Tuile key={cle} to={filtre && lien("circuit", filtre)}>
+                    <StatCard
+                      label={t(`audit.synthese.compteurs.${cle}`)}
+                      value={synthese.compteurs[cle]}
+                      tone={sensible && synthese.compteurs[cle] > 0 ? "danger" : undefined}
+                    />
+                  </Tuile>
                 ))}
-              </ol>
-            )}
-          </section>
-        </>
-      )}
+              </div>
+            </section>
+
+            <section aria-labelledby="audit-tuiles-referentiel" className="space-y-2">
+              <h3 id="audit-tuiles-referentiel" className="text-sm font-semibold">
+                {t("audit.source.referentiel")}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                {TUILES_REFERENTIEL.map(({ cle, filtre, sensible }) => (
+                  <Tuile key={cle} to={lien("referentiel", filtre)}>
+                    <StatCard
+                      label={t(`audit.synthese.compteurs.${cle}`)}
+                      value={synthese.compteurs[cle]}
+                      tone={sensible && synthese.compteurs[cle] > 0 ? "danger" : undefined}
+                    />
+                  </Tuile>
+                ))}
+              </div>
+            </section>
+
+            <Card className="border-border/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-sm">{t("audit.synthese.par_jour")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {synthese.par_jour.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("audit.synthese.rien")}</p>
+                ) : (
+                  <>
+                    <Legende
+                      items={[
+                        { tone: "bg-marque", label: t("audit.source.circuit") },
+                        { tone: "bg-marque-clair", label: t("audit.source.referentiel") },
+                      ]}
+                    />
+                    <BarresParJour jours={synthese.par_jour} title={t("audit.synthese.par_jour")} />
+                    {/* Les chiffres en texte, comme sous chaque graphique (DESIGN.md). */}
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground">
+                        {t("audit.synthese.detail_par_jour")}
+                      </summary>
+                      <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                        {synthese.par_jour.map((jour) => (
+                          <li key={jour.jour}>
+                            {t("audit.synthese.jour", {
+                              jour: formatDay(jour.jour),
+                              circuit: jour.circuit,
+                              referentiel: jour.referentiel,
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card className="border-border/60 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-sm">{t("audit.synthese.par_utilisateur")}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead scope="col">{t("audit.col_utilisateur")}</TableHead>
+                        <TableHead scope="col" className="text-right">{t("audit.synthese.evenements")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {synthese.par_utilisateur.map((ligne) => (
+                        <TableRow key={ligne.user}>
+                          <TableCell>
+                            <Link to={lien("circuit", { user: ligne.user })} className="font-medium hover:underline">
+                              {ligne.user}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{ligne.count}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+              <Card className="border-border/60 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-sm">{t("audit.synthese.par_pays")}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead scope="col">{t("commun.pays")}</TableHead>
+                        <TableHead scope="col" className="text-right">{t("audit.synthese.evenements")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {synthese.par_pays.map((ligne) => (
+                        <TableRow key={ligne.country}>
+                          <TableCell>{ligne.name}</TableCell>
+                          <TableCell className="text-right tabular-nums">{ligne.count}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+
+            <section aria-labelledby="audit-a-surveiller" className="space-y-2">
+              <h3 id="audit-a-surveiller" className="flex items-center gap-2 text-sm font-semibold">
+                <ShieldAlert className="h-4 w-4 text-statut-attente" aria-hidden />
+                {t("audit.synthese.a_surveiller")}
+              </h3>
+              <p className="text-xs text-muted-foreground">{t("audit.synthese.a_surveiller_aide")}</p>
+              {synthese.a_surveiller.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("audit.synthese.rien_a_surveiller")}</p>
+              ) : (
+                <ol className="space-y-2">
+                  {synthese.a_surveiller.map((entree) => (
+                    <Evenement key={`${entree.source}-${entree.id}`} entree={entree} />
+                  ))}
+                </ol>
+              )}
+            </section>
+          </>
+        )}
+      </div>
     </div>
   )
 }

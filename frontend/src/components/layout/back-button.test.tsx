@@ -48,4 +48,14 @@ describe("BackButton", () => {
 
     expect(screen.getByTestId("chemin")).toHaveTextContent("/")
   })
+
+  it("cède sa ligne à la barre latérale sur une section du menu, dès lg", () => {
+    afficher("/registre")
+    expect(screen.getByRole("button", { name: "Retour" }).parentElement).toHaveClass("lg:hidden")
+  })
+
+  it("reste en vue sur une fiche, que le menu ne nomme pas", () => {
+    afficher("/projets/3")
+    expect(screen.getByRole("button", { name: "Retour" }).parentElement).not.toHaveClass("lg:hidden")
+  })
 })

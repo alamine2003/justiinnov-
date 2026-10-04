@@ -25,18 +25,21 @@ export function DossiersTable({
   loading,
   colonne,
   vide,
+  className,
 }: {
   dossiers: Dossier[]
   loading: boolean
   colonne: "projet" | "type"
   /** Phrase de l'état vide : ce qu'il faut faire, déjà traduite. */
   vide: string
+  /** Pour une liste à hauteur d'écran : `defile` (DESIGN.md, « Hauteur »). */
+  className?: string
 }) {
   const { t } = useTranslation()
   // Dans un projet, le pays est celui du projet : la colonne le répéterait.
   const colonnes = colonne === "projet" ? 9 : 8
   return (
-    <div className="overflow-x-auto rounded-lg border border-border/60">
+    <div className={cn("overflow-x-auto rounded-lg border border-border/60", className)}>
       <Table>
         <TableHeader>
           <TableRow>

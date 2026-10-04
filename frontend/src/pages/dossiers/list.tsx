@@ -98,7 +98,7 @@ export function DossiersPage() {
   const changeStatus = (value: string) => changeFilter("status", value)
 
   return (
-    <div className="space-y-6">
+    <div className="ecran-plein space-y-6 court:space-y-3">
       <PageHeader
         title={t("dossiers.liste.titre")}
         description={t("dossiers.liste.description")}
@@ -164,9 +164,10 @@ export function DossiersPage() {
         />
       </div>
 
-      <Card className="border-border/60 shadow-sm">
-        <CardContent>
+      <Card className="remplit border-border/60 shadow-sm">
+        <CardContent className="remplit">
           <DossiersTable
+            className="defile"
             dossiers={dossiers}
             loading={query.loading}
             colonne="projet"

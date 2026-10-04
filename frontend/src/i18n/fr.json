@@ -873,7 +873,8 @@
       "vide_titre": "Aucune dépense sur la période",
       "vide_indication": "Changez d'année ou de pays pour voir une répartition.",
       "par_type_projet": "Par type de projet",
-      "par_type_dossier": "Par type de dossier"
+      "par_type_dossier": "Par type de dossier",
+      "axe": "Répartir par"
     },
     "alertes_soustitre": "les plus graves d'abord",
     "bandeau": {

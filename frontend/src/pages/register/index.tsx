@@ -126,7 +126,7 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="ecran-plein space-y-6 court:space-y-3">
       <PageHeader title={t("registre.titre")} description={t("registre.description")}>
         {/* Le menu reprend le pays du filtre ; il n'ajoute que l'exercice et le mois. */}
         <ExportMenu country={countryId} onError={setExportError} />
@@ -246,9 +246,9 @@ export function RegisterPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/60 shadow-sm">
-        <CardContent>
-          <div className="overflow-x-auto rounded-lg border border-border/60">
+      <Card className="remplit border-border/60 shadow-sm">
+        <CardContent className="remplit">
+          <div className="defile overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>
                 <TableRow>

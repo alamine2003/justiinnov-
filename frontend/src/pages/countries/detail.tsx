@@ -120,7 +120,7 @@ export function CountryDetailPage() {
   const devise = country.currency_symbol || country.currency
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 court:space-y-3">
       {query.error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />

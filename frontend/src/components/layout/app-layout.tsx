@@ -38,7 +38,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle"
 import { SUPERVISION_PATH, UserMenu } from "@/components/layout/user-menu"
 import { useAuth } from "@/context/use-auth"
 import { TOTP_PATH, platformClosed } from "@/lib/accounts"
-import { BRAND } from "@/lib/brand"
+import { BRAND, copyright } from "@/lib/brand"
 import { useInstallPrompt } from "@/lib/install-prompt"
 import { cn } from "@/lib/utils"
 
@@ -136,6 +136,33 @@ function Navigation({
         </div>
       ))}
     </>
+  )
+}
+
+/**
+ * Le pied de page, au bas de la barre latérale : identité, version, auteur
+ * restent sur chaque écran sans prendre de hauteur à la page.
+ */
+function PiedDuMenu({ replie }: { replie: boolean }) {
+  const { t } = useTranslation()
+  if (replie) {
+    return (
+      <p className="pb-1 text-center text-[10px] text-muted-foreground">
+        <span className="sr-only">{t("layout.version")} </span>
+        {BRAND.version}
+      </p>
+    )
+  }
+  return (
+    <div className="space-y-0.5 px-2 pb-1 text-[11px] leading-snug text-muted-foreground">
+      <p>{copyright()}</p>
+      <p>
+        {t("layout.version")} <span className="font-medium text-foreground">{BRAND.version}</span>
+      </p>
+      <p>
+        {t("layout.developpe_par")} <span className="font-medium text-foreground">{BRAND.developer}</span>
+      </p>
+    </div>
   )
 }
 
@@ -247,7 +274,8 @@ export function AppLayout() {
           >
             <Navigation groupes={groupes} replie={replie} />
           </nav>
-          <div className="shrink-0 border-t border-border/60 p-2">
+          <div className="shrink-0 space-y-2 border-t border-border/60 p-2">
+            <PiedDuMenu replie={replie} />
             <Button
               variant="ghost"
               size="sm"
@@ -382,7 +410,10 @@ export function AppLayout() {
 
         {/* `min-h-0 flex-1` maintient le pied de page en bas même sur un écran
             court, sans le coller au contenu sur un écran long. */}
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+        {/* `--hauteur-page` : la hauteur que laissent l'en-tête (4 rem et son
+          filet de 1 px) et la marge de la page. Un écran qui doit tenir
+          sans défiler (le Pilotage) s'y cale dès `lg`. */}
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 2xl:max-w-[96rem] [--hauteur-page:calc(100dvh-7rem-1px)] sm:px-6 court:py-4 court:[--hauteur-page:calc(100dvh-6rem-1px)]">
           {/* Retour en haut de chaque page, sauf l'accueil ; pas quand la
               plateforme est fermée — il n'y a alors nulle part où revenir. */}
           {!closed && <BackButton />}
@@ -394,7 +425,7 @@ export function AppLayout() {
           )}
           <Outlet />
         </main>
-        <AppFooter />
+        <AppFooter className={avecMenu ? "lg:hidden" : undefined} />
       </div>
     </div>
   )

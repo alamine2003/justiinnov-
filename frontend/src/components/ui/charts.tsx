@@ -79,6 +79,8 @@ interface JaugeDoubleProps {
   /** Légende sous le taux, au centre. */
   caption: string
   title: string
+  /** Taille, 132 px par défaut ; le dessin suit (`viewBox`). */
+  className?: string
 }
 
 /**
@@ -92,11 +94,12 @@ export function JaugeDouble({
   label,
   caption,
   title,
+  className,
 }: JaugeDoubleProps) {
   const execution = ratio(Number(executionRate ?? 0), 1)
   const justification = ratio(Number(justificationRate ?? 0), 1)
   return (
-    <div className="relative h-[132px] w-[132px] shrink-0">
+    <div className={cn("relative h-[132px] w-[132px] shrink-0", className)}>
       <span className="sr-only">{title}</span>
       <svg viewBox="0 0 132 132" className="h-full w-full" aria-hidden>
         <circle
