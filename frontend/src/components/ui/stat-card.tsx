@@ -18,6 +18,7 @@ export function StatCard({
   icon: Icon,
   tone,
   children,
+  className,
 }: {
   label: string
   value: string | number
@@ -26,6 +27,8 @@ export function StatCard({
   /** Teinte du chiffre et de la bordure : réservée à un écart, un dépassement. */
   tone?: "danger"
   children?: ReactNode
+  /** `h-full` dans une grille : les tuiles d'une rangée gardent une hauteur. */
+  className?: string
 }) {
   return (
     <Card
@@ -33,6 +36,7 @@ export function StatCard({
         // Écran bas : la tuile se resserre (DESIGN.md, « Hauteur d'écran »).
         "shadow-sm court:gap-2 court:py-3 court:[--card-spacing:--spacing(3)]",
         tone === "danger" ? "border-destructive/30" : "border-border/60",
+        className,
       )}
     >
       <CardHeader className="pb-2">

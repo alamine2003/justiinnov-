@@ -172,11 +172,12 @@ un graphique défile, dans sa propre boîte.
 Dès `lg`, **les écrans principaux tiennent dans la fenêtre** : la page ne
 défile pas, c'est son tableau ou son détail qui défile, dans sa boîte, sous
 un en-tête et des filtres qui restent en vue. Ce sont Pilotage, Projets et
-la fiche d'un projet, Dossiers, Registre, Audit, Budgets et Configuration.
+la fiche d'un projet, Dossiers et la fiche d'un dossier, Registre, Audit,
+Budgets et Configuration.
 `scripts/screenshot.ts` le vérifie à 1 366 × 768, 1 366 × 657 (le même
 portable, barre du navigateur déduite), 1 024 × 768 et 1 920 × 1 080. La
-fiche d'un dossier, celle d'un pays et l'import, formulaires et détails
-longs, gardent le défilement de page. Sous `lg`, et sous 36 rem (576 px)
+fiche d'un pays et l'import, formulaires et détails longs, gardent le
+défilement de page. Sous `lg`, et sous 36 rem (576 px)
 de fenêtre, la page défile normalement : le contenu y déborderait de
 boîtes plafonnées, hors du cadre de sa carte, et la barre latérale partirait
 avec le défilement.
@@ -216,7 +217,8 @@ avec le défilement.
   rétrécissent jamais — une carte, `overflow-hidden`, s'écrasait sous son
   contenu (les filtres du registre l'ont fait).
 - **Un tableau de bord long** (vue d'ensemble de l'audit, budgets,
-  sections de la configuration, historique d'un projet) : ce qui situe
+  sections de la configuration, historique d'un projet, lignes d'un dossier
+  et leur rail) : ce qui situe
   (en-tête, période, indicateurs, onglets) reste en vue, le reste va dans
   un `defile -mx-1 px-1 pb-1` — la marge rend aux cartes l'ombre et
   l'anneau de focus que le défilement rognerait.
@@ -497,8 +499,10 @@ au contenu. Il reste partout ailleurs : sur les fiches, sur `/dossiers`
 
 En haut à droite, à côté du sélecteur de thème et du menu du compte —
 un bouton à icône propre (`language-toggle.tsx`), pas une entrée du menu :
-un `DropdownMenuRadioGroup` avec deux choix, **Français** et **English**,
-chacun écrit dans sa propre langue et porteur de son attribut `lang`. Le choix est enregistré sur
+un `DropdownMenuRadioGroup` avec deux choix, **Français** et **English**.
+Le bouton montre l'icône et le code de la langue courante (« FR », « EN »),
+l'icône seule se reconnaissant mal ; son nom accessible reste « Langue de
+l'interface ». Les deux choix sont écrits chacun dans sa propre langue et porteur de son attribut `lang`. Le choix est enregistré sur
 le profil (`PATCH /api/me/`, champ `language`) et appliqué sans
 rechargement ; l'en-tête `Accept-Language` des requêtes suivantes le suit,
 et les notifications comme les e-mails arrivent dans cette langue.
@@ -553,16 +557,23 @@ l'état (`totp_confirmed`) ; `platformClosed` et `totpEnrolmentRequired`
     `statut-attente`, pas de « Plus tard », et la plateforme reste
     **fermée** — aucun menu — tant que l'écran n'est pas passé, après
     celui du mot de passe provisoire.
-- **Vérification** (chaque connexion d'un compte enrôlé) : le champ
-  « Code » est sur l'écran de connexion lui-même, toujours visible et
-  **facultatif**, avec l'aide « Uniquement si vous avez activé la double
-  authentification » — `POST /api/token-auth/` prend `{username, password,
-  code}` et répond `400 totp_required` sans code valide à un compte
-  enrôlé ; le champ devient alors exigé, sans perdre l'identifiant ni le
-  mot de passe. Le bouton « Se connecter », et un repli
-  `<details>` « Je n'ai plus accès à mon application » qui n'ouvre rien
-  d'automatique : il explique que seul un administrateur peut réinitialiser
-  l'enrôlement, et à qui s'adresser.
+- **Vérification** (chaque connexion d'un compte enrôlé) : **en deux
+  temps**. L'écran de connexion ne demande d'abord que l'identifiant et le
+  mot de passe ; `POST /api/token-auth/` prend `{username, password, code}`
+  et répond `400 totp_required` à un compte enrôlé sans code valide — après
+  avoir vérifié le mot de passe. Le champ « Code » n'apparaît qu'alors,
+  exigé et avec le focus, sous l'aide « Mot de passe accepté. Saisissez le
+  code… », sans perdre l'identifiant ni le mot de passe ; un autre
+  identifiant repart du premier temps. Montré à tous, le champ laissait
+  croire à un compte non enrôlé qu'il lui manquait quelque chose (audit UX
+  du 4 octobre 2026). Sous le champ, un repli `<details>` « Je n'ai plus
+  accès à mon application » qui n'ouvre rien d'automatique : il explique
+  que seul un administrateur peut réinitialiser l'enrôlement, et à qui
+  s'adresser.
+- **L'écran de connexion** ne présente que ce qui sert à entrer : l'aide
+  utile à la tâche en `text-sm` (code, « Mot de passe oublié ? »), les
+  mentions secondaires en `text-xs` ; l'installation de l'application se
+  propose après la connexion, dans le menu du compte.
 
 Un code refusé s'affiche en `<FormError>` sans vider le champ ; on ne
 désactive pas le bouton pour un champ vide (règle d'accessibilité

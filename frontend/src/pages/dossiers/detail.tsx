@@ -254,7 +254,7 @@ export function DossierDetailPage() {
   }
 
   return (
-    <div className="space-y-6 court:space-y-3">
+    <div className="ecran-plein space-y-6 court:space-y-3">
       {(query.error || actionError) && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -396,10 +396,12 @@ export function DossierDetailPage() {
 
       {/* Les lignes à gauche, les preuves et les rectifications dans un rail
           à droite : on justifie une ligne en regardant la pièce. Un rail
-          vide ne garde pas sa colonne : les lignes prennent la largeur. */}
+          vide ne garde pas sa colonne : les lignes prennent la largeur.
+          Dès `lg`, ce bloc défile sous l'en-tête, la frise et les totaux,
+          qui restent en vue (DESIGN.md, « Hauteur d'écran »). */}
       <div
         className={cn(
-          "grid gap-4",
+          "defile -mx-1 grid gap-4 px-1 pb-1",
           railOccupe && "xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start",
         )}
       >

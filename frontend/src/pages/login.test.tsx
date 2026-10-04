@@ -45,24 +45,20 @@ describe("connexion avec double authentification", () => {
     login.mockReset()
   })
 
-  it("montre le champ du code dès l'écran de connexion, facultatif tant que le serveur ne l'exige pas", () => {
+  it("ne montre pas le champ du code au premier temps", () => {
     afficher()
 
-    const champ = screen.getByLabelText("Code de double authentification")
-    expect(champ).toBeInTheDocument()
-    expect(champ).not.toBeRequired()
+    expect(screen.queryByLabelText("Code de double authentification")).toBeNull()
   })
 
-  it("se connecte en une seule fois quand le code est saisi d'emblée", async () => {
+  it("connecte en un temps un compte sans double authentification", async () => {
     login.mockResolvedValueOnce(undefined)
     afficher()
 
-    fireEvent.change(screen.getByLabelText("Code de double authentification"), {
-      target: { value: "654321" },
-    })
     saisirIdentifiants()
 
-    await waitFor(() => expect(login).toHaveBeenCalledWith("togo.innov", "secret", "654321"))
+    await waitFor(() => expect(login).toHaveBeenCalledWith("togo.innov", "secret", undefined))
+    expect(screen.queryByLabelText("Code de double authentification")).toBeNull()
   })
 
   it("exige le code et garde les identifiants saisis quand le serveur le réclame", async () => {
@@ -87,6 +83,8 @@ describe("connexion avec double authentification", () => {
 
     saisirIdentifiants()
     const champ = await screen.findByLabelText("Code de double authentification")
+    // Le champ apparaît avec le focus : il ne reste que le code à saisir.
+    await waitFor(() => expect(champ).toHaveFocus())
     fireEvent.change(champ, { target: { value: "123456" } })
     fireEvent.click(screen.getByRole("button", { name: "Se connecter" }))
 
@@ -139,5 +137,35 @@ describe("connexion refusée par le profil", () => {
       "Aucun profil n'est rattaché à ce compte.",
     )
     expect(screen.getByLabelText("Identifiant")).toHaveValue("togo.innov")
+  })
+
+  it("repart du premier temps quand l'identifiant change", async () => {
+    login.mockRejectedValueOnce(refusTotp("Ce champ est obligatoire."))
+    afficher()
+
+    saisirIdentifiants()
+    await screen.findByLabelText("Code de double authentification")
+    fireEvent.change(screen.getByLabelText("Identifiant"), { target: { value: "autre.compte" } })
+
+    expect(screen.queryByLabelText("Code de double authentification")).toBeNull()
+  })
+})
+
+/**
+ * Audit UX du 4 octobre 2026 : la connexion ne présente que ce qui sert à
+ * entrer. L'installation se propose après, dans le menu du compte ; la
+ * langue se lit sans deviner l'icône.
+ */
+describe("écran de connexion", () => {
+  it("ne présente pas l'installation de l'application", () => {
+    afficher()
+
+    expect(screen.queryByText(/Windows|macOS/)).toBeNull()
+  })
+
+  it("nomme la langue courante à côté de son icône", () => {
+    afficher()
+
+    expect(screen.getByRole("button", { name: "Langue de l'interface" })).toHaveTextContent("FR")
   })
 })

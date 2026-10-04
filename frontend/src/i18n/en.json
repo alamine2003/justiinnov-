@@ -281,8 +281,7 @@
     "indisponibles": "Notifications unavailable"
   },
   "pwa": {
-    "installer": "Install the app",
-    "note_connexion": "Available as a desktop app on Windows and macOS: install it from Chrome or Edge to open it outside the browser."
+    "installer": "Install the app"
   },
   "ui": {
     "tronque_titre": "Incomplete list",
@@ -290,7 +289,7 @@
   },
   "auth": {
     "connexion": "Sign in",
-    "sous_titre": "Sign in to access your scope.",
+    "sous_titre": "Sign in to access your budgets and expenses.",
     "identifiant": "Username",
     "identifiant_exemple": "firstname.lastname",
     "mot_de_passe": "Password",
@@ -308,7 +307,7 @@
       "justifiee_titre": "Every expense justified",
       "justifiee_texte": "Date, place, beneficiary and supporting document, for every amount.",
       "trace_titre": "Nothing gets lost",
-      "trace_texte": "A declared expense is final and every action is recorded."
+      "trace_texte": "A submitted expense is never changed silently: every correction goes through a justified request, and every action is recorded."
     },
     "identifiants_requis": "Enter your username and password.",
     "identifiants_invalides": "Invalid credentials",
@@ -325,10 +324,10 @@
     },
     "totp": {
       "code": "Two-factor authentication code",
-      "aide": "Enter the six-digit code shown by your authenticator app.",
+      "aide": "Password accepted. Enter the six-digit code shown by your authenticator app.",
       "code_requis": "Enter the code from your authenticator app.",
       "plus_acces": "I no longer have access to my app",
-      "plus_acces_texte": "Only a headquarters administrator can reset your two-factor authentication. Contact them: a new enrolment will be offered at your next sign-in.",
+      "plus_acces_texte": "Only a headquarters administrator can reset your two-factor authentication. Contact them: at your next sign-in, you will set up your authenticator app again.",
       "a_enroler_titre": "Two-factor authentication to set up",
       "a_enroler_texte": "A password alone is not enough to commit your signature. Link an authenticator app to your account: the platform stays closed until then.",
       "enroler": "Link your authenticator app",
@@ -342,7 +341,6 @@
       "code_six_chiffres": "The code has six digits.",
       "enrolement_impossible": "Unable to start enrolment",
       "confirmation_impossible": "Unable to confirm",
-      "aide_connexion": "Only if you have enabled two-factor authentication.",
       "volontaire_titre": "Enable two-factor authentication",
       "volontaire_texte": "A one-time code will be added to your password at every sign-in. It is optional until headquarters requires it, and recommended for anyone who reviews or justifies expenses.",
       "plus_tard": "Later"

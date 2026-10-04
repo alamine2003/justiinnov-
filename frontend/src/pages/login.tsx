@@ -1,13 +1,11 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
 import {
-  Download,
   Eye,
   EyeOff,
   FileCheck2,
   Loader2,
   Lock,
-  MonitorDown,
   ShieldCheck,
   Wallet,
 } from "lucide-react"
@@ -22,7 +20,6 @@ import { ThemeToggle } from "@/components/layout/theme-toggle"
 import { useAuth } from "@/context/use-auth"
 import { ApiError, hasFlag } from "@/lib/api"
 import { BRAND, copyright } from "@/lib/brand"
-import { useInstallPrompt } from "@/lib/install-prompt"
 
 /** Ce que la plateforme garantit, rappelé au moment de la connexion. */
 const PROMESSES = [
@@ -35,14 +32,20 @@ export function LoginPage() {
   const { t } = useTranslation()
   const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
-  const { available: installable, install } = useInstallPrompt()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [code, setCode] = useState("")
-  // Le champ du code est toujours là, facultatif : un compte enrôlé se
-  // connecte en une seule fois, un compte sans double authentification le
-  // laisse vide. Il ne devient exigé que lorsque le serveur le réclame.
+  // Connexion en deux temps : identifiant et mot de passe d'abord ; le champ
+  // du code n'apparaît que lorsque le serveur le réclame (`totp_required`),
+  // pour un compte enrôlé. Montré à tous, il laissait croire à un compte non
+  // enrôlé qu'il lui manquait quelque chose. Le contrôle reste au serveur.
   const [totpRequired, setTotpRequired] = useState(false)
+  const champCode = useRef<HTMLInputElement>(null)
+  // Le champ vient d'apparaître à la suite de l'envoi : le focus y va, la
+  // personne n'a plus que le code à saisir.
+  useEffect(() => {
+    if (totpRequired) champCode.current?.focus()
+  }, [totpRequired])
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -182,7 +185,15 @@ export function LoginPage() {
               <Input
                 id="username"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value)
+                  // Le code demandé l'était pour un compte : un autre
+                  // identifiant repart du premier temps.
+                  if (totpRequired) {
+                    setTotpRequired(false)
+                    setCode("")
+                  }
+                }}
                 placeholder={t("auth.identifiant_exemple")}
                 autoComplete="username"
                 required
@@ -218,7 +229,8 @@ export function LoginPage() {
               </div>
             </div>
 
-            <div className="grid gap-2">
+            {totpRequired && (
+              <div className="grid gap-2">
                 <Label htmlFor="totp-code">{t("auth.totp.code")}</Label>
                 <Input
                   id="totp-code"
@@ -228,21 +240,21 @@ export function LoginPage() {
                   maxLength={6}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  required={totpRequired}
+                  required
+                  ref={champCode}
                   className="h-10 font-mono tracking-widest"
                 />
-                <p className="text-xs text-muted-foreground">
-                  {totpRequired ? t("auth.totp.aide") : t("auth.totp.aide_connexion")}
-                </p>
+                <p className="text-sm text-muted-foreground">{t("auth.totp.aide")}</p>
                 {/* Rien d'automatique : seul un administrateur peut
                     réinitialiser l'enrôlement, et le lien le dit. */}
-                <details className="text-xs text-muted-foreground">
+                <details className="text-sm text-muted-foreground">
                   <summary className="cursor-pointer underline underline-offset-4 hover:text-foreground">
                     {t("auth.totp.plus_acces")}
                   </summary>
                   <p className="mt-1">{t("auth.totp.plus_acces_texte")}</p>
                 </details>
               </div>
+            )}
 
             <Button
               type="submit"
@@ -254,22 +266,11 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-xs text-muted-foreground">{t("auth.oubli")}</p>
+          <p className="mt-8 text-center text-sm text-muted-foreground">{t("auth.oubli")}</p>
 
-          {/* Application de bureau : la note reste discrète, et le bouton
-              n'apparaît que si le navigateur sait installer la page. */}
-          <div className="mt-6 flex items-start gap-2 rounded-lg border border-border/60 bg-card/60 p-3 text-xs text-muted-foreground">
-            <MonitorDown className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <div className="space-y-2">
-              <p>{t("pwa.note_connexion")}</p>
-              {installable && (
-                <Button variant="outline" size="xs" onClick={() => void install()}>
-                  <Download className="mr-1 h-3.5 w-3.5" aria-hidden />
-                  {t("pwa.installer")}
-                </Button>
-              )}
-            </div>
-          </div>
+          {/* L'installation de l'application de bureau se propose après la
+              connexion (menu du compte) : ici, elle retardait l'accès au
+              travail. */}
 
           {/* Le panneau porte déjà ces mentions sur grand écran. */}
           <p className="mt-6 text-center text-xs text-muted-foreground/70 lg:hidden">

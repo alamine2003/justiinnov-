@@ -60,7 +60,7 @@ function Tuile({ to, children }: { to?: string; children: ReactNode }) {
   return (
     <Link
       to={to}
-      className="block rounded-xl transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="block h-full rounded-xl transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {children}
     </Link>
@@ -128,6 +128,7 @@ export function VueDEnsemble() {
                 {TUILES_CIRCUIT.map(({ cle, filtre, sensible }) => (
                   <Tuile key={cle} to={filtre && lien("circuit", filtre)}>
                     <StatCard
+                      className="h-full"
                       label={t(`audit.synthese.compteurs.${cle}`)}
                       value={synthese.compteurs[cle]}
                       tone={sensible && synthese.compteurs[cle] > 0 ? "danger" : undefined}
@@ -145,6 +146,7 @@ export function VueDEnsemble() {
                 {TUILES_REFERENTIEL.map(({ cle, filtre, sensible }) => (
                   <Tuile key={cle} to={lien("referentiel", filtre)}>
                     <StatCard
+                      className="h-full"
                       label={t(`audit.synthese.compteurs.${cle}`)}
                       value={synthese.compteurs[cle]}
                       tone={sensible && synthese.compteurs[cle] > 0 ? "danger" : undefined}

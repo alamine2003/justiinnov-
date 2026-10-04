@@ -388,8 +388,13 @@ async function main() {
   const fiche = await hq.evaluate(() =>
     [...document.querySelectorAll("main a")].map((a) => a.getAttribute("href")).find((h) => h && /^\/projets\/\d+$/.test(h)),
   )
+  await goto(hq, "/dossiers")
+  const ficheDossier = await hq.evaluate(() =>
+    [...document.querySelectorAll("main a")].map((a) => a.getAttribute("href")).find((h) => h && /^\/dossiers\/\d+$/.test(h)),
+  )
   const ecrans = ["/", "/projets", "/dossiers", "/registre", "/audit", "/budgets", "/configuration", "/countries"]
   if (fiche) ecrans.push(fiche)
+  if (ficheDossier) ecrans.push(ficheDossier)
   // 1 366 × 657 : un portable 1 366 × 768, barre du navigateur déduite.
   for (const [largeur, hauteur] of [[1366, 768], [1366, 657], [1024, 768], [1920, 1080]]) {
     await hq.setViewportSize({ width: largeur, height: hauteur })

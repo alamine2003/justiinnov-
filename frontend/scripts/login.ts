@@ -52,34 +52,42 @@ async function codeFrais(secret: string) {
   return generate({ secret })
 }
 
-/** Remplit le formulaire, code de double authentification compris. */
+/**
+ * Se connecte en deux temps, comme une personne : identifiant et mot de
+ * passe, puis le code si le serveur le demande (le champ n'apparaît qu'à ce
+ * moment-là, compte enrôlé).
+ */
 export async function signIn(page: Page, base: string, account: Credentials) {
   await page.goto(`${base}/login`, { waitUntil: "networkidle" })
   await page.fill("#username", account.user)
   await page.fill("#password", account.password)
-  // Le champ du code est toujours présent : un compte enrôlé se connecte en
-  // une seule fois, sans le détour par un refus du serveur.
-  if (account.totpSecret) {
-    await page.fill("#totp-code", await codeFrais(account.totpSecret))
-  }
   await page.click("button[type=submit]")
 
-  try {
-    await page.waitForURL(HORS_CONNEXION, { timeout: 15000 })
-    return
-  } catch {
-    // Le serveur a refusé : soit le code a expiré entre le calcul et l'envoi
-    // (fenêtre de trente secondes), soit le compte n'a pas de secret connu.
-  }
+  const champCode = page.locator("#totp-code")
+  // Chaque attente rattrape son propre échec : la perdante expire après
+  // coup, et un rejet sans gestionnaire arrêterait le script.
+  const issue = await Promise.race([
+    page.waitForURL(HORS_CONNEXION, { timeout: 15000 }).then(() => "connecte" as const, () => null),
+    champCode.waitFor({ state: "visible", timeout: 15000 }).then(() => "code" as const, () => null),
+  ])
+  if (issue === "connecte") return
+  if (issue === null) throw new Error(`La connexion de ${account.user} n'a pas abouti.`)
   if (!account.totpSecret) {
     throw new Error(
-      `La connexion de ${account.user} n'a pas abouti : définissez ` +
-        `SHOT_${account.prefix}_TOTP_SECRET si le compte est enrôlé.`,
+      `La connexion de ${account.user} demande un code : définissez ` +
+        `SHOT_${account.prefix}_TOTP_SECRET pour ce compte enrôlé.`,
     )
   }
-  const bouton = page.locator("button[type=submit]")
-  await bouton.waitFor({ state: "visible" })
-  await page.fill("#totp-code", await codeFrais(account.totpSecret))
-  await bouton.click()
-  await page.waitForURL(HORS_CONNEXION, { timeout: 15000 })
+  // Un code peut expirer entre le calcul et l'envoi (fenêtre de trente
+  // secondes) : un second essai, avec un code frais, suffit.
+  for (let essai = 0; essai < 2; essai++) {
+    await champCode.fill(await codeFrais(account.totpSecret))
+    await page.click("button[type=submit]")
+    try {
+      await page.waitForURL(HORS_CONNEXION, { timeout: 15000 })
+      return
+    } catch {
+      if (essai === 1) throw new Error(`Le code de ${account.user} a été refusé deux fois.`)
+    }
+  }
 }
