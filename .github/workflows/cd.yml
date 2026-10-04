@@ -130,15 +130,16 @@ jobs:
 
       - name: Étiquette déployée
         id: tag
-        # Le SHA court identifie le code sans ambiguïté ; le nom du tag,
-        # quand il y en a un, sert aux humains. La version affichée dans
-        # l'interface (`version`) est celle de `package.json` suivie du SHA
-        # court, **la même sur `main` et sur le tag** : les deux livraisons
-        # d'un même commit publient la même étiquette `sha-…`, et la
-        # dernière arrivée l'emporte. Quand le tag y posait son nom et
-        # `main` celui du paquet, la production v1.3.1 a affiché
-        # « v1.0.6+55a5dcbbaa1b » (28 septembre 2026). Un tag qui ne
-        # correspond pas à `package.json` est donc refusé : relever la
+        # Le SHA court identifie le code sans ambiguïté : il nomme l'image
+        # (`sha-…`) et figure au résumé de la livraison. La version affichée
+        # dans l'interface (`version`) est celle de `package.json`, seule
+        # (décision 98, revue le 4 octobre 2026 : « 2.0.0+ae3f2c1a5545 »
+        # ne disait rien aux utilisateurs) — **la même sur `main` et sur le
+        # tag** : les deux livraisons d'un même commit publient la même
+        # étiquette `sha-…`, et la dernière arrivée l'emporte. Quand le tag
+        # y posait son nom et `main` celui du paquet, la production v1.3.1
+        # a affiché « v1.0.6+55a5dcbbaa1b » (28 septembre 2026). Un tag qui
+        # ne correspond pas à `package.json` est donc refusé : relever la
         # version du paquet d'abord, taguer ensuite.
         env:
           REF_NAME: ${{ github.ref_name }}
@@ -151,7 +152,7 @@ jobs:
             exit 1
           fi
           echo "tag=sha-${sha}" >> "$GITHUB_OUTPUT"
-          echo "version=${paquet}+${sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${paquet}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -203,7 +204,7 @@ jobs:
           context: frontend
           target: runtime
           # La version affichée en pied de page vient d'ici (voir
-          # `frontend/Dockerfile`) : celle de `package.json` et le SHA.
+          # `frontend/Dockerfile`) : celle de `package.json`, seule.
           build-args: |
             APP_VERSION=${{ steps.tag.outputs.version }}
           push: true

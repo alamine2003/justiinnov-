@@ -2204,9 +2204,10 @@ export interface components {
          *     * `downloaded` - Téléchargement
          *     * `imported` - Import Excel
          *     * `renamed` - Renommage
+         *     * `purged` - Remise à zéro des essais
          * @enum {string}
          */
-        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported" | "renamed"
+        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported" | "renamed" | "purged"
         AuditLog: {
             readonly id: number
             /** Utilisateur */
@@ -5376,8 +5377,9 @@ export interface operations {
                  *     * `downloaded` - Téléchargement
                  *     * `imported` - Import Excel
                  *     * `renamed` - Renommage
+                 *     * `purged` - Remise à zéro des essais
                  */
-                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "renamed" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
+                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "purged" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "renamed" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
                 country?: number
                 debut?: string
                 fin?: string

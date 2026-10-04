@@ -349,7 +349,7 @@ La tuile vectorielle `favicon.svg` fait foi : les PNG s'en déduisent par
 La **version** (pied de page, pastille de l'en-tête, écran de connexion)
 vient de `BRAND.version`, figée à la construction (`vite.config.ts`,
 `define`) : `APP_VERSION`, que la livraison pose à la version de
-`package.json` suivie du SHA court, sinon `package.json` seul. On ne
+`package.json`, seule, sans SHA (décision 98). On ne
 l'écrit nulle part ailleurs. Pour une nouvelle version, on relève
 `package.json` (`npm version X.Y.Z --no-git-tag-version`), on fusionne,
 puis on tague ce commit ; la livraison refuse un tag `vX.Y.Z` que

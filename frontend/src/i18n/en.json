@@ -198,7 +198,8 @@
       "proof_incomplete": "Incomplete document",
       "proof_to_review": "Document to review",
       "imported": "Import",
-      "renamed": "Rename"
+      "renamed": "Rename",
+      "purged": "Test data reset"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",

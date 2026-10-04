@@ -147,6 +147,8 @@ export const ACTION_STYLE: Record<string, string> = {
   rectified: ATTENTE,
   imported: INFO,
   renamed: INFO,
+  // Une seule fois, avant l'ouverture (décision 113).
+  purged: DANGER,
   // Historique des comptes (onglet « Référentiel et comptes » de l'audit).
   login: ARCHIVE,
   logout: ARCHIVE,

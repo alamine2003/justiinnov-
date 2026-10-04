@@ -198,7 +198,8 @@
       "proof_incomplete": "Justificatif incomplet",
       "proof_to_review": "Justificatif à contrôler",
       "imported": "Import",
-      "renamed": "Renommage"
+      "renamed": "Renommage",
+      "purged": "Remise à zéro des essais"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",

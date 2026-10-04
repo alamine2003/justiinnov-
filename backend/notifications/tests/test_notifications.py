@@ -359,12 +359,18 @@ class ConservationTests(NotificationTestCase):
 
     def test_aucune_commande_ne_supprime(self):
         """Pièces, dossiers, dépenses, notifications, journal : conservation
-        illimitée. Une commande qui supprimerait serait attrapée ici."""
+        illimitée. Une commande qui supprimerait serait attrapée ici.
+
+        Une seule exception, nommée : la remise à zéro des essais, une
+        fois, avant l'ouverture (décision 113, ``test_remise_a_zero``).
+        """
+        exceptions = {"remise_a_zero_des_essais.py"}
         racine = Path(__file__).resolve().parents[2]
         commandes = [
             source
             for app in ("reporting", "notifications", "core", "expenses")
             for source in (racine / app / "management" / "commands").glob("*.py")
+            if source.name not in exceptions
         ]
         self.assertTrue(commandes)
         for source in commandes:
