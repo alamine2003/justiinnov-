@@ -97,7 +97,7 @@ export function VueDEnsemble() {
       <BarreDePeriode lire={lire} changer={changer} />
 
       {/* La synthèse est un tableau de bord long : dès `lg`, elle défile
-          sous la période, qui reste en vue (DESIGN.md, « Hauteur »). La
+          sous la période, qui reste en vue (DESIGN.md, « Hauteur d'écran »). La
           marge rend aux cartes l'ombre et l'anneau de focus que le
           défilement rognerait. */}
       <div className="defile -mx-1 space-y-6 px-1 pb-1 court:space-y-4">

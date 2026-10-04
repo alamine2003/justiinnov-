@@ -227,6 +227,11 @@ export function AppLayout() {
         },
       ].filter((groupe) => groupe.entrees.length > 0)
   const avecMenu = groupes.length > 0
+  const dansLeMenu = groupes.some((groupe) => groupe.entrees.some((entree) => entree.to === location.pathname))
+  // Le bouton « Retour » occupe une ligne (h-7 et sa marge) au-dessus de la
+  // page dès `lg`, sauf sur l'accueil et les entrées du menu : la hauteur
+  // laissée à la page la retranche (`--retour`).
+  const retourDesLg = !closed && location.pathname !== "/" && !dansLeMenu
 
   const basculerRepli = () => {
     setReplie((avant) => {
@@ -408,15 +413,19 @@ export function AppLayout() {
           </SheetContent>
         </Sheet>
 
-        {/* `min-h-0 flex-1` maintient le pied de page en bas même sur un écran
-            court, sans le coller au contenu sur un écran long. */}
         {/* `--hauteur-page` : la hauteur que laissent l'en-tête (4 rem et son
-          filet de 1 px) et la marge de la page. Un écran qui doit tenir
-          sans défiler (le Pilotage) s'y cale dès `lg`. */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 2xl:max-w-[96rem] [--hauteur-page:calc(100dvh-7rem-1px)] sm:px-6 court:py-4 court:[--hauteur-page:calc(100dvh-6rem-1px)]">
+            filet de 1 px), la marge de `<main>` et le bouton « Retour ».
+            Pilotage, listes et fiches s'y calent dès `lg` (DESIGN.md,
+            « Hauteur d'écran »). */}
+        <main
+          className={cn(
+            "mx-auto w-full max-w-7xl flex-1 px-4 py-6 2xl:max-w-[96rem] [--hauteur-page:calc(100dvh-7rem-1px-var(--retour,0px))] sm:px-6 court:py-4 court:[--hauteur-page:calc(100dvh-6rem-1px-var(--retour,0px))]",
+            retourDesLg && "[--retour:2.75rem] court:[--retour:2.25rem]",
+          )}
+        >
           {/* Retour en haut de chaque page, sauf l'accueil ; pas quand la
               plateforme est fermée — il n'y a alors nulle part où revenir. */}
-          {!closed && <BackButton />}
+          {!closed && <BackButton dansLeMenu={dansLeMenu} />}
           {notice && (
             <Alert className="mb-6">
               <Info className="h-4 w-4" />

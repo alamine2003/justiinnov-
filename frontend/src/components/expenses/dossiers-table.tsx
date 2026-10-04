@@ -32,7 +32,7 @@ export function DossiersTable({
   colonne: "projet" | "type"
   /** Phrase de l'état vide : ce qu'il faut faire, déjà traduite. */
   vide: string
-  /** Pour une liste à hauteur d'écran : `defile` (DESIGN.md, « Hauteur »). */
+  /** Pour une liste à hauteur d'écran : `defile` (DESIGN.md, « Hauteur d'écran »). */
   className?: string
 }) {
   const { t } = useTranslation()

@@ -38,7 +38,7 @@ export function ConfigurationPage() {
       />
 
       {/* Dès `lg`, les onglets restent en vue et la section défile
-          dessous (DESIGN.md, « Hauteur »). */}
+          dessous (DESIGN.md, « Hauteur d'écran »). */}
       <Tabs
         className="remplit"
         value={onglet}

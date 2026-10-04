@@ -13,16 +13,16 @@ import { cn } from "@/lib/utils"
  * et, sinon (page ouverte directement, lien reçu, favori), à la liste de
  * la section : un retour qui sortirait de l'application n'en est pas un.
  */
-export function BackButton() {
+export function BackButton({ dansLeMenu = false }: { dansLeMenu?: boolean }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
   if (pathname === "/") return null
-  // Une section du menu (`/registre`, `/audit`…) n'a pour parent que
-  // l'accueil : dès `lg`, la barre latérale y mène déjà, et la ligne du
-  // bouton se rend au contenu (DESIGN.md, « Hauteur »).
-  const section = parentPath(pathname) === "/"
+  // Une entrée du menu (`/registre`, `/audit`…, que `AppLayout` nomme) :
+  // dès `lg`, la barre latérale, toujours visible, y mène déjà, et la ligne
+  // du bouton se rend au contenu (DESIGN.md, « Hauteur d'écran »).
+  // `/dossiers`, que le menu ne propose plus, garde son bouton.
 
   const goBack = () => {
     const state = window.history.state as { idx?: number } | null
@@ -31,7 +31,7 @@ export function BackButton() {
   }
 
   return (
-    <div className={cn("mb-4 flex court:mb-2", section && "lg:hidden")}>
+    <div className={cn("mb-4 flex court:mb-2", dansLeMenu && "lg:hidden")}>
       <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground" onClick={goBack}>
         <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
         {t("nav.retour")}

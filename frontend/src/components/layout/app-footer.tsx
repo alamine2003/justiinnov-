@@ -14,7 +14,7 @@ export function AppFooter({ className }: { className?: string }) {
   const { t } = useTranslation()
   return (
     <footer className={cn("mt-12 border-t border-border/60 bg-card/40", className)}>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-6 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto flex w-full max-w-7xl flex-col 2xl:max-w-[96rem] gap-2 px-6 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <p>
           {copyright()}{" "}
           <span className="text-muted-foreground/70">{t("app.tagline")}.</span>

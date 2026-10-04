@@ -25,12 +25,12 @@ vi.mock("@/components/layout/language-toggle", () => ({ LanguageToggle: () => nu
 vi.mock("@/components/layout/theme-toggle", () => ({ ThemeToggle: () => null }))
 vi.mock("@/lib/install-prompt", () => ({ useInstallPrompt: () => ({ available: false, install: vi.fn() }) }))
 
-function monter() {
+function monter(chemin = "/") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[chemin]}>
       <Routes>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<p>Accueil</p>} />
+          <Route path="*" element={<p>Page</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -106,5 +106,22 @@ describe("AppLayout — barre latérale", () => {
     monter()
 
     expect(screen.getByRole("banner")).toHaveTextContent("Siège — tous pays")
+  })
+
+  /**
+   * Régression : « Retour » se taisait dès `lg` sur toute page dont le
+   * parent est l'accueil, `/dossiers` compris — que le menu ne propose
+   * plus. Et sa ligne, restée au-dessus d'une fiche, la faisait défiler :
+   * la hauteur laissée à la page doit la retrancher.
+   */
+  it("tait « Retour » dès lg sur une entrée du menu seulement, et retranche sa ligne ailleurs", () => {
+    const { unmount } = monter("/registre")
+    expect(screen.getByRole("button", { name: "Retour" }).parentElement).toHaveClass("lg:hidden")
+    expect(screen.getByRole("main")).not.toHaveClass("[--retour:2.75rem]")
+    unmount()
+
+    monter("/dossiers")
+    expect(screen.getByRole("button", { name: "Retour" }).parentElement).not.toHaveClass("lg:hidden")
+    expect(screen.getByRole("main")).toHaveClass("[--retour:2.75rem]")
   })
 })

@@ -30,7 +30,7 @@ export function StatCard({
   return (
     <Card
       className={cn(
-        // Écran bas : la tuile se resserre (DESIGN.md, « Hauteur »).
+        // Écran bas : la tuile se resserre (DESIGN.md, « Hauteur d'écran »).
         "shadow-sm court:gap-2 court:py-3 court:[--card-spacing:--spacing(3)]",
         tone === "danger" ? "border-destructive/30" : "border-border/60",
       )}

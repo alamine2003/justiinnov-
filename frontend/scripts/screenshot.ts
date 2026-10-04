@@ -380,6 +380,46 @@ async function main() {
     await shot(hq, nom)
   }
 
+  // --- Hauteur d'écran : dès lg, la page ne défile pas ---------------------
+  // Son tableau ou son détail défile dans sa boîte (DESIGN.md, « Hauteur
+  // d'écran »). Le défilement nul n'était mesuré qu'à la main : une ligne
+  // « Retour » oubliée faisait défiler les fiches de 44 px.
+  await goto(hq, "/projets")
+  const fiche = await hq.evaluate(() =>
+    [...document.querySelectorAll("main a")].map((a) => a.getAttribute("href")).find((h) => h && /^\/projets\/\d+$/.test(h)),
+  )
+  const ecrans = ["/", "/projets", "/dossiers", "/registre", "/audit", "/budgets", "/configuration", "/countries"]
+  if (fiche) ecrans.push(fiche)
+  // 1 366 × 657 : un portable 1 366 × 768, barre du navigateur déduite.
+  for (const [largeur, hauteur] of [[1366, 768], [1366, 657], [1024, 768], [1920, 1080]]) {
+    await hq.setViewportSize({ width: largeur, height: hauteur })
+    const defilent: string[] = []
+    for (const chemin of ecrans) {
+      await goto(hq, chemin, 600)
+      const exces = await hq.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)
+      if (exces > 0) defilent.push(`${chemin} (${exces} px)`)
+    }
+    expect(defilent.length === 0, `à ${largeur} × ${hauteur}, aucune page ne défile${defilent.length ? ` — ${defilent.join(", ")}` : ""}`)
+  }
+  // Fenêtre trop basse pour tout tenir : la page défile, et la pagination
+  // reste atteignable — la carte ne la rogne pas.
+  await hq.setViewportSize({ width: 1280, height: 560 })
+  await goto(hq, "/registre", 800)
+  await hq.evaluate(() => {
+    // `scroll-smooth` sur <html> : sans cela, la mesure suivrait un défilement en cours.
+    document.documentElement.style.scrollBehavior = "auto"
+    window.scrollTo(0, document.documentElement.scrollHeight)
+  })
+  const paginationAtteinte = await hq.evaluate(() => {
+    const pagination = document.querySelector("main [data-slot=pagination]")
+    if (!pagination) return false
+    const r = pagination.getBoundingClientRect()
+    const vu = document.elementFromPoint(r.left + 4, r.top + r.height / 2)
+    return r.bottom <= window.innerHeight && vu !== null && pagination.contains(vu)
+  })
+  expect(paginationAtteinte, "à 1280 × 560, la pagination du registre reste visible")
+  await hq.setViewportSize({ width: 1440, height: 900 })
+
   // --- Parcours pays : périmètre restreint --------------------------------
   const rep = await newPage(browser)
   const repUser = await login(rep, "COUNTRY")

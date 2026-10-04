@@ -169,16 +169,25 @@ un graphique défile, dans sa propre boîte.
 
 ### Hauteur d'écran
 
-Dès `lg`, **une page tient dans la fenêtre** : elle ne défile pas, c'est son
-tableau ou son détail qui défile, dans sa boîte, sous un en-tête et des
-filtres qui restent en vue. Mesuré à 0 px de défilement de 1 024 × 768 à
-1 920 × 1 080, siège et pays, sur Pilotage, les listes, Audit, Budgets,
-Configuration et les fiches. Sous `lg`, la page défile normalement.
+Dès `lg`, **les écrans principaux tiennent dans la fenêtre** : la page ne
+défile pas, c'est son tableau ou son détail qui défile, dans sa boîte, sous
+un en-tête et des filtres qui restent en vue. Ce sont Pilotage, Projets et
+la fiche d'un projet, Dossiers, Registre, Audit, Budgets et Configuration.
+`scripts/screenshot.ts` le vérifie à 1 366 × 768, 1 366 × 657 (le même
+portable, barre du navigateur déduite), 1 024 × 768 et 1 920 × 1 080. La
+fiche d'un dossier, celle d'un pays et l'import, formulaires et détails
+longs, gardent le défilement de page. Sous `lg`, et sous 36 rem (576 px)
+de fenêtre, la page défile normalement : le contenu y déborderait de
+boîtes plafonnées, hors du cadre de sa carte, et la barre latérale partirait
+avec le défilement.
 
 - **`--hauteur-page`**, posée sur `<main>` par `AppLayout` : la fenêtre
   moins l'en-tête et les marges de `<main>` (`calc(100dvh - 7rem - 1px)`,
-  6 rem sur écran bas ; le pixel est le filet de l'en-tête). On ne la
-  recalcule pas dans une page : on la lit.
+  6 rem sur écran bas ; le pixel est le filet de l'en-tête), moins la
+  ligne du bouton « Retour » quand il s'affiche (`--retour`, 2,75 rem,
+  2,25 sur écran bas). On ne la recalcule pas dans une page : on la lit.
+  L'avis d'une redirection (« réservée au siège »), ponctuel, n'est pas
+  retranché : la page défile alors de sa hauteur.
 - **Variante `court:`** (`index.css`, `max-height: 860px` — un portable
   1 366 × 768) : l'espace vertical se resserre — `court:space-y-3` au lieu
   de `space-y-6` à la racine d'une page, titre de page en `text-xl`, tuiles
@@ -202,9 +211,10 @@ Configuration et les fiches. Sous `lg`, la page défile normalement.
   **chaque** conteneur entre elle et le tableau (onglets compris) ;
   `defile` fait défiler l'enveloppe du tableau et colle ses titres de
   colonnes en haut. Une liste courte garde sa hauteur naturelle ; sous
-  8 rem de tableau (fenêtre très basse), c'est la page qui défile. Les
-  autres enfants ne rétrécissent jamais — une carte, `overflow-hidden`,
-  s'écrasait sous son contenu (les filtres du registre l'ont fait).
+  8 rem de tableau, c'est la page qui défile, et la carte qui `remplit` ne
+  rogne pas sa pagination (`overflow: visible`). Les autres enfants ne
+  rétrécissent jamais — une carte, `overflow-hidden`, s'écrasait sous son
+  contenu (les filtres du registre l'ont fait).
 - **Un tableau de bord long** (vue d'ensemble de l'audit, budgets,
   sections de la configuration, historique d'un projet) : ce qui situe
   (en-tête, période, indicateurs, onglets) reste en vue, le reste va dans
@@ -222,7 +232,7 @@ Configuration et les fiches. Sous `lg`, la page défile normalement.
   (copyright, version, auteur ; la version seule quand elle est repliée) :
   sous le contenu, il ne se voyait qu'en défilant. Sous `lg`, il reste
   sous le contenu.
-- **Le bouton « Retour »** ne s'affiche pas, dès `lg`, sur une section du
+- **Le bouton « Retour »** ne s'affiche pas, dès `lg`, sur une entrée du
   menu : la barre latérale y mène déjà (voir « Bouton « Retour » »).
 
 ### Navigation
@@ -477,10 +487,11 @@ l'application, sinon à la liste de la section (`lib/navigation.ts`,
 ouvert d'un lien direct revient à `/dossiers` ; son fil d'Ariane mène à
 son projet. Une page
 ne rajoute pas son propre lien « Retour aux… » : il y en a un, au même
-endroit partout. Dès `lg`, il se tait sur une section du menu (`/registre`,
-`/audit`… : `parentPath` y vaut `/`) — la barre latérale, toujours visible,
-fait le même chemin et la ligne revient au contenu ; il reste sur les
-fiches et sous `lg`, où le menu est replié dans ☰.
+endroit partout. Dès `lg`, il se tait sur une entrée du menu (`/registre`,
+`/audit`…, celles qu'`AppLayout` affiche au compte, `dansLeMenu`) — la
+barre latérale, toujours visible, fait le même chemin et la ligne revient
+au contenu. Il reste partout ailleurs : sur les fiches, sur `/dossiers`
+(que le menu ne propose plus), et sous `lg`, où le menu est replié dans ☰.
 
 ### Sélecteur de langue
 

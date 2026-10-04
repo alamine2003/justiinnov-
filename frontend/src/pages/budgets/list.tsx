@@ -221,7 +221,7 @@ export function BudgetsPage() {
       </div>
 
       {/* Sous les indicateurs, enveloppes et réallocations défilent dès
-          `lg` : en-tête et totaux restent en vue (DESIGN.md, « Hauteur »). */}
+          `lg` : en-tête et totaux restent en vue (DESIGN.md, « Hauteur d'écran »). */}
       <div className="defile -mx-1 space-y-6 px-1 pb-1 court:space-y-3">
         {rows.length === 0 && !query.loading ? (
           <Card className="border-border/60 shadow-sm">

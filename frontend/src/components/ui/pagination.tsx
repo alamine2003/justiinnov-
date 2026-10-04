@@ -39,7 +39,7 @@ export function Pagination({
   const label = noun ? pluralize(count, noun[0], noun[1]) : t("commun.elements", { count })
 
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+    <div data-slot="pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
       <span className="text-muted-foreground">
         {label}
         {totalPages > 1 && ` · ${t("commun.page_sur", { page, total: totalPages })}`}
