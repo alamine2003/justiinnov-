@@ -341,10 +341,15 @@ class NiveauDExecutionTests(ExpenseTestCase):
 
     def test_le_niveau_est_publie_partout_ou_le_taux_l_est(self):
         """Enveloppe, ligne de pays du tableau de bord, totaux consolidés :
-        chacun porte ``execution_level`` à côté d'``execution_rate``."""
+        chacun porte ``execution_level`` à côté d'``execution_rate``, et tous
+        le calculent de même : (consommé + engagé) / attribué (décision 54).
+        Une ligne soumise compte dans le taux de l'enveloppe comme dans
+        celui de son pays."""
         self._configurer([70, 90, 100])
-        # 950 000 consommés sur 1 000 000 : 95 %, au-dessus de 90.
-        self.make_expense(amount="950000.00", status=Status.JUSTIFIED, budget=self.budget)
+        # 600 000 consommés et 350 000 engagés sur 1 000 000 : 95 %,
+        # au-dessus de 90 — 60 % seulement si l'engagé était oublié.
+        self.make_expense(amount="600000.00", status=Status.JUSTIFIED, budget=self.budget)
+        self.make_expense(amount="350000.00", status=Status.SUBMITTED, budget=self.budget)
         self.login(self.doo)
 
         enveloppe = self.client.get(f"/api/budgets/{self.budget.pk}/").data["figures"]
@@ -352,6 +357,7 @@ class NiveauDExecutionTests(ExpenseTestCase):
 
         self.assertEqual(enveloppe["execution_rate"], "0.9500")
         self.assertEqual(enveloppe["execution_level"], "warning")
+        self.assertEqual(tableau["countries"][0]["execution_rate"], "0.9500")
         self.assertEqual(tableau["countries"][0]["execution_level"], "warning")
         self.assertEqual(tableau["totals"]["execution_level"], "warning")
 

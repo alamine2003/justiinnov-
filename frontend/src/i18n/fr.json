@@ -281,8 +281,7 @@
     "indisponibles": "Notifications indisponibles"
   },
   "pwa": {
-    "installer": "Installer l'application",
-    "note_connexion": "Disponible en application de bureau sur Windows et macOS : installez-la depuis Chrome ou Edge pour l'ouvrir sans le navigateur."
+    "installer": "Installer l'application"
   },
   "ui": {
     "tronque_titre": "Liste incomplète",
@@ -290,7 +289,7 @@
   },
   "auth": {
     "connexion": "Connexion",
-    "sous_titre": "Identifiez-vous pour accéder à votre périmètre.",
+    "sous_titre": "Identifiez-vous pour accéder à vos budgets et à vos dépenses.",
     "identifiant": "Identifiant",
     "identifiant_exemple": "prenom.nom",
     "mot_de_passe": "Mot de passe",
@@ -308,7 +307,7 @@
       "justifiee_titre": "Chaque dépense justifiée",
       "justifiee_texte": "Date, lieu, bénéficiaire et pièce à l'appui, pour chaque montant.",
       "trace_titre": "Rien ne se perd",
-      "trace_texte": "Une dépense déclarée est définitive et toute action est tracée."
+      "trace_texte": "Une dépense soumise ne se modifie plus en silence : toute correction passe par une demande motivée, et chaque action est tracée."
     },
     "identifiants_requis": "Renseignez votre identifiant et votre mot de passe.",
     "identifiants_invalides": "Identifiants invalides",
@@ -325,10 +324,10 @@
     },
     "totp": {
       "code": "Code de double authentification",
-      "aide": "Saisissez le code à six chiffres affiché par votre application d'authentification.",
+      "aide": "Mot de passe accepté. Saisissez le code à six chiffres affiché par votre application d'authentification.",
       "code_requis": "Saisissez le code de votre application d'authentification.",
       "plus_acces": "Je n'ai plus accès à mon application",
-      "plus_acces_texte": "Seul un administrateur du siège peut réinitialiser votre double authentification. Contactez-le : un nouvel enrôlement vous sera proposé à la connexion suivante.",
+      "plus_acces_texte": "Seul un administrateur du siège peut réinitialiser votre double authentification. Contactez-le : à la connexion suivante, vous configurerez à nouveau votre application d'authentification.",
       "a_enroler_titre": "Double authentification à activer",
       "a_enroler_texte": "Un mot de passe seul ne suffit pas à engager votre signature. Liez une application d'authentification à votre compte : la plateforme reste fermée jusque-là.",
       "enroler": "Lier votre application d'authentification",
@@ -342,7 +341,6 @@
       "code_six_chiffres": "Le code comporte six chiffres.",
       "enrolement_impossible": "Enrôlement impossible",
       "confirmation_impossible": "Confirmation impossible",
-      "aide_connexion": "Uniquement si vous avez activé la double authentification.",
       "volontaire_titre": "Activer la double authentification",
       "volontaire_texte": "Un code à usage unique s'ajoutera à votre mot de passe à chaque connexion. Elle est facultative tant que le siège ne l'impose pas, et recommandée à qui contrôle ou justifie des dépenses.",
       "plus_tard": "Plus tard"
@@ -796,7 +794,8 @@
       "description": "Cette enveloppe n'a jamais servi : aucune dépense imputée, aucune réallocation, aucune sous-enveloppe. Elle disparaît de l'application ; l'historique garde qui l'a supprimée et quand. Une enveloppe qui a servi se désactive au lieu de se supprimer.",
       "confirmer": "Supprimer",
       "impossible": "Suppression impossible"
-    }
+    },
+    "choisir_pays_option": "Choisissez un pays…"
   },
   "pilotage": {
     "titre": "Pilotage",

@@ -1102,10 +1102,12 @@ class SeparationOfDutiesTests(ExpenseTestCase):
             number=numero, label="Autre mission", country=self.togo,
             date=date(self.year, 3, 16), created_by=self.owner.username,
         )
-        ligne = self.make_expense(dossier=dossier, created_by=created_by)
+        # Saisie sans auteur, puis signée après la soumission : le dossier
+        # n'emporte pas le brouillon d'un autre compte (décision 114), et
+        # une ligne déclarée d'un autre auteur — ou anonyme — ne vient que
+        # de données anciennes.
+        ligne = self.make_expense(dossier=dossier, created_by="")
         self.submit_dossier(dossier)
-        # La soumission donne un auteur à une ligne qui n'en a pas : une
-        # ligne anonyme déjà déclarée ne vient que de données anciennes.
         Expense.objects.filter(pk=ligne.pk).update(created_by=created_by)
         return ligne
 

@@ -25,8 +25,20 @@ export function LanguageToggle({ persistOnServer = false }: { persistOnServer?: 
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="icon" aria-label={t("layout.langue_bouton")}>
-            <Languages className="h-4 w-4" />
+          // Le code de la langue courante à côté de l'icône : seule, elle se
+          // reconnaissait mal. Le nom accessible reste celui du bouton.
+          // Le nom accessible contient le texte visible (WCAG 2.5.3) : une
+          // commande vocale « cliquer FR » trouve le bouton.
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 px-2"
+            aria-label={`${language.toUpperCase()} — ${t("layout.langue_bouton")}`}
+          >
+            <Languages className="h-4 w-4" aria-hidden />
+            <span aria-hidden className="text-xs font-medium">
+              {language.toUpperCase()}
+            </span>
           </Button>
         }
       />

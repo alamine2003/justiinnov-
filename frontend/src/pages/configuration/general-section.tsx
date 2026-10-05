@@ -16,12 +16,14 @@ import { BRAND } from "@/lib/brand"
 import { OVERRUN_POLICIES, overrunPolicyLabel } from "@/lib/labels"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import type { OverrunPolicy, WorkflowConfiguration } from "@/lib/types"
+import { useAuth } from "@/context/use-auth"
 import { useQuery } from "@/lib/use-query"
 import { normalizeDecimal } from "@/lib/utils"
 import { RatesSection } from "@/pages/configuration/rates-section"
 import { Chargement, Erreur } from "@/pages/configuration/section-states"
 
 export function GeneralSection() {
+  const { refreshProfile } = useAuth()
   const { t } = useTranslation()
   const query = useQuery("configuration:page", () => fetchConfiguration())
   const config = query.data
@@ -120,10 +122,12 @@ export function GeneralSection() {
         onSaved={async (workflow) => {
           query.setData((current) => (current ? { ...current, workflow } : current))
           // Les autres écrans (formulaire d'enveloppe, dépôt de pièce) lisent
-          // la configuration en cache. Le profil, lui, n'a pas à être relu :
-          // rien à l'écran ne lit `me.workflow`, et chaque action vient de
-          // `allowed_actions`, calculé par le serveur à la requête suivante.
+          // la configuration en cache. Le profil est relu aussi : les rails
+          // des enveloppes lisent `me.alert_thresholds`, et leurs graduations
+          // restaient les anciennes quand la couleur suivait déjà les
+          // nouvelles. Une relecture qui échoue ne défait pas l'enregistrement.
           invalidateReferentiel("configuration")
+          await refreshProfile().catch(() => undefined)
         }}
       />
 

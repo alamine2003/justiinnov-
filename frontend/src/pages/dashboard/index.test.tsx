@@ -247,3 +247,42 @@ describe("Pilotage — analyse d'un pays", () => {
     expect(screen.queryByText("Équipe Lomé")).toBeNull()
   })
 })
+
+/**
+ * Régression : les tuiles ouvraient le registre sans l'exercice ni le pays
+ * qu'elles comptaient — la liste ne disait pas le chiffre de la tuile.
+ */
+describe("Pilotage — liens des tuiles", () => {
+  it("transmettent l'exercice et le pays au registre", async () => {
+    profil = { has_global_scope: false, countries: [pays(1, "Cote d'Ivoire"), pays(2, "Togo")] } as Partial<Me>
+
+    monter()
+
+    fireEvent.change(await screen.findByRole("combobox", { name: "Pays" }), { target: { value: "2" } })
+    const lien = await screen.findByRole("link", { name: /Lignes en brouillon/ })
+    await waitFor(() => expect(lien.getAttribute("href")).toContain("country=2"))
+    const adresse = new URL(lien.getAttribute("href") ?? "", "http://x")
+    expect(adresse.pathname).toBe("/registre")
+    expect(adresse.searchParams.get("status")).toBe("draft")
+    expect(adresse.searchParams.get("from")).toMatch(/^\d{4}-01-01$/)
+    expect(adresse.searchParams.get("to")).toMatch(/^\d{4}-12-31$/)
+  })
+})
+
+/**
+ * Régression : sous le bandeau d'erreur, les tuiles affichaient « 0 » et
+ * le panneau « aucune enveloppe » — un échec se lisait comme un résultat.
+ */
+describe("Pilotage — chargement en échec", () => {
+  it("n'affiche aucun zéro ni état vide", async () => {
+    profil = { has_global_scope: false, countries: [pays(2, "Togo")] } as Partial<Me>
+    fetchDashboard.mockRejectedValue(new Error("Service indisponible"))
+
+    monter()
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /Lignes en brouillon/ })).toHaveTextContent("—")
+    expect(screen.getByRole("link", { name: /Lignes en brouillon/ })).not.toHaveTextContent("0")
+    expect(screen.queryByText(/Aucune enveloppe/)).toBeNull()
+  })
+})

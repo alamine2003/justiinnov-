@@ -26,9 +26,9 @@ const pays = (id: number, name: string, timezone: string) => ({
 const ABIDJAN = "Africa/Abidjan"
 const TANANARIVE = "Indian/Antananarivo"
 
-function monter() {
+function monter(adresse = "/registre") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[adresse]}>
       <RegisterPage />
     </MemoryRouter>,
   )
@@ -82,5 +82,25 @@ describe("Registre — périmètre restreint à plusieurs pays", () => {
     await waitFor(() => expect(fetchRegister).toHaveBeenCalled())
     expect(screen.getByText("Du (heure Africa/Lome)")).toBeInTheDocument()
     expect(screen.queryByLabelText("Pays")).toBeNull()
+  })
+})
+
+/**
+ * Régression : une tuile du Pilotage ouvrait le registre tous pays, toutes
+ * années, alors qu'elle comptait l'exercice et le pays choisis.
+ */
+describe("Registre — filtres reçus d'une tuile", () => {
+  it("reprend le pays et la période de l'adresse", async () => {
+    profil = { has_global_scope: false, countries: [pays(2, "Togo", ABIDJAN)] } as Partial<Me>
+
+    monter("/registre?status=draft&from=2025-01-01&to=2025-12-31&country=2")
+
+    await waitFor(() => expect(fetchRegister).toHaveBeenCalled())
+    const params = fetchRegister.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(params.status).toBe("draft")
+    expect(params.country).toBe(2)
+    expect(params.date__gte).toBeTruthy()
+    expect(params.date__lte).toBeTruthy()
+    expect(String(params.date__gte)).toContain("2025-01-01")
   })
 })

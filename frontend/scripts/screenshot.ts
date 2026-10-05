@@ -13,7 +13,7 @@
  * périmètre, une redirection absente, un titre qui manque.
  */
 import { chromium, type Browser, type Page } from "playwright"
-import { credentials, signIn } from "./login.ts"
+import { credentials, estLeRefusAttenduDuCode, signIn } from "./login.ts"
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:5173"
 const OUT = process.env.SHOT_OUT ?? "/tmp"
@@ -52,7 +52,7 @@ async function newPage(browser: Browser, viewport = { width: 1440, height: 900 }
   // cette langue et les attentes ci-dessous, écrites en français, échoueraient.
   const page = await browser.newPage({ viewport, locale: "fr-FR" })
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`[console] ${m.text()}`)
+    if (m.type() === "error" && !estLeRefusAttenduDuCode(m)) errors.push(`[console] ${m.text()}`)
   })
   page.on("pageerror", (e) => errors.push(`[pageerror] ${String(e)}`))
   return page
@@ -388,8 +388,13 @@ async function main() {
   const fiche = await hq.evaluate(() =>
     [...document.querySelectorAll("main a")].map((a) => a.getAttribute("href")).find((h) => h && /^\/projets\/\d+$/.test(h)),
   )
+  await goto(hq, "/dossiers")
+  const ficheDossier = await hq.evaluate(() =>
+    [...document.querySelectorAll("main a")].map((a) => a.getAttribute("href")).find((h) => h && /^\/dossiers\/\d+$/.test(h)),
+  )
   const ecrans = ["/", "/projets", "/dossiers", "/registre", "/audit", "/budgets", "/configuration", "/countries"]
   if (fiche) ecrans.push(fiche)
+  if (ficheDossier) ecrans.push(ficheDossier)
   // 1 366 × 657 : un portable 1 366 × 768, barre du navigateur déduite.
   for (const [largeur, hauteur] of [[1366, 768], [1366, 657], [1024, 768], [1920, 1080]]) {
     await hq.setViewportSize({ width: largeur, height: hauteur })

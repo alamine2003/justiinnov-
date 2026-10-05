@@ -475,3 +475,35 @@ class CourseSurLImport(CourseTestCase):
         self.assertEqual(response.data["lignes_creees"], 0)
         self.assertIn("déjà présente", response.data["erreurs"][0]["motif"])
         self.assertEqual(Expense.objects.filter(title="Taxi").count(), 1)
+
+
+class CourseSurLaCloture(CourseTestCase):
+    """Relecture de la 2.0.5 : la clôture compte les lignes sans pièce sous
+    le verrou du dossier (décision 115), mais le contrôle d'une pièce ne le
+    prenait pas. Un rejet passé pendant la clôture fermait le dossier sur
+    une pièce rejetée."""
+
+    def test_un_rejet_pendant_la_cloture_attend_puis_est_refuse(self):
+        dossier = self._dossier("N-0040", "100000.00", statut=Status.JUSTIFIED)
+        ligne = dossier.expenses.get()
+        ligne.justified_amount = Decimal("100000.00")
+        ligne.save()
+        piece = Proof.objects.create(
+            dossier=dossier, expense=ligne, file="justificatifs/f.pdf",
+            original_name="facture.pdf", sha256="b" * 64,
+        )
+
+        premiere, seconde = self._en_course(
+            lambda: self._client(self.rh).post(f"/api/dossiers/{dossier.pk}/close/", {}, format="json"),
+            lambda: self._client(self.rh_bis).post(
+                f"/api/proofs/{piece.pk}/review/",
+                {"status": Proof.ProofStatus.REJECTED, "reason": "illisible"},
+                format="json",
+            ),
+        )
+
+        self.assertEqual(premiere.status_code, status.HTTP_200_OK, premiere.data)
+        self.assertEqual(seconde.status_code, status.HTTP_400_BAD_REQUEST, seconde.data)
+        piece.refresh_from_db()
+        self.assertNotEqual(piece.status, Proof.ProofStatus.REJECTED)
+        self.assertEqual(Dossier.objects.get(pk=dossier.pk).status, Status.CLOSED)

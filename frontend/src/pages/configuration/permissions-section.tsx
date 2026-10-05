@@ -27,25 +27,17 @@ import { Chargement, Erreur } from "@/pages/configuration/section-states"
 
 export function PermissionsSection() {
   const query = useQuery("permissions", () => fetchPermissionMatrix())
-  // Chaque enregistrement remonte une matrice neuve : la clé remonte le
-  // formulaire, dont l'état local repart de ce que le serveur a retenu.
-  const [version, setVersion] = useState(0)
-  const [matrix, setMatrix] = useState<PermissionMatrix | null>(null)
-  const courante = matrix ?? query.data ?? null
+  const courante = query.data ?? null
 
   if (query.loading && !courante) return <Chargement />
   if (query.error && !courante) return <Erreur message={query.error} />
   if (!courante) return null
 
   return (
-    <MatriceDesDroits
-      key={version}
-      matrix={courante}
-      onSaved={(suivante) => {
-        setMatrix(suivante)
-        setVersion((v) => v + 1)
-      }}
-    />
+    // La matrice rendue par le serveur remplace celle affichée, sans
+    // remonter le formulaire : une clé qui changeait à chaque enregistrement
+    // effaçait la confirmation « Droits enregistrés » à peine posée.
+    <MatriceDesDroits matrix={courante} onSaved={(suivante) => query.setData(suivante)} />
   )
 }
 
@@ -92,6 +84,9 @@ export function MatriceDesDroits({
       // Le serveur a enregistré : une relecture qui échoue ne doit pas le
       // faire passer pour un refus.
       await refreshProfile().catch(() => undefined)
+      // Le formulaire repart de ce que le serveur a retenu (il peut avoir
+      // complété ou écarté un choix), confirmation comprise.
+      setChoix(Object.fromEntries(suivante.capabilities.map((c) => [c.key, c.roles])))
       setSaved(true)
       onSaved(suivante)
     } catch (err) {

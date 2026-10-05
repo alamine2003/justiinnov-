@@ -349,6 +349,50 @@ class FormatsTests(DashboardTestCase):
         self.assertEqual(dossiers[-1][1], "TOTAL")
         self.assertEqual(dossiers[-1][5], 500000)
 
+    def test_le_total_du_rapprochement_ne_compte_pas_les_brouillons(self):
+        """Décision 54 : un brouillon ne compte nulle part, pas plus dans le
+        TOTAL du rapprochement que dans celui de l'export des dépenses. Le
+        dossier en brouillon reste listé, avec son statut ; une ligne
+        brouillon dans un dossier qui en porte de déclarées ne compte pas
+        davantage."""
+        en_cours = Dossier.objects.create(
+            number="TG-BROUILLON", label="Brouillon en cours", country=self.togo,
+            date=date(self.year, 5, 3), status=Status.DRAFT,
+        )
+        self.make_expense(dossier=en_cours, amount="99999.00", status=Status.DRAFT)
+        self.make_expense(amount="11.00", status=Status.DRAFT)
+
+        classeur = load_workbook(BytesIO(
+            self._export("reconciliation.xlsx", country=self.togo.pk).content
+        ))
+        dossiers = list(classeur["Rapprochement dossiers"].iter_rows(values_only=True))
+        self.assertIn("Brouillon en cours", [ligne[1] for ligne in dossiers])
+        self.assertEqual(dossiers[-1][1], "TOTAL")
+        self.assertEqual(dossiers[-1][5], 500000)
+        self.assertEqual(dossiers[-1][6], 250000)
+        self.assertEqual(dossiers[-1][7], 250000)
+        texte = self._export("reconciliation.csv", country=self.togo.pk).content.decode("utf-8-sig")
+        self.assertIn(";TOTAL;", texte.splitlines()[-1])
+        self.assertIn(";500000,00;", texte.splitlines()[-1])
+
+    def test_un_brouillon_d_une_autre_devise_ne_fait_pas_taire_le_total(self):
+        """Relecture de la 2.0.5 : le TOTAL ne s'écrit qu'à devise unique,
+        celle des dossiers qui l'alimentent. Un brouillon en GNF, qui n'y
+        ajoute rien, ne le tait pas."""
+        self.ivoire.currency = "GNF"
+        self.ivoire.save()
+        abidjan = Dossier.objects.create(
+            number="CI-BROUILLON", label="Brouillon ivoirien", country=self.ivoire,
+            date=date(self.year, 4, 2), status=Status.DRAFT,
+        )
+        self.make_expense(dossier=abidjan, country=self.ivoire, team=None, owner=None, status=Status.DRAFT)
+
+        _, detail = exports.tableaux_rapprochement(Budget.objects.none(), Dossier.objects.all())
+
+        self.assertIn("Brouillon ivoirien", [ligne[1] for ligne in detail.lignes])
+        self.assertIsNotNone(detail.total)
+        self.assertEqual(detail.total[5], 500000)
+
     def test_les_totaux_ne_melangent_pas_les_devises(self):
         """Additionner des francs CFA et des francs guinéens donnerait un
         chiffre sans unité : le total est tu, comme au tableau de bord."""

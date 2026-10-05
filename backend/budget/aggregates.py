@@ -15,6 +15,11 @@ pour l'API, les écrans, les exports et les rapports périodiques :
   ses sous-enveloppes, qui sont alors tout ce qu'il a. Une sous-enveloppe
   découpe l'enveloppe du pays, elle ne s'y ajoute pas ;
 - **disponible** = attribué − consommé − engagé ;
+- **taux d'exécution** = (consommé + engagé) / attribué, pour une
+  enveloppe comme pour un pays ou le consolidé ; ``execution_level`` se
+  juge sur ce taux-là. Une dépense soumise mobilise déjà l'enveloppe :
+  l'ignorer laissait une enveloppe engagée au-delà de son montant se dire
+  « ok » quand la ligne de son pays la disait dépassée ;
 - **conversion en FCFA** : au taux en vigueur à la **date de référence de
   l'exercice** (:func:`date_de_reference`) — le 31 décembre pour un
   exercice clos, ce jour pour l'exercice en cours. Un rapport sur 2024
@@ -140,7 +145,9 @@ def budget_figures(budget, rates=None, seuil=None):
     consumed = totals["consumed"]
     justified = totals["justified"]
     remaining = budget.amount - consumed - engaged
-    execution_rate = _ratio(consumed, budget.amount)
+    # Même définition que la ligne pays et le consolidé (décision 54) :
+    # l'engagé compte, comme il compte dans le disponible.
+    execution_rate = _ratio(consumed + engaged, budget.amount)
     figures = {
         "engaged": engaged,
         "consumed": consumed,

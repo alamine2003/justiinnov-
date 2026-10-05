@@ -168,7 +168,11 @@ export function CountryDetailPage() {
           <TabsTrigger value="depenses">{t("pays.fiche.intitules_depenses")}</TabsTrigger>
           <TabsTrigger value="marketing">{t("pays.fiche.categories_marketing")}</TabsTrigger>
           <TabsTrigger value="beneficiaires">{t("pays.fiche.beneficiaires")}</TabsTrigger>
-          <TabsTrigger value="historique">{t("pays.fiche.historique")}</TabsTrigger>
+          {/* L'historique est un droit de la matrice (`history.read`) : sans
+              lui, l'onglet n'ouvrait qu'un refus du serveur. */}
+          {can("history.read") && (
+            <TabsTrigger value="historique">{t("pays.fiche.historique")}</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="managers" className="mt-4">
@@ -382,9 +386,11 @@ export function CountryDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="historique" className="mt-4">
-          <CaretHistory countryId={countryId} />
-        </TabsContent>
+        {can("history.read") && (
+          <TabsContent value="historique" className="mt-4">
+            <CaretHistory countryId={countryId} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

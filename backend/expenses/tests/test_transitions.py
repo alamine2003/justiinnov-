@@ -117,9 +117,12 @@ class ServicesDuCircuitTests(ExpenseTestCase):
     def test_quatre_yeux_sur_la_ligne(self):
         """Même au siège, celui qui a saisi ne tranche pas ce qu'il a saisi."""
         auteur = make_user("rh.auteur", Role.ADMIN)
-        self.ligne.created_by = auteur.username
-        self.ligne.save()
+        # Donnée d'avant la décision 89 : la ligne déclarée porte un auteur
+        # du siège. Posé après la soumission, que seul l'auteur d'une ligne
+        # emporte (décision 114).
         self.soumettre()
+        Expense.objects.filter(pk=self.ligne.pk).update(created_by=auteur.username)
+        self.ligne.refresh_from_db()
 
         with self.assertRaises(PermissionRefusee):
             self.trancher(self.ligne, "justify", auteur)
@@ -197,6 +200,60 @@ class ServicesDuCircuitTests(ExpenseTestCase):
         )
 
         self.assertEqual(resultat.instance.status, Status.CLOSED)
+
+    def test_le_motif_d_une_mise_en_controle_est_garde(self):
+        """``executer`` est la porte des vues : la remarque saisie avec une
+        mise en contrôle ne se perd plus en chemin, sur le dossier comme sur
+        la ligne, ni au journal."""
+        self.soumettre()
+        admin = get_access(self.controller)
+
+        dossier = transitions.executer(
+            self.dossier, "review", admin, trace(self.controller), note="À voir de près"
+        )
+        ligne = transitions.executer(
+            self.ligne, "review", admin, trace(self.controller), note="Reçu peu lisible"
+        )
+
+        self.dossier.refresh_from_db()
+        self.ligne.refresh_from_db()
+        self.assertEqual(self.dossier.note, "À voir de près")
+        self.assertEqual(self.ligne.control_note, "Reçu peu lisible")
+        self.assertEqual(dossier.audit[0].detail["note"], "À voir de près")
+        self.assertEqual(ligne.audit[0].detail["note"], "Reçu peu lisible")
+        entree = AuditLog.objects.get(
+            object_type="Dossier", object_id=self.dossier.pk, action=AuditLog.Action.REVIEWED
+        )
+        self.assertEqual(entree.detail["note"], "À voir de près")
+
+    def test_le_motif_d_une_mise_en_controle_passe_par_l_api(self):
+        """La route, pas seulement le service : ``note`` reçu par
+        ``POST /api/dossiers/{id}/review/`` arrive sur le dossier."""
+        self.soumettre()
+        self.login(self.controller)
+
+        response = self.client.post(
+            f"/api/dossiers/{self.dossier.pk}/review/", {"note": "À voir de près"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.note, "À voir de près")
+        self.assertEqual(response.data["note"], "À voir de près")
+
+    def test_le_motif_d_une_cloture_est_garde(self):
+        self.soumettre()
+        self.trancher(self.ligne, "justify", self.controller)
+
+        resultat = transitions.executer(
+            self.ligne, "close", get_access(self.controller), trace(self.controller),
+            note="Dossier complet",
+        )
+
+        self.ligne.refresh_from_db()
+        self.assertEqual(self.ligne.status, Status.CLOSED)
+        self.assertEqual(self.ligne.control_note, "Dossier complet")
+        self.assertEqual(resultat.audit[0].detail["note"], "Dossier complet")
 
     # -- Réouverture ----------------------------------------------------------
 

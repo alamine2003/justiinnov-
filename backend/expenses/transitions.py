@@ -350,6 +350,38 @@ def _exiger_equipe_et_owner(lignes):
     )
 
 
+def _exiger_les_auteurs_des_lignes(brouillons, acteur):
+    """Une ligne en brouillon ne part que sous la main de son auteur.
+
+    Le dossier se soumet par son auteur (``exiger_l_auteur_du_brouillon``),
+    mais un dossier sans auteur connu peut porter les lignes de plusieurs
+    collègues : le premier qui le soumettait déclarait, sous son nom, ce
+    que les autres n'avaient pas fini de saisir (décision 114). Une ligne
+    sans auteur connu reste soumise par qui déclare le dossier, comme
+    avant (migration ``expenses.0017``).
+
+    La règle ne vise que les lignes **jamais déclarées** : une ligne déjà
+    soumise, revenue au brouillon par une réouverture, a été déclarée par
+    son auteur. Elle repart avec le dossier — sans quoi un dossier rouvert
+    dont une ligne porte un autre auteur (un collègue parti, des données
+    d'avant la décision 89) ne se resoumettait plus jamais : ni
+    modifiable, ni retirable, ni déclarable.
+    """
+    autrui = [
+        ligne for ligne in brouillons
+        if ligne.created_by and ligne.created_by != acteur.username
+        and not a_ete_declare(ligne)
+    ]
+    if autrui:
+        raise PermissionRefusee(
+            _(
+                "Ce dossier contient {count} ligne(s) en brouillon saisie(s) "
+                "par quelqu'un d'autre ({author}) : seul leur auteur peut "
+                "les déclarer."
+            ).format(count=len(autrui), author=autrui[0].created_by)
+        )
+
+
 def _soumettre_les_lignes(dossier, acteur, trace, resultat):
     """Le dossier et ses lignes partent ensemble.
 
@@ -377,6 +409,7 @@ def _soumettre_les_lignes(dossier, acteur, trace, resultat):
             ),
         )
     brouillons = [e for e in lignes if e.status == Status.DRAFT]
+    _exiger_les_auteurs_des_lignes(brouillons, acteur)
     _exiger_equipe_et_owner(brouillons)
 
     # Une résolution par clé d'imputation, pas par ligne.
@@ -534,6 +567,19 @@ def _avant_sur_le_dossier(dossier, action, acteur, note, donnees, trace, resulta
             attendus=LINES_REQUIRED["close"],
             consigne=_("Justifiez-les ou marquez-les non justifiées avant de clôturer."),
         )
+        manquantes = dossier.lignes_a_prouver_pour_clore().count()
+        if manquantes:
+            # Une pièce rejetée après la justification laisse sa ligne sans
+            # preuve : clôturer figerait pour toujours un constat que plus
+            # rien ne soutient (décisions 107 et 115). Le pays dépose une
+            # autre pièce — possible jusqu'à la clôture —, ou le constat se
+            # fait rectifier. Une ligne constatée non justifiée n'en attend
+            # pas : l'absence de preuve est ce qu'on a constaté.
+            raise RegleViolee(
+                "proofs",
+                _("%(count)s ligne(s) sans justificatif : le dossier ne peut pas être clôturé.")
+                % {"count": manquantes},
+            )
 
     if action == "justify":
         manquantes = sans_preuve(dossier)
@@ -744,9 +790,13 @@ def rouvrir(dossier, acteur, motif, trace):
     return _transition(dossier, "reopen", acteur, trace, note=motif)
 
 
-def mettre_en_controle(objet, acteur, trace):
-    """Prend un dossier ou une ligne soumis en contrôle (l'administrateur)."""
-    return _transition(objet, "review", acteur, trace)
+def mettre_en_controle(objet, acteur, trace, *, note=""):
+    """Prend un dossier ou une ligne soumis en contrôle (l'administrateur).
+
+    ``note``, facultative, est la remarque de contrôle : gardée sur l'objet
+    (``Dossier.note``, ``Expense.control_note``) et au journal.
+    """
+    return _transition(objet, "review", acteur, trace, note=note)
 
 
 def trancher(objet, action, acteur, *, note="", justified_amount=None, trace):
@@ -764,9 +814,12 @@ def trancher(objet, action, acteur, *, note="", justified_amount=None, trace):
     )
 
 
-def cloturer(objet, acteur, trace):
-    """Clôt un dossier ou une ligne justifiés : l'affaire est terminée."""
-    return _transition(objet, "close", acteur, trace)
+def cloturer(objet, acteur, trace, *, note=""):
+    """Clôt un dossier ou une ligne justifiés : l'affaire est terminée.
+
+    ``note``, facultative, est gardée comme celle d'une mise en contrôle.
+    """
+    return _transition(objet, "close", acteur, trace, note=note)
 
 
 #: Nom d'action de l'API → service. Les vues passent par ici ; un appelant
@@ -783,10 +836,13 @@ def executer(objet, action, acteur, trace, *, note="", justified_amount=None):
         return soumettre(objet, acteur, trace)
     if action == "reopen":
         return rouvrir(objet, acteur, note, trace)
+    # Le motif suit chaque transition : l'API l'accepte partout, et une
+    # remarque saisie puis perdue sans un mot ferait croire qu'elle est
+    # gardée.
     if action == "review":
-        return mettre_en_controle(objet, acteur, trace)
+        return mettre_en_controle(objet, acteur, trace, note=note)
     if action == "close":
-        return cloturer(objet, acteur, trace)
+        return cloturer(objet, acteur, trace, note=note)
     return trancher(
         objet, action, acteur, note=note, justified_amount=justified_amount, trace=trace
     )
@@ -994,6 +1050,12 @@ def controler_piece(proof, statut, acteur, *, motif="", trace):
     """
     exiger_la_capacite("proofs.review", acteur)
     motif = (motif or "").strip()
+    # Le dossier, puis la pièce (décision 53) : sans le verrou du dossier,
+    # une pièce se rejetait pendant que le dossier se clôturait, chacun
+    # croyant l'autre inchangé — et le dossier se fermait sur une pièce
+    # rejetée, ce que la décision 115 refuse.
+    dossier_id = Proof.objects.values_list("dossier_id", flat=True).get(pk=proof.pk)
+    Dossier.objects.select_for_update().filter(pk=dossier_id).first()
     piece = (
         Proof.objects.select_related("dossier__country")
         .select_for_update(of=("self",))

@@ -236,7 +236,11 @@ export function JournalDuCircuit() {
                       <TableCell>
                         <p className="text-sm">{entry.label}</p>
                         <p className="text-xs text-muted-foreground">
-                          {entry.object_type}
+                          {/* Le serveur nomme l'objet par sa classe (« Expense ») :
+                              traduit, comme dans `Evenement`. */}
+                          {t(`audit.objet.${entry.object_type}` as "audit.objet.Dossier", {
+                            defaultValue: entry.object_type,
+                          })}
                           {entry.object_id !== null && ` #${entry.object_id}`}
                           {entry.country_name && ` · ${entry.country_name}`}
                         </p>

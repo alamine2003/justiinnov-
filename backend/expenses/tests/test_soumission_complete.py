@@ -11,7 +11,7 @@ from rest_framework import status
 
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
-from expenses.models import Expense
+from expenses.models import AuditLog, Expense
 from expenses.workflow import Status
 
 from .base import ExpenseTestCase
@@ -165,3 +165,71 @@ class AjoutParUnCollegueTests(ExpenseTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertIn("add_line", self._actions(self.owner))
+
+
+class BrouillonDUnCollegueTests(ExpenseTestCase):
+    """Un dossier sans auteur connu peut porter les brouillons de plusieurs
+    collègues : celui qui le soumet ne déclare pas, sous son nom, la ligne
+    qu'un autre n'a pas fini de saisir (décision 114)."""
+
+    def setUp(self):
+        super().setUp()
+        self.collegue = make_user("collegue.togo", Role.MANAGER, [self.togo])
+        # Brouillon rendu au pays (migration ``expenses.0017``) : sans
+        # auteur, chacun du pays peut le compléter.
+        self.dossier.created_by = ""
+        self.dossier.save()
+        self.make_expense(title="Ligne de l'auteur")
+
+    def _ligne_du_collegue(self):
+        self.login(self.collegue)
+        response = self.client.post(
+            "/api/expenses/",
+            {"dossier": self.dossier.pk, "country": self.togo.pk, "team": self.team.pk,
+             "owner": self.manager.pk, "date": "2026-03-16T10:00:00Z",
+             "title": "Ligne du collègue", "amount": "1000.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        return Expense.objects.get(pk=response.data["id"])
+
+    def test_la_soumission_n_emporte_pas_le_brouillon_d_un_collegue(self):
+        ligne = self._ligne_du_collegue()
+
+        response = self.submit_dossier(user=self.owner)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
+        ligne.refresh_from_db()
+        self.assertEqual(ligne.status, Status.DRAFT)
+        self.assertEqual(ligne.created_by, self.collegue.username)
+        self.dossier.refresh_from_db()
+        self.assertEqual(self.dossier.status, Status.DRAFT)
+        self.assertFalse(self.dossier.expenses.exclude(status=Status.DRAFT).exists())
+
+    def test_une_ligne_deja_declaree_repart_avec_le_dossier_rouvert(self):
+        """Relecture de la 2.0.5 : une ligne déclarée une fois par un collègue,
+        revenue au brouillon par une réouverture, ne bloque pas la
+        resoumission — sans quoi le dossier restait dans une impasse."""
+        ligne = self.make_expense(title="Ligne déjà déclarée", created_by=self.collegue.username)
+        AuditLog.objects.create(
+            action=AuditLog.Action.SUBMITTED, object_type="Expense", object_id=ligne.pk,
+            user=self.collegue.username,
+        )
+
+        response = self.submit_dossier(user=self.owner)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        ligne.refresh_from_db()
+        self.assertEqual(ligne.status, Status.SUBMITTED)
+
+    def test_une_ligne_sans_auteur_part_avec_le_dossier(self):
+        """Une ligne sans auteur connu n'est à personne : celui qui déclare
+        le dossier la déclare, et en devient l'auteur, comme avant."""
+        anonyme = self.make_expense(title="Ligne sans auteur", created_by="")
+
+        response = self.submit_dossier(user=self.owner)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        anonyme.refresh_from_db()
+        self.assertEqual(anonyme.status, Status.SUBMITTED)
+        self.assertEqual(anonyme.created_by, self.owner.username)

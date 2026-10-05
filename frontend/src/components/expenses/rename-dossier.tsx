@@ -19,8 +19,8 @@ import type { DossierDetail } from "@/lib/types"
 /**
  * Bouton « Renommer » et son dialogue (décision 104).
  *
- * Le titre d'un dossier se change à tout moment, même clôturé : il ne porte
- * ni montant ni preuve. Le bouton n'apparaît que si le serveur le propose
+ * Le titre d'un dossier se change jusqu'à la clôture (décisions 104 et
+ * 108) : il ne porte ni montant ni preuve. Clôturé, plus rien ne bouge. Le bouton n'apparaît que si le serveur le propose
  * (`rename` dans `allowed_actions` : un manager du pays par défaut).
  */
 export function RenameDossier({

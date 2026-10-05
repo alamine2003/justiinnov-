@@ -15,7 +15,7 @@ from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget
 from core.models import Country, Manager, Team
-from expenses.models import Dossier, Expense
+from expenses.models import Dossier, Expense, Proof
 from expenses.workflow import Status
 
 
@@ -108,9 +108,14 @@ class DossierCoherenceTests(APITestCase):
     def test_la_cloture_accepte_une_ligne_non_justifiee(self):
         """Non justifié est une décision : l'argent est sorti sans preuve, et
         c'est précisément ce que l'écart doit montrer. Rien ne l'empêche de
-        clore."""
+        clore : la ligne justifiée a sa pièce (décision 115), la ligne non
+        justifiée n'en attend pas."""
         dossier = self.dossier("N-3", Status.JUSTIFIED)
-        self.ligne(dossier, Status.JUSTIFIED, "Avec preuve")
+        prouvee = self.ligne(dossier, Status.JUSTIFIED, "Avec preuve")
+        Proof.objects.create(
+            dossier=dossier, expense=prouvee, file="justificatifs/f.pdf",
+            original_name="facture.pdf", sha256="c" * 64,
+        )
         self.ligne(dossier, Status.UNJUSTIFIED, "Sans preuve")
         self.login(self.controleur)
 
