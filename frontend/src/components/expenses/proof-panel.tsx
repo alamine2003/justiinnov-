@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FormError } from "@/components/ui/form-error"
-import { Input } from "@/components/ui/input"
+import { ChampFichier } from "@/components/ui/champ-fichier"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
@@ -404,7 +404,7 @@ function UploadDialog({
           <FormError>{error}</FormError>
           <div className="grid gap-2">
             <Label htmlFor="proof-file">{t("champs.file")}</Label>
-            <Input id="proof-file" type="file" ref={fileRef} accept={rules.accept} required />
+            <ChampFichier id="proof-file" ref={fileRef} accept={rules.accept} required />
             {rules.maxBytes && (
               <p className="text-xs text-muted-foreground">
                 {t("pieces.depot.taille_max", { taille: formatSize(t, rules.maxBytes) })}

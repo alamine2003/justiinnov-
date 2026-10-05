@@ -10,8 +10,15 @@ describe("liste d'exclusion du service worker", () => {
     }
   })
 
+  it("laisse les vidéos du guide au serveur, pas la page du guide", () => {
+    // Une vidéo ouverte dans un onglet est un fichier : le shell de
+    // l'application la remplacerait par l'interface (décision 118).
+    expect(isOutsideAppShell("/guides/fr/ouvrir-un-projet.webm")).toBe(true)
+    expect(isOutsideAppShell("/guide")).toBe(false)
+  })
+
   it("garde les pages de l'application dans le shell", () => {
-    for (const chemin of ["/", "/dossiers", "/dossiers/12", "/registre", "/administration", "/metrics-page", "/grafanaX"]) {
+    for (const chemin of ["/", "/dossiers", "/dossiers/12", "/registre", "/administration", "/metrics-page", "/grafanaX", "/guide"]) {
       expect(isOutsideAppShell(chemin), chemin).toBe(false)
     }
   })
@@ -22,6 +29,7 @@ describe("liste d'exclusion du service worker", () => {
       String(/^\/grafana(\/|$)/),
       String(/^\/admin(\/|$)/),
       String(/^\/metrics$/),
+      String(/^\/guides\//),
     ])
   })
 })

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageHeader } from "@/components/ui/page-header"
 import { FormError } from "@/components/ui/form-error"
-import { Input } from "@/components/ui/input"
+import { ChampFichier } from "@/components/ui/champ-fichier"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
@@ -185,10 +185,9 @@ export function ImportPage() {
 
             <div className="grid gap-2 sm:col-span-2">
               <Label htmlFor="import-file">{t("dossiers.import.fichier")}</Label>
-              <Input
+              <ChampFichier
                 key={fileKey}
                 id="import-file"
-                type="file"
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 required
