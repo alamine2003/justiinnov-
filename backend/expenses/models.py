@@ -101,6 +101,13 @@ class Beneficiary(TimeStampedModel):
 
 
 class DossierQuerySet(models.QuerySet):
+    def ouverts(self):
+        """Les dossiers que le circuit n'a pas encore fermés : tout sauf
+        « clôturé ». Une seule définition, pour la tuile « Dossiers ouverts »
+        du tableau de bord et le filtre ``ouverts`` de la liste — la liste
+        ouverte depuis la tuile dit le même chiffre (décision 117)."""
+        return self.exclude(status=Status.CLOSED)
+
     def with_totals(self):
         """Prépare totaux et compteurs en une seule requête.
 

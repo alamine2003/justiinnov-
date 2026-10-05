@@ -167,3 +167,53 @@ describe("DossiersPage — état vide", () => {
     expect(screen.queryByText(/Créez un projet/)).toBeNull()
   })
 })
+
+/**
+ * Décision 117 : la tuile « Dossiers ouverts » ouvre la liste sur les
+ * dossiers ouverts de son exercice et de son pays — le même chiffre.
+ */
+describe("DossiersPage — venue de la tuile « Dossiers ouverts »", () => {
+  it("passe ouverts, exercice et pays au serveur, et laisse lever l'exercice", async () => {
+    render(
+      <MemoryRouter initialEntries={["/dossiers?ouverts=1&exercice=2026&country=1"]}>
+        <DossiersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(fetchDossiers).toHaveBeenCalled())
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).toMatchObject({ ouverts: true, exercice: 2026, country: 1 })
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).not.toHaveProperty("status")
+    expect(fetchDossiersParPays.mock.calls.at(-1)?.[0]).toMatchObject({ ouverts: true, exercice: 2026 })
+    expect(screen.getByText("Exercice 2026 seulement")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Ouverts/ })).toHaveAttribute("aria-pressed", "true")
+
+    fireEvent.click(screen.getByRole("button", { name: "Voir toutes les années" }))
+
+    await waitFor(() => expect(fetchDossiers.mock.calls.at(-1)?.[0]).not.toHaveProperty("exercice"))
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).toMatchObject({ ouverts: true })
+    expect(screen.queryByText("Exercice 2026 seulement")).toBeNull()
+  })
+})
+
+describe("DossiersPage — pastilles « Ouverts » et statut", () => {
+  it("un statut remplace « Ouverts », et « Tous » retire les deux sans toucher à l'exercice", async () => {
+    render(
+      <MemoryRouter initialEntries={["/dossiers?ouverts=1&exercice=2026"]}>
+        <DossiersPage />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(fetchDossiers).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole("button", { name: /^Clôturé/ }))
+
+    await waitFor(() => expect(fetchDossiers.mock.calls.at(-1)?.[0]).toMatchObject({ status: "closed" }))
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).not.toHaveProperty("ouverts")
+    expect(screen.getByRole("button", { name: /^Ouverts/ })).toHaveAttribute("aria-pressed", "false")
+
+    fireEvent.click(screen.getByRole("button", { name: /^Tous/ }))
+
+    await waitFor(() => expect(fetchDossiers.mock.calls.at(-1)?.[0]).not.toHaveProperty("status"))
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).not.toHaveProperty("ouverts")
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).toMatchObject({ exercice: 2026 })
+  })
+})

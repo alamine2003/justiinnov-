@@ -254,7 +254,9 @@ class DashboardView(APIView):
             # Décaissements sans preuve : le chiffre que l'application existe
             # pour faire diminuer.
             "expenses_unjustified": by_status.get(Status.UNJUSTIFIED, 0),
-            "dossiers_open": dossiers.exclude(status=Status.CLOSED).count(),
+            # La définition de la liste (`?ouverts=true`) : la tuile ouvre
+            # une liste au même chiffre (décision 117).
+            "dossiers_open": dossiers.ouverts().count(),
         }
 
 

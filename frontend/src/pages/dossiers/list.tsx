@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { AlertTriangle, Search, Upload } from "lucide-react"
+import { AlertTriangle, CalendarRange, Search, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,9 @@ import type { WorkflowStatus } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
 
+/** Valeur de pastille du filtre serveur `ouverts` : tout sauf clôturé. */
+const OUVERTS = "ouverts"
+
 /**
  * Tous les dossiers visibles, quel que soit leur projet.
  *
@@ -35,10 +38,19 @@ export function DossiersPage() {
 
   // Le statut et le pays vivent dans l'URL : une tuile du tableau de bord
   // ou un favori doivent rouvrir la même vue.
+  // « Ouverts » (tout sauf clôturé) est défini par le serveur (`ouverts`,
+  // décision 117) : c'est ce que compte la tuile du tableau de bord.
   const statusParam = params.get("status") ?? ""
-  const statusFilter = (WORKFLOW_STATUSES as string[]).includes(statusParam)
-    ? (statusParam as WorkflowStatus)
-    : ""
+  const statusFilter: WorkflowStatus | typeof OUVERTS | "" =
+    params.get("ouverts") === "1"
+      ? OUVERTS
+      : (WORKFLOW_STATUSES as string[]).includes(statusParam)
+        ? (statusParam as WorkflowStatus)
+        : ""
+  // L'exercice ne se pose que depuis une tuile : la liste dit alors qu'elle
+  // est réduite, et propose de lever le filtre.
+  const exerciceParam = Number(params.get("exercice"))
+  const exercice = Number.isInteger(exerciceParam) && exerciceParam > 0 ? exerciceParam : null
   const countryParam = Number(params.get("country"))
   const countryFilter: number | "" =
     Number.isInteger(countryParam) && countryParam > 0 ? countryParam : ""
@@ -48,12 +60,17 @@ export function DossiersPage() {
   const debouncedSearch = useDebouncedValue(search)
   const [exportError, setExportError] = useState<string | null>(null)
 
+  // Les filtres communs à la liste et à ses onglets par pays.
+  const filtresDuServeur: Record<string, unknown> = {}
+  if (debouncedSearch) filtresDuServeur.search = debouncedSearch
+  if (statusFilter === OUVERTS) filtresDuServeur.ouverts = true
+  else if (statusFilter) filtresDuServeur.status = statusFilter
+  if (exercice !== null) filtresDuServeur.exercice = exercice
+
   const query = useQuery(
-    JSON.stringify({ page, search: debouncedSearch, statusFilter, countryFilter }),
+    JSON.stringify({ page, search: debouncedSearch, statusFilter, countryFilter, exercice }),
     (signal) => {
-      const requestParams: Record<string, unknown> = { page, page_size: PAGE_SIZE }
-      if (debouncedSearch) requestParams.search = debouncedSearch
-      if (statusFilter) requestParams.status = statusFilter
+      const requestParams: Record<string, unknown> = { page, page_size: PAGE_SIZE, ...filtresDuServeur }
       if (countryFilter !== "") requestParams.country = countryFilter
       return fetchDossiers(requestParams, signal)
     },
@@ -71,19 +88,14 @@ export function DossiersPage() {
   // pays ; le serveur cloisonne de toute façon.
   const choixPaysVisible = Boolean(me?.has_global_scope) || (me?.countries ?? []).length > 1
   const parPays = useQuery(
-    JSON.stringify({ search: debouncedSearch, statusFilter }),
-    (signal) => {
-      const requestParams: Record<string, unknown> = {}
-      if (debouncedSearch) requestParams.search = debouncedSearch
-      if (statusFilter) requestParams.status = statusFilter
-      return fetchDossiersParPays(requestParams, signal)
-    },
+    JSON.stringify({ search: debouncedSearch, statusFilter, exercice }),
+    (signal) => fetchDossiersParPays(filtresDuServeur, signal),
     { enabled: choixPaysVisible, fallback: t("dossiers.liste.chargement_impossible") },
   )
 
   // Un changement de filtre ramène à la première page : rester en page 4
   // d'un résultat qui n'en compte plus qu'une afficherait un tableau vide.
-  const changeFilter = (name: "status" | "country", value: string) => {
+  const changeFilter = (name: "status" | "country" | "exercice", value: string) => {
     setPage(1)
     setParams(
       (current) => {
@@ -95,7 +107,21 @@ export function DossiersPage() {
       { replace: true },
     )
   }
-  const changeStatus = (value: string) => changeFilter("status", value)
+  // « Ouverts » et un statut s'excluent : l'un remplace l'autre dans l'URL.
+  const changeStatus = (value: string) => {
+    setPage(1)
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.delete("status")
+        next.delete("ouverts")
+        if (value === OUVERTS) next.set("ouverts", "1")
+        else if (value) next.set("status", value)
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   return (
     <div className="ecran-plein space-y-6 court:space-y-3">
@@ -155,6 +181,11 @@ export function DossiersPage() {
               label: t("commun.tous"),
               count: statusFilter === "" && !query.loading ? count : undefined,
             },
+            {
+              value: OUVERTS,
+              label: t("dossiers.liste.ouverts"),
+              count: statusFilter === OUVERTS && !query.loading ? count : undefined,
+            },
             ...WORKFLOW_STATUSES.map((value) => ({
               value,
               label: workflowLabel(t, value),
@@ -163,6 +194,18 @@ export function DossiersPage() {
           ]}
         />
       </div>
+
+      {/* Venue d'une tuile du Pilotage, la liste est bornée à un exercice :
+          elle le dit, et la personne peut lever la borne. */}
+      {exercice !== null && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <CalendarRange className="h-4 w-4" aria-hidden />
+          <span>{t("dossiers.liste.exercice", { annee: exercice })}</span>
+          <Button variant="ghost" size="sm" onClick={() => changeFilter("exercice", "")}>
+            {t("dossiers.liste.toutes_annees")}
+          </Button>
+        </div>
+      )}
 
       <Card className="remplit border-border/60 shadow-sm">
         <CardContent className="remplit">
@@ -174,7 +217,7 @@ export function DossiersPage() {
             // Un filtre sans résultat le dit, plutôt que d'inviter à créer
             // un projet comme si le pays n'en avait aucun.
             vide={
-              debouncedSearch || statusFilter || countryFilter !== ""
+              debouncedSearch || statusFilter || countryFilter !== "" || exercice !== null
                 ? t("dossiers.liste.vide.aide_filtres")
                 : canCreate
                   ? t("dossiers.liste.vide.aide_creer")
