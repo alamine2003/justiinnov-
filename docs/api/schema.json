@@ -2023,7 +2023,7 @@
                         "in": "query",
                         "name": "exercice",
                         "schema": {
-                            "type": "number"
+                            "type": "integer"
                         }
                     },
                     {

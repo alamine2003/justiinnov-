@@ -194,3 +194,26 @@ describe("DossiersPage — venue de la tuile « Dossiers ouverts »", () => {
     expect(screen.queryByText("Exercice 2026 seulement")).toBeNull()
   })
 })
+
+describe("DossiersPage — pastilles « Ouverts » et statut", () => {
+  it("un statut remplace « Ouverts », et « Tous » retire les deux sans toucher à l'exercice", async () => {
+    render(
+      <MemoryRouter initialEntries={["/dossiers?ouverts=1&exercice=2026"]}>
+        <DossiersPage />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(fetchDossiers).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole("button", { name: /^Clôturé/ }))
+
+    await waitFor(() => expect(fetchDossiers.mock.calls.at(-1)?.[0]).toMatchObject({ status: "closed" }))
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).not.toHaveProperty("ouverts")
+    expect(screen.getByRole("button", { name: /^Ouverts/ })).toHaveAttribute("aria-pressed", "false")
+
+    fireEvent.click(screen.getByRole("button", { name: /^Tous/ }))
+
+    await waitFor(() => expect(fetchDossiers.mock.calls.at(-1)?.[0]).not.toHaveProperty("status"))
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).not.toHaveProperty("ouverts")
+    expect(fetchDossiers.mock.calls.at(-1)?.[0]).toMatchObject({ exercice: 2026 })
+  })
+})

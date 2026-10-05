@@ -19,6 +19,9 @@ import type { WorkflowStatus } from "@/lib/types"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
 
+/** Valeur de pastille du filtre serveur `ouverts` : tout sauf clôturé. */
+const OUVERTS = "ouverts"
+
 /**
  * Tous les dossiers visibles, quel que soit leur projet.
  *
@@ -27,9 +30,6 @@ import { useQuery } from "@/lib/use-query"
  * pilotage (`?status=`), la recherche transverse et l'export ; elle quitte
  * la navigation.
  */
-/** Valeur de pastille du filtre serveur `ouverts` : tout sauf clôturé. */
-const OUVERTS = "ouverts"
-
 export function DossiersPage() {
   const { t } = useTranslation()
   const { can, me } = useAuth()

@@ -4,7 +4,11 @@
 from datetime import date
 
 import django_filters
+from django import forms
 from django.db.models import Q
+from django_filters import rest_framework as filtres_de_l_api
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 
 from .historique import retirees_des_dossiers
 from .models import AuditLog, Dossier, Expense, Proof, Rectification
@@ -42,15 +46,30 @@ class AuditLogFilter(django_filters.FilterSet):
         )
 
 
-class DossierFilter(django_filters.FilterSet):
+@extend_schema_field(OpenApiTypes.INT)
+class FiltreEntier(django_filters.NumberFilter):
+    """Un nombre entier : ``NumberFilter`` lit un décimal, et ``2026.7``
+    devenait 2026 sans un mot."""
+
+    field_class = forms.IntegerField
+
+
+class DossierFilter(filtres_de_l_api.FilterSet):
     """Les filtres de la liste des dossiers, plus ce qu'une tuile du tableau
     de bord compte (décision 117) : ``ouverts`` (tout sauf clôturé, la
     définition de ``DossierQuerySet.ouverts``) et ``exercice``, l'année de
     la date du dossier. ``Dossier.date`` est un jour : les bornes sont
-    celles de ``reporting.scope.bornes_periode``, sans fuseau à appliquer."""
+    celles de ``reporting.scope.bornes_periode``, sans fuseau à appliquer.
 
-    ouverts = django_filters.BooleanFilter(method="filtrer_les_ouverts")
-    exercice = django_filters.NumberFilter(method="filtrer_par_exercice")
+    Le ``FilterSet`` et le ``BooleanFilter`` sont ceux de DRF, comme ce que
+    ``filterset_fields`` générait : leur widget lit ``1``/``0`` autant que
+    ``true``/``false`` — le générique ignorait ``?ouverts=1``, la forme de
+    l'adresse de l'interface. ``ouverts=false`` ne filtre rien : il rend
+    tous les dossiers, clôturés compris. ``exercice`` est un entier : une
+    décimale répond 400."""
+
+    ouverts = filtres_de_l_api.BooleanFilter(method="filtrer_les_ouverts")
+    exercice = FiltreEntier(method="filtrer_par_exercice")
 
     class Meta:
         model = Dossier
