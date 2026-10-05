@@ -6285,9 +6285,11 @@ export interface operations {
             query?: {
                 country?: number
                 country__country_ref?: string
+                exercice?: number
                 kind?: number
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
+                ouverts?: boolean
                 owner?: number
                 /** @description Un numéro de page de l'ensemble des résultats. */
                 page?: number

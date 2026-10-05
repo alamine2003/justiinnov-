@@ -33,7 +33,7 @@ from core.regles import RegleViolee, traduire_les_regles
 from . import stockage, transitions
 from .audit import champs_journalises, journaliser_la_modification, photographier, record
 from .mixins import DraftDeletableViewSet
-from .filtres import AuditLogFilter
+from .filtres import AuditLogFilter, DossierFilter
 from .synthese_audit import synthese
 from .models import (
     AuditLog,
@@ -230,10 +230,7 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         .with_totals()
     )
     permission_classes = [RolePermission]
-    filterset_fields = [
-        "country", "country__country_ref", "status", "team", "owner",
-        "project", "project__kind", "kind",
-    ]
+    filterset_class = DossierFilter
     search_fields = ["number", "label", "project__name", "project__reference", "external_ref"]
     ordering_fields = ["date", "number", "created_at"]
     # Un manager rattaché à des équipes ne voit que leurs dossiers : le

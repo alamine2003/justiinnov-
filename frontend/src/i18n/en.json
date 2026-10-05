@@ -372,7 +372,10 @@
         "titre": "No file",
         "aide_creer": "Create a project: its dossiers are opened automatically, you only have to fill them.",
         "aide_filtres": "No file matches these filters."
-      }
+      },
+      "ouverts": "Open",
+      "exercice": "Financial year {{annee}} only",
+      "toutes_annees": "Show all years"
     },
     "formulaire": {
       "creation_impossible": "Unable to create",

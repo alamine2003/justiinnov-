@@ -372,7 +372,10 @@
         "titre": "Aucun dossier",
         "aide_creer": "Créez un projet : ses dossiers sont ouverts d'office, il ne reste qu'à les remplir.",
         "aide_filtres": "Aucun dossier ne correspond à ces filtres."
-      }
+      },
+      "ouverts": "Ouverts",
+      "exercice": "Exercice {{annee}} seulement",
+      "toutes_annees": "Voir toutes les années"
     },
     "formulaire": {
       "creation_impossible": "Création impossible",

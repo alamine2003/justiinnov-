@@ -95,6 +95,13 @@ export function DashboardPage() {
     : me?.has_global_scope
       ? t("pilotage.charge.aide.dossiers_ouverts")
       : perimetre.map((pays) => pays.name).join(", ")
+  // La liste des dossiers ouverts de l'exercice et du pays : le chiffre de
+  // la tuile (décision 117).
+  const filtreDesDossiers = new URLSearchParams({
+    ouverts: "1",
+    exercice: String(year),
+    ...(countryId !== "" ? { country: String(countryId) } : {}),
+  }).toString()
   // L'exercice et le pays des tuiles, repris par le registre qu'elles ouvrent.
   const filtreDuRegistre = new URLSearchParams({
     from: `${year}-01-01`,
@@ -245,7 +252,7 @@ export function DashboardPage() {
           hint={portee}
           value={data?.workload.dossiers_open}
           tone="border-l-marque"
-          to="/dossiers"
+          to={`/dossiers?${filtreDesDossiers}`}
         />
       </div>
 

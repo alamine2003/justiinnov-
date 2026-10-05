@@ -267,6 +267,20 @@ describe("Pilotage — liens des tuiles", () => {
     expect(adresse.searchParams.get("from")).toMatch(/^\d{4}-01-01$/)
     expect(adresse.searchParams.get("to")).toMatch(/^\d{4}-12-31$/)
   })
+
+  it("ouvrent la liste des dossiers ouverts de l'exercice et du pays", async () => {
+    profil = { has_global_scope: false, countries: [pays(1, "Cote d'Ivoire"), pays(2, "Togo")] } as Partial<Me>
+
+    monter()
+
+    fireEvent.change(await screen.findByRole("combobox", { name: "Pays" }), { target: { value: "2" } })
+    const lien = await screen.findByRole("link", { name: /Dossiers ouverts/ })
+    await waitFor(() => expect(lien.getAttribute("href")).toContain("country=2"))
+    const adresse = new URL(lien.getAttribute("href") ?? "", "http://x")
+    expect(adresse.pathname).toBe("/dossiers")
+    expect(adresse.searchParams.get("ouverts")).toBe("1")
+    expect(adresse.searchParams.get("exercice")).toMatch(/^\d{4}$/)
+  })
 })
 
 /**

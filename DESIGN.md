@@ -770,9 +770,13 @@ Lignes.
     si `accepte_des_dossiers`) : confirmation, puis le serveur ouvre les
     dossiers prédéfinis qui manquent.
   Un refus du serveur s'affiche en `<FormError>`, dialogue ouvert.
-- `/dossiers` reste — tuiles du pilotage (`?status=`), recherche
-  transverse, export — mais quitte la navigation et n'ouvre plus de
-  dossier.
+- `/dossiers` reste — tuiles du pilotage, recherche transverse, export —
+  mais quitte la navigation et n'ouvre plus de dossier. La tuile
+  « Dossiers ouverts » y mène avec `?ouverts=1&exercice=…&country=…` :
+  la pastille « Ouverts » est choisie, et une ligne « Exercice 2026
+  seulement » avec « Voir toutes les années » dit que la liste est bornée.
+  Chaque tuile du Pilotage ouvre une liste au même chiffre que le sien
+  (décision 117).
 - **Configuration › Types de dossiers** : la liste commune, en
   `ManageRows` ; en écriture seulement avec `can("dossier_kinds.manage")`
   (le super administrateur), en lecture pour la RH ; un type s'ajoute ou se
