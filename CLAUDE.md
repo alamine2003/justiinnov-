@@ -43,7 +43,10 @@ donnez à chacune sa base avec `-e POSTGRES_DB=justi_<nom>`.
 
 Pour l'interface, lancez aussi les scripts de capture décrits dans `DESIGN.md`
 (parcours, connexion, thème sombre) : ils échouent sur toute erreur de
-console, et plusieurs défauts n'ont été trouvés qu'en regardant les images.
+console, et plusieurs défauts n'ont été trouvés qu'en regardant les images. Un
+écran que traverse un guide vidéo (décision 118) se filme aussi de nouveau
+(`frontend/scripts/tourner-guides.mts`, voir le README), sur une base
+jetable.
 
 La CI (`.github/workflows/ci.yml`) rejoue tout cela, captures comprises, sur
 la pile livrable (`docker-compose.ci.yml`) ; elle tourne sur chaque PR et

@@ -24,6 +24,7 @@ const CountryDetailPage = lazy(() => import("@/pages/countries/detail").then((m)
 const AuditPage = lazy(() => import("@/pages/audit/list").then((m) => ({ default: m.AuditPage })))
 const ConfigurationPage = lazy(() => import("@/pages/configuration").then((m) => ({ default: m.ConfigurationPage })))
 const PasswordPage = lazy(() => import("@/pages/password").then((m) => ({ default: m.PasswordPage })))
+const GuidePage = lazy(() => import("@/pages/guide").then((m) => ({ default: m.GuidePage })))
 const TwoFactorPage = lazy(() => import("@/pages/two-factor").then((m) => ({ default: m.TwoFactorPage })))
 
 function FullPageLoader() {
@@ -179,6 +180,9 @@ export default function App() {
           />
           <Route path="/dossiers/:id" element={<DossierDetailPage />} />
           <Route path="/registre" element={<RegisterPage />} />
+          {/* Le guide vidéo (décision 118) : chacun n'y voit que les
+              guides de ses capacités ; la page est donc ouverte à tous. */}
+          <Route path="/guide" element={<GuidePage />} />
           <Route
             path="/audit"
             element={

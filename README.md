@@ -647,6 +647,61 @@ npx tsx scripts/shot-theme.mts
 Chaque script échoue si la console du navigateur a produit la moindre erreur.
 La CI les rejoue sur la pile livrable.
 
+### Guides vidéo
+
+La page « Guide vidéo » (`/guide`, décision 118) montre un tutoriel par
+geste du manager : ouvrir un projet, saisir une dépense, joindre une pièce,
+soumettre un dossier, importer un classeur. Les vidéos, muettes et
+sous-titrées en français et en anglais, sont versionnées dans
+`frontend/public/guides/` et **se tournent de nouveau quand un écran
+qu'elles traversent change** — ou quand une règle que disent leurs
+sous-titres change (`LEGENDES`, dans le script).
+
+Le tournage **écrit dans la base** (un projet, une ligne, une pièce, une
+soumission, un import), et rien ne s'y supprime : il se fait sur une base
+jetable, `justi_guides`, à côté de `justi_innov` dans la même instance
+Postgres, **une langue par base neuve**. Le script refuse de tourner sans
+`GUIDES_LANGUE`, et n'écrit rien dans `public/guides/` si un seul geste
+échoue.
+
+```bash
+# 1. Une base neuve. Le backend de développement s'arrête : celui du
+#    tournage prend sa place (et son nom, « backend », que Vite appelle).
+docker compose up -d db redis minio frontend
+docker compose stop backend
+docker compose exec db dropdb -U justi --if-exists justi_guides
+docker compose exec db createdb -U justi justi_guides
+G="docker compose run --rm -e POSTGRES_DB=justi_guides --entrypoint python backend manage.py"
+$G migrate
+$G createcachetable
+# Un pays TG-01 et un compte manager de ce pays, jetables, dans un fichier
+# ignoré par git (*.local.json), au format de seed_users.
+$G seed_users --file seed_users.guides.local.json
+$G seed_demo --base-jetable
+docker compose run -d --rm --use-aliases --service-ports \
+  -e POSTGRES_DB=justi_guides --name justi-guides-backend backend
+
+# 2. Le tournage d'une langue.
+cd frontend
+GUIDES_LANGUE=fr SHOT_COUNTRY_USER=… SHOT_COUNTRY_PASSWORD=… \
+  SHOT_COUNTRY_TOTP_SECRET=… npx tsx scripts/tourner-guides.mts
+cd ..
+
+# 3. Arrêter le backend du tournage, reprendre en 1 pour l'autre langue
+#    (GUIDES_LANGUE=en), puis rendre la pile de développement.
+docker stop justi-guides-backend
+docker compose up -d backend
+```
+
+La pièce du guide « Joindre une pièce » est un reçu fictif, déposé dans le
+MinIO de développement. `GUIDES_SEULS=saisir-une-ligne,…` restreint le
+tournage à quelques guides, sur une base où les précédents ont déjà été
+joués (chacun reprend le projet, la ligne et la pièce du précédent). Les
+prises sont réencodées par le ffmpeg livré avec les navigateurs de
+Playwright ; `GUIDES_FFMPEG` en désigne un autre. **Regardez les vidéos et
+relisez leurs sous-titres avant de les commiter**, comme les captures : ils
+enseignent les règles du circuit au manager.
+
 ## Circuit de justification
 
 Le but de l'application n'est pas d'autoriser des dépenses : c'est de savoir

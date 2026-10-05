@@ -115,6 +115,8 @@ async function main() {
   const hqNav = await hq.getByRole("navigation", { name: "Navigation principale" }).getByRole("link").allTextContents()
   expect(hqNav.some((t) => t.includes("Configuration")), "le siège voit « Configuration »")
   expect(hqNav.some((t) => t.includes("Audit")), "le siège voit « Audit »")
+  // Les guides vidéo montrent les gestes du pays : le siège n'en a aucun.
+  expect(!hqNav.some((t) => t.includes("Guide vidéo")), "le siège ne voit pas « Guide vidéo »")
   expect((await hq.textContent("h1"))?.includes("Pilotage") ?? false, "le tableau de bord s'ouvre")
   // Le menu du compte : la supervision (Grafana) aux administrateurs, dans
   // un nouvel onglet ; la pastille 2FA pour un compte enrôlé (ceux de la CI
@@ -443,6 +445,27 @@ async function main() {
     "le pays ne voit pas « Supervision »",
   )
   await rep.keyboard.press("Escape")
+  // Le guide vidéo (décision 118) : les cinq gestes du manager, chacun avec
+  // sa vidéo et ses sous-titres servis — un fichier manquant répond 404.
+  expect(repNav.some((t) => t.includes("Guide vidéo")), "le pays voit « Guide vidéo »")
+  await goto(rep, "/guide", 1200)
+  await shot(rep, "guide_video")
+  const sommaire = rep.getByRole("navigation", { name: "Les guides" }).getByRole("button")
+  expect((await sommaire.count()) === 5, "le guide propose les cinq gestes du manager")
+  // Le type compte autant que le statut : le serveur de développement
+  // répond 200 avec index.html pour un fichier absent.
+  for (const [selecteur, attribut, type] of [
+    ["video source", "src", "video/webm"],
+    ["video track", "src", "text/vtt"],
+    ["video", "poster", "image/jpeg"],
+  ] as const) {
+    const adresse = await rep.locator(selecteur).first().getAttribute(attribut)
+    const reponse = adresse ? await rep.request.get(`${BASE}${adresse}`) : null
+    expect(
+      reponse?.status() === 200 && (reponse.headers()["content-type"] ?? "").startsWith(type),
+      `le guide ouvert sert ${adresse} en ${type}`,
+    )
+  }
   await goto(rep, "/projets", 1200)
   await shot(rep, "projets_representant")
   // Le pays crée ses projets : le type choisi annonce les dossiers qu'il

@@ -39,7 +39,11 @@
     "elements_one": "{{count}} item",
     "elements_other": "{{count}} items",
     "separateur_libelle": ": ",
-    "sera_enregistre": "Will be recorded as: {{montant}}"
+    "sera_enregistre": "Will be recorded as: {{montant}}",
+    "fichier": {
+      "choisir": "Choose a file",
+      "aucun": "No file chosen"
+    }
   },
   "nav": {
     "retour": "Back",
@@ -63,10 +67,12 @@
       "suivi": "Tracking",
       "budget": "Budget",
       "controle": "Control",
-      "administration": "Administration"
+      "administration": "Administration",
+      "aide": "Help"
     },
     "reduire_menu": "Collapse menu",
-    "deplier_menu": "Expand menu"
+    "deplier_menu": "Expand menu",
+    "guide": "Video guide"
   },
   "erreurs": {
     "injoignable": "Server unreachable. Check your connection.",
@@ -1405,5 +1411,38 @@
       "tronque": "Only the most recent events are shown.",
       "journal_complet": "See the project's full log"
     }
+  },
+  "guides": {
+    "titre": "Video guide",
+    "description": "Every step of the platform, shown one at a time. The videos are silent and subtitled, in the interface language.",
+    "sous_titres": "Subtitles",
+    "sommaire": "The guides",
+    "aucun": {
+      "titre": "No guide for your account",
+      "aide": "The guides show how to declare expenses, which only country managers do."
+    },
+    "liste": {
+      "ouvrir-un-projet": {
+        "titre": "Open a project",
+        "description": "Create a congress, a trip or a financial support, which receives its dossiers automatically."
+      },
+      "saisir-une-ligne": {
+        "titre": "Enter an expense",
+        "description": "Add a line to a dossier: what, when, where, how much and under which manager."
+      },
+      "joindre-une-piece": {
+        "titre": "Attach a document",
+        "description": "Upload the receipt or invoice that proves an expense, from its line."
+      },
+      "soumettre-un-dossier": {
+        "titre": "Submit a dossier",
+        "description": "Send a complete dossier to head office: its lines go with it."
+      },
+      "importer-un-classeur": {
+        "titre": "Import a workbook",
+        "description": "Load the lines of an Excel workbook into a dossier, after a simulation."
+      }
+    },
+    "illisible": "Your browser cannot play this video. Open the platform in an up-to-date Chrome, Edge or Firefox."
   }
 }

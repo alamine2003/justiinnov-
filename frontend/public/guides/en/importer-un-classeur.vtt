@@ -1,0 +1,25 @@
+WEBVTT
+
+1
+00:00:01.542 --> 00:00:07.199
+Are your expenses already in an Excel workbook? Import it into a project dossier.
+
+2
+00:00:07.199 --> 00:00:14.961
+Choose the project, then the dossier that will receive the lines.
+
+3
+00:00:14.961 --> 00:00:19.215
+Choose the workbook.
+
+4
+00:00:19.215 --> 00:00:28.893
+Simulate first (“Simulate the import”): nothing is written, you see what would be created.
+
+5
+00:00:28.893 --> 00:00:36.819
+Everything is correct: turn off the simulation, then click “Import”.
+
+6
+00:00:36.819 --> 00:00:44.130
+The lines arrive as drafts in the dossier. Then attach each one's document.

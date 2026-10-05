@@ -243,7 +243,8 @@ avec le défilement.
 **barre latérale** dès `lg`, par groupe : **Suivi** (Pilotage, Projets,
 Registre), **Budget** (Budgets, Pays), **Contrôle** (Audit, si
 `can("audit.read")`), **Administration** (Configuration, si
-`can("configuration.manage")`). Un groupe que les droits laissent vide ne
+`can("configuration.manage")`), **Aide** (Guide vidéo, s'il reste au compte
+au moins un guide à suivre). Un groupe que les droits laissent vide ne
 s'affiche pas. Surface neutre (`bg-card`, `border-r border-border/60`),
 entrée active en `bg-accent` : la barre ne porte aucune teinte de marque.
 
@@ -280,7 +281,12 @@ Variantes : `default` (action principale), `outline` (action secondaire),
 ### Champs
 
 `<Input>` et `<NativeSelect>` partagent la même hauteur et le même style.
-Toujours un `<Label htmlFor>` associé. Le projet utilise **base-ui** sous
+Toujours un `<Label htmlFor>` associé. Un champ fichier est un `<ChampFichier>`
+(`components/ui/champ-fichier.tsx`), jamais un `<Input type="file">` : le
+champ natif écrit « Choose File » dans la langue du navigateur, pas dans
+celle de l'interface. Le champ natif reste le contrôle, masqué
+visuellement — étiquette, clavier, `required`, `accept` et `ref` le visent
+toujours. Le projet utilise **base-ui** sous
 shadcn, dont l'API diffère de Radix : pour les listes déroulantes, préférez
 `NativeSelect` — comportement clavier natif, rendu correct sur mobile.
 
@@ -849,6 +855,27 @@ son dossier. Seul un dossier du projet « Historique »
 (`project_is_historical`) garde le choix, ses lignes portant chacune le
 leur.
 
+### Guide vidéo
+
+`/guide` (décision 118) : `PageHeader`, puis le lecteur dans une `Card` et,
+à sa droite dès `xl`, le sommaire des guides — une liste numérotée de
+boutons (`aria-current` sur le guide ouvert), chacun avec son affiche, son
+titre et sa description. Le guide ouvert vit dans l'adresse (`?video=`) ;
+une adresse qui nomme un guide inconnu ouvre le premier. Le lecteur est un
+`<video controls muted>` natif, avec la piste de sous-titres de la langue
+de l'interface (`kind="captions"`, `default`) et l'affiche du guide ; sa
+`key` change avec le guide et la langue, sans quoi il garderait l'ancienne
+source. La liste vient de `src/lib/guides.ts`, filtrée par `can()` : un
+compte ne voit que les guides des capacités qu'il a, et un compte sans guide
+lit un état vide qui dit pourquoi.
+
+Les vidéos sont **tournées par un script** (`scripts/tourner-guides.mts`,
+voir le README) : un pointeur et un halo, aux couleurs des jetons
+(`--foreground`, `--primary`), montrent où l'on clique ; le halo s'efface à
+chaque clic, sans quoi il resterait au-dessus de la page suivante. **Un
+écran que traverse un guide ne change pas sans que le guide soit tourné de
+nouveau** et regardé, comme une capture.
+
 ### Onglets par pays des dossiers et des projets
 
 Un dossier appartient à un pays (décision 89). Dès que le compte voit
@@ -898,6 +925,10 @@ npx tsx scripts/screenshot.ts     # parcours complet, siège et pays
 npx tsx scripts/shot-login.ts     # connexion, grand écran et mobile
 npx tsx scripts/shot-theme.mts    # écrans principaux, thème clair puis sombre
 ```
+
+Un écran que traverse un guide vidéo se filme aussi de nouveau
+(`scripts/tourner-guides.mts`, voir le README) : la vidéo montrerait
+sinon l'ancien écran.
 
 Les trois scripts **échouent si la console du navigateur a produit la moindre
 erreur** — une seule exception, nommée : le `400 totp_required` du premier

@@ -13,6 +13,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  PlayCircle,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -38,6 +39,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle"
 import { SUPERVISION_PATH, UserMenu } from "@/components/layout/user-menu"
 import { useAuth } from "@/context/use-auth"
 import { TOTP_PATH, platformClosed } from "@/lib/accounts"
+import { guidesVisibles } from "@/lib/guides"
 import { BRAND, copyright } from "@/lib/brand"
 import { useInstallPrompt } from "@/lib/install-prompt"
 import { cn } from "@/lib/utils"
@@ -224,6 +226,15 @@ export function AppLayout() {
           entrees: can("configuration.manage")
             ? [{ to: "/configuration", icon: Settings, label: t("nav.configuration") }]
             : [],
+        },
+        {
+          // Le guide vidéo ne s'affiche qu'à qui a au moins un guide à suivre.
+          cle: "aide",
+          titre: t("nav.groupe.aide"),
+          entrees:
+            guidesVisibles(can).length > 0
+              ? [{ to: "/guide", icon: PlayCircle, label: t("nav.guide") }]
+              : [],
         },
       ].filter((groupe) => groupe.entrees.length > 0)
   const avecMenu = groupes.length > 0

@@ -72,6 +72,22 @@ describe("AppLayout — barre latérale", () => {
     expect(within(barre()).queryByRole("link", { name: "Audit" })).toBeNull()
   })
 
+  it("ouvre le guide vidéo à qui a un guide à suivre, et à lui seul", () => {
+    // Le siège n'a aucun des gestes filmés : pas de groupe « Aide ».
+    monter()
+    expect(within(barre()).queryByText("Aide")).toBeNull()
+    expect(within(barre()).queryByRole("link", { name: "Guide vidéo" })).toBeNull()
+  })
+
+  it("range le guide vidéo sous « Aide », en dernier, pour un manager", () => {
+    droits = new Set(["projets.create", "expenses.create"])
+
+    monter()
+
+    expect(within(barre()).getByText("Aide")).toBeInTheDocument()
+    expect(within(barre()).getAllByRole("link").at(-1)).toHaveAttribute("href", "/guide")
+  })
+
   it("se replie en gardant le nom de chaque entrée, et s'en souvient", () => {
     const { unmount } = monter()
 
