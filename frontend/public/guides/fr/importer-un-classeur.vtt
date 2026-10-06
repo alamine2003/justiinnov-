@@ -1,25 +1,25 @@
 WEBVTT
 
 1
-00:00:01.468 --> 00:00:07.402
-Vos dépenses sont déjà dans un classeur Excel ? Importez-le dans un dossier du projet.
+00:00:01.545 --> 00:00:08.744
+Vos dépenses sont déjà dans un classeur Excel ? Importez-le dans un dossier d'un projet que vous avez ouvert.
 
 2
-00:00:07.402 --> 00:00:14.933
+00:00:08.744 --> 00:00:16.291
 Choisissez le projet, puis le dossier qui recevra les lignes.
 
 3
-00:00:14.933 --> 00:00:19.187
-Choisissez le classeur.
+00:00:16.291 --> 00:00:25.074
+Choisissez le classeur. Colonnes exigées : N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.
 
 4
-00:00:19.187 --> 00:00:28.790
+00:00:25.074 --> 00:00:34.716
 Simulez d'abord (« Simuler l'import ») : rien n'est écrit, vous voyez ce qui serait créé.
 
 5
-00:00:28.790 --> 00:00:37.085
-Tout est correct : désactivez la simulation, puis cliquez sur « Importer ».
+00:00:34.716 --> 00:00:43.777
+Si la simulation ne signale aucune erreur, désactivez-la, puis cliquez sur « Importer ».
 
 6
-00:00:37.085 --> 00:00:45.004
-Les lignes arrivent en brouillon dans le dossier. Joignez ensuite la pièce de chacune.
+00:00:43.777 --> 00:00:53.127
+Les lignes arrivent en brouillon dans le dossier. Joignez la pièce de chacune, soumettez ensuite le dossier.
