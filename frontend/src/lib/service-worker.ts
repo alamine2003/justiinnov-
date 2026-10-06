@@ -6,9 +6,14 @@
  * - `/grafana` : la supervision a sa propre application, servie par Caddy ;
  * - `/admin` : le back-office Django ;
  * - `/metrics` : l'exposition Prometheus ;
- * - `/guides/` : les vidéos du guide (décision 118), servies telles quelles
- *   et jamais mises en cache — une vidéo ouverte dans un onglet est un
- *   fichier, pas une page de l'application.
+ * - `/guides/` : les fichiers du guide vidéo (décision 118) — une vidéo
+ *   ouverte dans un onglet est un fichier, pas une page de l'application.
+ *
+ * Cette liste ne règle que le repli de navigation : elle n'empêche aucune
+ * mise en cache. Si les vidéos, sous-titres et affiches du guide ne sont pas
+ * préchargés, c'est que les `globPatterns` de `vite.config.ts` ne retiennent
+ * ni `webm`, ni `vtt`, ni `jpg` ; y ajouter l'une de ces extensions ferait
+ * précharger les guides à chaque installation, quoi que dise cette liste.
  *
  * Sans cette liste, ouvrir `/grafana/` dans un nouvel onglet affichait
  * l'interface au lieu de la supervision, une fois le service worker installé.

@@ -60,8 +60,10 @@ export default defineConfig(({ mode }) => {
           // Une police variable pèse plus que la limite par défaut (2 Mo).
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           // Navigation hors ligne : le shell de l'application, sauf pour
-          // l'API, la supervision, le back-office et les métriques, servis
-          // par le serveur (liste testée dans `src/lib/service-worker.ts`).
+          // l'API (`/api/`), la supervision (`/grafana`), le back-office
+          // (`/admin`), les métriques (`/metrics`) et les guides vidéo
+          // (`/guides/`), servis par le serveur (liste tenue dans
+          // `src/lib/service-worker.ts`, testée dans `service-worker.test.ts`).
           navigateFallback: "/index.html",
           navigateFallbackDenylist: NAVIGATE_FALLBACK_DENYLIST,
           // L'application est temps réel : aucune donnée métier en cache.

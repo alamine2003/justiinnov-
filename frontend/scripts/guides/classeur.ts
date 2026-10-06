@@ -8,6 +8,11 @@
  *
  * Un xlsx est une archive ZIP de quelques fichiers XML. Les entrées sont
  * stockées sans compression : il suffit d'en écrire les en-têtes.
+ *
+ * Le module tient aussi les dates du tournage, calculées à partir du jour
+ * où il se joue, et la vérification de ce que l'API répond à l'import. Tout
+ * y est pur — l'horloge se passe en argument —, donc testé sans base ni
+ * navigateur (`classeur.test.mts`).
  */
 import { crc32 } from "node:zlib"
 
@@ -119,4 +124,113 @@ function archive(fichiers: Record<string, string>) {
 /** Le classeur d'une seule feuille, la première ligne servant d'en-tête. */
 export function classeur(lignes: Cellule[][]) {
   return archive({ ...FICHIERS_FIXES, "xl/worksheets/sheet1.xml": feuille(lignes) })
+}
+
+// ---------------------------------------------------------------------------
+// Les dates du tournage
+// ---------------------------------------------------------------------------
+
+/**
+ * Le jour du tournage moins `jours`, sans quitter son année. Les dates du
+ * guide se calculent à partir du jour où il se tourne : la
+ * démonstration (`seed_demo`) n'ouvre que les enveloppes de l'année en
+ * cours, et une ligne datée d'une autre année n'en trouverait aucune — le
+ * tournage échouait dès le 1er janvier qui suivait. Une date passée, parce
+ * qu'une dépense se déclare après coup ; jamais avant le 1er janvier, pour
+ * qu'un tournage des premiers jours de l'année trouve encore l'enveloppe.
+ */
+export function jourDuTournage(aujourdhui: Date, jours: number): Date {
+  const annee = aujourdhui.getFullYear()
+  const jour = new Date(annee, aujourdhui.getMonth(), aujourdhui.getDate() - jours)
+  const premierJanvier = new Date(annee, 0, 1)
+  return jour < premierJanvier ? premierJanvier : jour
+}
+
+function deuxChiffres(nombre: number) {
+  return String(nombre).padStart(2, "0")
+}
+
+/**
+ * `JJ/MM/AAAA`, le format du classeur historique (`FORMATS_DE_DATE` de
+ * `backend/reporting/imports.py`) : jour et mois toujours sur deux
+ * chiffres — l'ancien `0${i + 1}/10/2026` donnait « 010/10/2026 » à la
+ * dixième ligne, refusée.
+ */
+export function dateDuClasseur(jour: Date): string {
+  return `${deuxChiffres(jour.getDate())}/${deuxChiffres(jour.getMonth() + 1)}/${jour.getFullYear()}`
+}
+
+/** `AAAA-MM-JJTHH:MM`, la valeur d'un champ `datetime-local`. */
+export function dateDeSaisie(jour: Date, heure = "10:30"): string {
+  return `${jour.getFullYear()}-${deuxChiffres(jour.getMonth() + 1)}-${deuxChiffres(jour.getDate())}T${heure}`
+}
+
+// ---------------------------------------------------------------------------
+// Le classeur du guide d'import, et ce que l'API doit en dire
+// ---------------------------------------------------------------------------
+
+/** Les colonnes du classeur historique que le guide remplit. */
+export const COLONNES_DU_CLASSEUR = ["N°ORDRE", "DATE", "TEAM", "OWNER", "LIBELLE DES TRANSACTIONS", "DEPENSES"] as const
+
+/**
+ * Le classeur du guide d'import, au format historique, aux noms de la
+ * démonstration. La ligne `i` est datée de `premierEcart + i` jours avant
+ * le tournage : des jours qui précèdent la ligne saisie à la main.
+ */
+export function classeurDuGuide(
+  libelles: readonly string[],
+  { aujourdhui, equipe, responsable, premierEcart = 4 }: {
+    aujourdhui: Date
+    equipe: string
+    responsable: string
+    premierEcart?: number
+  },
+) {
+  return classeur([
+    [...COLONNES_DU_CLASSEUR],
+    ...libelles.map((libelle, i) => [
+      `G-${i + 1}`,
+      dateDuClasseur(jourDuTournage(aujourdhui, premierEcart + i)),
+      equipe,
+      responsable,
+      libelle,
+      150000 + i * 25000,
+    ]),
+  ])
+}
+
+/** La réponse de `POST /api/imports/expenses.xlsx` (`reporting.imports._resultat`). */
+export interface ResultatDImport {
+  lignes_creees?: unknown
+  erreurs?: unknown
+  dry_run?: unknown
+}
+
+/**
+ * Vérifie qu'un import (ou sa simulation) a fait exactement ce que le guide
+ * montre, et lève sinon. L'API répond 200 même quand elle
+ * refuse le classeur, avec une liste `erreurs`, et l'écran affiche alors
+ * le même titre de résultat : attendre ce titre laissait filmer une carte
+ * d'erreurs, puis la légende suivante (`LEGENDES["importer-un-classeur"]`
+ * de `tourner-guides.mts`, « Si la simulation ne signale aucune erreur,
+ * désactivez-la… ») qui fait importer.
+ */
+export function verifierLImport(
+  etape: string,
+  statut: number,
+  resultat: ResultatDImport,
+  attendu: { lignes: number; simulation: boolean },
+) {
+  const motifs: string[] = []
+  if (statut < 200 || statut >= 300) motifs.push(`statut HTTP ${statut}`)
+  const erreurs = Array.isArray(resultat.erreurs) ? resultat.erreurs : null
+  if (erreurs === null) motifs.push("réponse sans liste « erreurs »")
+  else if (erreurs.length > 0) motifs.push(`${erreurs.length} erreur(s) : ${JSON.stringify(erreurs)}`)
+  if (resultat.lignes_creees !== attendu.lignes) {
+    motifs.push(`lignes_creees vaut ${JSON.stringify(resultat.lignes_creees)}, ${attendu.lignes} attendue(s)`)
+  }
+  if (resultat.dry_run !== attendu.simulation) {
+    motifs.push(`dry_run vaut ${JSON.stringify(resultat.dry_run)}, ${attendu.simulation} attendu`)
+  }
+  if (motifs.length > 0) throw new Error(`${etape} : le serveur n'a pas fait ce que le guide montre — ${motifs.join(" ; ")}.`)
 }

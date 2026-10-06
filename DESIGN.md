@@ -284,11 +284,20 @@ Variantes : `default` (action principale), `outline` (action secondaire),
 Toujours un `<Label htmlFor>` associé. Un champ fichier est un `<ChampFichier>`
 (`components/ui/champ-fichier.tsx`), jamais un `<Input type="file">` : le
 champ natif écrit « Choose File » dans la langue du navigateur, pas dans
-celle de l'interface. Le champ natif reste le contrôle, masqué
-visuellement — étiquette, clavier, `required`, `accept` et `ref` le visent
-toujours. Le projet utilise **base-ui** sous
-shadcn, dont l'API diffère de Radix : pour les listes déroulantes, préférez
-`NativeSelect` — comportement clavier natif, rendu correct sur mobile.
+celle de l'interface. Le champ natif reste le contrôle, **transparent et
+posé sur tout le champ** (`absolute inset-0 opacity-0`) — jamais `sr-only`,
+qui empêche de déposer un fichier glissé depuis l'explorateur (le navigateur
+ouvrait le fichier à la place de la page) ; étiquette, clavier, `required`,
+`accept` et `ref` le visent toujours. Le nom du fichier choisi, ou « Aucun
+fichier choisi », le décrit (`aria-describedby`) — sinon un lecteur d'écran
+annonce la valeur native, dans la langue du navigateur — et, tronqué, se lit
+en entier au survol (`title`, porté par le champ natif qui est au-dessus ;
+le texte affiché, couvert, n'en porte pas : il n'est jamais survolé).
+Désactivé ou invalide (`aria-invalid`), il s'affiche comme `<Input>`.
+
+Le projet utilise **base-ui** sous shadcn, dont l'API diffère de Radix :
+pour les listes déroulantes, préférez `NativeSelect` — comportement
+clavier natif, rendu correct sur mobile.
 
 ### Tableaux
 
@@ -857,24 +866,82 @@ leur.
 
 ### Guide vidéo
 
-`/guide` (décision 118) : `PageHeader`, puis le lecteur dans une `Card` et,
-à sa droite dès `xl`, le sommaire des guides — une liste numérotée de
-boutons (`aria-current` sur le guide ouvert), chacun avec son affiche, son
-titre et sa description. Le guide ouvert vit dans l'adresse (`?video=`) ;
+`/guide` (décision 118) : `PageHeader`, puis le lecteur dans une `Card` et
+le sommaire des guides — une liste numérotée de boutons (`aria-current` sur
+le guide ouvert), chacun avec son affiche, son titre et sa description. Le
+sommaire est **sous le lecteur jusqu'à `2xl`** (en deux colonnes dès `md`,
+trois dès `xl`) et ne passe à sa droite (22rem) qu'au-delà. Deux contraintes
+fixent la taille du lecteur, mesurées ensemble :
+
+- **le texte filmé s'affiche à 9 px au moins aux largeurs courantes**
+  (1280 à 1920 px). Les vidéos sont tournées en 1280×800 et l'interface y
+  écrit en 14 px : la vidéo s'affiche donc sur 823 px de large au moins
+  (14 × 823 / 1280 ≈ 9). Avec le sommaire à droite dès `xl`, elle ne
+  mesurait que 584 px à 1280, et les libellés filmés 6 à 7 px, illisibles
+  sans plein écran ;
+- **le lecteur et ses contrôles tiennent dans la fenêtre**, sans défiler.
+  En pleine largeur jusqu'à `2xl`, la vidéo passait sous la ligne de
+  flottaison (bas à 847 px pour 768 à 1366×768, 907 pour 900 à 1440×900,
+  793 pour 720 à 1280×720) : le premier écran ne montrait que l'affiche,
+  une capture de l'application qu'on prenait pour la page elle-même.
+
+Le cadre du lecteur (`mx-auto w-full`, titre et étapes compris, alignés
+sur la vidéo) est donc borné en largeur par la hauteur de page :
+`max-w-[max(52rem,calc((var(--hauteur-page)_-_7.5rem)*1.6))]` — la
+hauteur de page (voir « Hauteur d'écran ») moins l'en-tête de la page et
+la marge haute de la carte (7,5 rem), au format des vidéos (16/10), sans
+descendre sous 52 rem (832 px, 9,1 px de texte filmé). La racine se
+resserre en `court:space-y-3`. Mesuré (Playwright, largeur de la boîte de
+la `<video>`, FR et EN, clair et sombre, sans débordement horizontal ni
+erreur de console) :
+
+| Fenêtre | Vidéo affichée | Texte filmé | Bas de la vidéo | Contrôles |
+|---|---|---|---|---|
+| 1280 × 720 | 832 px (plancher) | 9,1 px | 701 / 720 | visibles |
+| 1280 × 800 | 933 px | 10,2 px | 764 / 800 | visibles |
+| 1366 × 768 | 882 px | 9,6 px | 732 / 768 | visibles |
+| 1440 × 900 | 1 067 px | 11,7 px | 874 / 900 | visibles |
+| 1536 × 864 | 840 px (sommaire à droite) | 9,2 px | 732 / 864 | visibles |
+| 1920 × 1080 | 1 080 px (colonne) | 11,8 px | 882 / 1 080 | visibles |
+| 1366 × 657 | 832 px (plancher) | 9,1 px | 701 / 657 | sous la ligne |
+
+Le plancher l'emporte sur la hauteur : sur une fenêtre plus basse (le
+portable 1366 × 768, barre du navigateur déduite, n'a que 657 px), les
+contrôles passent sous la ligne plutôt que le texte filmé sous 9 px. Le
+sommaire, lui, reste sous le lecteur jusqu'à `2xl` et se découvre en
+défilant. En deçà de
+1280 px, la colonne de contenu elle-même est trop étroite (704 px, 7,7 px
+de texte filmé à 1024) : le plein écran du lecteur y pourvoit. Un
+changement de mise en page, d'en-tête de page ou de définition de tournage
+se mesure de nouveau (largeur affichée de la `<video>` ÷ `videoWidth` × 14,
+et `getBoundingClientRect().bottom` ≤ `innerHeight`). Le lecteur garde
+l'anneau de focus des boutons (`focus-visible:ring-3 ring-ring/50`) : le
+contour par défaut, à 2:1, ne se voyait pas. Le guide ouvert vit dans l'adresse (`?video=`) ;
 une adresse qui nomme un guide inconnu ouvre le premier. Le lecteur est un
 `<video controls muted>` natif, avec la piste de sous-titres de la langue
 de l'interface (`kind="captions"`, `default`) et l'affiche du guide ; sa
 `key` change avec le guide et la langue, sans quoi il garderait l'ancienne
-source. La liste vient de `src/lib/guides.ts`, filtrée par `can()` : un
-compte ne voit que les guides des capacités qu'il a, et un compte sans guide
-lit un état vide qui dit pourquoi.
+source. Sous le titre et la description, **les étapes du guide ouvert**
+s'écrivent en texte, dans une liste numérotée (« Les étapes ») : la vidéo
+est muette, et ce qu'elle montre doit se relire et se chercher dans la page.
+Elles sont lues dans le fichier de sous-titres de la langue — celui du
+lecteur, une seule source — par une analyse WebVTT minimale (chaque
+réplique est une étape). Le chargement et l'échec s'écrivent en petit,
+discrètement (`<output>`, puis `role="alert"`) ; un fichier absent ou qui
+n'est pas un sous-titre n'affiche rien. La liste des guides vient de
+`src/lib/guides.ts`, filtrée par `can()` : un compte ne voit que les
+guides des capacités qu'il a, et un compte sans guide lit un état vide qui
+dit pourquoi.
 
 Les vidéos sont **tournées par un script** (`scripts/tourner-guides.mts`,
 voir le README) : un pointeur et un halo, aux couleurs des jetons
 (`--foreground`, `--primary`), montrent où l'on clique ; le halo s'efface à
-chaque clic, sans quoi il resterait au-dessus de la page suivante. **Un
-écran que traverse un guide ne change pas sans que le guide soit tourné de
-nouveau** et regardé, comme une capture.
+chaque clic, sans quoi il resterait au-dessus de la page suivante. Le
+script compare enfin chaque vidéo, sous chaque sous-titre, à une capture
+de la page prise au même moment, et échoue si l'enregistrement a perdu des
+images (décision 118). **Un écran que traverse un guide ne change pas sans
+que le guide soit tourné de nouveau** et regardé, comme une capture : le
+contrôle des images n'attrape pas un détail faux.
 
 ### Onglets par pays des dossiers et des projets
 

@@ -1414,7 +1414,7 @@
   },
   "guides": {
     "titre": "Video guide",
-    "description": "Every step of the platform, shown one at a time. The videos are silent and subtitled, in the interface language.",
+    "description": "How to declare expenses, from the project to submission, step by step. The videos are silent and subtitled, in the interface language.",
     "sous_titres": "Subtitles",
     "sommaire": "The guides",
     "aucun": {
@@ -1424,24 +1424,29 @@
     "liste": {
       "ouvrir-un-projet": {
         "titre": "Open a project",
-        "description": "Create a congress, a trip or a financial support, which receives its dossiers automatically."
+        "description": "Create a congress, a trip or financial support, which receives its files automatically."
       },
       "saisir-une-ligne": {
         "titre": "Enter an expense",
-        "description": "Add a line to a dossier: what, when, where, how much and under which manager."
+        "description": "Add a line to a file in your name: what, when, where, how much, for which team and under which manager."
       },
       "joindre-une-piece": {
         "titre": "Attach a document",
         "description": "Upload the receipt or invoice that proves an expense, from its line."
       },
       "soumettre-un-dossier": {
-        "titre": "Submit a dossier",
-        "description": "Send a complete dossier to head office: its lines go with it."
+        "titre": "Submit a file",
+        "description": "Send a complete file to head office: its lines go with it."
       },
       "importer-un-classeur": {
         "titre": "Import a workbook",
-        "description": "Load the lines of an Excel workbook into a dossier, after a simulation."
+        "description": "Load the lines of an Excel workbook into a file, after a simulation."
       }
+    },
+    "etapes": {
+      "titre": "The steps",
+      "chargement": "Loading the steps…",
+      "erreur": "The steps could not be loaded; the video subtitles show them."
     },
     "illisible": "Your browser cannot play this video. Open the platform in an up-to-date Chrome, Edge or Firefox."
   }

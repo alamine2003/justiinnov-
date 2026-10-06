@@ -445,8 +445,12 @@ async function main() {
     "le pays ne voit pas « Supervision »",
   )
   await rep.keyboard.press("Escape")
-  // Le guide vidéo (décision 118) : les cinq gestes du manager, chacun avec
-  // sa vidéo et ses sous-titres servis — un fichier manquant répond 404.
+  // Le guide vidéo (décision 118) : le pays voit la page et son sommaire
+  // des cinq gestes du manager ; seul le guide ouvert par défaut (le
+  // premier, en français, la langue des captures) est vérifié ici — sa
+  // vidéo, ses sous-titres et son affiche répondent 200 avec leur type. Les
+  // 30 fichiers (5 guides × 2 langues × 3) sont tenus sur disque par
+  // `src/lib/guides-fichiers.test.ts`.
   expect(repNav.some((t) => t.includes("Guide vidéo")), "le pays voit « Guide vidéo »")
   await goto(rep, "/guide", 1200)
   await shot(rep, "guide_video")

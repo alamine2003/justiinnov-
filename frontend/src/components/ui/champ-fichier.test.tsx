@@ -45,8 +45,53 @@ describe("ChampFichier", () => {
     expect(champ.parentElement).toHaveClass("relative")
   })
 
-  it("se désactive comme un champ natif", () => {
+  it("se désactive comme un champ natif, et s'affiche comme un <Input> désactivé", () => {
     render(<ChampFichier aria-label="Pièce" disabled />)
-    expect(screen.getByLabelText("Pièce")).toBeDisabled()
+    const champ = screen.getByLabelText("Pièce")
+    expect(champ).toBeDisabled()
+    expect(champ.parentElement).toHaveClass("has-[input:disabled]:opacity-50", "has-[input:disabled]:bg-input/50")
+  })
+
+  it("se décrit par le fichier choisi, dans la langue de l'interface, et non par la valeur native", () => {
+    // Le texte visible était `aria-hidden` : un lecteur d'écran annonçait
+    // « No file chosen » sous une interface en français.
+    render(
+      <>
+        <Label htmlFor="piece">Fichier</Label>
+        <ChampFichier id="piece" aria-describedby="aide" />
+        <p id="aide">PDF, JPEG ou PNG.</p>
+      </>,
+    )
+
+    const champ = screen.getByLabelText("Fichier")
+    expect(champ).toHaveAccessibleDescription("Aucun fichier choisi PDF, JPEG ou PNG.")
+    // Le nom reste l'étiquette seule : le texte de l'état, dans l'étiquette
+    // qui enveloppe le champ, ne s'y ajoute pas (il serait annoncé deux fois).
+    expect(champ).toHaveAccessibleName("Fichier")
+    expect(champ).toHaveAttribute("title", "Aucun fichier choisi")
+
+    const long = "facture-hotel-congres-de-cardiologie-abidjan-2026-chambre-double-trois-nuits-recu.pdf"
+    fireEvent.change(champ, { target: { files: [new File(["%PDF-1.4"], long, { type: "application/pdf" })] } })
+
+    expect(champ).toHaveAccessibleDescription(`${long} PDF, JPEG ou PNG.`)
+    expect(champ).toHaveAccessibleName("Fichier")
+    // Tronqué à l'écran, le nom se lit en entier au survol : le champ natif,
+    // posé sur tout le reste, porte l'infobulle. Le texte affiché, qu'il
+    // couvre, n'en porte pas : jamais survolé, elle n'aurait été qu'un
+    // doublon trompeur.
+    expect(champ).toHaveAttribute("title", long)
+    expect(screen.getByText(long)).not.toHaveAttribute("title")
+  })
+
+  it("s'affiche invalide comme un <Input> quand le champ l'est", () => {
+    render(<ChampFichier aria-label="Pièce" aria-invalid />)
+
+    const champ = screen.getByLabelText("Pièce")
+    expect(champ).toHaveAttribute("aria-invalid", "true")
+    // La bordure et l'anneau destructifs d'<Input>, portés par le cadre.
+    expect(champ.parentElement).toHaveClass(
+      "has-[input[aria-invalid=true]]:border-destructive",
+      "has-[input[aria-invalid=true]]:ring-destructive/20",
+    )
   })
 })
