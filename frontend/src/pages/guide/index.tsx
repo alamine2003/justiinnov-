@@ -114,6 +114,13 @@ function EtapesDuGuide({ id, langue }: { id: IdDeGuide; langue: LangueDeGuide })
 }
 
 /**
+ * La largeur maximale du lecteur : la hauteur disponible sous l'en-tête de
+ * page, au format des vidéos (16/10), mais jamais moins de 52 rem, sous
+ * quoi le texte filmé (14 px sur 1280) tomberait sous 9 px.
+ */
+const LARGEUR_DU_LECTEUR = "max-w-[max(52rem,calc((var(--hauteur-page)_-_7.5rem)*1.6))]"
+
+/**
  * Le guide vidéo (décision 118) : un tutoriel par geste, filmé sur la pile
  * de démonstration (`scripts/tourner-guides.mts`), dans la langue de
  * l'interface. Chacun ne voit que les guides des capacités qu'il a ; le
@@ -138,7 +145,7 @@ export function GuidePage() {
     )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 court:space-y-3">
       <PageHeader title={t("guides.titre")} description={t("guides.description")} />
 
       {choisi ? (
@@ -147,40 +154,49 @@ export function GuidePage() {
         // le texte filmé à 6 ou 7 px, illisible (DESIGN.md, « Guide vidéo »).
         <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_22rem]">
           <Card className="border-border/60 shadow-sm">
-            <CardContent className="space-y-3">
-              {/* Muettes, sous-titrées : la clé remonte le lecteur quand
-                  le guide ou la langue changent, sans quoi il garderait
-                  l'ancienne source. */}
-              <video
-                key={`${choisi.id}-${langue}`}
-                aria-labelledby="guide-titre"
-                aria-describedby="guide-description"
-                controls
-                muted
-                preload="metadata"
-                poster={fichierDuGuide(choisi.id, langue, "jpg")}
-                className="aspect-[16/10] w-full rounded-lg border border-border/60 bg-muted outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <source src={fichierDuGuide(choisi.id, langue, "webm")} type="video/webm" />
-                <track
-                  kind="captions"
-                  src={fichierDuGuide(choisi.id, langue, "vtt")}
-                  srcLang={langue}
-                  label={t("guides.sous_titres")}
-                  default
-                />
-                {/* Ce texte ne s'affiche que si le navigateur ne lit pas la vidéo. */}
-                {t("guides.illisible")}
-              </video>
-              <div>
-                <h2 id="guide-titre" className="text-base font-semibold">
-                  {t(`guides.liste.${choisi.id}.titre`)}
-                </h2>
-                <p id="guide-description" className="text-sm text-muted-foreground">
-                  {t(`guides.liste.${choisi.id}.description`)}
-                </p>
+            <CardContent>
+              {/* Le lecteur tient dans la fenêtre, contrôles compris : sa
+                  largeur est bornée par la hauteur de page (`--hauteur-page`,
+                  moins l'en-tête de page et la marge de la carte, 7,5 rem,
+                  fois 16/10), sans descendre sous 52 rem — 832 px, le texte
+                  filmé à 9,1 px (DESIGN.md, « Guide vidéo »). Pleine
+                  largeur, il passait sous la ligne de flottaison à 1366×768.
+                  Titre et étapes s'alignent sur lui. */}
+              <div className={cn("mx-auto w-full space-y-3", LARGEUR_DU_LECTEUR)}>
+                {/* Muettes, sous-titrées : la clé remonte le lecteur quand
+                    le guide ou la langue changent, sans quoi il garderait
+                    l'ancienne source. */}
+                <video
+                  key={`${choisi.id}-${langue}`}
+                  aria-labelledby="guide-titre"
+                  aria-describedby="guide-description"
+                  controls
+                  muted
+                  preload="metadata"
+                  poster={fichierDuGuide(choisi.id, langue, "jpg")}
+                  className="aspect-[16/10] w-full rounded-lg border border-border/60 bg-muted outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <source src={fichierDuGuide(choisi.id, langue, "webm")} type="video/webm" />
+                  <track
+                    kind="captions"
+                    src={fichierDuGuide(choisi.id, langue, "vtt")}
+                    srcLang={langue}
+                    label={t("guides.sous_titres")}
+                    default
+                  />
+                  {/* Ce texte ne s'affiche que si le navigateur ne lit pas la vidéo. */}
+                  {t("guides.illisible")}
+                </video>
+                <div>
+                  <h2 id="guide-titre" className="text-base font-semibold">
+                    {t(`guides.liste.${choisi.id}.titre`)}
+                  </h2>
+                  <p id="guide-description" className="text-sm text-muted-foreground">
+                    {t(`guides.liste.${choisi.id}.description`)}
+                  </p>
+                </div>
+                <EtapesDuGuide id={choisi.id} langue={langue} />
               </div>
-              <EtapesDuGuide id={choisi.id} langue={langue} />
             </CardContent>
           </Card>
 

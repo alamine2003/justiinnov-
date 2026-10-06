@@ -23,8 +23,8 @@ export const LEVEE = "oui"
 /**
  * Vérifie que `base` (`SHOT_BASE`) vise une base jetable et la rend.
  * L'hôte doit être local (`HOTES_LOCAUX`) ; un autre hôte n'est accepté que
- * si `levee` (`GUIDES_CIBLE_JETABLE`) vaut exactement `oui` — une valeur
- * approchante (`1`, `true`, `non`) refuse plutôt que de deviner. Une adresse
+ * si `levee` (`GUIDES_CIBLE_JETABLE`) vaut `oui`, espaces autour tolérés — une
+ * valeur approchante (`1`, `true`, `OUI`, `non`) refuse plutôt que de deviner. Une adresse
  * qui ne se lit pas, ou qui n'est pas en `http`/`https`, refuse toujours.
  */
 export function exigerUneCibleJetable(base: string, levee: string | undefined): string {

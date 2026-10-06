@@ -76,9 +76,11 @@ describe("ChampFichier", () => {
     expect(champ).toHaveAccessibleDescription(`${long} PDF, JPEG ou PNG.`)
     expect(champ).toHaveAccessibleName("Fichier")
     // Tronqué à l'écran, le nom se lit en entier au survol : le champ natif,
-    // posé sur tout le reste, porte l'infobulle.
+    // posé sur tout le reste, porte l'infobulle. Le texte affiché, qu'il
+    // couvre, n'en porte pas : jamais survolé, elle n'aurait été qu'un
+    // doublon trompeur.
     expect(champ).toHaveAttribute("title", long)
-    expect(screen.getByText(long)).toHaveAttribute("title", long)
+    expect(screen.getByText(long)).not.toHaveAttribute("title")
   })
 
   it("s'affiche invalide comme un <Input> quand le champ l'est", () => {

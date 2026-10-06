@@ -704,25 +704,35 @@ n'a pas à y figurer : le script la fixe lui-même.
 ```bash
 # 1. Une base neuve. Le backend et l'ordonnanceur de développement
 #    s'arrêtent : le backend du tournage prend la place du premier (et son
-#    nom, « backend », que Vite appelle). ISOLE sépare tout ce que le
-#    tournage écrit : base, bucket, cache (bash : la variable se découpe en
-#    mots, comme G).
+#    nom, « backend », que Vite appelle). Les trois -e séparent tout ce que
+#    le tournage écrit : base, bucket, cache. Ils sont écrits en clair, dans
+#    la fonction g comme au lancement du backend du tournage : aucune ligne
+#    ne dépend du découpage d'une variable en mots. Le bloc se colle dans
+#    bash.
 docker compose up -d db redis minio frontend
 docker compose stop backend scheduler
 docker compose exec db dropdb -U justi --if-exists justi_guides
 docker compose exec db createdb -U justi justi_guides
 docker compose exec redis redis-cli -n 1 flushdb
-ISOLE="-e POSTGRES_DB=justi_guides -e AWS_STORAGE_BUCKET_NAME=justificatifs-guides -e REDIS_URL=redis://redis:6379/1"
-G="docker compose run --rm $ISOLE --entrypoint python backend manage.py"
-$G migrate
-$G createcachetable
+g() {
+  docker compose run --rm \
+    -e POSTGRES_DB=justi_guides \
+    -e AWS_STORAGE_BUCKET_NAME=justificatifs-guides \
+    -e REDIS_URL=redis://redis:6379/1 \
+    --entrypoint python backend manage.py "$@"
+}
+g migrate
+g createcachetable
 # Le bucket du tournage : seed_demo y dépose déjà des pièces, avant que
 # entrypoint.sh ne le crée au démarrage du backend du tournage.
-$G ensure_bucket
-$G seed_users --file seed_users.guides.local.json
-$G seed_demo --base-jetable
+g ensure_bucket
+g seed_users --file seed_users.guides.local.json
+g seed_demo --base-jetable
 docker compose run -d --rm --use-aliases --service-ports \
-  $ISOLE --name justi-guides-backend backend
+  -e POSTGRES_DB=justi_guides \
+  -e AWS_STORAGE_BUCKET_NAME=justificatifs-guides \
+  -e REDIS_URL=redis://redis:6379/1 \
+  --name justi-guides-backend backend
 
 # 2. Le tournage d'une langue.
 cd frontend
@@ -751,10 +761,19 @@ Le script se règle par l'environnement :
 | `GUIDES_LANGUE` | — | **obligatoire**, `fr` ou `en` : une langue par exécution, sur une base neuve. Absente ou autre, le script s'arrête avant d'ouvrir le navigateur |
 | `SHOT_COUNTRY_USER` / `_PASSWORD` / `_TOTP_SECRET` | — | le compte de tournage ci-dessus ; le secret seulement s'il est enrôlé |
 | `SHOT_BASE` | `http://localhost:5173` | adresse de l'interface visée |
-| `GUIDES_CIBLE_JETABLE` | — | le tournage refuse un `SHOT_BASE` dont l'hôte n'est ni `localhost`, ni `127.0.0.1`, ni `[::1]`, avant d'ouvrir le navigateur : il écrirait pour de bon dans une base qui n'est peut-être pas jetable. `GUIDES_CIBLE_JETABLE=oui` — exactement `oui` — lève ce garde-fou, quand l'hôte distant est bien une base jetable |
-| `GUIDES_SEULS` | tous | `saisir-une-ligne,…` restreint le tournage à quelques guides, sur une base où les précédents ont déjà été joués (chacun reprend le projet, la ligne et la pièce du précédent) |
+| `GUIDES_CIBLE_JETABLE` | — | le tournage refuse un `SHOT_BASE` dont l'hôte n'est ni `localhost`, ni `127.0.0.1`, ni `[::1]`, avant d'ouvrir le navigateur : il écrirait pour de bon dans une base qui n'est peut-être pas jetable. `GUIDES_CIBLE_JETABLE=oui` lève ce garde-fou, quand l'hôte distant est bien une base jetable : la valeur est lue sans les espaces qui l'entourent (`" oui "` vaut `oui`), et toute autre (`1`, `true`, `non`) refuse |
+| `GUIDES_SEULS` | tous | `saisir-une-ligne,…` restreint le tournage à quelques guides, sur une base où les précédents ont déjà été joués (chacun reprend le projet, la ligne et la pièce du précédent). Présente mais vide (`""`, `","`, `" "`) ou nommant un guide inconnu, elle arrête le script avant d'ouvrir le navigateur |
 | `GUIDES_OUT` | `frontend/public/guides` | dossier où le script écrit `<langue>/<guide>.webm`, `.vtt` et `.jpg` ; un autre dossier (chemin absolu) permet de relire un tournage sans toucher aux vidéos livrées |
-| `GUIDES_FFMPEG` | celui de Playwright | le ffmpeg qui réencode les prises (VP8, `libvpx`) |
+| `GUIDES_FFMPEG` | celui de Playwright | le ffmpeg qui réencode les prises (VP8, `libvpx`). Vérifié au démarrage : introuvable, ne s'exécutant pas ou sans l'encodeur `libvpx`, il arrête le script avant d'ouvrir le navigateur, et le message nomme `GUIDES_FFMPEG` |
+
+Ces refus tombent tous au démarrage, dans cet ordre — cible (`SHOT_BASE`,
+`GUIDES_CIBLE_JETABLE`), langue (`GUIDES_LANGUE` absente ou autre que
+`fr`, `en`), sélection (`GUIDES_SEULS` vide ou inconnu), encodeur
+(`GUIDES_FFMPEG` ou le ffmpeg de Playwright inutilisable) —, avant que le
+script ouvre le navigateur, donc avant tout geste : rien n'est écrit en
+base, ni dans `GUIDES_OUT`, et la base jetable n'a pas à être recréée
+(`frontend/scripts/tourner-guides.mts`, `main`). Un réglage faux se
+corrige et se relance sur la même base.
 
 La pièce du guide « Joindre une pièce » est un reçu fictif, déposé dans le
 bucket jetable `justificatifs-guides`. **Regardez les vidéos et relisez

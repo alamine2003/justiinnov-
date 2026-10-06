@@ -211,7 +211,9 @@ export interface ResultatDImport {
  * montre, et lève sinon. L'API répond 200 même quand elle
  * refuse le classeur, avec une liste `erreurs`, et l'écran affiche alors
  * le même titre de résultat : attendre ce titre laissait filmer une carte
- * d'erreurs sous la légende « Tout est correct ».
+ * d'erreurs, puis la légende suivante (`LEGENDES["importer-un-classeur"]`
+ * de `tourner-guides.mts`, « Si la simulation ne signale aucune erreur,
+ * désactivez-la… ») qui fait importer.
  */
 export function verifierLImport(
   etape: string,

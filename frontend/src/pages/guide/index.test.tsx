@@ -135,6 +135,20 @@ describe("GuidePage", () => {
     expect(document.getElementById(video.getAttribute("aria-labelledby")!)).toHaveTextContent("Ouvrir un projet")
   })
 
+  it("borne le lecteur à la hauteur de page, sans descendre sous 52 rem de large", () => {
+    // Pleine largeur, la vidéo (16/10) passait sous la ligne de flottaison à
+    // 1366×768 : ses contrôles ne se voyaient pas sans défiler. jsdom ne
+    // mesure rien ; les mesures réelles sont dans DESIGN.md, « Guide vidéo ».
+    const { container } = monter()
+
+    const video = container.querySelector("video")!
+    expect(video).toHaveClass("w-full", "aspect-[16/10]")
+    const cadre = video.parentElement!
+    expect(cadre).toHaveClass("mx-auto", "w-full", "max-w-[max(52rem,calc((var(--hauteur-page)_-_7.5rem)*1.6))]")
+    // Titre et étapes s'alignent sur la vidéo, dans le même cadre.
+    expect(within(cadre).getByRole("heading", { name: "Ouvrir un projet" })).toBeInTheDocument()
+  })
+
   it("dit à un compte sans guide pourquoi la page est vide", () => {
     droits = new Set(["audit.read"])
 

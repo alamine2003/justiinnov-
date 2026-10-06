@@ -70,11 +70,12 @@ function ChampFichier({
       {/* Caché aux lecteurs d'écran mais référencé par `aria-describedby`,
           qui le lit quand même : visible, il entrerait aussi dans le nom du
           champ par l'étiquette qui l'enveloppe (« Fichier Aucun fichier
-          choisi »), annoncé deux fois. */}
+          choisi »), annoncé deux fois. Pas d'infobulle ici : le champ
+          natif le couvre, il n'est jamais survolé ; c'est le champ qui
+          porte le nom entier (`title`). */}
       <span
         id={idDuNom}
         aria-hidden
-        title={nom ?? undefined}
         className={cn("truncate", nom ? "text-foreground" : "text-muted-foreground")}
       >
         {affiche}
