@@ -1414,7 +1414,7 @@
   },
   "guides": {
     "titre": "Guide vidéo",
-    "description": "Chaque geste de la plateforme, montré pas à pas. Les vidéos sont muettes et sous-titrées, dans la langue de l'interface.",
+    "description": "Les gestes de la déclaration, du projet à la soumission, montrés pas à pas. Les vidéos sont muettes et sous-titrées, dans la langue de l'interface.",
     "sous_titres": "Sous-titres",
     "sommaire": "Les guides",
     "aucun": {
@@ -1428,7 +1428,7 @@
       },
       "saisir-une-ligne": {
         "titre": "Saisir une dépense",
-        "description": "Ajouter une ligne à un dossier : quoi, quand, où, combien et sous quel responsable."
+        "description": "Ajouter une ligne à un dossier à votre nom : quoi, quand, où, combien, pour quelle équipe et sous quel responsable."
       },
       "joindre-une-piece": {
         "titre": "Joindre une pièce",
@@ -1442,6 +1442,11 @@
         "titre": "Importer un classeur",
         "description": "Verser les lignes d'un classeur Excel dans un dossier, après une simulation."
       }
+    },
+    "etapes": {
+      "titre": "Les étapes",
+      "chargement": "Chargement des étapes…",
+      "erreur": "Les étapes n'ont pas pu être chargées ; les sous-titres de la vidéo les donnent."
     },
     "illisible": "Votre navigateur ne lit pas cette vidéo. Ouvrez la plateforme dans Chrome, Edge ou Firefox à jour."
   }

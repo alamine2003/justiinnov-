@@ -660,26 +660,69 @@ sous-titres change (`LEGENDES`, dans le script).
 Le tournage **écrit dans la base** (un projet, une ligne, une pièce, une
 soumission, un import), et rien ne s'y supprime : il se fait sur une base
 jetable, `justi_guides`, à côté de `justi_innov` dans la même instance
-Postgres, **une langue par base neuve**. Le script refuse de tourner sans
-`GUIDES_LANGUE`, et n'écrit rien dans `public/guides/` si un seul geste
-échoue.
+Postgres, **une langue par base neuve**. Il est isolé de la pile de
+développement sur tout ce qu'il touche, pas seulement la base : ses pièces
+vont dans le bucket MinIO `justificatifs-guides` (pas `justificatifs`),
+son cache dans la base Redis 1 (pas la 0, où le backend de développement
+garde sa configuration du circuit), et l'ordonnanceur de développement
+s'arrête avec le backend le temps du tournage. **Ce bucket et cette base
+Redis sont jetables comme `justi_guides`** : rien de ce qu'ils contiennent
+ne se garde, et on peut les vider à tout moment. Le script n'écrit rien
+dans `public/guides/` si un seul geste échoue, ni si une vidéo réencodée
+ne montre pas, sous un sous-titre, ce que la page affichait à ce moment :
+il compare l'image de la vidéo à une capture prise pendant le tournage, et
+échoue au-delà de 2 % de pixels différents en nommant le guide et le
+sous-titre (contrôle des images, décision 118). Réussi, il affiche pour
+chaque guide l'écart d'image le plus fort.
+
+Le compte de tournage est un **`manager` jetable du Togo**, décrit dans
+`backend/seed_users.guides.local.json` — un fichier ignoré par git
+(`*.local.json`), qui ne quitte pas le poste. Partez de l'entrée `manager`
+de `backend/seed_users.example.json` :
+
+- **un pays `TG-01`** dans `countries`, celui de `seed_demo` (code `TG`,
+  nom `Togo`, devise `XOF`, symbole `FCFA`, fuseau `Africa/Lome`), et ce
+  seul pays dans le `countries` du compte ;
+- le rôle `manager` et une adresse du domaine de l'entreprise
+  (`ALLOWED_EMAIL_DOMAINS`) ;
+- **`"must_change_password": false`** : sinon la plateforme fermée ne
+  montre que l'écran de changement de mot de passe, et le tournage échoue
+  à la connexion ;
+- **pas de clé `teams`** : les équipes du Togo n'existent pas encore quand
+  `seed_users` passe (c'est `seed_demo` qui les crée), et un manager sans
+  équipe voit tout son pays — le guide choisit lui-même l'équipe du
+  projet ;
+- `totp_secret` **facultatif** : sans lui, le compte n'est pas enrôlé et
+  se connecte sans code (`DJANGO_TOTP_REQUIRED` est faux en
+  développement) ; avec lui, donnez le même secret dans
+  `SHOT_COUNTRY_TOTP_SECRET`. Jamais le secret d'un compte réel.
+
+Le mot de passe, vous le choisissez : il ne figure que dans ce fichier et
+dans `SHOT_COUNTRY_PASSWORD`, jamais dans le dépôt. La langue du profil
+n'a pas à y figurer : le script la fixe lui-même.
 
 ```bash
-# 1. Une base neuve. Le backend de développement s'arrête : celui du
-#    tournage prend sa place (et son nom, « backend », que Vite appelle).
+# 1. Une base neuve. Le backend et l'ordonnanceur de développement
+#    s'arrêtent : le backend du tournage prend la place du premier (et son
+#    nom, « backend », que Vite appelle). ISOLE sépare tout ce que le
+#    tournage écrit : base, bucket, cache (bash : la variable se découpe en
+#    mots, comme G).
 docker compose up -d db redis minio frontend
-docker compose stop backend
+docker compose stop backend scheduler
 docker compose exec db dropdb -U justi --if-exists justi_guides
 docker compose exec db createdb -U justi justi_guides
-G="docker compose run --rm -e POSTGRES_DB=justi_guides --entrypoint python backend manage.py"
+docker compose exec redis redis-cli -n 1 flushdb
+ISOLE="-e POSTGRES_DB=justi_guides -e AWS_STORAGE_BUCKET_NAME=justificatifs-guides -e REDIS_URL=redis://redis:6379/1"
+G="docker compose run --rm $ISOLE --entrypoint python backend manage.py"
 $G migrate
 $G createcachetable
-# Un pays TG-01 et un compte manager de ce pays, jetables, dans un fichier
-# ignoré par git (*.local.json), au format de seed_users.
+# Le bucket du tournage : seed_demo y dépose déjà des pièces, avant que
+# entrypoint.sh ne le crée au démarrage du backend du tournage.
+$G ensure_bucket
 $G seed_users --file seed_users.guides.local.json
 $G seed_demo --base-jetable
 docker compose run -d --rm --use-aliases --service-ports \
-  -e POSTGRES_DB=justi_guides --name justi-guides-backend backend
+  $ISOLE --name justi-guides-backend backend
 
 # 2. Le tournage d'une langue.
 cd frontend
@@ -688,19 +731,40 @@ GUIDES_LANGUE=fr SHOT_COUNTRY_USER=… SHOT_COUNTRY_PASSWORD=… \
 cd ..
 
 # 3. Arrêter le backend du tournage, reprendre en 1 pour l'autre langue
-#    (GUIDES_LANGUE=en), puis rendre la pile de développement.
+#    (GUIDES_LANGUE=en), puis rendre la pile de développement, ordonnanceur
+#    compris : `up -d backend` seul ne le relancerait pas.
 docker stop justi-guides-backend
-docker compose up -d backend
+docker compose up -d backend scheduler
 ```
 
+Reprendre en 1 vide aussi la base Redis 1 : la base neuve ne lit pas la
+configuration ni les compteurs de connexion de la précédente. Les pièces
+des tournages passés restent dans `justificatifs-guides`, sans fiche : on
+peut vider ou supprimer ce bucket depuis la console MinIO
+(<http://127.0.0.1:9001>) ; `justificatifs`, celui du développement, n'en
+reçoit aucune.
+
+Le script se règle par l'environnement :
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `GUIDES_LANGUE` | — | **obligatoire**, `fr` ou `en` : une langue par exécution, sur une base neuve. Absente ou autre, le script s'arrête avant d'ouvrir le navigateur |
+| `SHOT_COUNTRY_USER` / `_PASSWORD` / `_TOTP_SECRET` | — | le compte de tournage ci-dessus ; le secret seulement s'il est enrôlé |
+| `SHOT_BASE` | `http://localhost:5173` | adresse de l'interface visée |
+| `GUIDES_CIBLE_JETABLE` | — | le tournage refuse un `SHOT_BASE` dont l'hôte n'est ni `localhost`, ni `127.0.0.1`, ni `[::1]`, avant d'ouvrir le navigateur : il écrirait pour de bon dans une base qui n'est peut-être pas jetable. `GUIDES_CIBLE_JETABLE=oui` — exactement `oui` — lève ce garde-fou, quand l'hôte distant est bien une base jetable |
+| `GUIDES_SEULS` | tous | `saisir-une-ligne,…` restreint le tournage à quelques guides, sur une base où les précédents ont déjà été joués (chacun reprend le projet, la ligne et la pièce du précédent) |
+| `GUIDES_OUT` | `frontend/public/guides` | dossier où le script écrit `<langue>/<guide>.webm`, `.vtt` et `.jpg` ; un autre dossier (chemin absolu) permet de relire un tournage sans toucher aux vidéos livrées |
+| `GUIDES_FFMPEG` | celui de Playwright | le ffmpeg qui réencode les prises (VP8, `libvpx`) |
+
 La pièce du guide « Joindre une pièce » est un reçu fictif, déposé dans le
-MinIO de développement. `GUIDES_SEULS=saisir-une-ligne,…` restreint le
-tournage à quelques guides, sur une base où les précédents ont déjà été
-joués (chacun reprend le projet, la ligne et la pièce du précédent). Les
-prises sont réencodées par le ffmpeg livré avec les navigateurs de
-Playwright ; `GUIDES_FFMPEG` en désigne un autre. **Regardez les vidéos et
-relisez leurs sous-titres avant de les commiter**, comme les captures : ils
-enseignent les règles du circuit au manager.
+bucket jetable `justificatifs-guides`. **Regardez les vidéos et relisez
+leurs sous-titres avant de les commiter**, comme les captures : ils
+enseignent les règles du circuit au manager, et le contrôle des images
+n'attrape qu'une prise figée ou décalée — un halo resté sur une cible ou
+un détail faux passent sous son seuil. La CI ne tourne pas les guides ;
+elle vérifie ce qui est commité (`src/lib/guides-fichiers.test.ts`) : les
+trois fichiers de chaque guide dans chaque langue, à la signature de leur
+type, sans fichier orphelin, et `public/guides/` sous 6 000 000 octets.
 
 ## Circuit de justification
 

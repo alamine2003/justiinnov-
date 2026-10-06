@@ -7,6 +7,10 @@
  * la page, montrent où l'on clique ; ils ne font partie que de la vidéo.
  * Leurs couleurs sont les jetons de l'interface (`--foreground`,
  * `--background`, `--primary`) : ils suivent le thème filmé.
+ *
+ * Chaque légende capture aussi la page (`captures`) : le tournage compare
+ * ces captures à la vidéo réencodée et échoue si l'enregistrement a perdu
+ * des images (`controle-images.ts`).
  */
 import type { Locator, Page } from "playwright"
 
@@ -14,6 +18,14 @@ import type { Locator, Page } from "playwright"
 export function tempsDeLecture(texte: string) {
   return Math.max(2500, 1200 + texte.length * 55)
 }
+
+/**
+ * Délai entre le début d'une légende et la capture de la page que le
+ * contrôle des images compare à la vidéo : le temps qu'un rendu en cours
+ * s'achève, sans approcher du geste suivant (une légende dure au moins
+ * 2,5 s, `tempsDeLecture`).
+ */
+export const DELAI_DE_LA_CAPTURE = 300
 
 /** Des millisecondes en horodatage WebVTT, `hh:mm:ss.mmm`. */
 export function horodatage(ms: number) {
@@ -95,6 +107,8 @@ export const POINTEUR = `(() => {
 /** Une prise : la page filmée, ses légendes et leurs horodatages. */
 export class Scene {
   readonly reperes: Repere[] = []
+  /** Une capture PNG de la page par légende, dans l'ordre des repères. */
+  readonly captures: Buffer[] = []
   readonly page: Page
   private readonly legendes: readonly string[]
   private readonly t0 = Date.now()
@@ -109,12 +123,22 @@ export class Scene {
     return Date.now() - this.t0
   }
 
-  /** Affiche la légende `i` (un sous-titre) et laisse le temps de la lire. */
+  /**
+   * Affiche la légende `i` (un sous-titre) et laisse le temps de la lire.
+   * Pendant ce temps, la page est capturée telle qu'elle est : c'est ce que
+   * la vidéo doit montrer sous ce sous-titre. Le curseur de saisie reste
+   * visible (`caret: "initial"`), comme dans la vidéo. La capture ne
+   * rallonge pas la légende : on n'attend que ce qui reste de son temps de
+   * lecture.
+   */
   async dire(i: number) {
     const texte = this.legendes[i]
     if (texte === undefined) throw new Error(`Légende ${i} absente.`)
-    this.reperes.push({ debut: this.maintenant(), texte })
-    await this.page.waitForTimeout(tempsDeLecture(texte))
+    const debut = this.maintenant()
+    this.reperes.push({ debut, texte })
+    await this.page.waitForTimeout(DELAI_DE_LA_CAPTURE)
+    this.captures.push(await this.page.screenshot({ type: "png", caret: "initial" }))
+    await this.page.waitForTimeout(Math.max(0, tempsDeLecture(texte) - (this.maintenant() - debut)))
   }
 
   /** Amène le pointeur sur la cible et l'entoure. */

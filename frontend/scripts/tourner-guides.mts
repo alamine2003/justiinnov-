@@ -17,7 +17,18 @@
  * Le compte est un `manager` du Togo sans équipe imposée, sur les données
  * de `manage.py seed_demo --base-jetable` (équipe « Équipe Kara », manager
  * responsable « Kodjo Mensah »). Comme les captures, le script échoue sur
- * toute erreur de console, et sur tout geste qui n'aboutit pas.
+ * toute erreur de console, et sur tout geste qui n'aboutit pas. Un réglage
+ * faux (langue, `GUIDES_SEULS`, `GUIDES_FFMPEG`) l'arrête avant d'ouvrir le
+ * navigateur, donc avant d'écrire dans la base (`guides/selection.ts`), de
+ * même qu'un `SHOT_BASE` qui ne vise pas la machine locale, sauf
+ * `GUIDES_CIBLE_JETABLE=oui` (`guides/cible.ts`). `GUIDES_OUT` écrit les
+ * fichiers ailleurs que dans `public/guides/`, pour relire un tournage sans
+ * toucher aux vidéos livrées.
+ *
+ * Chaque vidéo réencodée est enfin comparée, sous chaque sous-titre, à la
+ * capture de la page prise au même moment (`guides/controle-images.ts`) :
+ * une prise qui a perdu des images fait échouer le tournage, au lieu de
+ * partir dans `public/guides/`.
  */
 import { execFile } from "node:child_process"
 import { existsSync, readdirSync } from "node:fs"
@@ -25,40 +36,25 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
-import { chromium, type Browser, type Page } from "playwright"
-import { GUIDES, LANGUES_DES_GUIDES, type IdDeGuide, type LangueDeGuide } from "../src/lib/guides.ts"
-import { classeur } from "./guides/classeur.ts"
+import { chromium, type Browser, type Locator, type Page } from "playwright"
+import { type IdDeGuide, type LangueDeGuide } from "../src/lib/guides.ts"
+import { exigerUneCibleJetable } from "./guides/cible.ts"
+import { classeurDuGuide, dateDeSaisie, jourDuTournage, verifierLImport } from "./guides/classeur.ts"
+import { controlerLesImages, pourcentage } from "./guides/controle-images.ts"
 import { POINTEUR, Scene, sousTitres } from "./guides/scene.ts"
+import {
+  echecDuGeste,
+  ffmpegInutilisable,
+  guidesDuTournage,
+  langueDuTournage,
+  libelle,
+  proposeLibvpx,
+} from "./guides/selection.ts"
 import { credentials, estLeRefusAttenduDuCode, signIn } from "./login.ts"
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:5173"
 const SORTIE = process.env.GUIDES_OUT ?? path.resolve(import.meta.dirname, "../public/guides")
 const TAILLE = { width: 1280, height: 800 }
-
-/** La langue du tournage : obligatoire, une seule par base neuve. */
-function langueDuTournage(): LangueDeGuide {
-  const langue = process.env.GUIDES_LANGUE
-  if (!langue || !(LANGUES_DES_GUIDES as readonly string[]).includes(langue)) {
-    throw new Error(`GUIDES_LANGUE doit valoir ${LANGUES_DES_GUIDES.join(" ou ")}, une langue par base neuve.`)
-  }
-  return langue as LangueDeGuide
-}
-
-/**
- * `GUIDES_SEULS=saisir-une-ligne,…` restreint le tournage, le temps de
- * mettre un guide au point : chaque guide reprend ce que le précédent a
- * créé (le projet, la ligne, la pièce), un guide seul se tourne donc sur
- * une base où les précédents ont déjà été joués. Un nom inconnu arrête
- * tout, plutôt que de ne rien tourner sans le dire.
- */
-function guidesDuTournage(): IdDeGuide[] {
-  const tous = GUIDES.map((guide) => guide.id)
-  const demandes = process.env.GUIDES_SEULS?.split(",").filter(Boolean)
-  if (!demandes) return tous
-  const inconnus = demandes.filter((id) => !(tous as string[]).includes(id))
-  if (inconnus.length) throw new Error(`Guides inconnus : ${inconnus.join(", ")}. Connus : ${tous.join(", ")}.`)
-  return tous.filter((id) => demandes.includes(id))
-}
 
 /**
  * Le ffmpeg qui réencode les prises. Playwright filme vite et lourd (VP8 à
@@ -87,6 +83,23 @@ function ffmpeg() {
   )
 }
 
+/**
+ * Vérifie, avant le premier geste, que ce ffmpeg s'exécute et encode en VP8
+ * (`libvpx`) : sinon l'échec ne survenait qu'au réencodage du premier
+ * guide, quand la base jetable avait déjà reçu le projet du tournage.
+ */
+async function verifierFfmpeg() {
+  const chemin = ffmpeg()
+  const designe = Boolean(process.env.GUIDES_FFMPEG)
+  const sortie = await promisify(execFile)(chemin, ["-hide_banner", "-encoders"]).then(
+    ({ stdout }) => stdout,
+    (erreur: unknown) => {
+      throw ffmpegInutilisable(chemin, designe, erreur instanceof Error ? erreur.message : String(erreur))
+    },
+  )
+  if (!proposeLibvpx(sortie)) throw ffmpegInutilisable(chemin, designe, "il ne propose pas l'encodeur libvpx (VP8)")
+}
+
 /** Réencode une prise : 15 images par seconde suffisent à un écran d'application. */
 async function reencoder(source: string, cible: string) {
   await promisify(execFile)(ffmpeg(), [
@@ -101,20 +114,37 @@ async function dictionnaire(langue: LangueDeGuide) {
   const brut = JSON.parse(
     await readFile(path.resolve(import.meta.dirname, `../src/i18n/${langue}.json`), "utf8"),
   ) as Record<string, unknown>
-  return (cle: string, valeurs: Record<string, string> = {}) => {
-    let texte: unknown = brut
-    for (const morceau of cle.split(".")) texte = (texte as Record<string, unknown>)[morceau]
-    if (typeof texte !== "string") throw new Error(`Clé absente du dictionnaire ${langue} : ${cle}`)
-    return texte.replace(/\{\{(\w+)\}\}/g, (_, nom: string) => valeurs[nom] ?? "")
-  }
+  return (cle: string, valeurs: Record<string, string> = {}) => libelle(brut, langue, cle, valeurs)
 }
 
 type T = Awaited<ReturnType<typeof dictionnaire>>
 
+/**
+ * Le jour du tournage : les dates du guide s'en déduisent.
+ * `seed_demo` n'ouvre que les enveloppes de l'année en cours ; une date
+ * écrite en dur faisait échouer la soumission filmée dès l'année suivante.
+ */
+const AUJOURDHUI = new Date()
+const ANNEE = AUJOURDHUI.getFullYear()
+
+/**
+ * Les noms du référentiel de la démonstration (`seed_demo`, migration
+ * `core.0016` pour les types de dossiers). Ce sont des données, pas des
+ * libellés : l'écran les affiche tels quels dans les deux langues. Le
+ * script les choisit par leur nom, jamais par leur position dans une
+ * liste, qu'un nouvel élément du référentiel suffirait à décaler.
+ */
+const REFERENTIEL = {
+  equipe: "Équipe Kara",
+  responsable: "Kodjo Mensah",
+  /** Le dossier qui reçoit le classeur : le D001 (« Collations ») est soumis par le guide précédent. */
+  typeImporte: "Stands",
+} as const
+
 /** Ce que le manager saisit, dans la langue du guide. */
 const DONNEES = {
   fr: {
-    projet: "Congrès de cardiologie 2026",
+    projet: `Congrès de cardiologie ${ANNEE}`,
     ligne: "Pause-café du congrès",
     lieu: "Lomé",
     montant: "85000",
@@ -124,7 +154,7 @@ const DONNEES = {
     lignesImportees: ["Location du stand", "Impression des kakémonos", "Transport du matériel"],
   },
   en: {
-    projet: "Cardiology congress 2026",
+    projet: `Cardiology congress ${ANNEE}`,
     ligne: "Congress coffee break",
     lieu: "Lomé",
     montant: "85000",
@@ -155,30 +185,30 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       "Le projet est ouvert : il a sa référence et ses dossiers, un par type.",
     ],
     en: (t) => [
-      "A project groups the spending of a congress, a trip or a financial support.",
+      "A project groups the spending of a congress, a trip or financial support.",
       `Click “${t("projets.liste.nouveau")}”.`,
       "Give it a name your colleagues will recognise.",
-      "Choose its type: it sets the dossiers the project receives automatically.",
-      "Choose the team: its dossiers and their lines will carry it.",
+      "Choose its type: it sets the files the project receives automatically.",
+      "Choose the team: its files and their lines will carry it.",
       `Click “${t("commun.creer")}”.`,
-      "The project is open: it has its reference and its dossiers, one per type.",
+      "The project is open: it has its reference and its files, one per type.",
     ],
   },
   "saisir-une-ligne": {
     fr: (t) => [
-      "Chaque dossier reçoit les dépenses de son type. Ouvrez celui qui convient.",
+      "Ouvrez le dossier du bon type, dans un projet que vous avez ouvert : vous seul y ajoutez des lignes.",
       `Cliquez sur « ${t("commun.ajouter")} » pour saisir une dépense.`,
       "Décrivez la dépense : ce qui a été payé, quand et où.",
-      "Indiquez le montant, dans la devise du pays.",
-      "Choisissez le manager responsable : sans lui, le dossier ne se soumet pas.",
+      "Indiquez le montant dans la devise du pays (payé dans une autre devise, il se convertit).",
+      "Équipe et manager responsable sont exigés pour soumettre : l'équipe vient du dossier, choisissez le manager.",
       `Cliquez sur « ${t("commun.enregistrer")} ». La ligne reste un brouillon, modifiable, jusqu'à la soumission.`,
     ],
     en: (t) => [
-      "Each dossier receives the expenses of its type. Open the right one.",
+      "Open the file of the right type, in a project you opened yourself: only you can add lines to it.",
       `Click “${t("commun.ajouter")}” to enter an expense.`,
       "Describe the expense: what was paid, when and where.",
-      "Enter the amount, in the country's currency.",
-      "Choose the manager in charge: without one, the dossier cannot be submitted.",
+      "Enter the amount in the country's currency (if paid in another currency, it is converted).",
+      "A team and a responsible manager are required to submit: the team comes from the file, choose the manager.",
       `Click “${t("commun.enregistrer")}”. The line stays a draft, still editable, until it is submitted.`,
     ],
   },
@@ -193,7 +223,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
     en: (t) => [
       "Each line has its document: the receipt, invoice or paper that proves the expense.",
       "Upload the document from its line.",
-      "Choose the file: a PDF, an image or a document.",
+      "Choose it on your computer: a PDF, an image or a document.",
       `Say what kind of document it is, then click “${t("pieces.deposer")}”.`,
       "The document is filed under its line. Head office will review it.",
     ],
@@ -206,28 +236,28 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       "Une pièce oubliée se dépose encore depuis sa ligne, jusqu'à la clôture du dossier.",
     ],
     en: (t) => [
-      "When the dossier's expenses are complete, with their documents, submit it.",
-      `Click “${t("depenses.circuit.soumettre")}”: every line goes with the dossier.`,
-      "The dossier is submitted: its lines can no longer be changed, head office reviews them.",
-      "A forgotten document can still be uploaded from its line, until the dossier is closed.",
+      "When the file's expenses are complete, with their documents, submit it.",
+      `Click “${t("depenses.circuit.soumettre")}”: every line goes with the file.`,
+      "The file is submitted: its lines can no longer be changed, head office reviews them.",
+      "A forgotten document can still be uploaded from its line, until the file is closed.",
     ],
   },
   "importer-un-classeur": {
     fr: (t) => [
-      "Vos dépenses sont déjà dans un classeur Excel ? Importez-le dans un dossier du projet.",
+      "Vos dépenses sont déjà dans un classeur Excel ? Importez-le dans un dossier d'un projet que vous avez ouvert.",
       "Choisissez le projet, puis le dossier qui recevra les lignes.",
-      "Choisissez le classeur.",
+      "Choisissez le classeur. Colonnes exigées : N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.",
       `Simulez d'abord (« ${t("dossiers.import.simuler")} ») : rien n'est écrit, vous voyez ce qui serait créé.`,
-      `Tout est correct : désactivez la simulation, puis cliquez sur « ${t("dossiers.import.importer")} ».`,
-      "Les lignes arrivent en brouillon dans le dossier. Joignez ensuite la pièce de chacune.",
+      `Si la simulation ne signale aucune erreur, désactivez-la, puis cliquez sur « ${t("dossiers.import.importer")} ».`,
+      "Les lignes arrivent en brouillon dans le dossier. Joignez la pièce de chacune, soumettez ensuite le dossier.",
     ],
     en: (t) => [
-      "Are your expenses already in an Excel workbook? Import it into a project dossier.",
-      "Choose the project, then the dossier that will receive the lines.",
-      "Choose the workbook.",
+      "Are your expenses already in an Excel workbook? Import it into a file of a project you opened.",
+      "Choose the project, then the file that will receive the lines.",
+      "Choose the workbook. Required columns: N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.",
       `Simulate first (“${t("dossiers.import.simuler")}”): nothing is written, you see what would be created.`,
-      `Everything is correct: turn off the simulation, then click “${t("dossiers.import.importer")}”.`,
-      "The lines arrive as drafts in the dossier. Then attach each one's document.",
+      `If the simulation reports no error, turn it off, then click “${t("dossiers.import.importer")}”.`,
+      "The lines arrive as drafts in the file. Attach each one's document, then submit the file.",
     ],
   },
 }
@@ -236,6 +266,46 @@ interface Tournage {
   /** La page où commence la vidéo. */
   depart: string
   jouer: (s: Scene, t: T, d: Donnees) => Promise<void>
+}
+
+/**
+ * Choisit dans une liste l'option qui porte ce libellé, et lève avec les
+ * options présentes si elle n'y est pas : un choix par position prenait en
+ * silence l'élément voisin.
+ */
+async function choisirParLibelle(s: Scene, liste: Locator, libelle: string, quoi: string) {
+  const option = liste.locator("option").filter({ hasText: new RegExp(`^\\s*${echapperRegExp(libelle)}\\s*$`) })
+  const trouvee = await option.first().waitFor({ state: "attached", timeout: 10_000 }).then(
+    () => true,
+    () => false,
+  )
+  if (!trouvee) {
+    const presentes = (await liste.locator("option").allTextContents()).map((o) => `« ${o.trim()} »`)
+    throw new Error(`${quoi} « ${libelle} » absent de la liste (options : ${presentes.join(", ")}).`)
+  }
+  await s.choisir(liste, { label: libelle })
+}
+
+function echapperRegExp(texte: string) {
+  return texte.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/**
+ * Clique sur Simuler ou Importer et vérifie la réponse de l'API, pas
+ * seulement l'écran : le titre de la carte de résultat s'affiche aussi
+ * quand le classeur est refusé.
+ */
+async function importerEtVerifier(s: Scene, bouton: Locator, attendu: { lignes: number; simulation: boolean }) {
+  const reponse = s.page.waitForResponse(
+    (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/imports/expenses.xlsx",
+  )
+  // Si le clic échoue, cette attente rejette à la fermeture de la page :
+  // sans gestionnaire, ce rejet tardif masquerait la vraie cause.
+  reponse.catch(() => undefined)
+  await s.cliquer(bouton)
+  const recue = await reponse
+  const corps = (await recue.json().catch(() => ({}))) as Parameters<typeof verifierLImport>[2]
+  verifierLImport(attendu.simulation ? "La simulation de l'import" : "L'import", recue.status(), corps, attendu)
 }
 
 /** Ouvre le dossier D001 du projet du guide, depuis la liste des projets. */
@@ -261,9 +331,9 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       await s.dire(2)
       await s.saisir(dialogue.locator("#projet-name"), d.projet)
       await s.dire(3)
-      await s.choisir(dialogue.locator("#projet-kind"), { index: 1 })
+      await choisirParLibelle(s, dialogue.locator("#projet-kind"), t("libelles.projet_type.congres"), "Le type de projet")
       await s.dire(4)
-      await s.choisir(dialogue.locator("#projet-team"), { index: 1 })
+      await choisirParLibelle(s, dialogue.locator("#projet-team"), REFERENTIEL.equipe, "L'équipe")
       await s.dire(5)
       await s.cliquer(dialogue.getByRole("button", { name: t("commun.creer") }))
       await s.page.getByRole("heading", { name: d.projet }).waitFor()
@@ -280,12 +350,12 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       const dialogue = s.page.getByRole("dialog")
       await s.dire(2)
       await s.saisir(dialogue.locator("#exp-title"), d.ligne)
-      await s.remplir(dialogue.locator("#exp-date"), "2026-10-02T10:30")
+      await s.remplir(dialogue.locator("#exp-date"), dateDeSaisie(jourDuTournage(AUJOURDHUI, 3)))
       await s.saisir(dialogue.locator("#exp-place"), d.lieu)
       await s.dire(3)
       await s.saisir(dialogue.locator("#exp-amount"), d.montant)
       await s.dire(4)
-      await s.choisir(dialogue.locator("#exp-owner"), { index: 1 })
+      await choisirParLibelle(s, dialogue.locator("#exp-owner"), REFERENTIEL.responsable, "Le manager responsable")
       await s.dire(5)
       await s.cliquer(dialogue.getByRole("button", { name: t("commun.enregistrer") }))
       await dialogue.waitFor({ state: "hidden" })
@@ -339,24 +409,34 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       const libelle = options.find((o) => o.includes(d.projet))
       if (!libelle) throw new Error(`Projet « ${d.projet} » absent de l'import.`)
       await s.choisir(projet, { label: libelle })
-      // Le deuxième type du congrès (« Stands ») : le premier, D001, est soumis.
-      await s.choisir(s.page.locator("#import-kind"), { index: 2 })
+      await choisirParLibelle(s, s.page.locator("#import-kind"), REFERENTIEL.typeImporte, "Le type de dossier")
       await s.dire(2)
       const fichier = s.page.locator("#import-file")
       await s.montrer(fichier)
       await fichier.setInputFiles({
         name: d.fichierClasseur,
         mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        buffer: classeurDuGuide(d.lignesImportees),
+        buffer: classeurDuGuide(d.lignesImportees, {
+          aujourdhui: AUJOURDHUI,
+          equipe: REFERENTIEL.equipe,
+          responsable: REFERENTIEL.responsable,
+        }),
       })
       await s.attendre(800)
       await s.dire(3)
-      await s.cliquer(s.page.getByRole("button", { name: t("dossiers.import.simuler") }))
+      const attendues = d.lignesImportees.length
+      await importerEtVerifier(s, s.page.getByRole("button", { name: t("dossiers.import.simuler") }), {
+        lignes: attendues,
+        simulation: true,
+      })
       await s.page.getByText(t("dossiers.import.resultat_simulation")).waitFor()
       await s.attendre(2000)
       await s.dire(4)
       await s.cliquer(s.page.getByRole("switch"))
-      await s.cliquer(s.page.getByRole("button", { name: t("dossiers.import.importer"), exact: true }))
+      await importerEtVerifier(s, s.page.getByRole("button", { name: t("dossiers.import.importer"), exact: true }), {
+        lignes: attendues,
+        simulation: false,
+      })
       await s.page.getByText(t("dossiers.import.resultat_import")).waitFor()
       await s.dire(5)
     },
@@ -374,14 +454,6 @@ async function recu(page: Page, texte: string) {
   return pdf
 }
 
-/** Le classeur du guide d'import, au format historique, aux noms de la démonstration. */
-function classeurDuGuide(libelles: readonly string[]) {
-  return classeur([
-    ["N°ORDRE", "DATE", "TEAM", "OWNER", "LIBELLE DES TRANSACTIONS", "DEPENSES"],
-    ...libelles.map((libelle, i) => [`G-${i + 1}`, `0${i + 1}/10/2026`, "Équipe Kara", "Kodjo Mensah", libelle, 150000 + i * 25000]),
-  ])
-}
-
 /** Ouvre une session et fixe la langue du profil, hors caméra : la vidéo commence connectée. */
 async function session(navigateur: Browser, langue: LangueDeGuide) {
   const contexte = await navigateur.newContext({ viewport: TAILLE, locale: langue })
@@ -390,20 +462,28 @@ async function session(navigateur: Browser, langue: LangueDeGuide) {
   page.on("console", (m) => {
     if (m.type() === "error" && !estLeRefusAttenduDuCode(m)) erreurs.push(m.text())
   })
-  await signIn(page, BASE, credentials("COUNTRY"))
-  const jeton = await page.evaluate(() => localStorage.getItem("justi_token"))
-  const reponse = await page.request.patch(`${BASE}/api/me/`, {
-    headers: { Authorization: `Token ${jeton}` },
-    data: { language: langue },
-  })
-  if (!reponse.ok()) throw new Error(`La langue ${langue} n'a pas pu être fixée (${reponse.status()}).`)
+  try {
+    await signIn(page, BASE, credentials("COUNTRY"))
+    const jeton = await page.evaluate(() => localStorage.getItem("justi_token"))
+    const reponse = await page.request.patch(`${BASE}/api/me/`, {
+      headers: { Authorization: `Token ${jeton}` },
+      data: { language: langue },
+    })
+    if (!reponse.ok()) throw new Error(`La langue ${langue} n'a pas pu être fixée (${reponse.status()}).`)
+  } catch (cause) {
+    throw echecDuGeste(`la connexion (${langue})`, cause, erreurs)
+  }
   if (erreurs.length) throw new Error(`Erreurs de console à la connexion :\n${erreurs.join("\n")}`)
   const etat = await contexte.storageState()
   await contexte.close()
   return etat
 }
 
-/** Tourne un guide dans `brouillon` ; lève à la première erreur de console. */
+/**
+ * Tourne un guide dans `brouillon`. Lève si un geste échoue — avec les
+ * erreurs de console déjà collectées, qui disent souvent pourquoi — ou, le
+ * tournage fini, s'il y a eu la moindre erreur de console.
+ */
 async function tourner(
   navigateur: Browser,
   etat: Awaited<ReturnType<typeof session>>,
@@ -431,6 +511,8 @@ async function tourner(
     await TOURNAGES[id].jouer(scene, t, DONNEES[langue])
     await page.screenshot({ path: path.join(brouillon, `${id}.jpg`), type: "jpeg", quality: 70 })
     await scene.attendre(1500)
+  } catch (cause) {
+    throw echecDuGeste(`${langue}/${id}`, cause, erreurs)
   } finally {
     await contexte.close()
   }
@@ -438,15 +520,30 @@ async function tourner(
   const fin = scene.maintenant()
   const video = page.video()
   if (!video) throw new Error(`Aucune vidéo pour ${id}.`)
-  await reencoder(await video.path(), path.join(brouillon, `${id}.webm`))
+  const webm = path.join(brouillon, `${id}.webm`)
+  await reencoder(await video.path(), webm)
+  // La vidéo telle qu'elle sera servie, contre ce que la page montrait :
+  // lève si l'enregistrement a perdu des images sous un sous-titre.
+  const ecarts = await controlerLesImages({
+    navigateur,
+    ffmpeg: ffmpeg(),
+    video: webm,
+    reperes: scene.reperes,
+    captures: scene.captures,
+    guide: `${langue}/${id}`,
+  })
   await writeFile(path.join(brouillon, `${id}.vtt`), sousTitres(scene.reperes, fin))
-  console.log(`  ✓ ${langue}/${id} (${Math.round(fin / 1000)} s)`)
+  const pire = Math.max(0, ...ecarts.map((e) => e.ecart))
+  console.log(`  ✓ ${langue}/${id} (${Math.round(fin / 1000)} s, écart d'image au plus ${pourcentage(pire)})`)
 }
 
 async function main() {
-  const langue = langueDuTournage()
-  const guides = guidesDuTournage()
-  ffmpeg()
+  // Avant tout geste : le tournage écrit pour de bon dans la base visée,
+  // il n'en vise donc qu'une jetable.
+  exigerUneCibleJetable(BASE, process.env.GUIDES_CIBLE_JETABLE)
+  const langue = langueDuTournage(process.env.GUIDES_LANGUE)
+  const guides = guidesDuTournage(process.env.GUIDES_SEULS)
+  await verifierFfmpeg()
   const t = await dictionnaire(langue)
   // Les prises et les fichiers attendent dans un dossier temporaire : rien
   // n'arrive dans `public/` tant qu'un guide peut encore échouer.
