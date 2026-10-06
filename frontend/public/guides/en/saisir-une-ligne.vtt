@@ -1,25 +1,25 @@
 WEBVTT
 
 1
-00:00:01.624 --> 00:00:09.505
-Each dossier receives the expenses of its type. Open the right one.
+00:00:01.693 --> 00:00:11.217
+Open the file of the right type, in a project you opened yourself: only you can add lines to it.
 
 2
-00:00:09.505 --> 00:00:14.019
+00:00:11.217 --> 00:00:15.743
 Click “Add” to enter an expense.
 
 3
-00:00:14.019 --> 00:00:23.485
+00:00:15.743 --> 00:00:25.323
 Describe the expense: what was paid, when and where.
 
 4
-00:00:23.485 --> 00:00:28.703
-Enter the amount, in the country's currency.
+00:00:25.323 --> 00:00:33.135
+Enter the amount in the country's currency (if paid in another currency, it is converted).
 
 5
-00:00:28.703 --> 00:00:35.495
-Choose the manager in charge: without one, the dossier cannot be submitted.
+00:00:33.135 --> 00:00:41.643
+A team and a responsible manager are required to submit: the team comes from the file, choose the manager.
 
 6
-00:00:35.495 --> 00:00:46.888
+00:00:41.643 --> 00:00:53.150
 Click “Save”. The line stays a draft, still editable, until it is submitted.
