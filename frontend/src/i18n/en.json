@@ -468,7 +468,8 @@
       "aucun_projet": "No project open to dossiers",
       "projet_aide": "The workbook is imported into this project, and its country.",
       "projet_requis": "Choose the project to import into.",
-      "type_aide": "The project's dossier that receives the workbook's lines."
+      "type_aide": "The project's dossier that receives the workbook's lines.",
+      "ouvrir_dossier": "Open the dossier"
     },
     "renommer": {
       "bouton": "Rename",
@@ -633,7 +634,8 @@
       "sans_justificatif": "No supporting document",
       "remplacer_ou_ajouter": "Upload another document",
       "motif_rejet": "Rejected: {{motif}}",
-      "deposer_aria": "Upload the document for “{{ligne}}”"
+      "deposer_aria": "Upload the document for “{{ligne}}”",
+      "remplacer_ou_ajouter_aria": "Upload another document for “{{ligne}}”"
     },
     "dossier": {
       "sans_justificatif_one": "{{count}} line without supporting document",
@@ -1442,7 +1444,7 @@
   },
   "guides": {
     "titre": "Video guide",
-    "description": "How to declare expenses, from the project to submission, step by step. The videos are silent and subtitled, in the interface language.",
+    "description": "How to declare expenses, from the project to submission and workbook import, step by step. The videos are silent and subtitled, in the interface language.",
     "sous_titres": "Subtitles",
     "sommaire": "The guides",
     "aucun": {
@@ -1476,6 +1478,8 @@
       "chargement": "Loading the steps…",
       "erreur": "The steps could not be loaded; the video subtitles show them."
     },
-    "illisible": "Your browser cannot play this video. Open the platform in an up-to-date Chrome, Edge or Firefox."
+    "illisible": "Your browser cannot play this video. Open the platform in an up-to-date Chrome, Edge or Firefox.",
+    "numero": "{{numero}}. {{titre}}",
+    "video_indisponible": "This video could not be loaded. Reload the page; the steps below remain readable."
   }
 }

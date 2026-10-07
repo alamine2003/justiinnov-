@@ -27,6 +27,20 @@ export function tempsDeLecture(texte: string) {
  */
 export const DELAI_DE_LA_CAPTURE = 300
 
+/**
+ * La typographie française d'un sous-titre : une espace fine insécable
+ * (U+202F) avant « : », « ; », « ? » et « ! », et à l'intérieur des
+ * guillemets « ». Avec une espace ordinaire, le lecteur pouvait renvoyer
+ * un deux-points ou un guillemet seul en début de ligne. Ne touche ni au
+ * « : » collé d'une heure, ni aux espaces qui sont déjà insécables.
+ */
+export function espacesFines(texte: string) {
+  return texte
+    .replace(/[ \u00a0]+([:;?!])/g, "\u202f$1")
+    .replace(/«[ \u00a0]*/g, "«\u202f")
+    .replace(/[ \u00a0]*»/g, "\u202f»")
+}
+
 /** Des millisecondes en horodatage WebVTT, `hh:mm:ss.mmm`. */
 export function horodatage(ms: number) {
   const total = Math.max(0, Math.round(ms))

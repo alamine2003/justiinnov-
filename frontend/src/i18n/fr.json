@@ -451,7 +451,7 @@
       "fichier": "Fichier",
       "fichier_aide": "Export des dépenses ou classeur historique, au format .xlsx.",
       "fichier_requis": "Choisissez un classeur .xlsx.",
-      "simulation": "Simulation (dry run)",
+      "simulation": "Simulation (essai à blanc)",
       "simulation_aide": "Vérifie le classeur et compte ce qui serait créé, sans rien écrire.",
       "simuler": "Simuler l'import",
       "importer": "Importer",
@@ -468,7 +468,8 @@
       "aucun_projet": "Aucun projet ouvert aux dossiers",
       "projet_aide": "Le classeur s'importe dans ce projet, et dans son pays.",
       "projet_requis": "Choisissez le projet dans lequel importer.",
-      "type_aide": "Le dossier du projet qui reçoit les lignes du classeur."
+      "type_aide": "Le dossier du projet qui reçoit les lignes du classeur.",
+      "ouvrir_dossier": "Ouvrir le dossier"
     },
     "renommer": {
       "bouton": "Renommer",
@@ -633,7 +634,8 @@
       "sans_justificatif": "Sans justificatif",
       "remplacer_ou_ajouter": "Déposer une autre pièce",
       "motif_rejet": "Rejetée : {{motif}}",
-      "deposer_aria": "Déposer la pièce de « {{ligne}} »"
+      "deposer_aria": "Déposer la pièce de « {{ligne}} »",
+      "remplacer_ou_ajouter_aria": "Déposer une autre pièce pour « {{ligne}} »"
     },
     "dossier": {
       "sans_justificatif_one": "{{count}} ligne sans justificatif",
@@ -1442,7 +1444,7 @@
   },
   "guides": {
     "titre": "Guide vidéo",
-    "description": "Les gestes de la déclaration, du projet à la soumission, montrés pas à pas. Les vidéos sont muettes et sous-titrées, dans la langue de l'interface.",
+    "description": "Les gestes de la déclaration, du projet à la soumission et à l'import d'un classeur, montrés pas à pas. Les vidéos sont muettes et sous-titrées, dans la langue de l'interface.",
     "sous_titres": "Sous-titres",
     "sommaire": "Les guides",
     "aucun": {
@@ -1476,6 +1478,8 @@
       "chargement": "Chargement des étapes…",
       "erreur": "Les étapes n'ont pas pu être chargées ; les sous-titres de la vidéo les donnent."
     },
-    "illisible": "Votre navigateur ne lit pas cette vidéo. Ouvrez la plateforme dans Chrome, Edge ou Firefox à jour."
+    "illisible": "Votre navigateur ne lit pas cette vidéo. Ouvrez la plateforme dans Chrome, Edge ou Firefox à jour.",
+    "numero": "{{numero}}. {{titre}}",
+    "video_indisponible": "Cette vidéo n'a pas pu être chargée. Rechargez la page ; les étapes ci-dessous restent lisibles."
   }
 }

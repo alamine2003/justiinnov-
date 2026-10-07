@@ -1,5 +1,6 @@
-import { useSearchParams } from "react-router-dom"
-import { PlayCircle } from "lucide-react"
+import { useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
+import { AlertTriangle, PlayCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageHeader } from "@/components/ui/page-header"
@@ -129,20 +130,22 @@ const LARGEUR_DU_LECTEUR = "max-w-[max(52rem,calc((var(--hauteur-page)_-_7.5rem)
 export function GuidePage() {
   const { t, i18n } = useTranslation()
   const { can } = useAuth()
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const langue = langueDeGuide(i18n.resolvedLanguage)
   const guides = guidesVisibles(can)
   const choisi = guides.find((guide) => guide.id === params.get("video")) ?? guides[0]
+  // La vidéo (ou son affiche) qui n'a pas pu se charger : un lecteur gris
+  // et muet ne disait rien. L'état porte la clé du lecteur, il ne survit
+  // donc pas à un changement de guide ou de langue.
+  const [enErreur, setEnErreur] = useState<string | null>(null)
+  const cle = choisi ? `${choisi.id}-${langue}` : ""
 
-  const choisir = (id: IdDeGuide) =>
-    setParams(
-      (courant) => {
-        const suivant = new URLSearchParams(courant)
-        suivant.set("video", id)
-        return suivant
-      },
-      { replace: true },
-    )
+  /** L'adresse d'un guide : un vrai lien, qui s'ouvre aussi dans un onglet. */
+  const lienVers = (id: IdDeGuide) => {
+    const suivant = new URLSearchParams(params)
+    suivant.set("video", id)
+    return `?${suivant.toString()}`
+  }
 
   return (
     <div className="space-y-6 court:space-y-3">
@@ -167,7 +170,8 @@ export function GuidePage() {
                     le guide ou la langue changent, sans quoi il garderait
                     l'ancienne source. */}
                 <video
-                  key={`${choisi.id}-${langue}`}
+                  key={cle}
+                  onError={() => setEnErreur(cle)}
                   aria-labelledby="guide-titre"
                   aria-describedby="guide-description"
                   controls
@@ -176,7 +180,13 @@ export function GuidePage() {
                   poster={fichierDuGuide(choisi.id, langue, "jpg")}
                   className="aspect-[16/10] w-full rounded-lg border border-border/60 bg-muted outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
-                  <source src={fichierDuGuide(choisi.id, langue, "webm")} type="video/webm" />
+                  {/* L'erreur d'une source ne remonte pas à la vidéo : elle
+                      s'écoute sur la source elle-même. */}
+                  <source
+                    src={fichierDuGuide(choisi.id, langue, "webm")}
+                    type="video/webm"
+                    onError={() => setEnErreur(cle)}
+                  />
                   <track
                     kind="captions"
                     src={fichierDuGuide(choisi.id, langue, "vtt")}
@@ -187,6 +197,12 @@ export function GuidePage() {
                   {/* Ce texte ne s'affiche que si le navigateur ne lit pas la vidéo. */}
                   {t("guides.illisible")}
                 </video>
+                {enErreur === cle && (
+                  <p role="alert" className="flex items-start gap-2 text-sm text-destructive">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    {t("guides.video_indisponible")}
+                  </p>
+                )}
                 <div>
                   <h2 id="guide-titre" className="text-base font-semibold">
                     {t(`guides.liste.${choisi.id}.titre`)}
@@ -207,12 +223,15 @@ export function GuidePage() {
                 const actif = guide.id === choisi.id
                 return (
                   <li key={guide.id}>
-                    <button
-                      type="button"
-                      aria-current={actif ? "true" : undefined}
-                      aria-label={`${rang + 1}. ${t(`guides.liste.${guide.id}.titre`)}`}
+                    <Link
+                      to={lienVers(guide.id)}
+                      replace
+                      aria-current={actif ? "page" : undefined}
+                      aria-label={t("guides.numero", {
+                        numero: rang + 1,
+                        titre: t(`guides.liste.${guide.id}.titre`),
+                      })}
                       aria-describedby={`guide-${guide.id}-description`}
-                      onClick={() => choisir(guide.id)}
                       className={cn(
                         "flex h-full w-full items-start gap-3 rounded-lg border p-2 text-left transition-colors outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50",
                         actif ? "border-ring bg-accent" : "border-border/60 bg-card",
@@ -226,13 +245,16 @@ export function GuidePage() {
                       />
                       <span className="min-w-0">
                         <span className="block text-sm font-medium">
-                          {rang + 1}. {t(`guides.liste.${guide.id}.titre`)}
+                          {t("guides.numero", {
+                            numero: rang + 1,
+                            titre: t(`guides.liste.${guide.id}.titre`),
+                          })}
                         </span>
                         <span id={`guide-${guide.id}-description`} className="block text-xs text-muted-foreground">
                           {t(`guides.liste.${guide.id}.description`)}
                         </span>
                       </span>
-                    </button>
+                    </Link>
                   </li>
                 )
               })}

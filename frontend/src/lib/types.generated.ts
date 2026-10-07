@@ -3772,6 +3772,7 @@ export interface components {
             country?: number
         }
         ImportResult: {
+            readonly dossier: number | null
             readonly lignes_creees: number
             readonly equipes_creees: number
             readonly managers_crees: number

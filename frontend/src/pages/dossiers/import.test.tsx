@@ -46,7 +46,7 @@ beforeEach(() => {
   fetchDossierKinds.mockResolvedValue(page([stands]))
   importExpenses.mockReset()
   importExpenses.mockResolvedValue({
-    lignes_creees: 2, equipes_creees: 0, managers_crees: 0, erreurs: [], dry_run: true,
+    dossier: 41, lignes_creees: 2, equipes_creees: 0, managers_crees: 0, erreurs: [], dry_run: true,
   })
 })
 
@@ -95,5 +95,27 @@ describe("ImportPage — un classeur s'importe dans un projet (décision 102)", 
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Choisissez le projet dans lequel importer.")
     expect(importExpenses).not.toHaveBeenCalled()
+  })
+
+  it("après l'import, ouvre le dossier qui a reçu les lignes ; pas après une simulation", async () => {
+    afficher(`/dossiers/import?project=${congres.id}`)
+    await screen.findByRole("option", { name: "Stands" })
+    fireEvent.change(screen.getByLabelText("Type de dossier"), { target: { value: String(stands.id) } })
+    choisirFichier()
+
+    fireEvent.click(screen.getByRole("button", { name: "Simuler l'import" }))
+    await screen.findByText("Résultat de la simulation")
+    expect(screen.queryByRole("button", { name: /Ouvrir le dossier/ })).toBeNull()
+
+    importExpenses.mockResolvedValueOnce({
+      dossier: 41, lignes_creees: 2, equipes_creees: 0, managers_crees: 0, erreurs: [], dry_run: false,
+    })
+    fireEvent.click(screen.getByRole("switch"))
+    fireEvent.click(screen.getByRole("button", { name: "Importer" }))
+
+    // Un lien rendu par `Button` (Base UI) : `<a role="button" href>`.
+    expect(await screen.findByRole("button", { name: /Ouvrir le dossier/ })).toHaveAttribute(
+      "href", "/dossiers/41",
+    )
   })
 })

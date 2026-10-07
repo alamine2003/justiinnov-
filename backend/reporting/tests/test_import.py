@@ -647,6 +647,9 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertFalse(response.data["erreurs"])
         self.assertEqual(response.data["lignes_creees"], 4)
+        # La réponse nomme le dossier qui a reçu les lignes : l'écran
+        # propose de l'ouvrir.
+        self.assertEqual(response.data["dossier"], self.dossier.pk)
         # Les deux N°ORDRE vont au dossier prédéfini du type (décision 106).
         self.assertEqual(self.dossier.expenses.count(), 4)
         self.dossier.refresh_from_db()

@@ -74,14 +74,14 @@ describe("GuidePage", () => {
     const { container } = monter()
 
     const sommaire = screen.getByRole("navigation", { name: "Les guides" })
-    expect(Array.from(sommaire.querySelectorAll("button")).map((b) => b.getAttribute("aria-label"))).toEqual([
+    expect(Array.from(sommaire.querySelectorAll("a")).map((a) => a.getAttribute("aria-label"))).toEqual([
       "1. Ouvrir un projet",
       "2. Saisir une dépense",
       "3. Joindre une pièce",
       "4. Soumettre un dossier",
       "5. Importer un classeur",
     ])
-    expect(screen.getByRole("button", { name: "1. Ouvrir un projet" })).toHaveAttribute("aria-current", "true")
+    expect(screen.getByRole("link", { name: "1. Ouvrir un projet" })).toHaveAttribute("aria-current", "page")
     expect(source(container)).toBe("/guides/fr/ouvrir-un-projet.webm")
     const piste = container.querySelector("video track")
     expect(piste).toHaveAttribute("src", "/guides/fr/ouvrir-un-projet.vtt")
@@ -92,11 +92,31 @@ describe("GuidePage", () => {
   it("change de vidéo au choix d'un guide, et le garde dans l'adresse", () => {
     const { container } = monter()
 
-    fireEvent.click(screen.getByRole("button", { name: "3. Joindre une pièce" }))
+    fireEvent.click(screen.getByRole("link", { name: "3. Joindre une pièce" }))
 
     expect(source(container)).toBe("/guides/fr/joindre-une-piece.webm")
     expect(screen.getByRole("heading", { name: "Joindre une pièce" })).toBeInTheDocument()
     expect(screen.getByLabelText("adresse")).toHaveTextContent("?video=joindre-une-piece")
+  })
+
+  it("le sommaire est fait de liens : un guide s'ouvre aussi dans un nouvel onglet", () => {
+    monter()
+
+    expect(screen.getByRole("link", { name: "5. Importer un classeur" })).toHaveAttribute(
+      "href", "/guide?video=importer-un-classeur",
+    )
+  })
+
+  it("dit quand la vidéo ne se charge pas, au lieu d'un lecteur gris et muet", () => {
+    const { container } = monter()
+    expect(screen.queryByRole("alert")).toBeNull()
+
+    fireEvent.error(container.querySelector("video source")!)
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Cette vidéo n'a pas pu être chargée")
+    // Un autre guide repart d'un lecteur neuf : le message ne le suit pas.
+    fireEvent.click(screen.getByRole("link", { name: "2. Saisir une dépense" }))
+    expect(screen.queryByText(/Cette vidéo n'a pas pu être chargée/)).toBeNull()
   })
 
   it("rouvre le guide de l'adresse, et le premier si l'adresse en nomme un inconnu", () => {
@@ -113,8 +133,8 @@ describe("GuidePage", () => {
 
     monter()
 
-    expect(screen.getByRole("button", { name: "1. Saisir une dépense" })).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /Importer un classeur/ })).toBeNull()
+    expect(screen.getByRole("link", { name: "1. Saisir une dépense" })).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /Importer un classeur/ })).toBeNull()
   })
 
   it("suit la langue de l'interface : vidéo, sous-titres et titres en anglais", async () => {
@@ -166,7 +186,7 @@ describe("GuidePage", () => {
     expect(await etapes()).toEqual(repliques("fr", "ouvrir-un-projet"))
     expect(fetch).toHaveBeenCalledWith("/guides/fr/ouvrir-un-projet.vtt", expect.anything())
 
-    fireEvent.click(screen.getByRole("button", { name: "4. Soumettre un dossier" }))
+    fireEvent.click(screen.getByRole("link", { name: "4. Soumettre un dossier" }))
     await waitFor(async () => expect(await etapes()).toEqual(repliques("fr", "soumettre-un-dossier")))
   })
 

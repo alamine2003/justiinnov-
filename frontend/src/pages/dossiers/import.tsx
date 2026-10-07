@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react"
-import { useSearchParams } from "react-router-dom"
-import { AlertTriangle, CheckCircle2, FlaskConical, Loader2, Upload } from "lucide-react"
+import { Link, useSearchParams } from "react-router-dom"
+import { AlertTriangle, ArrowRight, CheckCircle2, FlaskConical, Loader2, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -258,6 +258,18 @@ function ImportResultCard({ result }: { result: ImportResult }) {
           <p className="text-xs text-muted-foreground">
             {t("dossiers.import.rien_ecrit")}
           </p>
+        )}
+        {/* Après l'import, la suite est dans le dossier : joindre la pièce
+            de chaque ligne, puis soumettre. Le serveur le nomme. */}
+        {reussi && !result.dry_run && result.dossier !== null && (
+          <Button
+            size="sm"
+            nativeButton={false}
+            render={<Link to={`/dossiers/${result.dossier}`} />}
+          >
+            {t("dossiers.import.ouvrir_dossier")}
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </Button>
         )}
         {erreurs.length > 0 && (
           <ul className="space-y-1 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">

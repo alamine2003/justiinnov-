@@ -225,7 +225,15 @@ export function ProofPanel({
             size="sm"
             variant="outline"
             onClick={() => setUploadOpen(true)}
-            aria-label={ligne ? t("pieces.ligne.deposer_aria", { ligne }) : undefined}
+            // Le nom accessible reprend le texte visible (WCAG 2.5.3) : « Déposer
+            // une autre pièce » ne s'annonçait pas « Déposer la pièce de… ».
+            aria-label={
+              ligne
+                ? proofs.length > 0
+                  ? t("pieces.ligne.remplacer_ou_ajouter_aria", { ligne })
+                  : t("pieces.ligne.deposer_aria", { ligne })
+                : undefined
+            }
           >
             <Upload className="mr-1 h-3.5 w-3.5" aria-hidden />
             {proofs.length > 0 ? t("pieces.ligne.remplacer_ou_ajouter") : t("pieces.deposer")}
