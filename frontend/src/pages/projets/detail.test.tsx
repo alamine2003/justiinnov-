@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ProjetDetailPage } from "./detail"
 import { invalidateReferentiel } from "@/lib/referentiel"
+import { pageDesTypesDeProjets } from "@/test/types-de-projets-fixtures"
 
 const fetchProject = vi.fn()
 const fetchDossierKinds = vi.fn()
@@ -19,6 +20,7 @@ vi.mock("@/lib/countries", () => ({
   updateProject: (...args: unknown[]) => updateProject(...args),
   completerProject: (...args: unknown[]) => completerProject(...args),
   fetchProjectHistory: (...args: unknown[]) => fetchProjectHistory(...args),
+  fetchProjectTypes: () => pageDesTypesDeProjets(),
 }))
 vi.mock("@/lib/expenses", () => ({
   fetchDossiers: (...args: unknown[]) => fetchDossiers(...args),
@@ -181,6 +183,8 @@ describe("Modifier et compléter le projet, côté siège", () => {
     updateProject.mockResolvedValue({ ...congres })
     afficher()
     fireEvent.click(await screen.findByRole("button", { name: "Modifier" }))
+    // Les types viennent du serveur (décision 119).
+    await screen.findByRole("option", { name: "Voyage" })
     fireEvent.change(screen.getByLabelText("Type de projet"), { target: { value: "voyage" } })
     fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Reprise" } })
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))

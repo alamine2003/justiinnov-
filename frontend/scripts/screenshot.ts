@@ -365,19 +365,26 @@ async function main() {
   for (const [onglet, nom] of [
     ["Utilisateurs", "configuration_utilisateurs"],
     ["Pays", "configuration_pays"],
-    ["Types de dossiers", "configuration_types_dossiers"],
+    ["Types de projets", "configuration_types_projets"],
     ["Permissions", "configuration_permissions"],
   ] as const) {
     await hq.getByRole("tab", { name: onglet }).click()
     await hq.waitForTimeout(900)
     expectData((await hq.locator("tbody tr").count()) > 0, `Configuration › ${onglet} a des lignes`)
-    if (onglet === "Types de dossiers") {
-      // Décision 108 : la liste est au super administrateur seul ; le
-      // compte de capture du siège est administrateur (RH), il la lit.
+    if (onglet === "Types de projets") {
+      // Décisions 108 et 119 : les deux listes sont au super administrateur
+      // seul ; le compte de capture du siège est administrateur (RH), il
+      // les lit, chaque type de projet avec ses types de dossiers.
       expect(
-        (await hq.getByRole("button", { name: "Ajouter" }).count()) === 0,
-        "la RH lit les types de dossiers sans pouvoir les modifier",
+        (await hq.getByRole("button", { name: /Ajouter un type/ }).count()) === 0,
+        "la RH lit les types de projets et de dossiers sans pouvoir les modifier",
       )
+      for (const type of ["Congrès", "Voyage", "Soutien financier"]) {
+        expectData(
+          (await hq.getByRole("heading", { name: type, exact: true }).count()) === 1,
+          `Configuration › Types de projets montre « ${type} »`,
+        )
+      }
     }
     await shot(hq, nom)
   }

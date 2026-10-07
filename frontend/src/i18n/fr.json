@@ -231,11 +231,6 @@
       "fr": "Français",
       "en": "English"
     },
-    "projet_type": {
-      "congres": "Congrès",
-      "voyage": "Voyage",
-      "soutien_financier": "Soutien financier"
-    },
     "historique_action": {
       "created": "Création",
       "updated": "Modification",
@@ -265,7 +260,8 @@
       "exchange_rate": "Taux de change",
       "cost_center": "Centres de coûts",
       "expense_title": "Intitulés de dépenses",
-      "marketing_category": "Catégories marketing"
+      "marketing_category": "Catégories marketing",
+      "project_type": "Types de projets"
     }
   },
   "layout": {
@@ -1047,7 +1043,7 @@
       "utilisateurs": "Utilisateurs",
       "pays": "Pays",
       "permissions": "Permissions",
-      "types-de-dossiers": "Types de dossiers"
+      "types-de-projets": "Types de projets"
     },
     "general": {
       "parametres_titre": "Paramètres du serveur et du workflow",
@@ -1197,12 +1193,44 @@
       "taux_invalide": "Indiquez un taux décimal strictement positif."
     },
     "types_dossiers": {
-      "titre": "Types de dossiers",
-      "description": "La liste commune aux filiales : chaque nouveau projet reçoit d'office un dossier par type actif de son type de projet. Tenue par le super administrateur ; un type se désactive, il ne se supprime pas.",
       "chargement_impossible": "Impossible de charger les types de dossiers",
       "nom_placeholder": "Stands",
       "noun_pluriel": "types de dossiers",
-      "motif_mention": "obligatoire pour une modification"
+      "ajouter": "Ajouter un type de dossier",
+      "ordre": "Ordre",
+      "titre_colonne": "Type de dossier",
+      "aucun": "Aucun type de dossier : ce type de projet n'ouvre pas de projet.",
+      "modifier_aria": "Modifier le type de dossier « {{nom}} »",
+      "nom_requis": "Indiquez le nom du type de dossier.",
+      "dialogue_ajouter": "Ajouter un type de dossier à « {{type}} »",
+      "dialogue_modifier": "Modifier « {{nom}} »",
+      "dialogue_aide": "Les nouveaux projets reçoivent ce dossier ; les projets existants se complètent depuis leur fiche."
+    },
+    "types_projets": {
+      "titre": "Types de projets et leurs dossiers",
+      "description": "Deux listes communes aux filiales. Chaque projet ouvert sous un type reçoit d'office un dossier par type de dossier actif, dans l'ordre affiché. Tenues par le super administrateur ; rien ne se supprime, un type se désactive.",
+      "chargement_impossible": "Impossible de charger les types de projets",
+      "noun_pluriel": "types de projets",
+      "historique": "Historique",
+      "ajouter": "Ajouter un type de projet",
+      "modifier": "Modifier",
+      "modifier_aria": "Modifier le type de projet « {{nom}} »",
+      "sans_dossier": "Aucun dossier actif : n'ouvre pas de projet",
+      "ordre": "ordre {{ordre}}",
+      "projets_one": "{{count}} projet",
+      "projets_other": "{{count}} projets",
+      "ordre_aide": "Les plus petits d'abord ; à égalité, par nom.",
+      "nom": "Nom",
+      "nom_placeholder": "Formation",
+      "nom_en": "Nom en anglais",
+      "nom_en_placeholder": "Training",
+      "nom_requis": "Indiquez le nom du type de projet.",
+      "actif_aide": "Désactivé, il n'ouvre plus de projet ; ses projets gardent leurs dossiers.",
+      "dialogue_ajouter": "Ajouter un type de projet",
+      "dialogue_ajouter_aide": "Son code, calculé du nom, ne changera plus : les projets le portent.",
+      "dialogue_modifier": "Modifier « {{nom}} »",
+      "dialogue_modifier_aide": "Code {{code}} : il ne change pas. Le motif reste au journal.",
+      "erreur_champs": "Corrigez les champs signalés."
     }
   },
   "audit": {

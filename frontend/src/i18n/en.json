@@ -231,11 +231,6 @@
       "fr": "Français",
       "en": "English"
     },
-    "projet_type": {
-      "congres": "Congress",
-      "voyage": "Trip",
-      "soutien_financier": "Financial support"
-    },
     "historique_action": {
       "created": "Creation",
       "updated": "Update",
@@ -265,7 +260,8 @@
       "exchange_rate": "Exchange rates",
       "cost_center": "Cost centres",
       "expense_title": "Expense titles",
-      "marketing_category": "Marketing categories"
+      "marketing_category": "Marketing categories",
+      "project_type": "Project types"
     }
   },
   "layout": {
@@ -1047,7 +1043,7 @@
       "utilisateurs": "Users",
       "pays": "Countries",
       "permissions": "Permissions",
-      "types-de-dossiers": "File types"
+      "types-de-projets": "Project types"
     },
     "general": {
       "parametres_titre": "Server and workflow settings",
@@ -1197,12 +1193,44 @@
       "taux_invalide": "Enter a strictly positive decimal rate."
     },
     "types_dossiers": {
-      "titre": "File types",
-      "description": "The list shared by the subsidiaries: each new project automatically receives one dossier per active type of its project type. Held by the super administrator; a type is deactivated, never deleted.",
       "chargement_impossible": "Unable to load file types",
       "nom_placeholder": "Stands",
       "noun_pluriel": "file types",
-      "motif_mention": "required for a change"
+      "ajouter": "Add a dossier type",
+      "ordre": "Order",
+      "titre_colonne": "Dossier type",
+      "aucun": "No dossier type: this project type opens no project.",
+      "modifier_aria": "Edit the dossier type “{{nom}}”",
+      "nom_requis": "Enter the name of the dossier type.",
+      "dialogue_ajouter": "Add a dossier type to “{{type}}”",
+      "dialogue_modifier": "Edit “{{nom}}”",
+      "dialogue_aide": "New projects receive this dossier; existing projects are completed from their page."
+    },
+    "types_projets": {
+      "titre": "Project types and their dossiers",
+      "description": "Two lists shared by all subsidiaries. Every project opened under a type automatically receives one dossier per active dossier type, in the order shown. Kept by the super administrator; nothing is deleted, a type is deactivated.",
+      "chargement_impossible": "Unable to load the project types",
+      "noun_pluriel": "project types",
+      "historique": "History",
+      "ajouter": "Add a project type",
+      "modifier": "Edit",
+      "modifier_aria": "Edit the project type “{{nom}}”",
+      "sans_dossier": "No active dossier: opens no project",
+      "ordre": "order {{ordre}}",
+      "projets_one": "{{count}} project",
+      "projets_other": "{{count}} projects",
+      "ordre_aide": "Smallest first; ties are sorted by name.",
+      "nom": "Name",
+      "nom_placeholder": "Formation",
+      "nom_en": "English name",
+      "nom_en_placeholder": "Training",
+      "nom_requis": "Enter the name of the project type.",
+      "actif_aide": "Once deactivated, it opens no more projects; its projects keep their dossiers.",
+      "dialogue_ajouter": "Add a project type",
+      "dialogue_ajouter_aide": "Its code, derived from the name, will never change: projects carry it.",
+      "dialogue_modifier": "Edit “{{nom}}”",
+      "dialogue_modifier_aide": "Code {{code}}: it does not change. The reason is kept in the log.",
+      "erreur_champs": "Correct the highlighted fields."
     }
   },
   "audit": {

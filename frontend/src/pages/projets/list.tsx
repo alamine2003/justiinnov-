@@ -42,10 +42,10 @@ import {
   fetchProjects,
   fetchProjectsParPays,
 } from "@/lib/countries"
-import { PROJECT_KINDS, projectKindLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, invalidateReferentiel, useReferentiel } from "@/lib/referentiel"
 import { scopedTeams, teamRequired } from "@/lib/teams"
 import type { CountrySummary, ProjectKind } from "@/lib/types"
+import { typesActifs, useTypesDeProjets } from "@/lib/types-de-projets"
 import { useDebouncedValue } from "@/lib/use-debounced"
 import { useQuery } from "@/lib/use-query"
 import { ApiError } from "@/lib/api"
@@ -65,8 +65,15 @@ export function ProjetsPage() {
   const canCreate = can("projets.create")
   const [params, setParams] = useSearchParams()
 
+  // La liste des types vient du serveur (décision 119). Tant qu'elle n'est
+  // pas là, le `?kind=` d'un lien est cru : il vient d'une puce ou d'une
+  // tuile ; un code inconnu, une fois la liste lue, retombe sur « Tous ».
+  const typesDeProjets = useTypesDeProjets()
   const kindParam = params.get("kind") ?? ""
-  const kindFilter = (PROJECT_KINDS as string[]).includes(kindParam) ? (kindParam as ProjectKind) : ""
+  const kindFilter: ProjectKind =
+    typesDeProjets.data === null || typesDeProjets.data.some((type) => type.code === kindParam)
+      ? kindParam
+      : ""
   const countryParam = Number(params.get("country"))
   const countryFilter: number | "" =
     Number.isInteger(countryParam) && countryParam > 0 ? countryParam : ""
@@ -175,10 +182,10 @@ export function ProjetsPage() {
               label: t("commun.tous"),
               count: kindFilter === "" && !query.loading ? count : undefined,
             },
-            ...PROJECT_KINDS.map((value) => ({
-              value,
-              label: projectKindLabel(t, value),
-              count: kindFilter === value && !query.loading ? count : undefined,
+            ...(typesDeProjets.data ?? []).map((type) => ({
+              value: type.code,
+              label: type.libelle,
+              count: kindFilter === type.code && !query.loading ? count : undefined,
             })),
           ]}
         />
@@ -294,7 +301,9 @@ function ProjectForm({
   // arrive après l'ouverture du dialogue.
   const country: number | "" = choix !== "" ? choix : countries.length === 1 ? countries[0].id : ""
   const [name, setName] = useState("")
-  const [kind, setKind] = useState<ProjectKind | "">("")
+  const [kind, setKind] = useState<ProjectKind>("")
+  // Seuls les types actifs ouvrent un projet (décision 119).
+  const types = typesActifs(useTypesDeProjets().data)
   const [description, setDescription] = useState("")
   const [team, setTeam] = useState<number | "">("")
   const [error, setError] = useState<string | null>(null)
@@ -409,13 +418,13 @@ function ProjectForm({
             <NativeSelect
               id="projet-kind"
               value={kind}
-              onChange={(e) => setKind(e.target.value as ProjectKind | "")}
+              onChange={(e) => setKind(e.target.value)}
               required
             >
               <option value="">{t("projets.formulaire.choisir_type")}</option>
-              {PROJECT_KINDS.map((value) => (
-                <option key={value} value={value}>
-                  {projectKindLabel(t, value)}
+              {types.map((type) => (
+                <option key={type.code} value={type.code}>
+                  {type.libelle}
                 </option>
               ))}
             </NativeSelect>

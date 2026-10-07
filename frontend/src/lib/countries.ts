@@ -13,6 +13,7 @@ import type {
   Paginated,
   ParPays,
   Project,
+  ProjectType,
   Team,
 } from "@/lib/types"
 
@@ -119,6 +120,22 @@ export function completerProject(id: number) {
 /** Le projet, ses dossiers, leurs lignes et leurs pièces : une chronologie (décision 110). */
 export function fetchProjectHistory(id: number, signal?: AbortSignal) {
   return apiGet<HistoriqueDeProjet>(`/projects/${id}/historique/`, undefined, signal)
+}
+
+// ---------------------------------------------------------------------------
+// Types de projets : la liste commune, tenue par le super administrateur
+// (décision 119)
+// ---------------------------------------------------------------------------
+export function fetchProjectTypes(params?: Record<string, unknown>, signal?: AbortSignal) {
+  return apiGet<Paginated<ProjectType>>("/project-types/", params, signal)
+}
+
+export function createProjectType(data: unknown) {
+  return apiPost<ProjectType>("/project-types/", data)
+}
+
+export function updateProjectType(id: number, data: unknown) {
+  return apiPatch<ProjectType>(`/project-types/${id}/`, data)
 }
 
 // ---------------------------------------------------------------------------
