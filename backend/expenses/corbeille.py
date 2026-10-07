@@ -222,6 +222,13 @@ def _chaine(piece):
     return versions
 
 
+def prouve_un_constat(piece):
+    """La pièce prouve-t-elle une ligne justifiée ou clôturée — ou, d'avant
+    la 2.0 et sans ligne, un dossier constaté ? Elle ne part alors pas seule."""
+    statut = piece.expense.status if piece.expense_id else piece.dossier.status
+    return statut in RECTIFIABLE_STATUSES
+
+
 def _verrouiller(nature, pk):
     """L'objet visé, sous verrou — son dossier d'abord, comme les autres services."""
     modele = MODELES[nature]
@@ -231,7 +238,15 @@ def _verrouiller(nature, pk):
             raise modele.DoesNotExist
         Dossier.objects.select_for_update().filter(pk=dossier_id).first()
     relations = ("dossier__country",) if nature == Nature.PIECE else ("country",)
-    return modele.objects.select_for_update(of=("self",)).select_related(*relations).get(pk=pk)
+    # Le projet sans clé : une saisie concurrente verrouille son dossier
+    # puis vérifie, au commit, le projet de sa ligne (``FOR KEY SHARE``) ;
+    # un ``FOR UPDATE`` ici les interbloquerait (même choix que
+    # ``numerotation``).
+    return (
+        modele.objects.select_for_update(of=("self",), no_key=nature == Nature.PROJET)
+        .select_related(*relations)
+        .get(pk=pk)
+    )
 
 
 @transaction.atomic
@@ -265,6 +280,18 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
                 "nature",
                 _("Le projet « Historique » range les dossiers d'avant la 2.0 : il ne se retire pas."),
             )
+        # Des lignes rangées ailleurs — dans le dossier « Historique » du
+        # pays, depuis la 2.0 — peuvent encore citer le projet : elles le
+        # protègent en base, et elles ne partent pas avec lui.
+        ailleurs = Expense.objects.filter(project=objet).exclude(dossier__project=objet)
+        if ailleurs.exists():
+            raise RegleViolee(
+                "nature",
+                _(
+                    "{count} ligne(s) d'un autre dossier ({dossier}) citent encore ce "
+                    "projet : mettez-les à la corbeille d'abord."
+                ).format(count=ailleurs.count(), dossier=ailleurs.first().dossier.number),
+            )
         if Budget.objects.filter(project=objet).exists():
             raise RegleViolee(
                 "nature",
@@ -285,9 +312,10 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
     else:
         dossier = objet.dossier
         _exiger_le_perimetre(acteur, dossier.country_id)
+        # Toutes ses versions partent : aucune ne doit prouver un constat.
         # Une pièce d'avant la 2.0, sans ligne, prouve le dossier entier.
-        statut = objet.expense.status if objet.expense_id else dossier.status
-        if statut in RECTIFIABLE_STATUSES:
+        versions = _chaine(objet)
+        if any(prouve_un_constat(version) for version in versions):
             raise RegleViolee(
                 "nature",
                 _(
@@ -296,8 +324,9 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
                 ),
             )
         team = dossier.team
-        versions = [p.pk for p in _chaine(objet)]
-        retrait.pieces(Proof.objects.filter(pk__in=versions).select_for_update(of=("self",)))
+        retrait.pieces(
+            Proof.objects.filter(pk__in=[v.pk for v in versions]).select_for_update(of=("self",))
+        )
 
     retrait.terminer()
     triggers.mis_a_la_corbeille(retrait.racine, team, trace.compte)

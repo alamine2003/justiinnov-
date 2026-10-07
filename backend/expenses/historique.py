@@ -12,7 +12,7 @@ from django.db.models import Q
 
 from core.models import ChangeLog
 
-from .models import AuditLog, Expense, Proof, Rectification
+from .models import AuditLog, Dossier, ElementSupprime, Expense, Proof, Rectification
 
 #: Au-delà, la liste est tronquée — le journal d'audit complet reste à la
 #: page Audit, filtrable par projet.
@@ -67,24 +67,54 @@ def retirees_des_dossiers(dossiers):
     )
 
 
-def historique_du_projet(projet):
-    """``{"entrees": [...], "tronque": bool}`` pour ``projet``."""
-    dossiers = list(projet.dossiers.values_list("pk", flat=True))
-    lignes = list(Expense.objects.filter(dossier__in=dossiers).values_list("pk", flat=True))
-    pieces = list(Proof.objects.filter(dossier__in=dossiers).values_list("pk", flat=True))
-    rectifications = list(
+def journal_du_projet(projet_id):
+    """Ce qui, au journal d'audit, concerne les dossiers d'un projet, leurs
+    lignes, leurs pièces et leurs demandes de rectification.
+
+    Ce qui a été mis à la corbeille (décision 120) n'est plus en base : ses
+    identifiants se relisent dans les copies de la corbeille, pour que la
+    fiche du projet garde l'histoire — et la mise à la corbeille elle-même —
+    de ce qui en est parti.
+    """
+    nature = ElementSupprime.Nature
+    # Un filtre d'URL le donne en décimal ; une clé JSON se compare à un entier.
+    projet_id = int(projet_id)
+    dossiers = set(Dossier.objects.filter(project=projet_id).values_list("pk", flat=True))
+    dossiers |= set(
+        ElementSupprime.objects.filter(nature=nature.DOSSIER, donnees__project_id=projet_id)
+        .values_list("objet_id", flat=True)
+    )
+    lignes = set(Expense.objects.filter(dossier__in=dossiers).values_list("pk", flat=True))
+    rectifications = set(
         Rectification.objects.filter(expense__in=lignes).values_list("pk", flat=True)
     )
-    referentiel = ChangeLog.objects.filter(
-        model_name=ChangeLog.Models.PROJECT, object_id=projet.pk
-    ).order_by("-created_at", "-pk")[: PLAFOND + 1]
-    circuit = AuditLog.objects.filter(
+    for objet_id, donnees in ElementSupprime.objects.filter(
+        nature=nature.LIGNE, donnees__dossier_id__in=list(dossiers)
+    ).values_list("objet_id", "donnees"):
+        lignes.add(objet_id)
+        rectifications.update(r["id"] for r in donnees.get("rectifications", []))
+    pieces = set(Proof.objects.filter(dossier__in=dossiers).values_list("pk", flat=True))
+    pieces |= set(
+        ElementSupprime.objects.filter(nature=nature.PIECE, donnees__dossier_id__in=list(dossiers))
+        .values_list("objet_id", flat=True)
+    )
+    return (
         Q(object_type="Dossier", object_id__in=dossiers)
         | Q(object_type="Expense", object_id__in=lignes)
         | Q(object_type="Proof", object_id__in=pieces)
         | Q(object_type="Rectification", object_id__in=rectifications)
         | retirees_des_dossiers(dossiers)
+    )
+
+
+def historique_du_projet(projet):
+    """``{"entrees": [...], "tronque": bool}`` pour ``projet``."""
+    referentiel = ChangeLog.objects.filter(
+        model_name=ChangeLog.Models.PROJECT, object_id=projet.pk
     ).order_by("-created_at", "-pk")[: PLAFOND + 1]
+    circuit = AuditLog.objects.filter(journal_du_projet(projet.pk)).order_by(
+        "-created_at", "-pk"
+    )[: PLAFOND + 1]
     entrees = sorted(
         [*map(_entree_referentiel, referentiel), *map(_entree_circuit, circuit)],
         key=lambda e: (e["created_at"], e["id"]),

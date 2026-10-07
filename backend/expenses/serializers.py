@@ -41,13 +41,13 @@ from .models import (
     compute_sha256,
 )
 from .numerotation import refus_d_ouverture
+from .corbeille import prouve_un_constat
 from .stockage import effacer_sans_bruit, noter_depot
 from .transitions import peut_decider_rectification
 from .workflow import (
     LOCKED_STATUSES,
     PROOF_LOCKED_STATUSES,
     PROOF_TRANSITIONS,
-    RECTIFIABLE_STATUSES,
     REQUEST_RECTIFICATION,
     corbeille_ouverte,
     dossier_allowed_actions,
@@ -432,8 +432,9 @@ class ProofSerializer(serializers.ModelSerializer):
             return False
         if not corbeille_ouverte(configuration):
             return False
-        statut = proof.expense.status if proof.expense_id else proof.dossier.status
-        return statut not in RECTIFIABLE_STATUSES
+        # La pièce elle-même ; le service relit aussi ses autres versions,
+        # qui partent avec elle (``corbeille.prouve_un_constat``).
+        return not prouve_un_constat(proof)
 
     def validate_file(self, uploaded):
         if uploaded.size > settings.MAX_PROOF_SIZE:

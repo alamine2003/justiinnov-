@@ -210,6 +210,15 @@ function Emportes({
     { fallback: t("corbeille.page.indisponible") },
   )
   if (query.loading) return <SkeletonRows columns={COLONNES} rows={2} />
+  if (query.error) {
+    return (
+      <TableRow>
+        <TableCell colSpan={COLONNES}>
+          <FormError>{query.error}</FormError>
+        </TableCell>
+      </TableRow>
+    )
+  }
   return (
     <>
       {(query.data?.results ?? []).map((element) => (

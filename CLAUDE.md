@@ -199,7 +199,8 @@ l'application.
   par le seul `super_admin`), dans la même transaction
   (`expenses.predefinis`), signés par le manager qui crée le projet, dans
   l'équipe qu'il choisit. **Aucun dossier ne se crée ni ne se supprime par
-  l'API** (405) ; un dossier prédéfini par type et par projet
+  l'API** (405 ; seule la corbeille du `super_admin` en retire un, avant la
+  mise en ligne finale, décision 120) ; un dossier prédéfini par type et par projet
   (`Dossier.predefini`, `unique_type_par_projet`). Un projet qui n'en
   recevrait aucun ne se crée pas ; le siège complète à la demande un projet
   des dossiers qui lui manquent (`POST /api/projects/{id}/completer/`). Son numéro est calculé,
@@ -236,7 +237,7 @@ l'application.
   d'une entité de référentiel se fait par désactivation (`is_active`) ;
   l'API répond 405 sur `DELETE`. La conservation est illimitée : ni tâche
   de ménage, ni rétention sur les dossiers, les pièces ou les journaux.
-  **Une seule exception, déjà décidée : la remise à zéro des essais**
+  **Deux exceptions, décidées pour l'avant-ouverture. La remise à zéro des essais**
   (décision 113), avant l'ouverture aux filiales — `manage.py
   remise_a_zero_des_essais`, une fois, sur sauvegarde fraîche, chaque objet
   retiré tracé `purged` au journal. Elle ne se refait pas : la commande

@@ -5,13 +5,12 @@ from datetime import date
 
 import django_filters
 from django import forms
-from django.db.models import Q
 from django_filters import rest_framework as filtres_de_l_api
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 
-from .historique import retirees_des_dossiers
-from .models import AuditLog, Dossier, ElementSupprime, Expense, Proof, Rectification
+from .historique import journal_du_projet
+from .models import AuditLog, Dossier, ElementSupprime
 
 
 class AuditLogFilter(django_filters.FilterSet):
@@ -26,24 +25,9 @@ class AuditLogFilter(django_filters.FilterSet):
         fields = ["user", "action", "object_type", "country"]
 
     def filtrer_par_projet(self, queryset, name, value):
-        """Ce qui est arrivé aux dossiers du projet, à leurs lignes et à leurs pièces."""
-        dossiers = Dossier.objects.filter(project=value).values("pk")
-        lignes = Expense.objects.filter(dossier__project=value).values("pk")
-        return queryset.filter(
-            Q(object_type="Dossier", object_id__in=dossiers)
-            | Q(object_type="Expense", object_id__in=lignes)
-            | Q(
-                object_type="Proof",
-                object_id__in=Proof.objects.filter(dossier__project=value).values("pk"),
-            )
-            | retirees_des_dossiers(dossiers.values_list("pk", flat=True))
-            | Q(
-                object_type="Rectification",
-                object_id__in=Rectification.objects.filter(
-                    expense__dossier__project=value
-                ).values("pk"),
-            )
-        )
+        """Ce qui est arrivé aux dossiers du projet, à leurs lignes et à leurs
+        pièces — y compris ce qui en est parti à la corbeille (décision 120)."""
+        return queryset.filter(journal_du_projet(value))
 
 
 @extend_schema_field(OpenApiTypes.INT)

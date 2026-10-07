@@ -193,6 +193,66 @@ class CorbeilleTests(ExpenseTestCase):
                 self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertTrue(Project.objects.filter(pk=projet.pk).exists())
 
+    def test_un_projet_cite_par_une_ligne_d_un_autre_dossier_reste(self):
+        """Depuis la 2.0, une ligne du dossier « Historique » peut encore
+        citer son projet d'origine : elle le protège en base. Le refus le
+        dit, au lieu d'un « réessayez » qui échouerait toujours."""
+        historique = Project.objects.create(
+            country=self.togo, name="Historique (avant 2.0)", is_historical=True,
+        )
+        ancien = Dossier.objects.create(
+            number="ANCIEN-1", label="Ancien", country=self.togo, project=historique,
+            team=self.team, owner=self.manager, date=self.dossier.date,
+            created_by=self.owner.username,
+        )
+        self.make_expense(dossier=ancien, project=self.projet)
+
+        reponse = self.jeter("projet", self.projet.pk)
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("ANCIEN-1", str(reponse.data))
+        self.assertTrue(Project.objects.filter(pk=self.projet.pk).exists())
+        self.assertFalse(ElementSupprime.objects.exists())
+
+    def test_une_version_qui_prouve_un_constat_retient_toute_la_chaine(self):
+        """Une pièce d'avant la 2.0, remplacée sur une ligne justifiée :
+        retirer l'ancienne emporterait la nouvelle, et la ligne resterait
+        constatée sans preuve."""
+        ancienne = Proof.objects.create(
+            dossier=self.dossier, file=ContentFile(b"%PDF-1.4 a", name="a.pdf"),
+            original_name="a.pdf", sha256="c" * 64, uploaded_by="owner.togo",
+        )
+        self.piece(self.ligne_cloturee(), replaces=ancienne, version=2, sha256="d" * 64)
+
+        reponse = self.jeter("piece", ancienne.pk)
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Proof.objects.count(), 2)
+
+    def test_la_fiche_du_projet_garde_ce_qui_en_est_parti(self):
+        """Décision 110 : l'historique du projet dit aussi ce qui a été mis à
+        la corbeille — la mise à la corbeille elle-même, et ce qui l'a précédée."""
+        ligne = self.make_expense()
+        AuditLog.objects.create(
+            user="owner.togo", action=AuditLog.Action.CREATED, object_type="Expense",
+            object_id=ligne.pk, label="Saisie", country=self.togo,
+        )
+        self.jeter("ligne", ligne.pk)
+        self.jeter("dossier", self.dossier.pk)
+        self.login(self.controller)
+
+        entrees = self.client.get(f"/api/projects/{self.projet.pk}/historique/").data["entrees"]
+        journal = self.client.get("/api/audit/", {"projet": self.projet.pk}).data["results"]
+
+        vues = {(e["objet"], e["object_id"], e["action"]) for e in entrees}
+        self.assertIn(("Expense", ligne.pk, "created"), vues)
+        self.assertIn(("Expense", ligne.pk, "trashed"), vues)
+        self.assertIn(("Dossier", self.dossier.pk, "trashed"), vues)
+        self.assertEqual(
+            {(e["object_type"], e["action"]) for e in journal if e["action"] == "trashed"},
+            {("Expense", "trashed"), ("Dossier", "trashed")},
+        )
+
     def test_un_objet_inconnu_n_existe_pas(self):
         self.assertEqual(self.jeter("ligne", 999999).status_code, status.HTTP_404_NOT_FOUND)
 

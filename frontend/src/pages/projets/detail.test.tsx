@@ -26,9 +26,13 @@ vi.mock("@/lib/expenses", () => ({
   fetchDossiers: (...args: unknown[]) => fetchDossiers(...args),
 }))
 let droits: Record<string, boolean> = {}
+let corbeilleOuverte = false
 vi.mock("@/context/use-auth", () => ({
   useAuth: () => ({
-    me: { has_global_scope: false, countries: [], teams: [] },
+    me: {
+      has_global_scope: false, countries: [], teams: [],
+      workflow: { suppressions_ouvertes: corbeilleOuverte },
+    },
     can: (cle: string) => droits[cle] ?? false,
   }),
 }))
@@ -55,6 +59,7 @@ function afficher(adresse = "/projets/7") {
 }
 
 beforeEach(() => {
+  corbeilleOuverte = false
   droits = { "expenses.create": true, "data.import": true, "projets.rename": true }
   invalidateReferentiel()
   fetchProject.mockReset()
@@ -240,5 +245,41 @@ describe("Historique du projet", () => {
     await screen.findByRole("heading", { name: "Congrès de Lomé" })
     expect(screen.queryByRole("tab", { name: "Historique" })).toBeNull()
     expect(fetchProjectHistory).not.toHaveBeenCalled()
+  })
+})
+
+/** La corbeille du super administrateur (décision 120). */
+describe("ProjetDetailPage — corbeille", () => {
+  const bouton = () => screen.queryByRole("button", { name: "Mettre à la corbeille" })
+
+  it("propose la corbeille avec la capacité et la corbeille ouverte", async () => {
+    droits = { "corbeille.supprimer": true }
+    corbeilleOuverte = true
+
+    afficher()
+
+    expect(await screen.findByRole("button", { name: "Mettre à la corbeille" })).toBeInTheDocument()
+  })
+
+  it("ne la propose ni fermée, ni sans la capacité, ni sur le projet « Historique »", async () => {
+    droits = { "corbeille.supprimer": true }
+    const { unmount } = afficher()
+    await screen.findByText("Congrès de Lomé")
+    expect(bouton()).toBeNull()
+    unmount()
+
+    corbeilleOuverte = true
+    droits = {}
+    const second = afficher()
+    await screen.findByText("Congrès de Lomé")
+    expect(bouton()).toBeNull()
+    second.unmount()
+
+    droits = { "corbeille.supprimer": true }
+    invalidateReferentiel()
+    fetchProject.mockResolvedValue({ ...congres, name: "Historique (avant 2.0)", is_historical: true })
+    afficher()
+    await screen.findByText("Historique (avant 2.0)")
+    expect(bouton()).toBeNull()
   })
 })
