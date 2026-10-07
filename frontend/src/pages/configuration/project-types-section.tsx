@@ -455,7 +455,9 @@ function DialogueDeType({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2" noValidate>
           <FormError>{error}</FormError>
-          <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
+          {/* L'un sous l'autre : côte à côte, « Nom en anglais (facultatif) »
+              passait sur deux lignes et décalait son champ. */}
+          <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="type-nom">{t("configuration.types_projets.nom")}</Label>
               <Input
