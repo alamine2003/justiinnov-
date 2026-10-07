@@ -12,7 +12,7 @@ import logging
 from django.db import IntegrityError, transaction
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
@@ -30,15 +30,16 @@ from core.serializers import ParPaysSerializer
 from core.mixins import NoDestroyModelViewSet
 from core.regles import RegleViolee, traduire_les_regles
 
-from . import stockage, transitions
+from . import corbeille, stockage, transitions
 from .audit import champs_journalises, journaliser_la_modification, photographier, record
 from .mixins import DraftDeletableViewSet
-from .filtres import AuditLogFilter, DossierFilter
+from .filtres import AuditLogFilter, DossierFilter, ElementSupprimeFilter
 from .synthese_audit import synthese
 from .models import (
     AuditLog,
     Beneficiary,
     Dossier,
+    ElementSupprime,
     Expense,
     Proof,
     Rectification,
@@ -50,7 +51,10 @@ from .serializers import (
     BeneficiarySerializer,
     DossierDetailSerializer,
     DossierSerializer,
+    ElementSupprimeSerializer,
+    MiseALaCorbeilleSerializer,
     RenommerSerializer,
+    ResultatCorbeilleSerializer,
     ExpenseRegisterSerializer,
     ExpenseSerializer,
     ExpenseTransitionSerializer,
@@ -286,7 +290,10 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         requête par relation affichée.
         """
         return queryset.prefetch_related(
-            Prefetch("expenses", queryset=self._lignes_visibles()), "proofs"
+            Prefetch("expenses", queryset=self._lignes_visibles()),
+            # L'état de sa ligne dit si une pièce part seule à la corbeille
+            # (``can_trash``) : lu dans la même requête.
+            Prefetch("proofs", queryset=Proof.objects.select_related("expense")),
         )
 
     def presenter(self, dossier):
@@ -510,7 +517,7 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
 class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
     """Pièces justificatives, déposées sur une ligne, rangées sous son dossier (décision 107)."""
 
-    queryset = Proof.objects.select_related("dossier__country").all()
+    queryset = Proof.objects.select_related("dossier__country", "expense").all()
     serializer_class = ProofSerializer
     permission_classes = [RolePermission]
     filterset_fields = ["dossier", "expense", "kind", "status", "is_complete"]
@@ -806,3 +813,79 @@ class AuditLogViewSet(CountryScopedMixin, viewsets.ReadOnlyModelViewSet):
             circuit, referentiel,
             debut=bornes.validated_data.get("debut"), fin=bornes.validated_data.get("fin"),
         )).data)
+
+
+@extend_schema_view(
+    create=extend_schema(request=MiseALaCorbeilleSerializer, responses={201: ResultatCorbeilleSerializer}),
+    fichier=extend_schema(responses={(200, "application/octet-stream"): OpenApiTypes.BINARY}),
+)
+class CorbeilleViewSet(
+    CountryScopedMixin,
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """La corbeille du super administrateur (décision 120).
+
+    Il y met un projet, un dossier, une ligne ou un justificatif, avec ce
+    qui en dépend, tant que la configuration la tient ouverte ; la RH et la
+    direction la relisent, comme le journal d'audit. Elle ne se vide ni ne
+    se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
+    """
+
+    queryset = (
+        ElementSupprime.objects.select_related("country")
+        .annotate(nb_emportes=Count("emportes"))
+        .order_by("-supprime_le", "-pk")
+    )
+    serializer_class = ElementSupprimeSerializer
+    permission_classes = [RolePermission]
+    read_capability = "audit.read"
+    write_capability = "corbeille.supprimer"
+    country_field = None
+    filterset_class = ElementSupprimeFilter
+    search_fields = ["reference", "libelle", "motif", "supprime_par"]
+    # `id` : ce qu'un élément a emporté se relit dans l'ordre du retrait.
+    ordering_fields = ["supprime_le", "id"]
+
+    def create(self, request, *args, **kwargs):
+        demande = MiseALaCorbeilleSerializer(data=request.data)
+        demande.is_valid(raise_exception=True)
+        with traduire_les_regles():
+            resultat = corbeille.mettre_a_la_corbeille(
+                demande.validated_data["nature"], demande.validated_data["id"],
+                get_access(request.user), demande.validated_data["motif"],
+                Trace.depuis_requete(request),
+            )
+        element = self.get_queryset().get(pk=resultat.element.pk)
+        return Response(
+            ResultatCorbeilleSerializer({"element": element, "emportes": resultat.emportes}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["get"])
+    def fichier(self, request, pk=None):
+        """Le justificatif gardé par le stockage, téléchargé comme une pièce (§5.4)."""
+        element = self.get_object()
+        if not element.fichier:
+            raise FichierIntrouvable()
+        stockage_des_pieces = Proof._meta.get_field("file").storage
+        try:
+            contenu = stockage_des_pieces.open(element.fichier, "rb")
+        except FileNotFoundError as exc:
+            logger.error("Fichier %s de la corbeille introuvable : %s", element.fichier, exc)
+            raise FichierIntrouvable() from exc
+        except Exception as exc:
+            logger.exception("Stockage des justificatifs injoignable (%s)", element.fichier)
+            raise StockageIndisponible() from exc
+        record(
+            request, AuditLog.Action.DOWNLOADED, element,
+            country=element.country, sha256=element.sha256, corbeille=True,
+        )
+        nom = element.donnees.get("original_name") or element.fichier.rsplit("/", 1)[-1]
+        return FileResponse(
+            contenu, as_attachment=True, filename=nom,
+            content_type=element.donnees.get("content_type") or None,
+        )
+

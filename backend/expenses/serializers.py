@@ -34,6 +34,7 @@ from .models import (
     AuditLog,
     Beneficiary,
     Dossier,
+    ElementSupprime,
     Expense,
     Proof,
     Rectification,
@@ -46,7 +47,9 @@ from .workflow import (
     LOCKED_STATUSES,
     PROOF_LOCKED_STATUSES,
     PROOF_TRANSITIONS,
+    RECTIFIABLE_STATUSES,
     REQUEST_RECTIFICATION,
+    corbeille_ouverte,
     dossier_allowed_actions,
     expense_allowed_actions,
 )
@@ -166,7 +169,7 @@ TRANSITION_CHOICES = [
     for name in (
         "edit", "rename", "add_line", "upload", "delete",
         "submit", "review", "justify", "reject", "close", "reopen",
-        REQUEST_RECTIFICATION,
+        REQUEST_RECTIFICATION, "trash",
     )
 ]
 
@@ -365,6 +368,7 @@ class ProofSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     download_url = serializers.SerializerMethodField()
     allowed_reviews = serializers.SerializerMethodField()
+    can_trash = serializers.SerializerMethodField()
 
     #: Fixés au dépôt. Une pièce est une preuve : on n'en change ni le
     #: contenu, ni le dossier, ni la filiation — on en dépose une nouvelle
@@ -377,7 +381,7 @@ class ProofSerializer(serializers.ModelSerializer):
             "id", "dossier", "expense", "file", "original_name", "kind", "kind_display",
             "status", "status_display", "is_complete", "sha256", "size",
             "content_type", "version", "replaces", "uploaded_by",
-            "rejection_reason", "download_url", "allowed_reviews",
+            "rejection_reason", "download_url", "allowed_reviews", "can_trash",
             "created_at", "updated_at",
         ]
         # ``is_complete`` ne se modifie que par ``review`` : c'est un constat
@@ -414,6 +418,22 @@ class ProofSerializer(serializers.ModelSerializer):
             return []
         reachable = PROOF_TRANSITIONS.get(proof.status, frozenset())
         return [value for value, _label in Proof.ProofStatus.choices if value in reachable]
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_trash(self, proof):
+        """La pièce peut-elle partir seule à la corbeille (décision 120) ?
+
+        Pas celle d'une ligne constatée : la ligne resterait justifiée sans
+        preuve — c'est alors la ligne qui part (``corbeille``).
+        """
+        access = _acces(self)
+        configuration = _configuration(self)
+        if access is None or access.role not in roles_pour("corbeille.supprimer", configuration):
+            return False
+        if not corbeille_ouverte(configuration):
+            return False
+        statut = proof.expense.status if proof.expense_id else proof.dossier.status
+        return statut not in RECTIFIABLE_STATUSES
 
     def validate_file(self, uploaded):
         if uploaded.size > settings.MAX_PROOF_SIZE:
@@ -1350,3 +1370,44 @@ class SyntheseRequeteSerializer(serializers.Serializer):
         if debut and fin and debut > fin:
             raise serializers.ValidationError({"debut": _("La période commence après sa fin.")})
         return attrs
+
+
+class ElementSupprimeSerializer(serializers.ModelSerializer):
+    """Un élément de la corbeille (décision 120) : ce qu'il était, et qui l'a retiré."""
+
+    nature_display = serializers.CharField(source="get_nature_display", read_only=True)
+    country_name = serializers.CharField(source="country.name", read_only=True)
+    #: Ce que l'élément a emporté avec lui ; zéro pour ce qui est parti avec un autre.
+    emportes = serializers.IntegerField(source="nb_emportes", read_only=True, default=0)
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ElementSupprime
+        fields = [
+            "id", "nature", "nature_display", "objet_id", "reference", "libelle",
+            "country", "country_name", "montant", "devise", "donnees", "sha256",
+            "racine", "emportes", "motif", "supprime_par", "supprime_le",
+            "download_url",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_download_url(self, element):
+        """Le fichier d'un justificatif, gardé par le stockage ; rien pour le reste."""
+        return f"/api/corbeille/{element.pk}/fichier/" if element.fichier else None
+
+
+class MiseALaCorbeilleSerializer(serializers.Serializer):
+    """Ce que le super administrateur met à la corbeille, et pourquoi."""
+
+    nature = serializers.ChoiceField(choices=ElementSupprime.Nature.choices)
+    id = serializers.IntegerField(min_value=1)
+    motif = serializers.CharField(allow_blank=True, trim_whitespace=True)
+
+
+class ResultatCorbeilleSerializer(serializers.Serializer):
+    """L'élément de tête, et le nombre d'objets retirés par nature."""
+
+    element = ElementSupprimeSerializer(read_only=True)
+    emportes = serializers.DictField(child=serializers.IntegerField(), read_only=True)
+

@@ -1,5 +1,5 @@
 """Filtres de lecture : journal d'audit (décision 111), liste des dossiers
-(décision 117)."""
+(décision 117), corbeille (décision 120)."""
 
 from datetime import date
 
@@ -11,7 +11,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 
 from .historique import retirees_des_dossiers
-from .models import AuditLog, Dossier, Expense, Proof, Rectification
+from .models import AuditLog, Dossier, ElementSupprime, Expense, Proof, Rectification
 
 
 class AuditLogFilter(django_filters.FilterSet):
@@ -88,3 +88,17 @@ class DossierFilter(filtres_de_l_api.FilterSet):
         if not date.min.year <= annee <= date.max.year:
             return queryset.none()
         return queryset.filter(date__range=(date(annee, 1, 1), date(annee, 12, 31)))
+
+
+class ElementSupprimeFilter(filtres_de_l_api.FilterSet):
+    """Par nature, pays, période ; les têtes seules, ou ce qu'une tête a emporté."""
+
+    debut = django_filters.DateFilter(field_name="supprime_le", lookup_expr="date__gte")
+    fin = django_filters.DateFilter(field_name="supprime_le", lookup_expr="date__lte")
+    #: Ce que le super administrateur a choisi de retirer, sans ce qui est
+    #: parti avec : la liste de la corbeille se lit ainsi.
+    tetes = filtres_de_l_api.BooleanFilter(field_name="racine", lookup_expr="isnull")
+
+    class Meta:
+        model = ElementSupprime
+        fields = ["nature", "country", "racine"]

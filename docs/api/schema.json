@@ -37,11 +37,12 @@
                                 "reopened",
                                 "reviewed",
                                 "submitted",
+                                "trashed",
                                 "unjustified",
                                 "updated"
                             ]
                         },
-                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage\n* `purged` - Remise à zéro des essais"
+                        "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage\n* `purged` - Remise à zéro des essais\n* `trashed` - Mise à la corbeille"
                     },
                     {
                         "in": "query",
@@ -962,6 +963,252 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/Configuration"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/corbeille/": {
+            "get": {
+                "operationId": "corbeille_list",
+                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte ; la RH et la\ndirection la relisent, comme le journal d'audit. Elle ne se vide ni ne\nse modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "country",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "debut",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "fin",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "nature",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "dossier",
+                                "ligne",
+                                "piece",
+                                "projet"
+                            ]
+                        },
+                        "description": "* `projet` - Projet\n* `dossier` - Dossier\n* `ligne` - Ligne de dépense\n* `piece` - Justificatif"
+                    },
+                    {
+                        "name": "ordering",
+                        "required": false,
+                        "in": "query",
+                        "description": "Quel champ utiliser pour classer les résultats.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un numéro de page de l'ensemble des résultats.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page_size",
+                        "required": false,
+                        "in": "query",
+                        "description": "Nombre de résultats à retourner par page.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "racine",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un terme de recherche.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "tetes",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "tags": [
+                    "corbeille"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedElementSupprimeList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "corbeille_create",
+                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte ; la RH et la\ndirection la relisent, comme le journal d'audit. Elle ne se vide ni ne\nse modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
+                "tags": [
+                    "corbeille"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MiseALaCorbeilleRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MiseALaCorbeilleRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MiseALaCorbeilleRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ResultatCorbeille"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/corbeille/{id}/": {
+            "get": {
+                "operationId": "corbeille_retrieve",
+                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte ; la RH et la\ndirection la relisent, comme le journal d'audit. Elle ne se vide ni ne\nse modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Élément de la corbeille.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "corbeille"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ElementSupprime"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/corbeille/{id}/fichier/": {
+            "get": {
+                "operationId": "corbeille_fichier_retrieve",
+                "description": "Le justificatif gardé par le stockage, téléchargé comme une pièce (§5.4).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Élément de la corbeille.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "corbeille"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
                                 }
                             }
                         },
@@ -5651,10 +5898,11 @@
                                 "reallocation_requested",
                                 "rectification_decided",
                                 "rectification_requested",
-                                "storage_error"
+                                "storage_error",
+                                "trashed"
                             ]
                         },
-                        "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification"
+                        "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `trashed` - Mise à la corbeille"
                     },
                     {
                         "in": "query",
@@ -8546,10 +8794,11 @@
                     "downloaded",
                     "imported",
                     "renamed",
-                    "purged"
+                    "purged",
+                    "trashed"
                 ],
                 "type": "string",
-                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage\n* `purged` - Remise à zéro des essais"
+                "description": "* `created` - Création\n* `updated` - Modification\n* `submitted` - Soumission\n* `reviewed` - Mise en contrôle\n* `justified` - Justification\n* `unjustified` - Constat de non-justification\n* `approved` - Validation d'un justificatif\n* `rejected` - Rejet d'un justificatif\n* `proof_incomplete` - Justificatif signalé incomplet\n* `proof_to_review` - Justificatif remis à contrôler\n* `deleted` - Suppression d'un brouillon\n* `closed` - Clôture\n* `reopened` - Réouverture\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `rectified` - Rectification d'un constat\n* `proof_uploaded` - Dépôt de justificatif\n* `proof_replaced` - Remplacement de justificatif\n* `downloaded` - Téléchargement\n* `imported` - Import Excel\n* `renamed` - Renommage\n* `purged` - Remise à zéro des essais\n* `trashed` - Mise à la corbeille"
             },
             "AuditLog": {
                 "type": "object",
@@ -11484,6 +11733,123 @@
                     "proofs"
                 ]
             },
+            "ElementSupprime": {
+                "type": "object",
+                "description": "Un élément de la corbeille (décision 120) : ce qu'il était, et qui l'a retiré.",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "nature": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/NatureEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "nature_display": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "objet_id": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "title": "Identifiant d'origine"
+                    },
+                    "reference": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Référence"
+                    },
+                    "libelle": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Libellé"
+                    },
+                    "country": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "title": "Pays"
+                    },
+                    "country_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "montant": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,14}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "devise": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "donnees": {
+                        "readOnly": true,
+                        "title": "Données"
+                    },
+                    "sha256": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Empreinte SHA-256"
+                    },
+                    "racine": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true,
+                        "title": "Retiré avec"
+                    },
+                    "emportes": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "default": 0
+                    },
+                    "motif": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "supprime_par": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Mis à la corbeille par"
+                    },
+                    "supprime_le": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Mis à la corbeille le"
+                    },
+                    "download_url": {
+                        "type": "string",
+                        "nullable": true,
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "id",
+                    "nature",
+                    "nature_display",
+                    "objet_id",
+                    "reference",
+                    "libelle",
+                    "country",
+                    "country_name",
+                    "montant",
+                    "devise",
+                    "donnees",
+                    "sha256",
+                    "racine",
+                    "emportes",
+                    "motif",
+                    "supprime_par",
+                    "supprime_le",
+                    "download_url"
+                ]
+            },
             "EntreeHistorique": {
                 "type": "object",
                 "description": "Une entrée de l'historique d'un projet : référentiel ou circuit (décision 110).",
@@ -13230,11 +13596,47 @@
                     "require_review_step": {
                         "type": "boolean",
                         "readOnly": true
+                    },
+                    "suppressions_ouvertes": {
+                        "type": "boolean",
+                        "readOnly": true
                     }
                 },
                 "required": [
-                    "require_review_step"
+                    "require_review_step",
+                    "suppressions_ouvertes"
                 ]
+            },
+            "MiseALaCorbeilleRequest": {
+                "type": "object",
+                "description": "Ce que le super administrateur met à la corbeille, et pourquoi.",
+                "properties": {
+                    "nature": {
+                        "$ref": "#/components/schemas/NatureEnum"
+                    },
+                    "id": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "motif": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "motif",
+                    "nature"
+                ]
+            },
+            "NatureEnum": {
+                "enum": [
+                    "projet",
+                    "dossier",
+                    "ligne",
+                    "piece"
+                ],
+                "type": "string",
+                "description": "* `projet` - Projet\n* `dossier` - Dossier\n* `ligne` - Ligne de dépense\n* `piece` - Justificatif"
             },
             "Notification": {
                 "type": "object",
@@ -13337,10 +13739,11 @@
                     "storage_error",
                     "dossier_reopened",
                     "rectification_requested",
-                    "rectification_decided"
+                    "rectification_decided",
+                    "trashed"
                 ],
                 "type": "string",
-                "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification"
+                "description": "* `budget_threshold` - Seuil budgétaire atteint\n* `budget_overrun` - Dépassement budgétaire\n* `expense_submitted` - Dépense à contrôler\n* `expense_rejected` - Dépense rejetée\n* `proof_missing` - Justificatif manquant\n* `proof_incomplete` - Justificatif incomplet\n* `reallocation_requested` - Demande de réallocation\n* `storage_error` - Anomalie de stockage\n* `dossier_reopened` - Dossier rouvert\n* `rectification_requested` - Demande de rectification\n* `rectification_decided` - Décision sur une rectification\n* `trashed` - Mise à la corbeille"
             },
             "NotificationLevelEnum": {
                 "enum": [
@@ -13658,6 +14061,39 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/Dossier"
+                        }
+                    }
+                }
+            },
+            "PaginatedElementSupprimeList": {
+                "type": "object",
+                "required": [
+                    "count",
+                    "next",
+                    "previous",
+                    "results"
+                ],
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "example": 123
+                    },
+                    "next": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=4"
+                    },
+                    "previous": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=2"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ElementSupprime"
                         }
                     }
                 }
@@ -14809,6 +15245,9 @@
                     },
                     "warn_without_proof_submission": {
                         "type": "boolean"
+                    },
+                    "suppressions_ouvertes": {
+                        "type": "boolean"
                     }
                 }
             },
@@ -15040,6 +15479,11 @@
                         "readOnly": true,
                         "description": "Relire la trace des actions sensibles, décisions du siège comprises."
                     },
+                    "corbeille.supprimer": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Retirer un projet, un dossier, une ligne ou un justificatif, avec ce qui en dépend, tant que les suppressions sont ouvertes. La corbeille garde une copie et le fichier, et ne se vide pas."
+                    },
                     "history.read": {
                         "type": "boolean",
                         "readOnly": true,
@@ -15212,6 +15656,7 @@
                     "users.update",
                     "configuration.manage",
                     "audit.read",
+                    "corbeille.supprimer",
                     "history.read",
                     "countries.create",
                     "countries.update",
@@ -15652,6 +16097,10 @@
                         },
                         "readOnly": true
                     },
+                    "can_trash": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -15684,6 +16133,7 @@
                     "rejection_reason",
                     "download_url",
                     "allowed_reviews",
+                    "can_trash",
                     "created_at",
                     "updated_at"
                 ]
@@ -15990,6 +16440,31 @@
                 },
                 "required": [
                     "label"
+                ]
+            },
+            "ResultatCorbeille": {
+                "type": "object",
+                "description": "L'élément de tête, et le nombre d'objets retirés par nature.",
+                "properties": {
+                    "element": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ElementSupprime"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "emportes": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "integer"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "element",
+                    "emportes"
                 ]
             },
             "RoleEnum": {
@@ -16405,10 +16880,11 @@
                     "reject",
                     "close",
                     "reopen",
-                    "request_rectification"
+                    "request_rectification",
+                    "trash"
                 ],
                 "type": "string",
-                "description": "* `edit` - edit\n* `rename` - rename\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen\n* `request_rectification` - request_rectification"
+                "description": "* `edit` - edit\n* `rename` - rename\n* `add_line` - add_line\n* `upload` - upload\n* `delete` - delete\n* `submit` - submit\n* `review` - review\n* `justify` - justify\n* `reject` - reject\n* `close` - close\n* `reopen` - reopen\n* `request_rectification` - request_rectification\n* `trash` - trash"
             },
             "TransitionRequest": {
                 "type": "object",
@@ -16634,6 +17110,9 @@
                     "warn_without_proof_submission": {
                         "type": "boolean"
                     },
+                    "suppressions_ouvertes": {
+                        "type": "boolean"
+                    },
                     "updated_at": {
                         "type": "string",
                         "format": "date-time",
@@ -16649,6 +17128,7 @@
                     "default_overrun_policy",
                     "default_overrun_policy_display",
                     "warn_without_proof_submission",
+                    "suppressions_ouvertes",
                     "updated_at"
                 ]
             },

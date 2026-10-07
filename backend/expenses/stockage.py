@@ -28,7 +28,7 @@ from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
-from .models import FichierASupprimer, Proof
+from .models import ElementSupprime, FichierASupprimer, Proof
 
 logger = logging.getLogger(__name__)
 
@@ -199,11 +199,15 @@ def pieces_orphelines(*, age_minimal=timedelta(hours=24), maintenant=None):
 
     Inventaire seulement : rien n'est effacé. Le délai de sécurité écarte
     un dépôt en cours, dont la fiche n'est pas encore écrite. Une demande
-    d'effacement en attente n'est pas un orphelin : elle est en cours.
+    d'effacement en attente n'est pas un orphelin : elle est en cours. Un
+    justificatif mis à la corbeille non plus : elle le garde (décision 120).
     Rend une liste de ``(chemin, date de modification ou None)``.
     """
     maintenant = maintenant or timezone.now()
     references = set(Proof.objects.values_list("file", flat=True))
+    references |= set(
+        ElementSupprime.objects.exclude(fichier="").values_list("fichier", flat=True)
+    )
     en_attente = set(
         FichierASupprimer.objects.filter(deleted_at__isnull=True).values_list(
             "name", flat=True

@@ -929,6 +929,10 @@ class AuditLog(models.Model):
         # retirées par ``manage.py remise_a_zero_des_essais`` (décision 113).
         # Pas ``deleted`` : ce qui part n'est pas seulement un brouillon.
         PURGED = "purged", _("Remise à zéro des essais")
+        # Avant la mise en ligne finale, le super administrateur retire les
+        # saisies d'essai par la corbeille, tant qu'elle est ouverte
+        # (décision 120). Ce qui part y garde sa copie et son fichier.
+        TRASHED = "trashed", _("Mise à la corbeille")
 
     user = models.CharField(_("Utilisateur"), max_length=180, blank=True)
     action = models.CharField(_("Action"), max_length=32, choices=Action.choices)
@@ -961,3 +965,70 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"[{self.get_action_display()}] {self.object_type} #{self.object_id}"
+
+
+class ElementSupprime(models.Model):
+    """Ce que le super administrateur a mis à la corbeille (décision 120).
+
+    Avant la mise en ligne finale, les saisies d'essai — projets, dossiers,
+    lignes, justificatifs — se retirent pour que les filiales partent de
+    zéro. L'objet quitte réellement sa table : enveloppes, tableaux de bord,
+    exports et numérotation se recalculent sans qu'aucune lecture ait à
+    filtrer un drapeau, et un pays vidé recommence à ``-001``. Ce qu'il
+    portait reste ici, figé : ses champs (``donnees``), son fichier pour un
+    justificatif — que le stockage garde —, qui l'a retiré, quand, depuis
+    où et pourquoi.
+
+    La corbeille ne se vide pas : un déclencheur refuse en base toute
+    modification et toute suppression, comme pour le journal d'audit. Elle
+    ne se restaure pas non plus : elle garde la trace, elle ne remet rien
+    en place.
+    """
+
+    class Nature(models.TextChoices):
+        PROJET = "projet", _("Projet")
+        DOSSIER = "dossier", _("Dossier")
+        LIGNE = "ligne", _("Ligne de dépense")
+        PIECE = "piece", _("Justificatif")
+
+    nature = models.CharField(_("Nature"), max_length=16, choices=Nature.choices)
+    #: L'identifiant de l'objet retiré : c'est lui que le journal d'audit
+    #: cite. Le numéro, lui, peut resservir une fois l'objet parti.
+    objet_id = models.PositiveBigIntegerField(_("Identifiant d'origine"))
+    reference = models.CharField(_("Référence"), max_length=64, blank=True)
+    libelle = models.CharField(_("Libellé"), max_length=250, blank=True)
+    # PROTECT : un pays qui a des éléments à la corbeille se désactive, il
+    # ne se supprime pas — la copie est immuable.
+    country = models.ForeignKey(
+        Country, on_delete=models.PROTECT, related_name="+", verbose_name=_("Pays"),
+    )
+    montant = models.DecimalField(
+        _("Montant"), max_digits=16, decimal_places=2, null=True, blank=True
+    )
+    devise = models.CharField(_("Devise"), max_length=3, blank=True)
+    donnees = models.JSONField(_("Données"), default=dict)
+    #: Le chemin du justificatif dans le stockage, qui le garde.
+    fichier = models.CharField(_("Fichier"), max_length=500, blank=True)
+    sha256 = models.CharField(_("Empreinte SHA-256"), max_length=64, blank=True)
+    #: L'élément que le super administrateur a choisi de retirer ; vide pour
+    #: lui-même. Une ligne partie avec son dossier pointe sur le dossier.
+    racine = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="emportes", verbose_name=_("Retiré avec"),
+    )
+    motif = models.TextField(_("Motif"))
+    supprime_par = models.CharField(_("Mis à la corbeille par"), max_length=180)
+    supprime_le = models.DateTimeField(_("Mis à la corbeille le"), auto_now_add=True)
+    ip_address = models.GenericIPAddressField(_("Adresse IP"), null=True, blank=True)
+
+    class Meta:
+        ordering = ["-supprime_le", "-pk"]
+        verbose_name = _("Élément de la corbeille")
+        verbose_name_plural = _("Corbeille")
+        indexes = [
+            models.Index(fields=["country", "supprime_le"], name="corbeille_pays_date"),
+            models.Index(fields=["nature", "objet_id"], name="corbeille_objet"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_nature_display()} {self.reference or self.objet_id}"

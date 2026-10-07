@@ -167,6 +167,35 @@ def dossier_reopened(dossier, actor, motive):
     )
 
 
+def mis_a_la_corbeille(element, team, actor):
+    """Prévient le pays que le super administrateur a retiré une de ses saisies.
+
+    La corbeille ne sert qu'avant la mise en ligne finale (décision 120) ;
+    les managers du pays — ceux de l'équipe, quand l'élément en avait une —
+    ne doivent pas chercher en vain ce qu'ils avaient saisi. Le lien mène à
+    la liste des projets : l'objet retiré n'a plus de fiche.
+    """
+    return _safe(
+        lambda: notify(
+            _sauf(recipients_for(PROVIDERS, element.country, team), actor),
+            kind=Notification.Kind.TRASHED,
+            level=Notification.Level.WARNING,
+            title=format_lazy(
+                _("Mis à la corbeille — {reference}"),
+                reference=element.reference or element.libelle,
+            ),
+            body=format_lazy(
+                _("{label} a été retiré par la direction, avec ce qui en dépendait. Motif : {motive}"),
+                label=element.libelle or element.reference,
+                motive=element.motif,
+            ),
+            link="/projets",
+            country=element.country,
+            dedup_key=f"trashed:{element.pk}",
+        )
+    )
+
+
 #: Correspondance entre le type d'alerte et le type de notification.
 ALERT_KINDS = {
     "budget_overrun": Notification.Kind.BUDGET_OVERRUN,

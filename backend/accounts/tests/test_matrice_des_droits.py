@@ -73,8 +73,11 @@ class DroitsDuManagerTests(ScopingTestCase):
         )
         # Les deux listes communes, au super administrateur seul (décisions
         # 108 et 119) : la RH, qui règle la matrice, ne se les rouvre pas.
-        for cle in ("dossier_kinds.manage", "project_types.manage"):
+        # La corbeille aussi (décision 120) : elle retire ce que la RH
+        # contrôle, et ne s'ouvre jamais au pays qui l'a déclaré.
+        for cle in ("dossier_kinds.manage", "project_types.manage", "corbeille.supprimer"):
             with self.subTest(cle=cle):
+                self.assertIn(Role.MANAGER, CAPACITES_PAR_CLE[cle].verrouillees)
                 self.assertIn(Role.ADMIN, CAPACITES_PAR_CLE[cle].verrouillees)
                 self.assertEqual(CAPACITES_PAR_CLE[cle].fixes, {Role.SUPER_ADMIN})
                 self.assertEqual(roles_pour(cle), {Role.SUPER_ADMIN})
