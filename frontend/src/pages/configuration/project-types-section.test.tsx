@@ -143,4 +143,36 @@ describe("Types de projets et leurs dossiers (décision 119)", () => {
 
     expect(await screen.findByText("Ce type de projet existe déjà.")).toBeInTheDocument()
   })
+
+  it("ne montre le nombre de projets que s'il est servi, au siège", async () => {
+    droits = {}
+    fetchProjectTypes.mockResolvedValue(page([{ ...congres, projets: null }, formation]))
+    afficher()
+
+    await screen.findByRole("heading", { name: "Congrès" })
+    expect(screen.queryByText(/3 projets/)).toBeNull()
+    expect(screen.getByText(/0 projet/)).toBeInTheDocument()
+  })
+
+  it("laisse le serveur ranger un nouveau type quand l'ordre reste vide", async () => {
+    droits = { "project_types.manage": true }
+    createProjectType.mockResolvedValue(formation)
+    afficher()
+    await screen.findByRole("heading", { name: "Congrès" })
+
+    fireEvent.click(screen.getByRole("button", { name: /Ajouter un type de projet/ }))
+    fireEvent.change(await screen.findByLabelText(/^Nom$/), { target: { value: "Séminaire" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() => expect(createProjectType).toHaveBeenCalled())
+    expect(createProjectType.mock.calls[0][0]).not.toHaveProperty("ordre")
+  })
+
+  it("dit qu'il n'y a aucun type de projet, au lieu d'une page vide", async () => {
+    droits = {}
+    fetchProjectTypes.mockResolvedValue(page([]))
+    afficher()
+
+    expect(await screen.findByText("Aucun type de projet")).toBeInTheDocument()
+  })
 })

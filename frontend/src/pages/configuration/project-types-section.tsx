@@ -136,6 +136,15 @@ export function ProjectTypesSection() {
             </Table>
           </CardContent>
         </Card>
+      ) : listeDesTypes.length === 0 && !types.error ? (
+        <Card className="border-border/60 shadow-sm">
+          <CardContent className="py-8 text-center">
+            <p className="text-sm font-medium">{t("configuration.types_projets.aucun")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("configuration.types_projets.aucun_aide")}
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         listeDesTypes.map((type) => (
           <CarteDeType
@@ -225,8 +234,13 @@ function CarteDeType({
               <span className="font-mono">{type.code}</span>
               {" · "}
               {t("configuration.types_projets.ordre", { ordre: type.ordre })}
-              {" · "}
-              {t("configuration.types_projets.projets", { count: type.projets })}
+              {/* Servi au siège seul : il compte les dix-sept filiales. */}
+              {type.projets !== null && (
+                <>
+                  {" · "}
+                  {t("configuration.types_projets.projets", { count: type.projets })}
+                </>
+              )}
             </p>
             {type.description && (
               <p className="text-sm text-muted-foreground">{type.description}</p>
@@ -387,6 +401,7 @@ function ChampOrdre({
         inputMode="numeric"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        placeholder={t("configuration.types_projets.ordre_placeholder")}
         aria-describedby={`${id}-aide`}
       />
       <p id={`${id}-aide`} className="text-xs text-muted-foreground">
@@ -410,7 +425,8 @@ function DialogueDeType({
   const [name, setName] = useState(type?.name ?? "")
   const [nameEn, setNameEn] = useState(type?.name_en ?? "")
   const [description, setDescription] = useState(type?.description ?? "")
-  const [ordre, setOrdre] = useState(String(type?.ordre ?? 0))
+  // Vide à la création : le serveur range le type après les autres.
+  const [ordre, setOrdre] = useState(type ? String(type.ordre) : "")
   const [actif, setActif] = useState(type?.is_active ?? true)
   const [motif, setMotif] = useState("")
   const { saving, error, setError, fields, enregistrer } = useEnregistrement(onSaved, onClose)
@@ -429,7 +445,7 @@ function DialogueDeType({
       name: name.trim(),
       name_en: nameEn.trim(),
       description: description.trim(),
-      ordre: Number(ordre) || 0,
+      ...(ordre.trim() !== "" ? { ordre: Number(ordre) } : {}),
       is_active: actif,
       ...(type ? { motif: motif.trim() } : {}),
     }
@@ -444,7 +460,7 @@ function DialogueDeType({
         <DialogHeader>
           <DialogTitle>
             {type
-              ? t("configuration.types_projets.dialogue_modifier", { nom: type.name })
+              ? t("configuration.types_projets.dialogue_modifier", { nom: type.libelle })
               : t("configuration.types_projets.dialogue_ajouter")}
           </DialogTitle>
           <DialogDescription>
@@ -538,7 +554,8 @@ function DialogueDeKind({
   const { t } = useTranslation()
   const [name, setName] = useState(kind?.name ?? "")
   const [description, setDescription] = useState(kind?.description ?? "")
-  const [ordre, setOrdre] = useState(String(kind?.ordre ?? 0))
+  // Vide à la création : le serveur range le type après ceux de son type de projet.
+  const [ordre, setOrdre] = useState(kind ? String(kind.ordre) : "")
   const [actif, setActif] = useState(kind?.is_active ?? true)
   const [motif, setMotif] = useState("")
   const { saving, error, setError, fields, enregistrer } = useEnregistrement(onSaved, onClose)
@@ -556,7 +573,7 @@ function DialogueDeKind({
     const donnees = {
       name: name.trim(),
       description: description.trim(),
-      ordre: Number(ordre) || 0,
+      ...(ordre.trim() !== "" ? { ordre: Number(ordre) } : {}),
       is_active: actif,
       ...(kind ? { motif: motif.trim() } : { project_kind: type.code }),
     }
@@ -572,7 +589,7 @@ function DialogueDeKind({
           <DialogTitle>
             {kind
               ? t("configuration.types_dossiers.dialogue_modifier", { nom: kind.name })
-              : t("configuration.types_dossiers.dialogue_ajouter", { type: type.name })}
+              : t("configuration.types_dossiers.dialogue_ajouter", { type: type.libelle })}
           </DialogTitle>
           <DialogDescription>{t("configuration.types_dossiers.dialogue_aide")}</DialogDescription>
         </DialogHeader>

@@ -15489,7 +15489,7 @@
                     "projets": {
                         "type": "integer",
                         "readOnly": true,
-                        "default": 0
+                        "nullable": true
                     },
                     "created_at": {
                         "type": "string",

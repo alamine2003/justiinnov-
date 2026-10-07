@@ -1,9 +1,12 @@
 """La liste commune des types de projets, réglée par le super administrateur (décision 119)."""
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import translation
 from rest_framework import status
 
 from core.models import ChangeLog, DossierKind, Project, ProjectType, code_de_type
+from core.numerotation import creer_projet
 from expenses.models import Dossier
 from expenses.tests.base import ExpenseTestCase
 from expenses.tests.test_workflow import configurer
@@ -183,3 +186,55 @@ class TypesDeProjetsTests(ExpenseTestCase):
 
         with translation.override("en"):
             self.assertEqual(formation.libelle, "Formation")
+
+    def test_le_nombre_de_projets_ne_se_sert_qu_au_siege(self):
+        """Il compte les dix-sept filiales : un manager en déduirait les
+        projets d'un autre pays (règle du cloisonnement)."""
+        self.login(self.owner)
+        pays = self.client.get("/api/project-types/").data["results"][0]
+        self.login(self.controller)
+        siege = self.client.get("/api/project-types/").data["results"][0]
+
+        # Le socle ouvre un congrès au Togo et un en Côte d'Ivoire.
+        self.assertIsNone(pays["projets"])
+        self.assertEqual(siege["projets"], 2)
+
+    def test_sans_ordre_un_nouveau_type_va_apres_les_autres(self):
+        formation = self.creer_type().data
+        badges = self.client.post(
+            "/api/dossier-kinds/", {"project_kind": "congres", "name": "Badges"}, format="json"
+        ).data
+
+        self.assertEqual(formation["ordre"], 4)
+        self.assertEqual(badges["ordre"], DossierKind.objects.filter(project_kind="congres").count())
+
+    def test_le_journal_garde_le_nom_francais_quelle_que_soit_la_langue(self):
+        self.login(self.doo)
+        voyage = ProjectType.objects.get(code="voyage")
+
+        self.client.patch(
+            f"/api/project-types/{voyage.pk}/",
+            {"description": "Déplacements", "motif": "Précision"},
+            format="json", HTTP_ACCEPT_LANGUAGE="en",
+        )
+
+        self.assertEqual(
+            ChangeLog.objects.filter(model_name="project_type", object_id=voyage.pk).latest("pk").label,
+            "Voyage",
+        )
+
+
+class ListeDesProjetsTests(ExpenseTestCase):
+    def test_la_liste_des_projets_lit_les_types_sans_une_requete_par_projet(self):
+        """``kind_display`` lit le type de chaque projet : ``select_related``."""
+        self.login(self.controller)
+        self.client.get("/api/projects/")  # réchauffe le cache des droits
+
+        with CaptureQueriesContext(connection) as avant:
+            self.client.get("/api/projects/")
+        for rang in range(6):
+            creer_projet(Project(country=self.togo, name=f"Congrès {rang}", kind_id="congres"))
+        with CaptureQueriesContext(connection) as apres:
+            self.client.get("/api/projects/")
+
+        self.assertEqual(len(apres), len(avant))

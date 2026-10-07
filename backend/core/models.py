@@ -180,7 +180,9 @@ class ProjectType(TimeStampedModel):
         verbose_name_plural = _("Types de projets")
 
     def __str__(self):
-        return self.libelle
+        # Le nom français, pas le libellé : le journal (``ChangeLog.label``)
+        # ne doit pas changer selon la langue de qui écrit.
+        return self.name
 
     def save(self, *args, **kwargs):
         if not self.code:

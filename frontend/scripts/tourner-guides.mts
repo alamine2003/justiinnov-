@@ -199,7 +199,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
   },
   "saisir-une-ligne": {
     fr: (t) => [
-      "Ouvrez le dossier du bon type, dans un projet de votre pays.",
+      "Ouvrez le dossier du bon type, dans un projet que vous avez ouvert.",
       `Cliquez sur « ${t("commun.ajouter")} » pour saisir une dépense.`,
       "Décrivez la dépense : ce qui a été payé, quand et où.",
       `Saisissez le montant ; payé dans une autre devise, ouvrez « ${t("depenses.formulaire.autre_devise")} ».`,
@@ -207,7 +207,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       `Cliquez sur « ${t("commun.enregistrer")} » : la ligne reste un brouillon que vous seul modifiez.`,
     ],
     en: (t) => [
-      "Open the dossier of the right type, in a project of your country.",
+      "Open the dossier of the right type, in a project you opened yourself.",
       `Click “${t("commun.ajouter")}” to enter an expense.`,
       "Describe the expense: what was paid, when and where.",
       `Enter the amount; if paid in another currency, open “${t("depenses.formulaire.autre_devise")}”.`,
@@ -237,7 +237,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       `« ${t("depenses.circuit.soumettre")} » agit tout de suite, sans confirmation ni retour en arrière.`,
       "Vos lignes partent avec le dossier ; un brouillon d'un collègue bloque l'envoi.",
       `Cliquez sur « ${t("depenses.circuit.soumettre")} ».`,
-      "Le dossier est soumis : il ne se modifie plus, seul le siège peut le rouvrir.",
+      "Le dossier est soumis : ses lignes ne changent plus, seul le siège peut le rouvrir.",
       "Une ligne sans pièce part avec un avertissement ; le dossier attend ses pièces.",
     ],
     en: (t) => [
@@ -245,7 +245,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       `“${t("depenses.circuit.soumettre")}” acts at once, with no confirmation and no way back.`,
       "Your lines go with the dossier; a colleague's draft line blocks the submission.",
       `Click “${t("depenses.circuit.soumettre")}”.`,
-      "The dossier is submitted: it can no longer change; only headquarters can reopen it.",
+      "The dossier is submitted: its lines are fixed; only headquarters can reopen it.",
       "A line without a document goes with a warning; the dossier awaits its documents.",
     ],
   },
@@ -254,7 +254,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       "Vos dépenses sont dans un classeur Excel ? Importez-les depuis la fiche du projet.",
       `Cliquez sur « ${t("dossiers.import.bouton")} », puis choisissez le dossier qui recevra les lignes.`,
       "Colonnes exigées : N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.",
-      "TEAM doit être l'équipe du dossier, et le dossier encore un brouillon.",
+      "TEAM doit être l'équipe du dossier, et le dossier votre brouillon.",
       "Simulez d'abord : rien n'est écrit, vous voyez ce qui serait créé.",
       `Sans erreur, désactivez la simulation, puis cliquez sur « ${t("dossiers.import.importer")} ».`,
       `Les lignes arrivent en brouillon : « ${t("dossiers.import.ouvrir_dossier")} » les montre.`,
@@ -264,7 +264,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       "Are your expenses in an Excel workbook? Import them from the project page.",
       `Click “${t("dossiers.import.bouton")}”, then choose the dossier that will receive the lines.`,
       "Required columns: N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.",
-      "TEAM must be the dossier's team, and the dossier must still be a draft.",
+      "TEAM must be the dossier's team, and the dossier your own draft.",
       "Simulate first: nothing is written, you see what would be created.",
       `With no error, turn the simulation off, then click “${t("dossiers.import.importer")}”.`,
       `The lines arrive as drafts: “${t("dossiers.import.ouvrir_dossier")}” shows them.`,

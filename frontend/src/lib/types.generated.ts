@@ -4930,8 +4930,7 @@ export interface components {
             is_active: boolean
             /** @default 0 */
             readonly dossier_kinds_actifs: number
-            /** @default 0 */
-            readonly projets: number
+            readonly projets: number | null
             /**
              * Créé le
              * Format: date-time

@@ -1221,7 +1221,7 @@
       "ordre": "ordre {{ordre}}",
       "projets_one": "{{count}} projet",
       "projets_other": "{{count}} projets",
-      "ordre_aide": "Les plus petits d'abord ; à égalité, par nom.",
+      "ordre_aide": "Les plus petits d'abord ; à égalité, par nom. Vide : après les autres.",
       "nom": "Nom",
       "nom_placeholder": "Formation",
       "nom_en": "Nom en anglais",
@@ -1232,7 +1232,10 @@
       "dialogue_ajouter_aide": "Son code, calculé du nom, ne changera plus : les projets le portent.",
       "dialogue_modifier": "Modifier « {{nom}} »",
       "dialogue_modifier_aide": "Code {{code}} : il ne change pas. Le motif reste au journal.",
-      "erreur_champs": "Corrigez les champs signalés."
+      "erreur_champs": "Corrigez les champs signalés.",
+      "aucun": "Aucun type de projet",
+      "aucun_aide": "Sans type de projet, aucun projet ne s'ouvre : le super administrateur en ajoute un.",
+      "ordre_placeholder": "Après les autres"
     }
   },
   "audit": {

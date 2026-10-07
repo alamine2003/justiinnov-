@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+from django.db.models import Max
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -286,7 +287,9 @@ class ProjectTypeSerializer(serializers.ModelSerializer):
     #: Nombre de types de dossiers actifs : un type sans aucun n'ouvre pas
     #: de projet (décision 106), la configuration le signale.
     dossier_kinds_actifs = serializers.IntegerField(read_only=True, default=0)
-    projets = serializers.IntegerField(read_only=True, default=0)
+    #: Nombre de projets du type, toutes filiales : servi au siège seul,
+    #: nul pour un compte de pays (``ProjectTypeViewSet.get_queryset``).
+    projets = serializers.IntegerField(read_only=True, allow_null=True, default=None)
     motif = serializers.CharField(
         write_only=True, required=False, allow_blank=True, max_length=1000,
         label=_("Motif"),
@@ -314,6 +317,14 @@ class ProjectTypeSerializer(serializers.ModelSerializer):
         if not valeur:
             raise serializers.ValidationError(_("Indiquez le nom du type de projet."))
         return valeur
+
+    def create(self, validated_data):
+        # Sans ordre donné, le nouveau type va après les autres : à 0, il
+        # passait devant « Congrès ».
+        if "ordre" not in validated_data:
+            dernier = ProjectType.objects.aggregate(dernier=Max("ordre"))["dernier"]
+            validated_data["ordre"] = (dernier or 0) + 1
+        return super().create(validated_data)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -357,6 +368,16 @@ class DossierKindSerializer(serializers.ModelSerializer):
                 message=_("Ce type de dossier existe déjà pour ce type de projet."),
             )
         ]
+
+    def create(self, validated_data):
+        # Sans ordre donné, le nouveau type de dossier va après ceux de son
+        # type de projet : à 0, il devenait le D001 des projets suivants.
+        if "ordre" not in validated_data:
+            dernier = DossierKind.objects.filter(
+                project_kind=validated_data["project_kind"]
+            ).aggregate(dernier=Max("ordre"))["dernier"]
+            validated_data["ordre"] = (dernier or 0) + 1
+        return super().create(validated_data)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)

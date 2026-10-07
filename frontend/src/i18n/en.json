@@ -1221,7 +1221,7 @@
       "ordre": "order {{ordre}}",
       "projets_one": "{{count}} project",
       "projets_other": "{{count}} projects",
-      "ordre_aide": "Smallest first; ties are sorted by name.",
+      "ordre_aide": "Smallest first; ties are sorted by name. Empty: after the others.",
       "nom": "Name",
       "nom_placeholder": "Formation",
       "nom_en": "English name",
@@ -1232,7 +1232,10 @@
       "dialogue_ajouter_aide": "Its code, derived from the name, will never change: projects carry it.",
       "dialogue_modifier": "Edit “{{nom}}”",
       "dialogue_modifier_aide": "Code {{code}}: it does not change. The reason is kept in the log.",
-      "erreur_champs": "Correct the highlighted fields."
+      "erreur_champs": "Correct the highlighted fields.",
+      "aucun": "No project type",
+      "aucun_aide": "Without a project type, no project can be opened: the super administrator adds one.",
+      "ordre_placeholder": "After the others"
     }
   },
   "audit": {

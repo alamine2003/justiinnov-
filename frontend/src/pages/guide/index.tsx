@@ -134,7 +134,8 @@ export function GuidePage() {
   const langue = langueDeGuide(i18n.resolvedLanguage)
   const guides = guidesVisibles(can)
   const choisi = guides.find((guide) => guide.id === params.get("video")) ?? guides[0]
-  // La vidéo (ou son affiche) qui n'a pas pu se charger : un lecteur gris
+  // La vidéo qui n'a pas pu se charger (l'échec d'une affiche, lui, ne
+  // déclenche aucun événement) : un lecteur gris
   // et muet ne disait rien. L'état porte la clé du lecteur, il ne survit
   // donc pas à un changement de guide ou de langue.
   const [enErreur, setEnErreur] = useState<string | null>(null)
