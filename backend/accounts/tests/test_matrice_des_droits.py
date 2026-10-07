@@ -65,14 +65,19 @@ class DroitsDuManagerTests(ScopingTestCase):
     def test_projets_et_types_de_dossiers_ne_s_ouvrent_pas_au_pays(self):
         """Modifier un projet, tenir la liste des types qui fixe ses
         dossiers : jamais le pays. Créer un projet : jamais le siège."""
-        for cle in ("projets.update", "dossier_kinds.manage"):
+        for cle in ("projets.update", "dossier_kinds.manage", "project_types.manage"):
             with self.subTest(cle=cle):
                 self.assertIn(Role.MANAGER, CAPACITES_PAR_CLE[cle].verrouillees)
         self.assertTrue(
             {Role.ADMIN, Role.SUPER_ADMIN} <= CAPACITES_PAR_CLE["projets.create"].verrouillees
         )
-        self.assertIn(Role.ADMIN, CAPACITES_PAR_CLE["dossier_kinds.manage"].verrouillees)
-        self.assertEqual(roles_pour("dossier_kinds.manage"), {Role.SUPER_ADMIN})
+        # Les deux listes communes, au super administrateur seul (décisions
+        # 108 et 119) : la RH, qui règle la matrice, ne se les rouvre pas.
+        for cle in ("dossier_kinds.manage", "project_types.manage"):
+            with self.subTest(cle=cle):
+                self.assertIn(Role.ADMIN, CAPACITES_PAR_CLE[cle].verrouillees)
+                self.assertEqual(CAPACITES_PAR_CLE[cle].fixes, {Role.SUPER_ADMIN})
+                self.assertEqual(roles_pour(cle), {Role.SUPER_ADMIN})
 
 
 class MatriceDesDroitsTests(ScopingTestCase):

@@ -18,7 +18,8 @@ from accounts.models import Role
 from accounts.permissions import Access
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget
-from core.models import Country, Project, ProjectKind, Team, WorkflowConfiguration
+from core import types_de_projets
+from core.models import Country, Project, Team, WorkflowConfiguration
 from core.numerotation import creer_projet
 from core.tests.aides import trace
 from expenses.models import Dossier, Expense
@@ -143,7 +144,7 @@ class ImportTests(HorlogeTestCase):
         self.login(importateur)
         # Le classeur se verse dans le dossier prédéfini du type (décision 106).
         projet = creer_projet(Project(
-            country=self.djibouti, name="Congrès de Djibouti", kind=ProjectKind.CONGRES,
+            country=self.djibouti, name="Congrès de Djibouti", kind_id=types_de_projets.CONGRES,
         ))
         creer_les_dossiers_predefinis(projet, auteur=importateur.username, trace=trace(importateur))
 

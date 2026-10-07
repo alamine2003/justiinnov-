@@ -19,6 +19,7 @@ from .models import (
     Manager,
     MarketingCategory,
     Project,
+    ProjectType,
     Team,
 )
 from .journal import serialisable, tracer
@@ -29,7 +30,7 @@ from .requetes import (  # noqa: F401 — ré-exportés pour les commandes et le
 )
 
 ALL_MODELS = (
-    Country, Manager, Team, CostCenter, Project, DossierKind, ExpenseTitle,
+    Country, Manager, Team, CostCenter, Project, ProjectType, DossierKind, ExpenseTitle,
     MarketingCategory,
 )
 
@@ -40,6 +41,7 @@ _MODEL_NAME = {
     "CostCenter": ChangeLog.Models.COST_CENTER,
     "Project": ChangeLog.Models.PROJECT,
     "DossierKind": ChangeLog.Models.DOSSIER_KIND,
+    "ProjectType": ChangeLog.Models.PROJECT_TYPE,
     "ExpenseTitle": ChangeLog.Models.EXPENSE_TITLE,
     "MarketingCategory": ChangeLog.Models.MARKETING_CATEGORY,
 }

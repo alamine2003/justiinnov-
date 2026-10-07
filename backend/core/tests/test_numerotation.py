@@ -9,7 +9,8 @@ from unittest import mock
 from django.db import connection, transaction
 from django.test import TestCase, TransactionTestCase
 
-from core.models import Country, Project, ProjectKind
+from core import types_de_projets
+from core.models import Country, Project
 from core.numerotation import annee_locale, creer_projet
 
 
@@ -26,7 +27,7 @@ class NumerotationDesProjetsTests(TestCase):
 
     def nouveau(self, nom, country=None):
         return creer_projet(Project(
-            country=country or self.togo, name=nom, kind=ProjectKind.CONGRES,
+            country=country or self.togo, name=nom, kind_id=types_de_projets.CONGRES,
         ))
 
     def test_les_projets_d_un_pays_se_suivent_dans_l_annee(self):
@@ -67,13 +68,15 @@ class CourseSurLaNumerotation(TransactionTestCase):
     """Deux projets créés au même instant dans le même pays : deux rangs."""
 
     def test_deux_creations_simultanees_ne_tirent_pas_le_meme_rang(self):
+        # Ce cas de test vide la base, types d'origine compris (core.0018).
+        types_de_projets.assurer_les_types_d_origine()
         togo = _pays()
         resultats = {}
 
         def concurrent():
             try:
                 resultats["second"] = creer_projet(Project(
-                    country_id=togo.pk, name="Second", kind=ProjectKind.VOYAGE,
+                    country_id=togo.pk, name="Second", kind_id=types_de_projets.VOYAGE,
                 ))
             finally:
                 connection.close()
@@ -81,7 +84,7 @@ class CourseSurLaNumerotation(TransactionTestCase):
         fil = threading.Thread(target=concurrent)
         with transaction.atomic():
             premier = creer_projet(Project(
-                country=togo, name="Premier", kind=ProjectKind.CONGRES,
+                country=togo, name="Premier", kind_id=types_de_projets.CONGRES,
             ))
             fil.start()
             self.assertTrue(self._attendre_une_session_bloquee())

@@ -415,7 +415,6 @@ SPECTACULAR_SETTINGS = {
         "RectificationStatusEnum": "expenses.models.Rectification.Status",
         "OverrunPolicyEnum": "budget.models.OverrunPolicy",
         "ProjectStatusEnum": "core.models.Project.STATUS_CHOICES",
-        "ProjectKindEnum": "core.models.ProjectKind",
         "ChangeLogActionEnum": "core.models.ChangeLog.Actions",
         "ChangeLogModelEnum": "core.models.ChangeLog.Models",
         "AuditActionEnum": "expenses.models.AuditLog.Action",

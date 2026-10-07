@@ -345,6 +345,14 @@ CAPACITES = (
     # reçoit d'office (décision 106) : au super administrateur seul, comme
     # les enveloppes — la RH, qui règle la matrice, se la rouvrirait sinon
     # (décision 108).
+    # La liste des types de projets fixe, avec celle des types de dossiers,
+    # ce que les pays ouvrent (décision 119) : même verrou.
+    Capacite(
+        "project_types.manage", GROUPE_REFERENTIEL,
+        _("Tenir les types de projets"),
+        _("Ajouter, renommer, ordonner ou désactiver un type de projet de la liste commune aux filiales."),
+        _ALLOCATEUR, verrouillees=frozenset({Role.ADMIN, *COUNTRY_ROLES}), fixes=_ALLOCATEUR,
+    ),
     Capacite(
         "dossier_kinds.manage", GROUPE_REFERENTIEL,
         _("Tenir les types de dossiers"),

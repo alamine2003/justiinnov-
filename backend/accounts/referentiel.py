@@ -28,6 +28,7 @@ from core.models import (
     Manager,
     MarketingCategory,
     Project,
+    ProjectType,
     Team,
 )
 from core.serializers import (
@@ -44,6 +45,7 @@ from core.serializers import (
     HistoriqueDeProjetSerializer,
     ParPaysSerializer,
     ProjectSerializer,
+    ProjectTypeSerializer,
     RenommerProjetSerializer,
     TeamSerializer,
 )
@@ -395,12 +397,12 @@ class ProjectViewSet(ScopedViewSet):
         from expenses.predefinis import EQUIPE_DU_PROJET, creer_les_dossiers_predefinis
 
         motif = serializer.validated_data.pop("motif", "").strip()
-        a_typer = not serializer.instance.kind and not serializer.instance.is_historical
+        a_typer = not serializer.instance.kind_id and not serializer.instance.is_historical
         with transaction.atomic(), motif_du_journal(motif):
             projet = serializer.save()
             # Un projet d'avant la 2.0 que le siège vient de typer reçoit
             # ses dossiers prédéfinis ; ils reviennent au pays (sans auteur).
-            if a_typer and projet.kind:
+            if a_typer and projet.kind_id:
                 creer_les_dossiers_predefinis(
                     projet, equipe=EQUIPE_DU_PROJET,
                     trace=Trace.depuis_requete(self.request),
@@ -475,6 +477,41 @@ class ProjectViewSet(ScopedViewSet):
         return Response(compter_par_pays(projets, get_access(request.user)))
 
 
+class ProjectTypeViewSet(NoDestroyModelViewSet):
+    """La liste commune des types de projets (décision 119).
+
+    Lue par tout compte connecté — le pays y choisit le type d'un projet —,
+    tenue par le super administrateur seul (``project_types.manage``,
+    verrouillé à la RH et au pays, comme les types de dossiers). Pas de
+    cloisonnement : elle vaut pour les dix-sept filiales. Un type ne se
+    supprime pas (405) : il se désactive, et n'ouvre plus de projet.
+    Toute modification exige un motif (décision 109).
+    """
+
+    queryset = ProjectType.objects.annotate(
+        dossier_kinds_actifs=Count(
+            "dossier_kinds", filter=Q(dossier_kinds__is_active=True), distinct=True
+        ),
+        projets=Count("projects", distinct=True),
+    ).order_by("ordre", "name", "pk")
+    serializer_class = ProjectTypeSerializer
+    permission_classes = [RolePermission]
+    filterset_fields = ["is_active"]
+    search_fields = ["name", "name_en", "code"]
+    write_capability = "project_types.manage"
+
+    def perform_update(self, serializer):
+        motif = serializer.validated_data.pop("motif", "").strip()
+        with motif_du_journal(motif):
+            serializer.save()
+        serializer.instance = self.get_queryset().get(pk=serializer.instance.pk)
+
+    def perform_create(self, serializer):
+        serializer.validated_data.pop("motif", None)
+        serializer.save()
+        serializer.instance = self.get_queryset().get(pk=serializer.instance.pk)
+
+
 class DossierKindViewSet(NoDestroyModelViewSet):
     """La liste commune des types de dossiers (décision 101).
 
@@ -485,7 +522,7 @@ class DossierKindViewSet(NoDestroyModelViewSet):
     Toute modification exige un motif (décision 109).
     """
 
-    queryset = DossierKind.objects.all()
+    queryset = DossierKind.objects.select_related("project_kind")
     serializer_class = DossierKindSerializer
     permission_classes = [RolePermission]
     filterset_fields = ["project_kind", "is_active"]

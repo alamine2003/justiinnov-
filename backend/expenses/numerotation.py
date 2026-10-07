@@ -61,11 +61,11 @@ def refus_d_ouverture(projet, kind):
     if projet is None:
         return "project", _("Choisissez le projet dans lequel ouvrir ce dossier.")
     if not projet.accepte_des_dossiers:
-        if projet.is_historical or not projet.kind:
+        if projet.is_historical or not projet.kind_id:
             return "project", _("Ce projet n'a pas de type : il n'accepte pas de nouveau dossier.")
         return "project", _("Ce projet est désactivé : il n'accepte plus de dossier.")
     if kind is None:
         return "kind", _("Choisissez le type du dossier : stands, voyages, billets…")
-    if not kind.is_active or kind.project_kind != projet.kind:
+    if not kind.is_active or kind.project_kind_id != projet.kind_id:
         return "kind", _("Ce type de dossier ne s'ouvre pas dans ce projet.")
     return None

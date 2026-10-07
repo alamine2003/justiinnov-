@@ -210,7 +210,8 @@ def lignes_depenses(expenses):
     tableau = Tableau("BASE DE DONNEES ACTIONS", EXPENSE_COLUMNS)
     source = (
         expenses.select_related(
-            "dossier__country", "dossier__project", "dossier__kind", "country", "team", "owner",
+            "dossier__country", "dossier__project__kind", "dossier__kind", "country", "team",
+            "owner",
         )
         .prefetch_related("dossier__proofs")
         .order_by("date", "pk")
@@ -245,7 +246,7 @@ def lignes_depenses(expenses):
             expense.get_status_display(),
             _proof_summary(dossier, expense),
             _projet(dossier),
-            dossier.project.get_kind_display() if dossier.project else "",
+            dossier.project.kind.libelle if dossier.project and dossier.project.kind else "",
             dossier.kind.name if dossier.kind else "",
         ])
 
