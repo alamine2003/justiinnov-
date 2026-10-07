@@ -72,7 +72,8 @@
     },
     "reduire_menu": "Réduire le menu",
     "deplier_menu": "Déplier le menu",
-    "guide": "Guide vidéo"
+    "guide": "Guide vidéo",
+    "corbeille": "Corbeille"
   },
   "erreurs": {
     "injoignable": "Serveur injoignable. Vérifiez votre connexion.",
@@ -213,7 +214,8 @@
       "proof_to_review": "Justificatif à contrôler",
       "imported": "Import",
       "renamed": "Renommage",
-      "purged": "Remise à zéro des essais"
+      "purged": "Remise à zéro des essais",
+      "trashed": "Mise à la corbeille"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",
@@ -1236,6 +1238,15 @@
       "aucun": "Aucun type de projet",
       "aucun_aide": "Sans type de projet, aucun projet ne s'ouvre : le super administrateur en ajoute un.",
       "ordre_placeholder": "Après les autres"
+    },
+    "corbeille": {
+      "titre": "Corbeille",
+      "libelle": "Suppressions ouvertes",
+      "aide": "Ouverte, le super administrateur peut mettre à la corbeille les projets, dossiers, lignes et justificatifs saisis pendant les essais. Fermez-la à la mise en ligne finale : plus rien ne se supprimera.",
+      "lecture_seule": "Seul le super administrateur ouvre ou ferme la corbeille.",
+      "ouverte": "La corbeille est ouverte.",
+      "fermee": "La corbeille est fermée.",
+      "voir": "Voir la corbeille"
     }
   },
   "audit": {
@@ -1287,7 +1298,8 @@
         "Rectification": "Rectifications",
         "BudgetReallocation": "Réallocations",
         "Export": "Exports",
-        "ExpenseImport": "Imports"
+        "ExpenseImport": "Imports",
+        "ElementSupprime": "Corbeille"
       },
       "retirer": "Retirer le filtre « {{filtre}} »"
     },
@@ -1484,5 +1496,54 @@
     "illisible": "Votre navigateur ne lit pas cette vidéo. Ouvrez la plateforme dans Chrome, Edge ou Firefox à jour.",
     "numero": "{{numero}}. {{titre}}",
     "video_indisponible": "Cette vidéo n'a pas pu être chargée. Rechargez la page ; les étapes ci-dessous restent lisibles."
+  },
+  "corbeille": {
+    "bouton": "Mettre à la corbeille",
+    "aria": "Mettre « {{libelle}} » à la corbeille",
+    "titre": "Mettre à la corbeille : {{libelle}}",
+    "emporte": {
+      "projet": "Le projet part avec ses dossiers, leurs lignes et leurs justificatifs.",
+      "dossier": "Le dossier part avec ses lignes et leurs justificatifs.",
+      "ligne": "La ligne part avec ses justificatifs et ses demandes de rectification.",
+      "piece": "Le justificatif part avec toutes ses versions ; la ligne reste."
+    },
+    "avertissement": "Tout cela quitte les listes, les enveloppes et les tableaux de bord. La corbeille en garde une copie et les fichiers ; elle ne se vide pas et ne remet rien en place.",
+    "impossible": "La mise à la corbeille a échoué.",
+    "fait": "« {{libelle}} » est dans la corbeille.",
+    "page": {
+      "titre": "Corbeille",
+      "description": "Ce que le super administrateur a retiré avant la mise en ligne finale, avec qui, quand et pourquoi. Rien ne s'y modifie ni ne s'y supprime.",
+      "ouverte": "Les suppressions sont ouvertes : le super administrateur peut encore mettre des saisies à la corbeille.",
+      "fermee": "Les suppressions sont fermées : plus rien ne part à la corbeille.",
+      "indisponible": "La corbeille n'a pas pu être chargée.",
+      "recherche_placeholder": "Référence, libellé, motif ou auteur…",
+      "recherche_aria": "Rechercher dans la corbeille",
+      "nature_aria": "Filtrer par nature",
+      "toutes_natures": "Toutes les natures",
+      "col_date": "Retiré le",
+      "col_element": "Élément",
+      "col_pays": "Pays",
+      "col_montant": "Montant",
+      "col_par": "Par",
+      "col_motif": "Motif",
+      "col_actions": "Actions",
+      "emportes_one": "avec {{count}} élément",
+      "emportes_other": "avec {{count}} éléments",
+      "voir_emportes": "Voir ce qui est parti avec « {{libelle}} »",
+      "masquer_emportes": "Masquer ce qui est parti avec « {{libelle}} »",
+      "telecharger": "Télécharger le justificatif « {{libelle}} »",
+      "telechargement_impossible": "Le justificatif n'a pas pu être téléchargé.",
+      "vide_titre": "La corbeille est vide",
+      "vide_aide": "Rien n'a été mis à la corbeille.",
+      "noun_singulier": "élément",
+      "noun_pluriel": "éléments"
+    },
+    "natures": {
+      "projet": "Projets",
+      "dossier": "Dossiers",
+      "ligne": "Lignes",
+      "piece": "Justificatifs"
+    },
+    "motif_placeholder": "Pourquoi retirer cet élément ?"
   }
 }

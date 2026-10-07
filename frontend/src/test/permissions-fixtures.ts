@@ -11,6 +11,7 @@ export const PERMISSIONS_DU_PAYS: Permissions = {
   "users.update": false,
   "configuration.manage": false,
   "audit.read": false,
+  "corbeille.supprimer": false,
   "history.read": false,
   "countries.create": false,
   "countries.update": false,

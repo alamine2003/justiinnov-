@@ -149,6 +149,8 @@ export const ACTION_STYLE: Record<string, string> = {
   renamed: INFO,
   // Une seule fois, avant l'ouverture (décision 113).
   purged: DANGER,
+  // Avant la mise en ligne finale, par le super administrateur (décision 120).
+  trashed: DANGER,
   // Historique des comptes (onglet « Référentiel et comptes » de l'audit).
   login: ARCHIVE,
   logout: ARCHIVE,

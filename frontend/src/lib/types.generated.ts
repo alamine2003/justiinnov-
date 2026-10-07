@@ -250,6 +250,79 @@ export interface paths {
         patch?: never
         trace?: never
     }
+    "/api/corbeille/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description La corbeille du super administrateur (décision 120).
+         *
+         *     Il y met un projet, un dossier, une ligne ou un justificatif, avec ce
+         *     qui en dépend, tant que la configuration la tient ouverte ; la RH et la
+         *     direction la relisent, comme le journal d'audit. Elle ne se vide ni ne
+         *     se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
+         */
+        get: operations["corbeille_list"]
+        put?: never
+        /**
+         * @description La corbeille du super administrateur (décision 120).
+         *
+         *     Il y met un projet, un dossier, une ligne ou un justificatif, avec ce
+         *     qui en dépend, tant que la configuration la tient ouverte ; la RH et la
+         *     direction la relisent, comme le journal d'audit. Elle ne se vide ni ne
+         *     se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
+         */
+        post: operations["corbeille_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/corbeille/{id}/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description La corbeille du super administrateur (décision 120).
+         *
+         *     Il y met un projet, un dossier, une ligne ou un justificatif, avec ce
+         *     qui en dépend, tant que la configuration la tient ouverte ; la RH et la
+         *     direction la relisent, comme le journal d'audit. Elle ne se vide ni ne
+         *     se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
+         */
+        get: operations["corbeille_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/corbeille/{id}/fichier/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /** @description Le justificatif gardé par le stockage, téléchargé comme une pièce (§5.4). */
+        get: operations["corbeille_fichier_retrieve"]
+        put?: never
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
     "/api/cost-centers/": {
         parameters: {
             query?: never
@@ -2289,9 +2362,10 @@ export interface components {
          *     * `imported` - Import Excel
          *     * `renamed` - Renommage
          *     * `purged` - Remise à zéro des essais
+         *     * `trashed` - Mise à la corbeille
          * @enum {string}
          */
-        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported" | "renamed" | "purged"
+        AuditActionEnum: "created" | "updated" | "submitted" | "reviewed" | "justified" | "unjustified" | "approved" | "rejected" | "proof_incomplete" | "proof_to_review" | "deleted" | "closed" | "reopened" | "rectification_requested" | "rectification_decided" | "rectified" | "proof_uploaded" | "proof_replaced" | "downloaded" | "imported" | "renamed" | "purged" | "trashed"
         AuditLog: {
             readonly id: number
             /** Utilisateur */
@@ -3276,6 +3350,41 @@ export interface components {
             readonly proofs: components["schemas"]["Proof"][]
             readonly warning?: string
         }
+        /** @description Un élément de la corbeille (décision 120) : ce qu'il était, et qui l'a retiré. */
+        ElementSupprime: {
+            readonly id: number
+            readonly nature: components["schemas"]["NatureEnum"]
+            readonly nature_display: string
+            /** Identifiant d'origine */
+            readonly objet_id: number
+            /** Référence */
+            readonly reference: string
+            /** Libellé */
+            readonly libelle: string
+            /** Pays */
+            readonly country: number
+            readonly country_name: string
+            /** Format: decimal */
+            readonly montant: string | null
+            readonly devise: string
+            /** Données */
+            readonly donnees: unknown
+            /** Empreinte SHA-256 */
+            readonly sha256: string
+            /** Retiré avec */
+            readonly racine: number | null
+            /** @default 0 */
+            readonly emportes: number
+            readonly motif: string
+            /** Mis à la corbeille par */
+            readonly supprime_par: string
+            /**
+             * Mis à la corbeille le
+             * Format: date-time
+             */
+            readonly supprime_le: string
+            readonly download_url: string | null
+        }
         /** @description Une entrée de l'historique d'un projet : référentiel ou circuit (décision 110). */
         EntreeHistorique: {
             readonly source: components["schemas"]["SourceEnum"]
@@ -3922,7 +4031,22 @@ export interface components {
         /** @description Politique du circuit que l'interface doit connaître. */
         MeWorkflow: {
             readonly require_review_step: boolean
+            readonly suppressions_ouvertes: boolean
         }
+        /** @description Ce que le super administrateur met à la corbeille, et pourquoi. */
+        MiseALaCorbeilleRequest: {
+            nature: components["schemas"]["NatureEnum"]
+            id: number
+            motif: string
+        }
+        /**
+         * @description * `projet` - Projet
+         *     * `dossier` - Dossier
+         *     * `ligne` - Ligne de dépense
+         *     * `piece` - Justificatif
+         * @enum {string}
+         */
+        NatureEnum: "projet" | "dossier" | "ligne" | "piece"
         Notification: {
             readonly id: number
             /** Type */
@@ -3966,9 +4090,10 @@ export interface components {
          *     * `dossier_reopened` - Dossier rouvert
          *     * `rectification_requested` - Demande de rectification
          *     * `rectification_decided` - Décision sur une rectification
+         *     * `trashed` - Mise à la corbeille
          * @enum {string}
          */
-        NotificationKindEnum: "budget_threshold" | "budget_overrun" | "expense_submitted" | "expense_rejected" | "proof_missing" | "proof_incomplete" | "reallocation_requested" | "storage_error" | "dossier_reopened" | "rectification_requested" | "rectification_decided"
+        NotificationKindEnum: "budget_threshold" | "budget_overrun" | "expense_submitted" | "expense_rejected" | "proof_missing" | "proof_incomplete" | "reallocation_requested" | "storage_error" | "dossier_reopened" | "rectification_requested" | "rectification_decided" | "trashed"
         /**
          * @description * `info` - Information
          *     * `warning` - Avertissement
@@ -4119,6 +4244,21 @@ export interface components {
              */
             previous: string | null
             results: components["schemas"]["Dossier"][]
+        }
+        PaginatedElementSupprimeList: {
+            /** @example 123 */
+            count: number
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next: string | null
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous: string | null
+            results: components["schemas"]["ElementSupprime"][]
         }
         PaginatedExchangeRateList: {
             /** @example 123 */
@@ -4698,6 +4838,7 @@ export interface components {
             /** Politique de dépassement par défaut */
             default_overrun_policy?: components["schemas"]["OverrunPolicyEnum"]
             warn_without_proof_submission?: boolean
+            suppressions_ouvertes?: boolean
         }
         /**
          * @description * `cash` - Espèces
@@ -4757,6 +4898,8 @@ export interface components {
             readonly "configuration.manage": boolean
             /** @description Relire la trace des actions sensibles, décisions du siège comprises. */
             readonly "audit.read": boolean
+            /** @description Retirer un projet, un dossier, une ligne ou un justificatif, avec ce qui en dépend, tant que les suppressions sont ouvertes. La corbeille garde une copie et le fichier, et ne se vide pas. */
+            readonly "corbeille.supprimer": boolean
             /** @description Lire qui a modifié quoi dans le référentiel, sur son périmètre. */
             readonly "history.read": boolean
             /** @description Créer un pays parmi les filiales du groupe. */
@@ -5001,6 +5144,7 @@ export interface components {
             readonly rejection_reason: string
             readonly download_url: string
             readonly allowed_reviews: components["schemas"]["ProofStatusEnum"][]
+            readonly can_trash: boolean
             /**
              * Créé le
              * Format: date-time
@@ -5157,6 +5301,13 @@ export interface components {
         /** @description Le nouveau titre d'un dossier (décision 104). */
         RenommerRequest: {
             label: string
+        }
+        /** @description L'élément de tête, et le nombre d'objets retirés par nature. */
+        ResultatCorbeille: {
+            readonly element: components["schemas"]["ElementSupprime"]
+            readonly emportes: {
+                [key: string]: number
+            }
         }
         /**
          * @description * `super_admin` - Super administrateur (DG, DO, CEO, DEV)
@@ -5349,9 +5500,10 @@ export interface components {
          *     * `close` - close
          *     * `reopen` - reopen
          *     * `request_rectification` - request_rectification
+         *     * `trash` - trash
          * @enum {string}
          */
-        TransitionEnum: "edit" | "rename" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen" | "request_rectification"
+        TransitionEnum: "edit" | "rename" | "add_line" | "upload" | "delete" | "submit" | "review" | "justify" | "reject" | "close" | "reopen" | "request_rectification" | "trash"
         /**
          * @description Motif accompagnant une transition ; obligatoire pour un rejet (§5.5)
          *     et pour une réouverture.
@@ -5483,6 +5635,7 @@ export interface components {
             default_overrun_policy: components["schemas"]["OverrunPolicyEnum"]
             readonly default_overrun_policy_display: string
             warn_without_proof_submission: boolean
+            suppressions_ouvertes: boolean
             /**
              * Modifié le
              * Format: date-time
@@ -5540,8 +5693,9 @@ export interface operations {
                  *     * `imported` - Import Excel
                  *     * `renamed` - Renommage
                  *     * `purged` - Remise à zéro des essais
+                 *     * `trashed` - Mise à la corbeille
                  */
-                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "purged" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "renamed" | "reopened" | "reviewed" | "submitted" | "unjustified" | "updated"
+                action?: "approved" | "closed" | "created" | "deleted" | "downloaded" | "imported" | "justified" | "proof_incomplete" | "proof_replaced" | "proof_to_review" | "proof_uploaded" | "purged" | "rectification_decided" | "rectification_requested" | "rectified" | "rejected" | "renamed" | "reopened" | "reviewed" | "submitted" | "trashed" | "unjustified" | "updated"
                 country?: number
                 debut?: string
                 fin?: string
@@ -5960,6 +6114,115 @@ export interface operations {
                 }
                 content: {
                     "application/json": components["schemas"]["Configuration"]
+                }
+            }
+        }
+    }
+    corbeille_list: {
+        parameters: {
+            query?: {
+                country?: number
+                debut?: string
+                fin?: string
+                /**
+                 * @description * `projet` - Projet
+                 *     * `dossier` - Dossier
+                 *     * `ligne` - Ligne de dépense
+                 *     * `piece` - Justificatif
+                 */
+                nature?: "dossier" | "ligne" | "piece" | "projet"
+                /** @description Quel champ utiliser pour classer les résultats. */
+                ordering?: string
+                /** @description Un numéro de page de l'ensemble des résultats. */
+                page?: number
+                /** @description Nombre de résultats à retourner par page. */
+                page_size?: number
+                racine?: number
+                /** @description Un terme de recherche. */
+                search?: string
+                tetes?: boolean
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["PaginatedElementSupprimeList"]
+                }
+            }
+        }
+    }
+    corbeille_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MiseALaCorbeilleRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["MiseALaCorbeilleRequest"]
+                "multipart/form-data": components["schemas"]["MiseALaCorbeilleRequest"]
+            }
+        }
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ResultatCorbeille"]
+                }
+            }
+        }
+    }
+    corbeille_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Élément de la corbeille. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ElementSupprime"]
+                }
+            }
+        }
+    }
+    corbeille_fichier_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Élément de la corbeille. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/octet-stream": string
                 }
             }
         }
@@ -8137,8 +8400,9 @@ export interface operations {
                  *     * `dossier_reopened` - Dossier rouvert
                  *     * `rectification_requested` - Demande de rectification
                  *     * `rectification_decided` - Décision sur une rectification
+                 *     * `trashed` - Mise à la corbeille
                  */
-                kind?: "budget_overrun" | "budget_threshold" | "dossier_reopened" | "expense_rejected" | "expense_submitted" | "proof_incomplete" | "proof_missing" | "reallocation_requested" | "rectification_decided" | "rectification_requested" | "storage_error"
+                kind?: "budget_overrun" | "budget_threshold" | "dossier_reopened" | "expense_rejected" | "expense_submitted" | "proof_incomplete" | "proof_missing" | "reallocation_requested" | "rectification_decided" | "rectification_requested" | "storage_error" | "trashed"
                 /**
                  * @description * `info` - Information
                  *     * `warning` - Avertissement

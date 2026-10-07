@@ -35,6 +35,7 @@ function afficher(expense: Expense, proofs: Proof[] = []) {
         deleting={false}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onTrashed={vi.fn()}
         onTransition={vi.fn()}
         onRequestRectification={vi.fn()}
         onError={vi.fn()}
@@ -76,5 +77,22 @@ describe("CarteDeLigne — le justificatif de la ligne (décision 107)", () => {
     // commande vocale ne pouvait pas prononcer en lisant l'écran.
     const bouton = screen.getByRole("button", { name: "Déposer une autre pièce pour « Taxi »" })
     expect(bouton).toHaveTextContent("Déposer une autre pièce")
+  })
+})
+
+describe("CarteDeLigne — la corbeille du super administrateur (décision 120)", () => {
+  it("propose la corbeille seulement avec `trash` dans les actions de la ligne", () => {
+    const { unmount } = afficher(ligne({ allowed_actions: [] }))
+    expect(screen.queryByRole("button", { name: "Mettre « Taxi » à la corbeille" })).toBeNull()
+    unmount()
+
+    afficher(ligne({ allowed_actions: ["trash"] as Expense["allowed_actions"] }))
+    expect(screen.getByRole("button", { name: "Mettre « Taxi » à la corbeille" })).toBeInTheDocument()
+  })
+
+  it("propose la corbeille d'une pièce quand le serveur le permet (`can_trash`)", () => {
+    afficher(ligne({ has_proof: true }), [{ ...piece, can_trash: true } as Proof])
+
+    expect(screen.getByRole("button", { name: "Mettre « taxi.pdf » à la corbeille" })).toBeInTheDocument()
   })
 })

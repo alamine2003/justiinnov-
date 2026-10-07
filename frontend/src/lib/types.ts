@@ -46,6 +46,15 @@ export type ChangeLogEntry = Schema<"ChangeLog">
 export type AvailableCountry = Schema<"AvailableCountry">
 
 /**
+ * Élément de la corbeille du super administrateur (décision 120) : la copie
+ * figée de ce qui a été retiré, et qui l'a retiré.
+ */
+export type ElementSupprime = Schema<"ElementSupprime">
+/** Ce qui se met à la corbeille : projet, dossier, ligne ou justificatif. */
+export type NatureSupprimee = Schema<"NatureEnum">
+export type ResultatCorbeille = Schema<"ResultatCorbeille">
+
+/**
  * Réponse d'une liste. Le schéma en décrit une par ressource
  * (`PaginatedExpenseList`…) ; l'interface n'a besoin que de la forme.
  */
@@ -98,10 +107,11 @@ export type WorkflowStatus = Schema<"WorkflowStatusEnum">
 /**
  * Actions de saisie qu'un dossier ou une ligne se voient proposer
  * (`allowed_actions`) : modifier, ajouter une ligne, déposer une pièce,
- * supprimer. Le serveur les calcule — brouillon ou non, auteur ou non,
- * droit ou non — et l'interface n'a aucune liste d'états à recopier.
+ * supprimer, mettre à la corbeille (décision 120). Le serveur les calcule
+ * — brouillon ou non, auteur ou non, droit ou non, corbeille ouverte ou
+ * non — et l'interface n'a aucune liste d'états à recopier.
  */
-type EditAction = "edit" | "rename" | "add_line" | "upload" | "delete"
+type EditAction = "edit" | "rename" | "add_line" | "upload" | "delete" | "trash"
 
 /**
  * Demande de rectification d'un constat : proposée dans `allowed_actions`

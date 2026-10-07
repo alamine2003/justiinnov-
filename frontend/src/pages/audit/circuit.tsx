@@ -86,7 +86,7 @@ function readDiff(entry: AuditEntry): Record<string, [unknown, unknown]> | null 
 
 /** Objets du journal du circuit, pour le filtre « Objet ». */
 const OBJETS = [
-  "Dossier", "Expense", "Proof", "Rectification", "BudgetReallocation", "Export", "ExpenseImport",
+  "Dossier", "Expense", "Proof", "Rectification", "BudgetReallocation", "Export", "ExpenseImport", "ElementSupprime",
 ] as const
 
 /**

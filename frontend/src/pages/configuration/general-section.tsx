@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { CheckCircle2, Info, Loader2, Save } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { Link } from "react-router-dom"
 import type { TFunction } from "i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -131,8 +132,89 @@ export function GeneralSection() {
         }}
       />
 
+      <InterrupteurDeLaCorbeille
+        ouverte={config.workflow.suppressions_ouvertes}
+        onSaved={async (workflow) => {
+          query.setData((current) => (current ? { ...current, workflow } : current))
+          invalidateReferentiel("configuration")
+          // Les boutons « Mettre à la corbeille » lisent l'interrupteur dans
+          // le profil : il se relit tout de suite.
+          await refreshProfile().catch(() => undefined)
+        }}
+      />
+
       <RatesSection />
     </div>
+  )
+}
+
+/**
+ * La corbeille du super administrateur (décision 120) : ouverte pendant
+ * les essais, fermée à la mise en ligne finale. Seul qui a
+ * `corbeille.supprimer` la règle ; la RH la voit, grisée. L'interrupteur
+ * s'enregistre seul : il n'attend pas le formulaire du circuit, que la RH
+ * enregistre sans pouvoir y toucher.
+ */
+function InterrupteurDeLaCorbeille({
+  ouverte,
+  onSaved,
+}: {
+  ouverte: boolean
+  onSaved: (workflow: WorkflowConfiguration) => Promise<void>
+}) {
+  const { t } = useTranslation()
+  const { can } = useAuth()
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const reglable = can("corbeille.supprimer")
+
+  const changer = async (valeur: boolean) => {
+    setSaving(true)
+    setError(null)
+    try {
+      await onSaved(await updateWorkflowConfiguration({ suppressions_ouvertes: valeur }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("erreurs.enregistrement_impossible"))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card className="border-border/60 shadow-sm">
+      <CardHeader>
+        <CardTitle className="text-sm font-semibold">{t("configuration.corbeille.titre")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <FormError>{error}</FormError>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3">
+          <div>
+            <Label htmlFor="suppressions_ouvertes" className="block text-sm font-medium">
+              {t("configuration.corbeille.libelle")}
+            </Label>
+            <p className="text-xs text-muted-foreground">{t("configuration.corbeille.aide")}</p>
+            <p className="mt-1 text-xs font-medium">
+              {ouverte ? t("configuration.corbeille.ouverte") : t("configuration.corbeille.fermee")}
+              {!reglable && ` ${t("configuration.corbeille.lecture_seule")}`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {saving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />}
+            <Switch
+              id="suppressions_ouvertes"
+              checked={ouverte}
+              disabled={!reglable || saving}
+              onCheckedChange={(checked) => void changer(checked)}
+            />
+          </div>
+        </div>
+        {can("audit.read") && (
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/corbeille" />}>
+            {t("configuration.corbeille.voir")}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link, useParams, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { AlertTriangle, Archive, Info, Loader2, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -10,6 +10,7 @@ import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { PageHeader } from "@/components/ui/page-header"
 import { RefreshIndicator } from "@/components/ui/refresh-indicator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { MettreALaCorbeille } from "@/components/corbeille/mettre-a-la-corbeille"
 import { DossiersTable } from "@/components/expenses/dossiers-table"
 import { CompleterProject } from "@/components/projects/completer-project"
 import { EditProject } from "@/components/projects/edit-project"
@@ -39,7 +40,8 @@ export function ProjetDetailPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const projetId = Number(id)
-  const { can } = useAuth()
+  const { can, me } = useAuth()
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [page, setPage] = useState(1)
   const avecHistorique = can("audit.read")
@@ -171,6 +173,21 @@ export function ProjetDetailPage() {
         <RenameProject project={projet} onRenamed={projetChange} />
         <EditProject project={projet} onSaved={projetChange} />
         <CompleterProject project={projet} onDone={projetChange} />
+        {/* La corbeille du super administrateur (décision 120) : la capacité
+            et l'interrupteur viennent de `/api/me/` ; le serveur refuse le
+            reste (projet qui porte une enveloppe) dans le dialogue. Le
+            projet « Historique » ne se retire pas. */}
+        {can("corbeille.supprimer") && me?.workflow.suppressions_ouvertes && !projet.is_historical && (
+          <MettreALaCorbeille
+            nature="projet"
+            id={projet.id}
+            libelle={projet.reference ?? projet.name}
+            onDone={() => {
+              invalidateReferentiel((key) => key === "projects" || key.startsWith("country:"))
+              navigate("/projets")
+            }}
+          />
+        )}
       </PageHeader>
 
       {/* Pourquoi on ne peut pas y ouvrir de dossier : le dire plutôt que

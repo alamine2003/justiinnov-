@@ -24,6 +24,7 @@ const CountryDetailPage = lazy(() => import("@/pages/countries/detail").then((m)
 const AuditPage = lazy(() => import("@/pages/audit/list").then((m) => ({ default: m.AuditPage })))
 const ConfigurationPage = lazy(() => import("@/pages/configuration").then((m) => ({ default: m.ConfigurationPage })))
 const PasswordPage = lazy(() => import("@/pages/password").then((m) => ({ default: m.PasswordPage })))
+const CorbeillePage = lazy(() => import("@/pages/corbeille").then((m) => ({ default: m.CorbeillePage })))
 const GuidePage = lazy(() => import("@/pages/guide").then((m) => ({ default: m.GuidePage })))
 const TwoFactorPage = lazy(() => import("@/pages/two-factor").then((m) => ({ default: m.TwoFactorPage })))
 
@@ -188,6 +189,15 @@ export default function App() {
             element={
               <RequirePermission permission="audit.read">
                 <AuditPage />
+              </RequirePermission>
+            }
+          />
+          {/* La corbeille se lit comme le journal d'audit (décision 120). */}
+          <Route
+            path="/corbeille"
+            element={
+              <RequirePermission permission="audit.read">
+                <CorbeillePage />
               </RequirePermission>
             }
           />

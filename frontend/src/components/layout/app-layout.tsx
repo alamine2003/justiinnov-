@@ -15,6 +15,7 @@ import {
   PanelLeftOpen,
   PlayCircle,
   ScrollText,
+  Trash2,
   Settings,
   ShieldCheck,
   Wallet,
@@ -217,7 +218,10 @@ export function AppLayout() {
           cle: "controle",
           titre: t("nav.groupe.controle"),
           entrees: can("audit.read")
-            ? [{ to: "/audit", icon: ScrollText, label: t("nav.audit") }]
+            ? [
+                { to: "/audit", icon: ScrollText, label: t("nav.audit") },
+                { to: "/corbeille", icon: Trash2, label: t("nav.corbeille") },
+              ]
             : [],
         },
         {

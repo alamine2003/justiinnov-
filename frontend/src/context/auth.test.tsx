@@ -113,7 +113,7 @@ function profil(
     totp_confirmed: true,
     language: "fr",
     supervision: false,
-    workflow: { require_review_step: false },
+    workflow: { require_review_step: false, suppressions_ouvertes: false },
     alert_thresholds: [80, 100],
     ...overrides,
     permissions: { ...PERMISSIONS_DU_PAYS, ...overrides.permissions },
