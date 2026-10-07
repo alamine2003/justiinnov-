@@ -91,14 +91,32 @@ describe("texte des guides vidéo", () => {
     return suite < 0 ? texte.slice(debut) : texte.slice(debut, debut + id.length + 4 + suite)
   }
 
-  /** Les sous-titres d'un guide dans une langue, interpolations remplacées par « … ». */
+  /** La valeur d'une clé du dictionnaire (« a.b.c »), pour remplacer un libellé interpolé. */
+  function libelle(langue: LangueDeGuide, cle: string) {
+    let valeur: unknown = langue === "fr" ? fr : en
+    for (const partie of cle.split(".")) valeur = (valeur as Record<string, unknown>)?.[partie]
+    return typeof valeur === "string" ? valeur : "…"
+  }
+
+  /**
+   * Les sous-titres d'un guide dans une langue. Un libellé interpolé
+   * (`${t("cle")}`) prend sa valeur du dictionnaire : compté pour « … », un
+   * sous-titre de 89 caractères passait pour 66.
+   */
   function legendes(id: IdDeGuide, langue: LangueDeGuide) {
     const corps = partie(bloc("LEGENDES"), id).match(new RegExp(`\\n {4}${langue}: \\(t\\) => \\[\\n([\\s\\S]*?)\\n {4}\\],`))
     expect(corps, `${id}/${langue}`).not.toBeNull()
     return corps![1]
       .split("\n")
       .filter((ligne) => /^ {6}["`]/.test(ligne))
-      .map((ligne) => ligne.trim().replace(/,$/, "").slice(1, -1).replace(/\$\{[^}]*\}/g, "…"))
+      .map((ligne) =>
+        ligne
+          .trim()
+          .replace(/,$/, "")
+          .slice(1, -1)
+          .replace(/\$\{t\("([^"]+)"[^}]*\}/g, (_, cle: string) => libelle(langue, cle))
+          .replace(/\$\{[^}]*\}/g, "…"),
+      )
   }
 
   const tous = (langue: LangueDeGuide) => GUIDES.flatMap((guide) => legendes(guide.id, langue))
@@ -131,7 +149,6 @@ describe("texte des guides vidéo", () => {
   })
 
   it("tient chaque sous-titre en deux lignes du lecteur : 84 caractères au plus", () => {
-    // Un libellé interpolé compte pour « … » : la marge couvre les plus longs.
     for (const langue of LANGUES_DES_GUIDES) {
       for (const legende of tous(langue)) expect(legende.length, legende).toBeLessThanOrEqual(84)
     }

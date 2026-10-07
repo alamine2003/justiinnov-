@@ -100,10 +100,16 @@ async function verifierFfmpeg() {
   if (!proposeLibvpx(sortie)) throw ffmpegInutilisable(chemin, designe, "il ne propose pas l'encodeur libvpx (VP8)")
 }
 
-/** Réencode une prise : 15 images par seconde suffisent à un écran d'application. */
-async function reencoder(source: string, cible: string) {
+/**
+ * Réencode une prise : 15 images par seconde suffisent à un écran
+ * d'application. La prise s'arrête une seconde après la fin du dernier
+ * sous-titre (`duree`, en millisecondes) : celle de « Soumettre un
+ * dossier » durait 4 s de plus que ses sous-titres, un écran figé sans
+ * texte à la fin de la vidéo.
+ */
+async function reencoder(source: string, cible: string, duree: number) {
   await promisify(execFile)(ffmpeg(), [
-    "-hide_banner", "-loglevel", "error", "-y", "-i", source,
+    "-hide_banner", "-loglevel", "error", "-y", "-i", source, "-t", (duree / 1000).toFixed(3),
     "-c:v", "libvpx", "-crf", "12", "-b:v", "300k", "-deadline", "good", "-cpu-used", "1",
     "-r", "15", "-an", cible,
   ])
@@ -202,7 +208,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       "Ouvrez le dossier du bon type, dans un projet que vous avez ouvert.",
       `Cliquez sur « ${t("commun.ajouter")} » pour saisir une dépense.`,
       "Décrivez la dépense : ce qui a été payé, quand et où.",
-      `Saisissez le montant ; payé dans une autre devise, ouvrez « ${t("depenses.formulaire.autre_devise")} ».`,
+      `Montant en devise du pays ; sinon, ouvrez « ${t("depenses.formulaire.autre_devise")} ».`,
       "Équipe et manager responsable sont exigés pour soumettre : choisissez le manager.",
       `Cliquez sur « ${t("commun.enregistrer")} » : la ligne reste un brouillon que vous seul modifiez.`,
     ],
@@ -210,7 +216,7 @@ const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
       "Open the dossier of the right type, in a project you opened yourself.",
       `Click “${t("commun.ajouter")}” to enter an expense.`,
       "Describe the expense: what was paid, when and where.",
-      `Enter the amount; if paid in another currency, open “${t("depenses.formulaire.autre_devise")}”.`,
+      `Amount in the country's currency; otherwise open “${t("depenses.formulaire.autre_devise")}”.`,
       "A team and a responsible manager are required to submit: choose the manager.",
       `Click “${t("commun.enregistrer")}”: the line stays a draft that only you can edit.`,
     ],
@@ -551,7 +557,7 @@ async function tourner(
   const video = page.video()
   if (!video) throw new Error(`Aucune vidéo pour ${id}.`)
   const webm = path.join(brouillon, `${id}.webm`)
-  await reencoder(await video.path(), webm)
+  await reencoder(await video.path(), webm, fin + 1000)
   // La vidéo telle qu'elle sera servie, contre ce que la page montrait :
   // lève si l'enregistrement a perdu des images sous un sous-titre.
   const ecarts = await controlerLesImages({
