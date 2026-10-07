@@ -25,7 +25,8 @@ from rest_framework.test import APIClient
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget, OverrunPolicy
-from core.models import Country, DossierKind, Manager, Project, ProjectKind, Team
+from core import types_de_projets
+from core.models import Country, DossierKind, Manager, Project, Team
 from core.numerotation import creer_projet
 from expenses.models import AuditLog, Dossier, Expense, Proof
 from expenses.services import committed_total
@@ -49,11 +50,12 @@ class CourseTestCase(TransactionTestCase):
         self.team = Team.objects.create(country=self.togo, name="Équipe Lomé")
         # Un dossier s'ouvre dans un projet typé (décision 102). La liste des
         # types vient d'une migration, que ce cas de test vide : on la recrée.
+        types_de_projets.assurer_les_types_d_origine()
         self.stands, _ = DossierKind.objects.get_or_create(
-            project_kind=ProjectKind.CONGRES, name="Stands"
+            project_kind_id=types_de_projets.CONGRES, name="Stands"
         )
         self.projet = creer_projet(Project(
-            country=self.togo, name="Congrès de Lomé", kind=ProjectKind.CONGRES,
+            country=self.togo, name="Congrès de Lomé", kind_id=types_de_projets.CONGRES,
         ))
         self.manager = Manager.objects.create(name="Kodjo Mensah")
         self.manager.countries.add(self.togo)

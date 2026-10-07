@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ProjetsPage } from "./list"
 import { invalidateReferentiel } from "@/lib/referentiel"
+import { TYPES_DE_PROJETS, pageDesTypesDeProjets } from "@/test/types-de-projets-fixtures"
 
 const fetchCountries = vi.fn()
 const fetchProjects = vi.fn()
@@ -10,6 +11,7 @@ const fetchProjectsParPays = vi.fn()
 const createProject = vi.fn()
 const fetchCountry = vi.fn()
 const fetchDossierKinds = vi.fn()
+const fetchProjectTypes = vi.fn(() => pageDesTypesDeProjets())
 vi.mock("@/lib/countries", () => ({
   fetchCountries: () => fetchCountries(),
   fetchCountry: (...args: unknown[]) => fetchCountry(...args),
@@ -17,6 +19,7 @@ vi.mock("@/lib/countries", () => ({
   fetchProjects: (...args: unknown[]) => fetchProjects(...args),
   fetchProjectsParPays: (...args: unknown[]) => fetchProjectsParPays(...args),
   createProject: (...args: unknown[]) => createProject(...args),
+  fetchProjectTypes: () => fetchProjectTypes(),
 }))
 let droits: Record<string, boolean> = {}
 let global = true
@@ -102,6 +105,31 @@ describe("ProjetsPage — la liste", () => {
     // Les onglets comptent avec les filtres de la liste, sans le pays.
     await waitFor(() =>
       expect(fetchProjectsParPays).toHaveBeenLastCalledWith({ kind: "voyage" }, expect.anything()),
+    )
+  })
+
+  it("propose en filtre un type ajouté par le super administrateur, lu du serveur", async () => {
+    // Décision 119 : la liste n'est plus figée dans l'interface.
+    fetchProjectTypes.mockResolvedValueOnce({
+      count: 1, next: null, previous: null,
+      results: [{ ...TYPES_DE_PROJETS[0], id: 9, code: "formation", name: "Formation", libelle: "Formation" }],
+    })
+    afficher("/projets?kind=formation")
+
+    expect(await screen.findAllByRole("button", { name: /Formation/ })).not.toHaveLength(0)
+    await waitFor(() =>
+      expect(fetchProjects).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "formation" }), expect.anything(),
+      ),
+    )
+  })
+
+  it("ignore un type inconnu dans l'adresse, une fois la liste lue", async () => {
+    afficher("/projets?kind=inexistant")
+    await screen.findByRole("button", { name: /Voyage/ })
+
+    await waitFor(() =>
+      expect(fetchProjects.mock.lastCall?.[0]).not.toHaveProperty("kind", "inexistant"),
     )
   })
 

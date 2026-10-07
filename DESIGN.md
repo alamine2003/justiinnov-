@@ -792,10 +792,24 @@ Lignes.
   seulement » avec « Voir toutes les années » dit que la liste est bornée.
   Chaque tuile du Pilotage ouvre une liste au même chiffre que le sien
   (décision 117).
-- **Configuration › Types de dossiers** : la liste commune, en
-  `ManageRows` ; en écriture seulement avec `can("dossier_kinds.manage")`
-  (le super administrateur), en lecture pour la RH ; un type s'ajoute ou se
-  désactive, avec un motif pour toute modification.
+- **Configuration › Types de projets** (décision 119 ;
+  `pages/configuration/project-types-section.tsx`) : le « maître-détail »
+  de la configuration. Une carte par type de projet — nom, nom anglais
+  après « · », code en `font-mono`, ordre, nombre de projets, badge
+  Actif/Désactivé, badge d'attente « Aucun dossier actif » quand il
+  n'ouvrirait aucun projet — et, dans la carte, le tableau de ses types de
+  dossiers (ordre, nom, description, état, crayon). Les boutons « Ajouter
+  un type de projet », « Ajouter un type de dossier » et « Modifier » ne
+  paraissent qu'avec `can("project_types.manage")` ou
+  `can("dossier_kinds.manage")` (le super administrateur) ; la RH lit.
+  Les dialogues mettent leurs champs l'un sous l'autre, l'erreur du
+  serveur sous le champ visé, et exigent `ChampMotif` à toute
+  modification ; l'ordre est un champ numérique avec sa règle en aide.
+  « Historique » mène au journal du référentiel filtré sur l'entité.
+  L'ancien `?onglet=types-de-dossiers` ouvre cet onglet. Ailleurs,
+  aucune liste de types n'est écrite dans l'interface : filtres et
+  formulaires lisent `useTypesDeProjets()` (les formulaires, les seuls
+  actifs).
 - Fiche d'un pays, onglet Projets : en **lecture seule** — nom en lien vers
   la fiche, référence, `<ProjectKindBadge>`. On crée, renomme, modifie et
   complète un projet depuis sa fiche, motif à l'appui.
@@ -867,8 +881,12 @@ leur.
 ### Guide vidéo
 
 `/guide` (décision 118) : `PageHeader`, puis le lecteur dans une `Card` et
-le sommaire des guides — une liste numérotée de boutons (`aria-current` sur
-le guide ouvert), chacun avec son affiche, son titre et sa description. Le
+le sommaire des guides — une liste numérotée de **liens** `?video=…`
+(`aria-current="page"` sur le guide ouvert ; un guide s'ouvre aussi dans
+un nouvel onglet), chacun avec son affiche, son titre et sa description,
+numérotés par le dictionnaire (`guides.numero`). Une vidéo qui ne se
+charge pas le dit sous le lecteur (`role="alert"`, `guides.video_indisponible`),
+au lieu d'un cadre gris muet ; les étapes en texte restent lisibles. Le
 sommaire est **sous le lecteur jusqu'à `2xl`** (en deux colonnes dès `md`,
 trois dès `xl`) et ne passe à sa droite (22rem) qu'au-delà. Deux contraintes
 fixent la taille du lecteur, mesurées ensemble :

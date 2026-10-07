@@ -1753,15 +1753,8 @@
                         "in": "query",
                         "name": "project_kind",
                         "schema": {
-                            "type": "string",
-                            "title": "Type de projet",
-                            "enum": [
-                                "congres",
-                                "soutien_financier",
-                                "voyage"
-                            ]
-                        },
-                        "description": "* `congres` - Congrès\n* `voyage` - Voyage\n* `soutien_financier` - Soutien financier"
+                            "type": "string"
+                        }
                     },
                     {
                         "name": "search",
@@ -2085,15 +2078,8 @@
                         "in": "query",
                         "name": "project__kind",
                         "schema": {
-                            "type": "string",
-                            "title": "Type de projet",
-                            "enum": [
-                                "congres",
-                                "soutien_financier",
-                                "voyage"
-                            ]
-                        },
-                        "description": "* `congres` - Congrès\n* `voyage` - Voyage\n* `soutien_financier` - Soutien financier"
+                            "type": "string"
+                        }
                     },
                     {
                         "name": "search",
@@ -4671,13 +4657,14 @@
                                 "manager",
                                 "marketing_category",
                                 "project",
+                                "project_type",
                                 "reallocation",
                                 "team",
                                 "user",
                                 "workflow_configuration"
                             ]
                         },
-                        "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur\n* `beneficiary` - Bénéficiaire\n* `dossier_kind` - Type de dossier"
+                        "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur\n* `beneficiary` - Bénéficiaire\n* `dossier_kind` - Type de dossier\n* `project_type` - Type de projet"
                     },
                     {
                         "in": "query",
@@ -5958,6 +5945,282 @@
                 }
             }
         },
+        "/api/project-types/": {
+            "get": {
+                "operationId": "project_types_list",
+                "description": "La liste commune des types de projets (décision 119).\n\nLue par tout compte connecté — le pays y choisit le type d'un projet —,\ntenue par le super administrateur seul (``project_types.manage``,\nverrouillé à la RH et au pays, comme les types de dossiers). Pas de\ncloisonnement : elle vaut pour les dix-sept filiales. Un type ne se\nsupprime pas (405) : il se désactive, et n'ouvre plus de projet.\nToute modification exige un motif (décision 109).",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "is_active",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "ordering",
+                        "required": false,
+                        "in": "query",
+                        "description": "Quel champ utiliser pour classer les résultats.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un numéro de page de l'ensemble des résultats.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page_size",
+                        "required": false,
+                        "in": "query",
+                        "description": "Nombre de résultats à retourner par page.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Un terme de recherche.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "tags": [
+                    "project-types"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedProjectTypeList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "project_types_create",
+                "description": "La liste commune des types de projets (décision 119).\n\nLue par tout compte connecté — le pays y choisit le type d'un projet —,\ntenue par le super administrateur seul (``project_types.manage``,\nverrouillé à la RH et au pays, comme les types de dossiers). Pas de\ncloisonnement : elle vaut pour les dix-sept filiales. Un type ne se\nsupprime pas (405) : il se désactive, et n'ouvre plus de projet.\nToute modification exige un motif (décision 109).",
+                "tags": [
+                    "project-types"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProjectTypeRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProjectTypeRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProjectTypeRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProjectType"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/project-types/{id}/": {
+            "get": {
+                "operationId": "project_types_retrieve",
+                "description": "La liste commune des types de projets (décision 119).\n\nLue par tout compte connecté — le pays y choisit le type d'un projet —,\ntenue par le super administrateur seul (``project_types.manage``,\nverrouillé à la RH et au pays, comme les types de dossiers). Pas de\ncloisonnement : elle vaut pour les dix-sept filiales. Un type ne se\nsupprime pas (405) : il se désactive, et n'ouvre plus de projet.\nToute modification exige un motif (décision 109).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Type de projet.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "project-types"
+                ],
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProjectType"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "put": {
+                "operationId": "project_types_update",
+                "description": "La liste commune des types de projets (décision 119).\n\nLue par tout compte connecté — le pays y choisit le type d'un projet —,\ntenue par le super administrateur seul (``project_types.manage``,\nverrouillé à la RH et au pays, comme les types de dossiers). Pas de\ncloisonnement : elle vaut pour les dix-sept filiales. Un type ne se\nsupprime pas (405) : il se désactive, et n'ouvre plus de projet.\nToute modification exige un motif (décision 109).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Type de projet.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "project-types"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProjectTypeRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProjectTypeRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProjectTypeRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProjectType"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "project_types_partial_update",
+                "description": "La liste commune des types de projets (décision 119).\n\nLue par tout compte connecté — le pays y choisit le type d'un projet —,\ntenue par le super administrateur seul (``project_types.manage``,\nverrouillé à la RH et au pays, comme les types de dossiers). Pas de\ncloisonnement : elle vaut pour les dix-sept filiales. Un type ne se\nsupprime pas (405) : il se désactive, et n'ouvre plus de projet.\nToute modification exige un motif (décision 109).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Un(une) valeur entière unique identifiant ce(cette) Type de projet.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "project-types"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedProjectTypeRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedProjectTypeRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedProjectTypeRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "tokenAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProjectType"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/projects/": {
             "get": {
                 "operationId": "projects_list",
@@ -5988,15 +6251,8 @@
                         "in": "query",
                         "name": "kind",
                         "schema": {
-                            "type": "string",
-                            "title": "Type de projet",
-                            "enum": [
-                                "congres",
-                                "soutien_financier",
-                                "voyage"
-                            ]
-                        },
-                        "description": "* `congres` - Congrès\n* `voyage` - Voyage\n* `soutien_financier` - Soutien financier"
+                            "type": "string"
+                        }
                     },
                     {
                         "name": "ordering",
@@ -8558,11 +8814,6 @@
                     "name"
                 ]
             },
-            "BlankEnum": {
-                "enum": [
-                    ""
-                ]
-            },
             "Breakdown": {
                 "type": "object",
                 "properties": {
@@ -9283,10 +9534,11 @@
                     "workflow_configuration",
                     "user",
                     "beneficiary",
-                    "dossier_kind"
+                    "dossier_kind",
+                    "project_type"
                 ],
                 "type": "string",
-                "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur\n* `beneficiary` - Bénéficiaire\n* `dossier_kind` - Type de dossier"
+                "description": "* `country` - Pays\n* `manager` - Manager\n* `team` - Équipe\n* `cost_center` - Centre de coûts\n* `project` - Projet\n* `expense_title` - Intitulé de dépenses\n* `marketing_category` - Catégorie marketing\n* `budget` - Enveloppe budgétaire\n* `reallocation` - Réallocation budgétaire\n* `exchange_rate` - Taux de change\n* `workflow_configuration` - Configuration du workflow\n* `user` - Compte utilisateur\n* `beneficiary` - Bénéficiaire\n* `dossier_kind` - Type de dossier\n* `project_type` - Type de projet"
             },
             "ChangePasswordRequest": {
                 "type": "object",
@@ -10843,11 +11095,7 @@
                         "readOnly": true
                     },
                     "project_kind": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/ProjectKindEnum"
-                            }
-                        ],
+                        "type": "string",
                         "title": "Type de projet"
                     },
                     "project_kind_display": {
@@ -10861,6 +11109,11 @@
                     },
                     "description": {
                         "type": "string"
+                    },
+                    "ordre": {
+                        "type": "integer",
+                        "maximum": 32767,
+                        "minimum": 0
                     },
                     "is_active": {
                         "type": "boolean",
@@ -10885,6 +11138,7 @@
                     "project_kind_display",
                     "name",
                     "description",
+                    "ordre",
                     "is_active",
                     "created_at",
                     "updated_at"
@@ -10895,11 +11149,8 @@
                 "description": "Un type de dossier de la liste commune (décision 101).\n\nSon type de projet ne change plus dès qu'un dossier l'emploie : les\ndossiers ouverts sous « Stands » resteraient sinon dans un congrès\nsous un type devenu celui d'un voyage.",
                 "properties": {
                     "project_kind": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/ProjectKindEnum"
-                            }
-                        ],
+                        "type": "string",
+                        "minLength": 1,
                         "title": "Type de projet"
                     },
                     "name": {
@@ -10910,6 +11161,11 @@
                     },
                     "description": {
                         "type": "string"
+                    },
+                    "ordre": {
+                        "type": "integer",
+                        "maximum": 32767,
+                        "minimum": 0
                     },
                     "is_active": {
                         "type": "boolean",
@@ -12551,6 +12807,11 @@
             "ImportResult": {
                 "type": "object",
                 "properties": {
+                    "dossier": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true
+                    },
                     "lignes_creees": {
                         "type": "integer",
                         "readOnly": true
@@ -12576,6 +12837,7 @@
                     }
                 },
                 "required": [
+                    "dossier",
                     "lignes_creees",
                     "equipes_creees",
                     "managers_crees",
@@ -13664,6 +13926,39 @@
                     }
                 }
             },
+            "PaginatedProjectTypeList": {
+                "type": "object",
+                "required": [
+                    "count",
+                    "next",
+                    "previous",
+                    "results"
+                ],
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "example": 123
+                    },
+                    "next": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=4"
+                    },
+                    "previous": {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "uri",
+                        "example": "http://api.example.org/accounts/?page=2"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ProjectType"
+                        }
+                    }
+                }
+            },
             "PaginatedProofList": {
                 "type": "object",
                 "required": [
@@ -13993,11 +14288,8 @@
                 "description": "Un type de dossier de la liste commune (décision 101).\n\nSon type de projet ne change plus dès qu'un dossier l'emploie : les\ndossiers ouverts sous « Stands » resteraient sinon dans un congrès\nsous un type devenu celui d'un voyage.",
                 "properties": {
                     "project_kind": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/ProjectKindEnum"
-                            }
-                        ],
+                        "type": "string",
+                        "minLength": 1,
                         "title": "Type de projet"
                     },
                     "name": {
@@ -14008,6 +14300,11 @@
                     },
                     "description": {
                         "type": "string"
+                    },
+                    "ordre": {
+                        "type": "integer",
+                        "maximum": 32767,
+                        "minimum": 0
                     },
                     "is_active": {
                         "type": "boolean",
@@ -14315,15 +14612,10 @@
                         "nullable": true
                     },
                     "kind": {
-                        "title": "Type de projet",
-                        "oneOf": [
-                            {
-                                "$ref": "#/components/schemas/ProjectKindEnum"
-                            },
-                            {
-                                "$ref": "#/components/schemas/BlankEnum"
-                            }
-                        ]
+                        "type": "string",
+                        "minLength": 1,
+                        "nullable": true,
+                        "title": "Type de projet"
                     },
                     "is_active": {
                         "type": "boolean",
@@ -14334,6 +14626,40 @@
                         "writeOnly": true,
                         "nullable": true,
                         "title": "Équipe"
+                    },
+                    "motif": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 1000
+                    }
+                }
+            },
+            "PatchedProjectTypeRequest": {
+                "type": "object",
+                "description": "Un type de projet de la liste commune (décision 119).\n\nLe ``code`` est calculé du nom à la création et ne se saisit jamais :\nprojets et types de dossiers le portent. Toute modification exige un\nmotif (décision 109). ``libelle`` est le nom dans la langue du lecteur.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "title": "Nom",
+                        "maxLength": 80
+                    },
+                    "name_en": {
+                        "type": "string",
+                        "title": "Nom en anglais",
+                        "maxLength": 80
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "ordre": {
+                        "type": "integer",
+                        "maximum": 32767,
+                        "minimum": 0
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Actif"
                     },
                     "motif": {
                         "type": "string",
@@ -14759,6 +15085,11 @@
                         "readOnly": true,
                         "description": "Changer le statut ou la description d'un projet, le désactiver, typer un projet d'avant la 2.0 ; motif obligatoire."
                     },
+                    "project_types.manage": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Ajouter, renommer, ordonner ou désactiver un type de projet de la liste commune aux filiales."
+                    },
                     "dossier_kinds.manage": {
                         "type": "boolean",
                         "readOnly": true,
@@ -14890,6 +15221,7 @@
                     "projets.create",
                     "projets.rename",
                     "projets.update",
+                    "project_types.manage",
                     "dossier_kinds.manage",
                     "referentiel.update",
                     "budgets.create",
@@ -14958,15 +15290,9 @@
                         "nullable": true
                     },
                     "kind": {
-                        "title": "Type de projet",
-                        "oneOf": [
-                            {
-                                "$ref": "#/components/schemas/ProjectKindEnum"
-                            },
-                            {
-                                "$ref": "#/components/schemas/BlankEnum"
-                            }
-                        ]
+                        "type": "string",
+                        "nullable": true,
+                        "title": "Type de projet"
                     },
                     "kind_display": {
                         "type": "string",
@@ -15048,15 +15374,6 @@
                     "updated_at"
                 ]
             },
-            "ProjectKindEnum": {
-                "enum": [
-                    "congres",
-                    "voyage",
-                    "soutien_financier"
-                ],
-                "type": "string",
-                "description": "* `congres` - Congrès\n* `voyage` - Voyage\n* `soutien_financier` - Soutien financier"
-            },
             "ProjectRequest": {
                 "type": "object",
                 "description": "Un projet, son type et sa référence (décision 100).\n\nLa référence, l'année et le rang sont attribués à la création\n(``core.numerotation``) et ne se saisissent pas. Le type est exigé à la\ncréation et ne change plus — sauf pour un projet d'avant la 2.0, resté\n« à typer », qui se type une fois. Le projet « Historique » ne se type\npas : il range des dossiers d'avant les projets.",
@@ -15089,15 +15406,10 @@
                         "nullable": true
                     },
                     "kind": {
-                        "title": "Type de projet",
-                        "oneOf": [
-                            {
-                                "$ref": "#/components/schemas/ProjectKindEnum"
-                            },
-                            {
-                                "$ref": "#/components/schemas/BlankEnum"
-                            }
-                        ]
+                        "type": "string",
+                        "minLength": 1,
+                        "nullable": true,
+                        "title": "Type de projet"
                     },
                     "is_active": {
                         "type": "boolean",
@@ -15129,6 +15441,120 @@
                 ],
                 "type": "string",
                 "description": "* `planned` - Planifié\n* `active` - En cours\n* `on_hold` - En pause\n* `completed` - Terminé"
+            },
+            "ProjectType": {
+                "type": "object",
+                "description": "Un type de projet de la liste commune (décision 119).\n\nLe ``code`` est calculé du nom à la création et ne se saisit jamais :\nprojets et types de dossiers le portent. Toute modification exige un\nmotif (décision 109). ``libelle`` est le nom dans la langue du lecteur.",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "code": {
+                        "type": "string",
+                        "readOnly": true,
+                        "pattern": "^[-a-zA-Z0-9_]+$"
+                    },
+                    "name": {
+                        "type": "string",
+                        "title": "Nom",
+                        "maxLength": 80
+                    },
+                    "name_en": {
+                        "type": "string",
+                        "title": "Nom en anglais",
+                        "maxLength": 80
+                    },
+                    "libelle": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "ordre": {
+                        "type": "integer",
+                        "maximum": 32767,
+                        "minimum": 0
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Actif"
+                    },
+                    "dossier_kinds_actifs": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "default": 0
+                    },
+                    "projets": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Créé le"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "title": "Modifié le"
+                    }
+                },
+                "required": [
+                    "id",
+                    "code",
+                    "name",
+                    "name_en",
+                    "libelle",
+                    "description",
+                    "ordre",
+                    "is_active",
+                    "dossier_kinds_actifs",
+                    "projets",
+                    "created_at",
+                    "updated_at"
+                ]
+            },
+            "ProjectTypeRequest": {
+                "type": "object",
+                "description": "Un type de projet de la liste commune (décision 119).\n\nLe ``code`` est calculé du nom à la création et ne se saisit jamais :\nprojets et types de dossiers le portent. Toute modification exige un\nmotif (décision 109). ``libelle`` est le nom dans la langue du lecteur.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "title": "Nom",
+                        "maxLength": 80
+                    },
+                    "name_en": {
+                        "type": "string",
+                        "title": "Nom en anglais",
+                        "maxLength": 80
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "ordre": {
+                        "type": "integer",
+                        "maximum": 32767,
+                        "minimum": 0
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Actif"
+                    },
+                    "motif": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 1000
+                    }
+                },
+                "required": [
+                    "name"
+                ]
             },
             "Proof": {
                 "type": "object",

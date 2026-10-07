@@ -5,6 +5,8 @@ from decimal import Decimal
 from django.core.cache import cache
 from django.db import models
 from django.db.models.deletion import ProtectedError
+from django.utils.text import slugify
+from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
 from .africa import validate_african_country
@@ -130,12 +132,70 @@ class CostCenter(TimeStampedModel):
         return f"{self.code} — {self.name}"
 
 
-class ProjectKind(models.TextChoices):
-    """Type d'un projet (décision 100) : il fixe les types de dossiers qu'on y ouvre."""
+def code_de_type(nom, pris):
+    """Le code d'un type de projet : son nom en minuscules ASCII, ``_`` pour séparateur.
 
-    CONGRES = "congres", _("Congrès")
-    VOYAGE = "voyage", _("Voyage")
-    SOUTIEN_FINANCIER = "soutien_financier", _("Soutien financier")
+    « Soutien financier » donne ``soutien_financier``, comme les trois codes
+    d'avant la liste en base. Tronqué à la taille de la colonne ; un code
+    déjà ``pris`` reçoit un suffixe ``_2``, ``_3``… Un nom sans lettre
+    latine donne ``type``.
+    """
+    base = (slugify(nom).replace("-", "_") or "type")[:24].strip("_") or "type"
+    pris = set(pris)
+    code, rang = base, 2
+    while code in pris:
+        suffixe = f"_{rang}"
+        code = base[: 24 - len(suffixe)] + suffixe
+        rang += 1
+    return code
+
+
+class ProjectType(TimeStampedModel):
+    """Type de projet (décisions 100 et 119) : congrès, voyage, soutien financier…
+
+    Une liste **commune aux dix-sept filiales**, tenue par le super
+    administrateur seul (``project_types.manage``) dans « Configuration ›
+    Types de projets » : chaque type porte ses types de dossiers
+    (``DossierKind``), que reçoit d'office tout projet ouvert sous lui
+    (décision 106). Elle se désactive, ne se supprime pas.
+
+    Le ``code`` est la valeur que portent les projets et les types de
+    dossiers (colonnes ``kind`` et ``project_kind``) : calculé du nom à la
+    création, il ne change plus, pour que le renommage d'un type ne touche à
+    aucun projet ni à aucun filtre enregistré. Le libellé suit la langue du
+    lecteur : ``name_en`` en anglais, le nom français à défaut.
+    """
+
+    code = models.SlugField(_("Code"), max_length=24, unique=True, editable=False)
+    name = models.CharField(_("Nom"), max_length=80, unique=True)
+    name_en = models.CharField(_("Nom en anglais"), max_length=80, blank=True)
+    description = models.TextField(_("Description"), blank=True)
+    #: Rang dans les listes (configuration, filtres, formulaire de projet).
+    ordre = models.PositiveSmallIntegerField(_("Ordre"), default=0)
+    is_active = models.BooleanField(_("Actif"), default=True)
+
+    class Meta:
+        ordering = ["ordre", "name", "pk"]
+        verbose_name = _("Type de projet")
+        verbose_name_plural = _("Types de projets")
+
+    def __str__(self):
+        # Le nom français, pas le libellé : le journal (``ChangeLog.label``)
+        # ne doit pas changer selon la langue de qui écrit.
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = code_de_type(self.name, ProjectType.objects.values_list("code", flat=True))
+        super().save(*args, **kwargs)
+
+    @property
+    def libelle(self):
+        """Le nom dans la langue active : anglais s'il est donné, français sinon."""
+        langue = get_language() or ""
+        if langue.startswith("en") and self.name_en:
+            return self.name_en
+        return self.name
 
 
 class Project(TimeStampedModel):
@@ -167,8 +227,12 @@ class Project(TimeStampedModel):
         "Budget", max_digits=14, decimal_places=2, null=True, blank=True
     )
     is_active = models.BooleanField(_("Actif"), default=True)
-    kind = models.CharField(
-        _("Type de projet"), max_length=24, choices=ProjectKind.choices, blank=True
+    #: Le type, par son code (décision 119) : la colonne ``kind`` garde les
+    #: valeurs d'avant la liste en base (``congres``, ``voyage``…). Vide pour
+    #: le projet « Historique » et pour un projet d'avant la 2.0 à typer.
+    kind = models.ForeignKey(
+        ProjectType, on_delete=models.PROTECT, to_field="code", db_column="kind",
+        null=True, blank=True, related_name="projects", verbose_name=_("Type de projet"),
     )
     #: Année et rang de la référence : le rang repart de 1 chaque année,
     #: dans chaque pays. Vides pour le projet « Historique ».
@@ -213,7 +277,7 @@ class Project(TimeStampedModel):
         La même règle que ``expenses.numerotation.refus_d_ouverture``, lue
         par l'interface pour proposer ou non « Nouveau dossier ».
         """
-        return bool(self.kind) and not self.is_historical and self.is_active
+        return bool(self.kind_id) and not self.is_historical and self.is_active
 
 
 class DossierKind(TimeStampedModel):
@@ -226,15 +290,19 @@ class DossierKind(TimeStampedModel):
     pas.
     """
 
-    project_kind = models.CharField(
-        _("Type de projet"), max_length=24, choices=ProjectKind.choices
+    project_kind = models.ForeignKey(
+        ProjectType, on_delete=models.PROTECT, to_field="code", db_column="project_kind",
+        related_name="dossier_kinds", verbose_name=_("Type de projet"),
     )
     name = models.CharField(_("Nom"), max_length=120)
     description = models.TextField(_("Description"), blank=True)
+    #: Rang sous son type de projet : l'ordre des dossiers prédéfinis, donc
+    #: de leurs numéros (``D001``…), à la création d'un projet.
+    ordre = models.PositiveSmallIntegerField(_("Ordre"), default=0)
     is_active = models.BooleanField(_("Actif"), default=True)
 
     class Meta:
-        ordering = ["project_kind", "name", "pk"]
+        ordering = ["project_kind__ordre", "project_kind__name", "ordre", "name", "pk"]
         verbose_name = _("Type de dossier")
         verbose_name_plural = _("Types de dossiers")
         constraints = [
@@ -326,6 +394,7 @@ class ChangeLog(models.Model):
         USER = "user", _("Compte utilisateur")
         BENEFICIARY = "beneficiary", _("Bénéficiaire")
         DOSSIER_KIND = "dossier_kind", _("Type de dossier")
+        PROJECT_TYPE = "project_type", _("Type de projet")
 
     model_name = models.CharField(
         "Entité", max_length=32, choices=Models.choices

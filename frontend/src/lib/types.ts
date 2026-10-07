@@ -24,8 +24,17 @@ export type Team = Schema<"Team">
 export type CostCenter = Schema<"CostCenter">
 export type ProjectStatus = Schema<"ProjectStatusEnum">
 export type Project = Schema<"Project">
-/** Congrès, voyage ou soutien financier : fixé à la création du projet (décision 100). */
-export type ProjectKind = Schema<"ProjectKindEnum">
+/**
+ * Type de projet de la liste commune — congrès, voyage, soutien financier… —,
+ * tenue par le super administrateur (décision 119).
+ */
+export type ProjectType = Schema<"ProjectType">
+/**
+ * Code d'un type de projet (`congres`, `voyage`…), tel que le portent un
+ * projet (`kind`) et un type de dossier (`project_kind`). La liste vient du
+ * serveur : l'interface n'en recopie aucune.
+ */
+export type ProjectKind = string
 /** Type de dossier de la liste commune aux filiales (décision 101). */
 export type DossierKind = Schema<"DossierKind">
 export type ExpenseTitle = Schema<"ExpenseTitle">

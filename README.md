@@ -157,7 +157,8 @@ l'application de sa raison d'être. La règle des quatre yeux reste en garde :
 celui qui a saisi une dépense ne la contrôle pas.
 
 **Projets, puis dossiers (version 2.0).** Le projet est la rubrique
-principale : un congrès, un voyage ou un soutien financier (`kind`), avec
+principale : un congrès, un voyage, un soutien financier… (`kind`, le code
+d'un type de la liste `GET /api/project-types/`), avec
 une référence calculée à sa création, `TG-P-2026-001` — code du pays,
 année, rang dans le pays et l'année. Le manager ouvre ses projets
 (`POST /api/projects/` avec `country`, `kind`, `name`, `team` ; capacité
@@ -165,8 +166,15 @@ année, rang dans le pays et l'année. Le manager ouvre ses projets
 prédéfinis**, un par type de dossier de son type de projet : congrès —
 Stands, T-shirts, Collations, Voyages ; voyage — Billets, Carburant,
 Hôtellerie, Repas, Forfait ; soutien financier — Soutien financier
-(décision 106). La liste des types est commune aux filiales et tenue par
-le seul super administrateur (`/api/dossier-kinds/`, `dossier_kinds.manage`).
+(décision 106). Les deux listes — types de projets et types de dossiers —
+sont communes aux filiales et tenues par le seul super administrateur
+(`/api/project-types/`, `project_types.manage` ; `/api/dossier-kinds/`,
+`dossier_kinds.manage` ; décision 119) : on y ajoute, renomme, ordonne
+(`ordre`, qui fixe l'ordre des dossiers prédéfinis) et désactive, motif
+obligatoire à chaque modification ; rien ne s'y supprime (405). Le code
+d'un type de projet est calculé de son nom et ne change plus ; son
+libellé suit la langue du lecteur (`name_en`, le français à défaut).
+Un type désactivé n'ouvre plus de projet.
 Aucun dossier ne se crée ni ne se supprime par l'API : `POST` et `DELETE
 /api/dossiers/` répondent 405. Le numéro d'un dossier est calculé,
 `TG-P-2026-001-D001` ; ses lignes portent le projet du dossier.

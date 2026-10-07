@@ -6,8 +6,8 @@ que ``core`` ne connaît pas : ``core`` est au bas de l'ordre des
 dépendances, ``accounts`` juste au-dessus (décision 40).
 """
 
-from django.db import transaction
-from django.db.models import Count, Q
+from django.db import IntegrityError, transaction
+from django.db.models import Count, IntegerField, Q, Value
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 import django_filters
@@ -28,6 +28,7 @@ from core.models import (
     Manager,
     MarketingCategory,
     Project,
+    ProjectType,
     Team,
 )
 from core.serializers import (
@@ -44,6 +45,7 @@ from core.serializers import (
     HistoriqueDeProjetSerializer,
     ParPaysSerializer,
     ProjectSerializer,
+    ProjectTypeSerializer,
     RenommerProjetSerializer,
     TeamSerializer,
 )
@@ -316,7 +318,9 @@ class ProjectViewSet(ScopedViewSet):
     du pays verrouillée (``core.numerotation``).
     """
 
-    queryset = Project.objects.select_related("country").all().order_by("-created_at")
+    # Le type est lu par chaque ligne (``kind_display``) : sans lui, une
+    # requête par projet typé.
+    queryset = Project.objects.select_related("country", "kind").all().order_by("-created_at")
     serializer_class = ProjectSerializer
     filterset_fields = ["country", "status", "is_active", "kind", "is_historical"]
     search_fields = ["name", "reference"]
@@ -395,12 +399,12 @@ class ProjectViewSet(ScopedViewSet):
         from expenses.predefinis import EQUIPE_DU_PROJET, creer_les_dossiers_predefinis
 
         motif = serializer.validated_data.pop("motif", "").strip()
-        a_typer = not serializer.instance.kind and not serializer.instance.is_historical
+        a_typer = not serializer.instance.kind_id and not serializer.instance.is_historical
         with transaction.atomic(), motif_du_journal(motif):
             projet = serializer.save()
             # Un projet d'avant la 2.0 que le siège vient de typer reçoit
             # ses dossiers prédéfinis ; ils reviennent au pays (sans auteur).
-            if a_typer and projet.kind:
+            if a_typer and projet.kind_id:
                 creer_les_dossiers_predefinis(
                     projet, equipe=EQUIPE_DU_PROJET,
                     trace=Trace.depuis_requete(self.request),
@@ -475,6 +479,60 @@ class ProjectViewSet(ScopedViewSet):
         return Response(compter_par_pays(projets, get_access(request.user)))
 
 
+class ProjectTypeViewSet(NoDestroyModelViewSet):
+    """La liste commune des types de projets (décision 119).
+
+    Lue par tout compte connecté — le pays y choisit le type d'un projet —,
+    tenue par le super administrateur seul (``project_types.manage``,
+    verrouillé à la RH et au pays, comme les types de dossiers). Pas de
+    cloisonnement : elle vaut pour les dix-sept filiales. Un type ne se
+    supprime pas (405) : il se désactive, et n'ouvre plus de projet.
+    Toute modification exige un motif (décision 109).
+    """
+
+    queryset = ProjectType.objects.annotate(
+        dossier_kinds_actifs=Count(
+            "dossier_kinds", filter=Q(dossier_kinds__is_active=True), distinct=True
+        ),
+    ).order_by("ordre", "name", "pk")
+    serializer_class = ProjectTypeSerializer
+    permission_classes = [RolePermission]
+    filterset_fields = ["is_active"]
+    search_fields = ["name", "name_en", "code"]
+    write_capability = "project_types.manage"
+
+    def get_queryset(self):
+        # Le nombre de projets d'un type couvre les dix-sept filiales : il ne
+        # se sert qu'au siège. Un manager du Togo qui lirait « congrès : 7 »
+        # en déduirait ceux de la Côte d'Ivoire (hors périmètre, sans
+        # révéler son existence) ; pour lui, il est nul.
+        access = get_access(self.request.user)
+        if access is not None and access.has_global_scope:
+            projets = Count("projects", distinct=True)
+        else:
+            projets = Value(None, output_field=IntegerField())
+        return super().get_queryset().annotate(projets=projets)
+
+    def perform_update(self, serializer):
+        motif = serializer.validated_data.pop("motif", "").strip()
+        with motif_du_journal(motif):
+            serializer.save()
+        serializer.instance = self.get_queryset().get(pk=serializer.instance.pk)
+
+    def perform_create(self, serializer):
+        serializer.validated_data.pop("motif", None)
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except IntegrityError:
+            # Deux noms qui donnent le même code, créés au même instant : le
+            # second voit la contrainte d'unicité du code, pas un 500.
+            raise serializers.ValidationError(
+                {"name": _("Un type de projet au code voisin vient d'être créé : réessayez.")}
+            )
+        serializer.instance = self.get_queryset().get(pk=serializer.instance.pk)
+
+
 class DossierKindViewSet(NoDestroyModelViewSet):
     """La liste commune des types de dossiers (décision 101).
 
@@ -485,7 +543,7 @@ class DossierKindViewSet(NoDestroyModelViewSet):
     Toute modification exige un motif (décision 109).
     """
 
-    queryset = DossierKind.objects.all()
+    queryset = DossierKind.objects.select_related("project_kind")
     serializer_class = DossierKindSerializer
     permission_classes = [RolePermission]
     filterset_fields = ["project_kind", "is_active"]

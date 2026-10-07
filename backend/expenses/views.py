@@ -226,7 +226,9 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
     """
 
     queryset = (
-        Dossier.objects.select_related("country", "team", "owner", "project", "kind")
+        Dossier.objects.select_related(
+            "country", "team", "owner", "project__kind", "kind"
+        )
         .with_totals()
     )
     permission_classes = [RolePermission]

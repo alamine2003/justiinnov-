@@ -59,7 +59,8 @@ from accounts.permissions import get_access
 from budget.aggregates import convert
 from budget.models import Budget, ExchangeRate
 from core.journal import Trace
-from core.models import Country, Manager, Project, ProjectKind, Team
+from core import types_de_projets
+from core.models import Country, Manager, Project, Team
 from core.numerotation import creer_projet
 from core.regles import PermissionRefusee, RegleViolee
 from core.requetes import reset_current_request, set_current_request
@@ -97,10 +98,10 @@ MANAGERS = {"TG": "Kodjo Mensah", "CI": "Awa Koné"}
 #: le premier est le congrès du pays.
 PROJETS = {
     "TG": [
-        ("Lancement gamme pédiatrique", ProjectKind.CONGRES, "Équipe Lomé"),
-        ("Tournées terrain Togo", ProjectKind.VOYAGE, "Équipe Kara"),
+        ("Lancement gamme pédiatrique", types_de_projets.CONGRES, "Équipe Lomé"),
+        ("Tournées terrain Togo", types_de_projets.VOYAGE, "Équipe Kara"),
     ],
-    "CI": [("Salon pharmaceutique d'Abidjan", ProjectKind.CONGRES, None)],
+    "CI": [("Salon pharmaceutique d'Abidjan", types_de_projets.CONGRES, None)],
 }
 BENEFICIAIRES = {
     "TG": ("Pharmacie du Grand Marché", Beneficiary.Kind.CLIENT),
@@ -211,7 +212,7 @@ class Command(BaseCommand):
             pays_user = self.comptes["demo.pays"]
             auteur = pays_user.username if pays_user.profile.countries.filter(pk=country.pk).exists() else ""
             projet = creer_projet(Project(
-                country=country, name=nom, kind=kind, status="active",
+                country=country, name=nom, kind_id=kind, status="active",
                 budget=Decimal("5000000.00"),
             ))
             creer_les_dossiers_predefinis(

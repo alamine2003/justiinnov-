@@ -1,17 +1,25 @@
 WEBVTT
 
 1
-00:00:02.624 --> 00:00:07.731
-When the file's expenses are complete, with their documents, submit it.
+00:00:01.628 --> 00:00:10.445
+Open the dossier and check its lines: each one needs its document.
 
 2
-00:00:07.731 --> 00:00:13.056
-Click “Submit”: every line goes with the file.
+00:00:10.445 --> 00:00:14.947
+“Submit” acts at once, with no confirmation and no way back.
 
 3
-00:00:13.056 --> 00:00:18.879
-The file is submitted: its lines can no longer be changed, head office reviews them.
+00:00:14.947 --> 00:00:20.498
+Your lines go with the dossier; a colleague's draft line blocks the submission.
 
 4
-00:00:18.879 --> 00:00:27.670
-A forgotten document can still be uploaded from its line, until the file is closed.
+00:00:20.498 --> 00:00:24.474
+Click “Submit”.
+
+5
+00:00:24.474 --> 00:00:30.022
+The dossier is submitted: its lines are fixed; only headquarters can reopen it.
+
+6
+00:00:30.022 --> 00:00:38.550
+A line without a document goes with a warning; the dossier awaits its documents.

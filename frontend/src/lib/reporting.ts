@@ -106,6 +106,8 @@ export interface ImportError {
 }
 
 export interface ImportResult {
+  /** Le dossier qui reçoit les lignes ; nul quand l'import est refusé avant de l'avoir trouvé. */
+  dossier: number | null
   lignes_creees: number
   equipes_creees: number
   managers_crees: number

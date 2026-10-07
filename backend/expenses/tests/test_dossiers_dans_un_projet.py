@@ -6,7 +6,8 @@ from rest_framework import status
 
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
-from core.models import DossierKind, Project, ProjectKind, Team
+from core import types_de_projets
+from core.models import DossierKind, Project, Team
 from expenses.models import AuditLog, Dossier, Expense
 from expenses.workflow import Status
 
@@ -22,7 +23,7 @@ class DossiersPredefinisTests(ExpenseTestCase):
             "/api/projects/",
             {
                 "country": self.togo.pk, "name": "Congrès de Kara",
-                "kind": ProjectKind.CONGRES, "team": self.team.pk, **charge,
+                "kind": types_de_projets.CONGRES, "team": self.team.pk, **charge,
             },
             format="json",
         )
@@ -38,7 +39,7 @@ class DossiersPredefinisTests(ExpenseTestCase):
         self.assertEqual(reponse.status_code, status.HTTP_201_CREATED, reponse.data)
         projet = Project.objects.get(pk=reponse.data["id"])
         dossiers = list(projet.dossiers.order_by("number"))
-        types = self.types_du(ProjectKind.CONGRES)
+        types = self.types_du(types_de_projets.CONGRES)
         self.assertTrue(types)
         self.assertEqual([d.label for d in dossiers], types)
         self.assertEqual([d.kind.name for d in dossiers], types)
@@ -63,21 +64,21 @@ class DossiersPredefinisTests(ExpenseTestCase):
         self.assertEqual(reponse.data["dossier_count"], len(dossiers))
 
     def test_le_type_de_projet_choisit_ses_dossiers(self):
-        voyage = self.creer(name="Tournée du Nord", kind=ProjectKind.VOYAGE)
+        voyage = self.creer(name="Tournée du Nord", kind=types_de_projets.VOYAGE)
 
         self.assertEqual(voyage.status_code, status.HTTP_201_CREATED, voyage.data)
         self.assertEqual(
             list(Dossier.objects.filter(project_id=voyage.data["id"]).order_by("number")
                  .values_list("label", flat=True)),
-            self.types_du(ProjectKind.VOYAGE),
+            self.types_du(types_de_projets.VOYAGE),
         )
 
     def test_un_projet_qui_ne_recevrait_aucun_dossier_ne_se_cree_pas(self):
         """Le pays n'aurait aucun moyen d'en ouvrir : ni projet inactif, ni
         type de projet sans type de dossier actif."""
-        DossierKind.objects.filter(project_kind=ProjectKind.SOUTIEN_FINANCIER).update(is_active=False)
+        DossierKind.objects.filter(project_kind=types_de_projets.SOUTIEN_FINANCIER).update(is_active=False)
 
-        sans_type_actif = self.creer(kind=ProjectKind.SOUTIEN_FINANCIER)
+        sans_type_actif = self.creer(kind=types_de_projets.SOUTIEN_FINANCIER)
         inactif = self.creer(name="Congrès en sommeil", is_active=False)
 
         for reponse in (sans_type_actif, inactif):
@@ -90,7 +91,7 @@ class DossiersPredefinisTests(ExpenseTestCase):
         """Un type ajouté depuis : le projet n'est pas complété d'office,
         le siège le complète à la demande ; rien n'est ouvert deux fois."""
         projet_id = self.creer().data["id"]
-        badges = DossierKind.objects.create(project_kind=ProjectKind.CONGRES, name="Badges")
+        badges = DossierKind.objects.create(project_kind_id=types_de_projets.CONGRES, name="Badges")
         self.assertFalse(Dossier.objects.filter(project_id=projet_id, kind=badges).exists())
 
         refus_pays = self.client.post(f"/api/projects/{projet_id}/completer/")
@@ -106,7 +107,7 @@ class DossiersPredefinisTests(ExpenseTestCase):
         self.assertEqual(ajoute.created_by, "")
         self.assertEqual(
             Dossier.objects.filter(project_id=projet_id).count(),
-            len(self.types_du(ProjectKind.CONGRES)),
+            len(self.types_du(types_de_projets.CONGRES)),
         )
 
     def test_le_dossier_ajoute_reste_lisible_par_l_equipe_du_projet(self):
@@ -114,7 +115,7 @@ class DossiersPredefinisTests(ExpenseTestCase):
         sans elle, le manager rattaché à cette équipe ne le voyait pas."""
         cloisonne = make_user("equipe.togo", Role.MANAGER, [self.togo], teams=[self.team])
         projet_id = self.creer(cloisonne).data["id"]
-        badges = DossierKind.objects.create(project_kind=ProjectKind.CONGRES, name="Badges")
+        badges = DossierKind.objects.create(project_kind_id=types_de_projets.CONGRES, name="Badges")
         self.login(self.controller)
 
         reponse = self.client.post(f"/api/projects/{projet_id}/completer/")
@@ -134,7 +135,7 @@ class DossiersPredefinisTests(ExpenseTestCase):
         Dossier.objects.filter(pk=Dossier.objects.filter(project_id=projet_id).first().pk).update(
             team=autre
         )
-        badges = DossierKind.objects.create(project_kind=ProjectKind.CONGRES, name="Badges")
+        badges = DossierKind.objects.create(project_kind_id=types_de_projets.CONGRES, name="Badges")
         self.login(self.controller)
 
         self.client.post(f"/api/projects/{projet_id}/completer/")
@@ -191,7 +192,7 @@ class DossiersPredefinisTests(ExpenseTestCase):
         self.login(cloisonne)
         self.assertEqual(
             self.client.get("/api/dossiers/", {"project": dans_l_equipe.data["id"]}).data["count"],
-            len(self.types_du(ProjectKind.CONGRES)),
+            len(self.types_du(types_de_projets.CONGRES)),
         )
 
     def test_le_siege_ne_cree_pas_de_projet(self):
@@ -227,20 +228,20 @@ class DossiersPredefinisTests(ExpenseTestCase):
 
         reponse = self.client.patch(
             f"/api/projects/{a_typer.pk}/",
-            {"kind": ProjectKind.SOUTIEN_FINANCIER, "motif": "Typage de reprise"},
+            {"kind": types_de_projets.SOUTIEN_FINANCIER, "motif": "Typage de reprise"},
             format="json",
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_200_OK, reponse.data)
         dossiers = Dossier.objects.filter(project=a_typer)
         self.assertEqual(
-            list(dossiers.values_list("label", flat=True)), self.types_du(ProjectKind.SOUTIEN_FINANCIER)
+            list(dossiers.values_list("label", flat=True)), self.types_du(types_de_projets.SOUTIEN_FINANCIER)
         )
         self.assertEqual(set(dossiers.values_list("created_by", flat=True)), {""})
 
     def test_le_projet_et_le_type_ne_changent_plus(self):
         autre = Project.objects.create(
-            country=self.togo, name="Autre congrès", kind=ProjectKind.CONGRES, reference="TG-P-X",
+            country=self.togo, name="Autre congrès", kind_id=types_de_projets.CONGRES, reference="TG-P-X",
         )
         self.dossier.created_by = self.owner.username
         self.dossier.save()
@@ -293,7 +294,7 @@ class LignesQuiSuiventLeProjetTests(ExpenseTestCase):
 
     def test_un_autre_projet_est_refuse(self):
         autre = Project.objects.create(
-            country=self.togo, name="Autre", kind=ProjectKind.CONGRES, reference="TG-P-Y",
+            country=self.togo, name="Autre", kind_id=types_de_projets.CONGRES, reference="TG-P-Y",
         )
         self.login(self.owner)
 

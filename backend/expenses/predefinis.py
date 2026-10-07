@@ -73,9 +73,10 @@ def creer_les_dossiers_predefinis(projet, *, auteur="", equipe=None, trace):
             if equipe is EQUIPE_DU_PROJET
             else getattr(equipe, "pk", equipe)
         )
+        # Dans l'ordre de la configuration : il fixe les numéros (``D001``…).
         for kind in DossierKind.objects.filter(
-            project_kind=projet.kind, is_active=True
-        ).exclude(pk__in=deja):
+            project_kind_id=projet.kind_id, is_active=True
+        ).exclude(pk__in=deja).order_by("ordre", "name", "pk"):
             dossier = creer_dossier(Dossier(
                 project=projet, kind=kind, label=kind.name, country=projet.country,
                 team_id=equipe_id, date=jour, status=Status.DRAFT, created_by=auteur,

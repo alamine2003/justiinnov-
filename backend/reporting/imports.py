@@ -672,6 +672,7 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
     resultat = _resultat(
         len(valides), erreurs, dry_run,
         equipes_creees=len(equipes_a_creer), managers_crees=len(managers_a_creer),
+        dossier=cible,
     )
     if erreurs or dry_run:
         return resultat
@@ -683,7 +684,7 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
     except _LigneEnErreur as exc:
         # La transaction est défaite : rien n'a été écrit, comme pour une
         # erreur relevée à la validation.
-        return _resultat(0, [_erreur(exc.ligne, exc.motif)], dry_run)
+        return _resultat(0, [_erreur(exc.ligne, exc.motif)], dry_run, dossier=cible)
     return resultat
 
 
@@ -776,8 +777,11 @@ def _verrouiller_le_dossier(dossier, ligne):
     return verrouille
 
 
-def _resultat(lignes, erreurs, dry_run, *, equipes_creees=0, managers_crees=0):
+def _resultat(lignes, erreurs, dry_run, *, equipes_creees=0, managers_crees=0, dossier=None):
+    """La réponse de l'import. ``dossier`` est le dossier prédéfini qui reçoit
+    les lignes, dès qu'il est trouvé : l'écran en propose l'ouverture."""
     return {
+        "dossier": getattr(dossier, "pk", None),
         "lignes_creees": lignes,
         "equipes_creees": equipes_creees,
         "managers_crees": managers_crees,

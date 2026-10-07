@@ -6,13 +6,13 @@ import { CountriesSection } from "@/pages/configuration/countries-section"
 import { UsersSection } from "@/pages/configuration/users-section"
 import { GeneralSection } from "@/pages/configuration/general-section"
 import { PermissionsSection } from "@/pages/configuration/permissions-section"
-import { DossierKindsSection } from "@/pages/configuration/dossier-kinds-section"
+import { ProjectTypesSection } from "@/pages/configuration/project-types-section"
 
 /**
  * Identifiants d'onglets : valeurs techniques, reprises dans l'URL
  * (`?onglet=utilisateurs`). Seuls les libellés sont traduits.
  */
-const ONGLETS = ["general", "utilisateurs", "pays", "types-de-dossiers", "permissions"] as const
+const ONGLETS = ["general", "utilisateurs", "pays", "types-de-projets", "permissions"] as const
 
 type Onglet = (typeof ONGLETS)[number]
 
@@ -27,7 +27,10 @@ export function ConfigurationPage() {
   // Une valeur inconnue — `?onglet=xyz`, ou l'ancien `?onglet=import` —
   // laissait une barre d'onglets sans onglet actif et aucun contenu : une
   // page blanche sans explication.
-  const demande = params.get("onglet")
+  // « Types de dossiers » est devenu « Types de projets » (décision 119) :
+  // un lien enregistré vers l'ancien onglet ouvre le nouveau, qui les porte.
+  const brut = params.get("onglet")
+  const demande = brut === "types-de-dossiers" ? "types-de-projets" : brut
   const onglet = demande && onglets.includes(demande as Onglet) ? demande : "general"
 
   return (
@@ -61,8 +64,8 @@ export function ConfigurationPage() {
         <TabsContent value="pays" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
           <CountriesSection />
         </TabsContent>
-        <TabsContent value="types-de-dossiers" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
-          <DossierKindsSection />
+        <TabsContent value="types-de-projets" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
+          <ProjectTypesSection />
         </TabsContent>
         <TabsContent value="permissions" className="defile -mx-1 mt-4 px-1 pb-1 court:mt-2">
           <PermissionsSection />

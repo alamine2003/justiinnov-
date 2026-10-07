@@ -2,10 +2,11 @@
 
 from decimal import Decimal
 
+from django.db.models import Max
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
-from rest_framework.validators import UniqueTogetherValidator
+from rest_framework.validators import UniqueTogetherValidator, UniqueValidator
 
 from .models import (
     ChangeLog,
@@ -16,6 +17,7 @@ from .models import (
     Manager,
     MarketingCategory,
     Project,
+    ProjectType,
     Team,
     WorkflowConfiguration,
 )
@@ -174,7 +176,12 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
 
     country_name = serializers.CharField(source="country.name", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
-    kind_display = serializers.CharField(source="get_kind_display", read_only=True)
+    #: Le type par son code (décision 119) : ``congres``, ``voyage``…
+    kind = serializers.SlugRelatedField(
+        slug_field="code", queryset=ProjectType.objects.all(), required=False,
+        allow_null=True, label=_("Type de projet"),
+    )
+    kind_display = serializers.SerializerMethodField()
     a_typer = serializers.SerializerMethodField()
     dossier_count = serializers.IntegerField(read_only=True, default=0)
     accepte_des_dossiers = serializers.BooleanField(read_only=True)
@@ -211,18 +218,27 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
             )
         ]
 
+    @extend_schema_field(serializers.CharField())
+    def get_kind_display(self, project):
+        """Le nom du type dans la langue du lecteur, vide pour un projet sans type."""
+        return project.kind.libelle if project.kind else ""
+
     @extend_schema_field(serializers.BooleanField())
     def get_a_typer(self, project):
         """Un projet d'avant la 2.0 que le siège n'a pas encore typé."""
-        return not project.kind and not project.is_historical
+        return not project.kind_id and not project.is_historical
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
         instance = self.instance
         if instance is None:
             if not attrs.get("kind"):
+                raise serializers.ValidationError({"kind": _("Indiquez le type du projet.")})
+            # Un type retiré de la liste n'ouvre plus de projet ; ceux qui
+            # l'ont déjà le gardent (décision 119).
+            if not attrs["kind"].is_active:
                 raise serializers.ValidationError(
-                    {"kind": _("Indiquez le type du projet : congrès, voyage ou soutien financier.")}
+                    {"kind": _("Ce type de projet est désactivé : il n'ouvre plus de projet.")}
                 )
             equipe = attrs.get("team")
             if equipe is not None and equipe.country_id != attrs["country"].pk:
@@ -252,6 +268,70 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
                 )
             if not attrs["kind"]:
                 raise serializers.ValidationError({"kind": _("Indiquez le type du projet.")})
+            if not attrs["kind"].is_active:
+                raise serializers.ValidationError(
+                    {"kind": _("Ce type de projet est désactivé : il n'ouvre plus de projet.")}
+                )
+        return attrs
+
+
+class ProjectTypeSerializer(serializers.ModelSerializer):
+    """Un type de projet de la liste commune (décision 119).
+
+    Le ``code`` est calculé du nom à la création et ne se saisit jamais :
+    projets et types de dossiers le portent. Toute modification exige un
+    motif (décision 109). ``libelle`` est le nom dans la langue du lecteur.
+    """
+
+    libelle = serializers.CharField(read_only=True)
+    #: Nombre de types de dossiers actifs : un type sans aucun n'ouvre pas
+    #: de projet (décision 106), la configuration le signale.
+    dossier_kinds_actifs = serializers.IntegerField(read_only=True, default=0)
+    #: Nombre de projets du type, toutes filiales : servi au siège seul,
+    #: nul pour un compte de pays (``ProjectTypeViewSet.get_queryset``).
+    projets = serializers.IntegerField(read_only=True, allow_null=True, default=None)
+    motif = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, max_length=1000,
+        label=_("Motif"),
+    )
+
+    class Meta:
+        model = ProjectType
+        fields = [
+            "id", "code", "name", "name_en", "libelle", "description", "ordre",
+            "is_active", "dossier_kinds_actifs", "projets", "created_at", "updated_at",
+            "motif",
+        ]
+        read_only_fields = ["code"]
+        extra_kwargs = {
+            "name": {"validators": [
+                UniqueValidator(
+                    queryset=ProjectType.objects.all(),
+                    message=_("Ce type de projet existe déjà."),
+                )
+            ]},
+        }
+
+    def validate_name(self, valeur):
+        valeur = valeur.strip()
+        if not valeur:
+            raise serializers.ValidationError(_("Indiquez le nom du type de projet."))
+        return valeur
+
+    def create(self, validated_data):
+        # Sans ordre donné, le nouveau type va après les autres : à 0, il
+        # passait devant « Congrès ».
+        if "ordre" not in validated_data:
+            dernier = ProjectType.objects.aggregate(dernier=Max("ordre"))["dernier"]
+            validated_data["ordre"] = (dernier or 0) + 1
+        return super().create(validated_data)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if self.instance is not None and not (attrs.get("motif") or "").strip():
+            raise serializers.ValidationError(
+                {"motif": _("Indiquez le motif de la modification : il reste au journal.")}
+            )
         return attrs
 
 
@@ -263,8 +343,11 @@ class DossierKindSerializer(serializers.ModelSerializer):
     sous un type devenu celui d'un voyage.
     """
 
+    project_kind = serializers.SlugRelatedField(
+        slug_field="code", queryset=ProjectType.objects.all(), label=_("Type de projet"),
+    )
     project_kind_display = serializers.CharField(
-        source="get_project_kind_display", read_only=True
+        source="project_kind.libelle", read_only=True
     )
     #: Pourquoi le type change : exigé à chaque modification (décision 109).
     motif = serializers.CharField(
@@ -276,7 +359,7 @@ class DossierKindSerializer(serializers.ModelSerializer):
         model = DossierKind
         fields = [
             "id", "project_kind", "project_kind_display", "name", "description",
-            "is_active", "created_at", "updated_at", "motif",
+            "ordre", "is_active", "created_at", "updated_at", "motif",
         ]
         validators = [
             UniqueTogetherValidator(
@@ -285,6 +368,16 @@ class DossierKindSerializer(serializers.ModelSerializer):
                 message=_("Ce type de dossier existe déjà pour ce type de projet."),
             )
         ]
+
+    def create(self, validated_data):
+        # Sans ordre donné, le nouveau type de dossier va après ceux de son
+        # type de projet : à 0, il devenait le D001 des projets suivants.
+        if "ordre" not in validated_data:
+            dernier = DossierKind.objects.filter(
+                project_kind=validated_data["project_kind"]
+            ).aggregate(dernier=Max("ordre"))["dernier"]
+            validated_data["ordre"] = (dernier or 0) + 1
+        return super().create(validated_data)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)

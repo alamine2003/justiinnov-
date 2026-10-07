@@ -2,7 +2,8 @@
 
 from rest_framework import status
 
-from core.models import ChangeLog, DossierKind, Project, ProjectKind
+from core import types_de_projets
+from core.models import ChangeLog, DossierKind, Project
 from expenses.tests.base import ExpenseTestCase
 from expenses.tests.test_workflow import configurer
 
@@ -95,7 +96,7 @@ class ProjetsTests(ExpenseTestCase):
         )
 
         self.projet.refresh_from_db()
-        self.assertEqual(self.projet.kind, ProjectKind.CONGRES)
+        self.assertEqual(self.projet.kind_id, types_de_projets.CONGRES)
         self.assertTrue(self.projet.is_active)
 
     def test_le_siege_ne_renomme_pas_un_projet_par_cette_route(self):
@@ -232,7 +233,7 @@ class ProjetsTests(ExpenseTestCase):
 
         self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
         self.projet.refresh_from_db()
-        self.assertEqual(self.projet.kind, ProjectKind.CONGRES)
+        self.assertEqual(self.projet.kind_id, types_de_projets.CONGRES)
 
     def test_un_projet_a_typer_se_type_une_fois(self):
         ancien = Project.objects.create(

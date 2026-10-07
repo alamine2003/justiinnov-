@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest"
 
-import { horodatage, sousTitres } from "./scene.ts"
+import { espacesFines, horodatage, sousTitres } from "./scene.ts"
 
 describe("horodatage (WebVTT, hh:mm:ss.mmm)", () => {
   it("écrit zéro sur toute sa largeur", () => {
@@ -85,5 +85,25 @@ describe("sousTitres (fichier WebVTT)", () => {
 
   it("se réduit à l'en-tête sans repère", () => {
     expect(sousTitres([], 5_000)).toBe("WEBVTT\n\n")
+  })
+})
+
+describe("espacesFines (typographie française des sous-titres)", () => {
+  const FINE = "\u202f"
+
+  it("lie « : », « ; », « ? » et « ! » au mot qui précède", () => {
+    expect(espacesFines("Choisissez son type : il fixe ; prêt ? oui !")).toBe(
+      `Choisissez son type${FINE}: il fixe${FINE}; prêt${FINE}? oui${FINE}!`,
+    )
+  })
+
+  it("garde les guillemets français collés à leur texte", () => {
+    expect(espacesFines("Cliquez sur « Créer ».")).toBe(`Cliquez sur «${FINE}Créer${FINE}».`)
+  })
+
+  it("remplace une espace insécable ordinaire, ne double rien, ne touche pas une heure", () => {
+    expect(espacesFines("type\u00a0: oui")).toBe(`type${FINE}: oui`)
+    expect(espacesFines(espacesFines("type : oui"))).toBe(`type${FINE}: oui`)
+    expect(espacesFines("à 10:30")).toBe("à 10:30")
   })
 })

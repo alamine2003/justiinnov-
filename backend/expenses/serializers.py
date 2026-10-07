@@ -952,9 +952,9 @@ class DossierSerializer(serializers.ModelSerializer):
     project_reference = serializers.CharField(
         source="project.reference", read_only=True, allow_null=True
     )
-    project_kind = serializers.CharField(source="project.kind", read_only=True, allow_null=True)
+    project_kind = serializers.CharField(source="project.kind_id", read_only=True, allow_null=True)
     project_kind_display = serializers.CharField(
-        source="project.get_kind_display", read_only=True, allow_null=True
+        source="project.kind.libelle", read_only=True, allow_null=True
     )
     project_is_historical = serializers.BooleanField(
         source="project.is_historical", read_only=True, allow_null=True

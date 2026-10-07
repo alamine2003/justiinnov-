@@ -14,7 +14,8 @@ from rest_framework import status
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget, ExchangeRate
-from core.models import Country, DossierKind, Project, ProjectKind, Team
+from core import types_de_projets
+from core.models import Country, DossierKind, Project, Team
 from core.numerotation import creer_projet
 from expenses.models import AuditLog, Dossier, Expense, Proof
 from expenses.tests.base import ExpenseTestCase, in_memory_storage
@@ -227,10 +228,10 @@ class BreakdownTests(DashboardTestCase):
         """Le projet d'une ligne est celui de son dossier (décision 102) ; la
         répartition se lit aussi par type de projet et par type de dossier."""
         projet = creer_projet(Project(
-            country=self.togo, name="Campagne T1", kind=ProjectKind.VOYAGE,
+            country=self.togo, name="Campagne T1", kind_id=types_de_projets.VOYAGE,
         ))
         billets = DossierKind.objects.get_or_create(
-            project_kind=ProjectKind.VOYAGE, name="Billets"
+            project_kind_id=types_de_projets.VOYAGE, name="Billets"
         )[0]
         dossier = Dossier.objects.create(
             number="N-VOYAGE", label="Billets", country=self.togo, project=projet,

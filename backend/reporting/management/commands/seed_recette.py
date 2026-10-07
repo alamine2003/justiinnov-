@@ -79,7 +79,8 @@ from budget import transitions as enveloppes
 from budget.aggregates import convert
 from budget.models import Budget, ExchangeRate, OverrunPolicy
 from core.journal import Trace
-from core.models import Country, Manager, Project, ProjectKind, Team
+from core import types_de_projets
+from core.models import Country, Manager, Project, Team
 from core.numerotation import creer_projet
 from core.regles import HorsPerimetre, PermissionRefusee, RegleViolee
 from core.requetes import reset_current_request, set_current_request
@@ -148,9 +149,9 @@ SIEGE = {
 #: dossiers (0 ou 1), auteur — manager du pays ou de l'équipe. Chacun naît
 #: avec un dossier par type de dossier de son type (décision 106).
 PROJETS = {
-    "congres": ("Congrès régional de pédiatrie", ProjectKind.CONGRES, 0, "pays"),
-    "voyage": ("Tournée des officines", ProjectKind.VOYAGE, 1, "pays"),
-    "soutien": ("Soutien à la pharmacie centrale", ProjectKind.SOUTIEN_FINANCIER, 0, "equipe"),
+    "congres": ("Congrès régional de pédiatrie", types_de_projets.CONGRES, 0, "pays"),
+    "voyage": ("Tournée des officines", types_de_projets.VOYAGE, 1, "pays"),
+    "soutien": ("Soutien à la pharmacie centrale", types_de_projets.SOUTIEN_FINANCIER, 0, "equipe"),
 }
 
 #: Les huit dossiers remplis d'un pays : rang (sa référence d'origine,
@@ -329,7 +330,7 @@ class Command(BaseCommand):
         for cle, (titre, kind, idx_equipe, auteur) in PROJETS.items():
             compte = self.comptes[f"{cc}.{'equipe' if auteur == 'equipe' else 'manager'}"]
             projet = creer_projet(Project(
-                country=country, name=f"{titre} — {country.name}", kind=kind,
+                country=country, name=f"{titre} — {country.name}", kind_id=kind,
                 status="active", budget=self._local(5_000_000, country),
             ))
             creer_les_dossiers_predefinis(

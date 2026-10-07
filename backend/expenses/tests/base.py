@@ -11,7 +11,8 @@ from rest_framework.test import APITestCase
 from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import Budget
-from core.models import Country, DossierKind, Manager, Project, ProjectKind, Team
+from core import types_de_projets
+from core.models import Country, DossierKind, Manager, Project, Team
 from core.numerotation import creer_projet
 from expenses.models import Dossier, Expense
 from expenses.services import resolve_budget
@@ -59,13 +60,13 @@ class ExpenseTestCase(APITestCase):
         # de dossier (décision 102). ``get_or_create`` : la liste de départ
         # vient d'une migration, et un ``TransactionTestCase`` vide les tables.
         cls.stands, _ = DossierKind.objects.get_or_create(
-            project_kind=ProjectKind.CONGRES, name="Stands"
+            project_kind_id=types_de_projets.CONGRES, name="Stands"
         )
         cls.projet = creer_projet(Project(
-            country=cls.togo, name="Congrès de Lomé", kind=ProjectKind.CONGRES,
+            country=cls.togo, name="Congrès de Lomé", kind_id=types_de_projets.CONGRES,
         ))
         cls.projet_ivoire = creer_projet(Project(
-            country=cls.ivoire, name="Congrès d'Abidjan", kind=ProjectKind.CONGRES,
+            country=cls.ivoire, name="Congrès d'Abidjan", kind_id=types_de_projets.CONGRES,
         ))
         cls.manager = Manager.objects.create(name="Kodjo Mensah")
 

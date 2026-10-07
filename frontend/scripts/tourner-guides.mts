@@ -41,7 +41,7 @@ import { type IdDeGuide, type LangueDeGuide } from "../src/lib/guides.ts"
 import { exigerUneCibleJetable } from "./guides/cible.ts"
 import { classeurDuGuide, dateDeSaisie, jourDuTournage, verifierLImport } from "./guides/classeur.ts"
 import { controlerLesImages, pourcentage } from "./guides/controle-images.ts"
-import { POINTEUR, Scene, sousTitres } from "./guides/scene.ts"
+import { POINTEUR, Scene, espacesFines, sousTitres } from "./guides/scene.ts"
 import {
   echecDuGeste,
   ffmpegInutilisable,
@@ -100,10 +100,16 @@ async function verifierFfmpeg() {
   if (!proposeLibvpx(sortie)) throw ffmpegInutilisable(chemin, designe, "il ne propose pas l'encodeur libvpx (VP8)")
 }
 
-/** Réencode une prise : 15 images par seconde suffisent à un écran d'application. */
-async function reencoder(source: string, cible: string) {
+/**
+ * Réencode une prise : 15 images par seconde suffisent à un écran
+ * d'application. La prise s'arrête une seconde après la fin du dernier
+ * sous-titre (`duree`, en millisecondes) : celle de « Soumettre un
+ * dossier » durait 4 s de plus que ses sous-titres, un écran figé sans
+ * texte à la fin de la vidéo.
+ */
+async function reencoder(source: string, cible: string, duree: number) {
   await promisify(execFile)(ffmpeg(), [
-    "-hide_banner", "-loglevel", "error", "-y", "-i", source,
+    "-hide_banner", "-loglevel", "error", "-y", "-i", source, "-t", (duree / 1000).toFixed(3),
     "-c:v", "libvpx", "-crf", "12", "-b:v", "300k", "-deadline", "good", "-cpu-used", "1",
     "-r", "15", "-an", cible,
   ])
@@ -145,6 +151,8 @@ const REFERENTIEL = {
 const DONNEES = {
   fr: {
     projet: `Congrès de cardiologie ${ANNEE}`,
+    /** Le type d'origine, sous le libellé que le serveur sert en français (`core.0018`). */
+    typeDeProjet: "Congrès",
     ligne: "Pause-café du congrès",
     lieu: "Lomé",
     montant: "85000",
@@ -155,6 +163,7 @@ const DONNEES = {
   },
   en: {
     projet: `Cardiology congress ${ANNEE}`,
+    typeDeProjet: "Congress",
     ligne: "Congress coffee break",
     lieu: "Lomé",
     montant: "85000",
@@ -176,88 +185,96 @@ type Donnees = (typeof DONNEES)[LangueDeGuide]
 const LEGENDES: Record<IdDeGuide, Record<LangueDeGuide, (t: T) => string[]>> = {
   "ouvrir-un-projet": {
     fr: (t) => [
-      "Un projet regroupe les dépenses d'un congrès, d'un voyage ou d'un soutien financier.",
+      "Un projet regroupe les dépenses d'une opération : un congrès, un voyage…",
       `Cliquez sur « ${t("projets.liste.nouveau")} ».`,
       "Donnez-lui un nom que vos collègues reconnaîtront.",
       "Choisissez son type : il fixe les dossiers que le projet reçoit d'office.",
-      "Choisissez l'équipe : ses dossiers et leurs lignes la porteront.",
+      "Choisissez l'équipe : chaque dossier du projet, et ses lignes, la porteront.",
       `Cliquez sur « ${t("commun.creer")} ».`,
-      "Le projet est ouvert : il a sa référence et ses dossiers, un par type.",
+      "Le projet est ouvert : il a sa référence et un dossier par type.",
     ],
     en: (t) => [
-      "A project groups the spending of a congress, a trip or financial support.",
+      "A project groups the expenses of one operation: a congress, a trip…",
       `Click “${t("projets.liste.nouveau")}”.`,
       "Give it a name your colleagues will recognise.",
-      "Choose its type: it sets the files the project receives automatically.",
-      "Choose the team: its files and their lines will carry it.",
+      "Choose its type: it sets the dossiers the project receives automatically.",
+      "Choose the team: every dossier of the project, and its lines, will carry it.",
       `Click “${t("commun.creer")}”.`,
-      "The project is open: it has its reference and its files, one per type.",
+      "The project is open: it has its reference and one dossier per type.",
     ],
   },
   "saisir-une-ligne": {
     fr: (t) => [
-      "Ouvrez le dossier du bon type, dans un projet que vous avez ouvert : vous seul y ajoutez des lignes.",
+      "Ouvrez le dossier du bon type, dans un projet que vous avez ouvert.",
       `Cliquez sur « ${t("commun.ajouter")} » pour saisir une dépense.`,
       "Décrivez la dépense : ce qui a été payé, quand et où.",
-      "Indiquez le montant dans la devise du pays (payé dans une autre devise, il se convertit).",
-      "Équipe et manager responsable sont exigés pour soumettre : l'équipe vient du dossier, choisissez le manager.",
-      `Cliquez sur « ${t("commun.enregistrer")} ». La ligne reste un brouillon, modifiable, jusqu'à la soumission.`,
+      `Montant en devise du pays ; sinon, ouvrez « ${t("depenses.formulaire.autre_devise")} ».`,
+      "Équipe et manager responsable sont exigés pour soumettre : choisissez le manager.",
+      `Cliquez sur « ${t("commun.enregistrer")} » : la ligne reste un brouillon que vous seul modifiez.`,
     ],
     en: (t) => [
-      "Open the file of the right type, in a project you opened yourself: only you can add lines to it.",
+      "Open the dossier of the right type, in a project you opened yourself.",
       `Click “${t("commun.ajouter")}” to enter an expense.`,
       "Describe the expense: what was paid, when and where.",
-      "Enter the amount in the country's currency (if paid in another currency, it is converted).",
-      "A team and a responsible manager are required to submit: the team comes from the file, choose the manager.",
-      `Click “${t("commun.enregistrer")}”. The line stays a draft, still editable, until it is submitted.`,
+      `Amount in the country's currency; otherwise open “${t("depenses.formulaire.autre_devise")}”.`,
+      "A team and a responsible manager are required to submit: choose the manager.",
+      `Click “${t("commun.enregistrer")}”: the line stays a draft that only you can edit.`,
     ],
   },
   "joindre-une-piece": {
     fr: (t) => [
-      "Chaque ligne a sa pièce : le reçu, la facture ou le document qui prouve la dépense.",
-      "Déposez la pièce depuis sa ligne.",
+      "Ouvrez le dossier : chaque ligne y reçoit sa pièce, le reçu ou la facture.",
+      `Sur la ligne, cliquez sur « ${t("pieces.deposer")} ».`,
       "Choisissez le fichier : un PDF, une image ou un document.",
-      `Indiquez de quel type de pièce il s'agit, puis cliquez sur « ${t("pieces.deposer")} ».`,
+      `Choisissez le type de pièce, puis cliquez sur « ${t("pieces.deposer")} ».`,
       "La pièce est rangée sous sa ligne. Le siège la contrôlera.",
     ],
     en: (t) => [
-      "Each line has its document: the receipt, invoice or paper that proves the expense.",
-      "Upload the document from its line.",
-      "Choose it on your computer: a PDF, an image or a document.",
-      `Say what kind of document it is, then click “${t("pieces.deposer")}”.`,
-      "The document is filed under its line. Head office will review it.",
+      "Open the dossier: each line receives its document there, receipt or invoice.",
+      `On the line, click “${t("pieces.deposer")}”.`,
+      "Choose the file: a PDF, an image or a document.",
+      `Choose the type of document, then click “${t("pieces.deposer")}”.`,
+      "The document is filed under its line. Headquarters will review it.",
     ],
   },
   "soumettre-un-dossier": {
     fr: (t) => [
-      "Quand les dépenses du dossier sont complètes, avec leurs pièces, soumettez-le.",
-      `Cliquez sur « ${t("depenses.circuit.soumettre")} » : toutes les lignes partent avec le dossier.`,
-      "Le dossier est soumis : ses lignes ne se modifient plus, le siège les contrôle.",
-      "Une pièce oubliée se dépose encore depuis sa ligne, jusqu'à la clôture du dossier.",
+      "Ouvrez le dossier et relisez ses lignes : chacune doit avoir sa pièce.",
+      `« ${t("depenses.circuit.soumettre")} » agit tout de suite, sans confirmation ni retour en arrière.`,
+      "Vos lignes partent avec le dossier ; un brouillon d'un collègue bloque l'envoi.",
+      `Cliquez sur « ${t("depenses.circuit.soumettre")} ».`,
+      "Le dossier est soumis : ses lignes ne changent plus, seul le siège peut le rouvrir.",
+      "Une ligne sans pièce part avec un avertissement ; le dossier attend ses pièces.",
     ],
     en: (t) => [
-      "When the file's expenses are complete, with their documents, submit it.",
-      `Click “${t("depenses.circuit.soumettre")}”: every line goes with the file.`,
-      "The file is submitted: its lines can no longer be changed, head office reviews them.",
-      "A forgotten document can still be uploaded from its line, until the file is closed.",
+      "Open the dossier and check its lines: each one needs its document.",
+      `“${t("depenses.circuit.soumettre")}” acts at once, with no confirmation and no way back.`,
+      "Your lines go with the dossier; a colleague's draft line blocks the submission.",
+      `Click “${t("depenses.circuit.soumettre")}”.`,
+      "The dossier is submitted: its lines are fixed; only headquarters can reopen it.",
+      "A line without a document goes with a warning; the dossier awaits its documents.",
     ],
   },
   "importer-un-classeur": {
     fr: (t) => [
-      "Vos dépenses sont déjà dans un classeur Excel ? Importez-le dans un dossier d'un projet que vous avez ouvert.",
-      "Choisissez le projet, puis le dossier qui recevra les lignes.",
-      "Choisissez le classeur. Colonnes exigées : N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.",
-      `Simulez d'abord (« ${t("dossiers.import.simuler")} ») : rien n'est écrit, vous voyez ce qui serait créé.`,
-      `Si la simulation ne signale aucune erreur, désactivez-la, puis cliquez sur « ${t("dossiers.import.importer")} ».`,
-      "Les lignes arrivent en brouillon dans le dossier. Joignez la pièce de chacune, soumettez ensuite le dossier.",
+      "Vos dépenses sont dans un classeur Excel ? Importez-les depuis la fiche du projet.",
+      `Cliquez sur « ${t("dossiers.import.bouton")} », puis choisissez le dossier qui recevra les lignes.`,
+      "Colonnes exigées : N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.",
+      "TEAM doit être l'équipe du dossier, et le dossier votre brouillon.",
+      "Simulez d'abord : rien n'est écrit, vous voyez ce qui serait créé.",
+      `Sans erreur, désactivez la simulation, puis cliquez sur « ${t("dossiers.import.importer")} ».`,
+      `Les lignes arrivent en brouillon : « ${t("dossiers.import.ouvrir_dossier")} » les montre.`,
+      "Joignez la pièce de chaque ligne ; soumettez ensuite le dossier.",
     ],
     en: (t) => [
-      "Are your expenses already in an Excel workbook? Import it into a file of a project you opened.",
-      "Choose the project, then the file that will receive the lines.",
-      "Choose the workbook. Required columns: N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.",
-      `Simulate first (“${t("dossiers.import.simuler")}”): nothing is written, you see what would be created.`,
-      `If the simulation reports no error, turn it off, then click “${t("dossiers.import.importer")}”.`,
-      "The lines arrive as drafts in the file. Attach each one's document, then submit the file.",
+      "Are your expenses in an Excel workbook? Import them from the project page.",
+      `Click “${t("dossiers.import.bouton")}”, then choose the dossier that will receive the lines.`,
+      "Required columns: N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.",
+      "TEAM must be the dossier's team, and the dossier your own draft.",
+      "Simulate first: nothing is written, you see what would be created.",
+      `With no error, turn the simulation off, then click “${t("dossiers.import.importer")}”.`,
+      `The lines arrive as drafts: “${t("dossiers.import.ouvrir_dossier")}” shows them.`,
+      "Upload each line's document; then submit the dossier.",
     ],
   },
 }
@@ -331,7 +348,8 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       await s.dire(2)
       await s.saisir(dialogue.locator("#projet-name"), d.projet)
       await s.dire(3)
-      await choisirParLibelle(s, dialogue.locator("#projet-kind"), t("libelles.projet_type.congres"), "Le type de projet")
+      // Le type est une donnée du serveur (décision 119), sous son libellé.
+      await choisirParLibelle(s, dialogue.locator("#projet-kind"), d.typeDeProjet, "Le type de projet")
       await s.dire(4)
       await choisirParLibelle(s, dialogue.locator("#projet-team"), REFERENTIEL.equipe, "L'équipe")
       await s.dire(5)
@@ -354,6 +372,12 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       await s.saisir(dialogue.locator("#exp-place"), d.lieu)
       await s.dire(3)
       await s.saisir(dialogue.locator("#exp-amount"), d.montant)
+      // Le panneau de la devise étrangère se montre, ouvert puis refermé :
+      // la dépense filmée est payée dans la devise du pays.
+      const autreDevise = dialogue.getByText(t("depenses.formulaire.autre_devise"), { exact: true })
+      await s.cliquer(autreDevise)
+      await s.attendre(1200)
+      await s.cliquer(autreDevise)
       await s.dire(4)
       await choisirParLibelle(s, dialogue.locator("#exp-owner"), REFERENTIEL.responsable, "Le manager responsable")
       await s.dire(5)
@@ -366,8 +390,8 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
   "joindre-une-piece": {
     depart: "/projets",
     async jouer(s, t, d) {
-      await ouvrirLeDossier(s, d, false)
       await s.dire(0)
+      await ouvrirLeDossier(s, d)
       await s.dire(1)
       await s.cliquer(s.page.getByRole("button", { name: t("pieces.ligne.deposer_aria", { ligne: d.ligne }) }))
       const dialogue = s.page.getByRole("dialog")
@@ -377,7 +401,7 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       await fichier.setInputFiles({ name: d.fichierRecu, mimeType: "application/pdf", buffer: await recu(s.page, d.recu) })
       await s.attendre(800)
       await s.dire(3)
-      await s.montrer(dialogue.locator("#proof-kind"))
+      await choisirParLibelle(s, dialogue.locator("#proof-kind"), t("libelles.piece_type.receipt"), "Le type de pièce")
       await s.cliquer(dialogue.getByRole("button", { name: t("pieces.deposer"), exact: true }))
       await dialogue.waitFor({ state: "hidden" })
       await s.page.getByText(d.fichierRecu).first().waitFor()
@@ -387,28 +411,33 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
   "soumettre-un-dossier": {
     depart: "/projets",
     async jouer(s, t, d) {
-      await ouvrirLeDossier(s, d, false)
       await s.dire(0)
-      await s.dire(1)
+      await ouvrirLeDossier(s, d)
       // « Soumettre » agit sans confirmation : le bouton disparaît quand le
       // dossier est soumis, et un refus du serveur le laisserait en place.
       const soumettre = s.page.getByRole("button", { name: t("depenses.circuit.soumettre"), exact: true })
+      await s.montrer(soumettre)
+      await s.dire(1)
+      await s.dire(2)
+      await s.relacher()
+      await s.dire(3)
       await s.cliquer(soumettre)
       await soumettre.waitFor({ state: "detached" })
-      await s.dire(2)
-      await s.dire(3)
+      await s.dire(4)
+      await s.dire(5)
     },
   },
   "importer-un-classeur": {
-    depart: "/dossiers/import",
+    depart: "/projets",
     async jouer(s, t, d) {
       await s.dire(0)
+      await s.cliquer(s.page.getByRole("link", { name: d.projet }).first())
+      await s.page.waitForLoadState("networkidle")
       await s.dire(1)
-      const projet = s.page.locator("#import-project")
-      const options = await projet.locator("option").allTextContents()
-      const libelle = options.find((o) => o.includes(d.projet))
-      if (!libelle) throw new Error(`Projet « ${d.projet} » absent de l'import.`)
-      await s.choisir(projet, { label: libelle })
+      // Le bouton de la fiche projet ouvre l'import, ce projet déjà choisi.
+      await s.cliquer(s.page.getByRole("button", { name: t("dossiers.import.bouton"), exact: true }))
+      await s.page.waitForURL(/\/dossiers\/import/)
+      await s.page.waitForLoadState("networkidle")
       await choisirParLibelle(s, s.page.locator("#import-kind"), REFERENTIEL.typeImporte, "Le type de dossier")
       await s.dire(2)
       const fichier = s.page.locator("#import-file")
@@ -424,6 +453,7 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       })
       await s.attendre(800)
       await s.dire(3)
+      await s.dire(4)
       const attendues = d.lignesImportees.length
       await importerEtVerifier(s, s.page.getByRole("button", { name: t("dossiers.import.simuler") }), {
         lignes: attendues,
@@ -431,14 +461,18 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       })
       await s.page.getByText(t("dossiers.import.resultat_simulation")).waitFor()
       await s.attendre(2000)
-      await s.dire(4)
+      await s.dire(5)
       await s.cliquer(s.page.getByRole("switch"))
       await importerEtVerifier(s, s.page.getByRole("button", { name: t("dossiers.import.importer"), exact: true }), {
         lignes: attendues,
         simulation: false,
       })
       await s.page.getByText(t("dossiers.import.resultat_import")).waitFor()
-      await s.dire(5)
+      await s.dire(6)
+      await s.cliquer(s.page.getByRole("button", { name: t("dossiers.import.ouvrir_dossier") }))
+      await s.page.waitForURL(/\/dossiers\/\d+$/)
+      await s.page.getByText(d.lignesImportees[0]).first().waitFor()
+      await s.dire(7)
     },
   },
 }
@@ -505,7 +539,9 @@ async function tourner(
     if (m.type() === "error") erreurs.push(m.text())
   })
   page.on("pageerror", (e) => erreurs.push(String(e)))
-  const scene = new Scene(page, LEGENDES[id][langue](t))
+  // Le français reçoit ses espaces fines insécables (« : », « ? », « »).
+  const legendes = LEGENDES[id][langue](t).map((texte) => (langue === "fr" ? espacesFines(texte) : texte))
+  const scene = new Scene(page, legendes)
   try {
     await page.goto(`${BASE}${TOURNAGES[id].depart}`, { waitUntil: "networkidle" })
     await TOURNAGES[id].jouer(scene, t, DONNEES[langue])
@@ -521,7 +557,7 @@ async function tourner(
   const video = page.video()
   if (!video) throw new Error(`Aucune vidéo pour ${id}.`)
   const webm = path.join(brouillon, `${id}.webm`)
-  await reencoder(await video.path(), webm)
+  await reencoder(await video.path(), webm, fin + 1000)
   // La vidéo telle qu'elle sera servie, contre ce que la page montrait :
   // lève si l'enregistrement a perdu des images sous un sous-titre.
   const ecarts = await controlerLesImages({

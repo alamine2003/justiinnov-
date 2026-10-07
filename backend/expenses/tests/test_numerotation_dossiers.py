@@ -5,7 +5,8 @@ from datetime import date
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from core.models import Country, DossierKind, Project, ProjectKind
+from core import types_de_projets
+from core.models import Country, DossierKind, Project
 from core.numerotation import creer_projet
 from expenses.models import Dossier
 from expenses.numerotation import creer_dossier
@@ -17,11 +18,11 @@ class NumerotationDesDossiersTests(TestCase):
         cls.togo = Country.objects.create(
             name="Togo", code="TG", currency="XOF", timezone="Africa/Lome",
         )
-        cls.stands = DossierKind.objects.get(project_kind=ProjectKind.CONGRES, name="Stands")
-        cls.t_shirts = DossierKind.objects.get(project_kind=ProjectKind.CONGRES, name="T-shirts")
+        cls.stands = DossierKind.objects.get(project_kind=types_de_projets.CONGRES, name="Stands")
+        cls.t_shirts = DossierKind.objects.get(project_kind=types_de_projets.CONGRES, name="T-shirts")
 
     def projet(self, nom):
-        return creer_projet(Project(country=self.togo, name=nom, kind=ProjectKind.CONGRES))
+        return creer_projet(Project(country=self.togo, name=nom, kind_id=types_de_projets.CONGRES))
 
     def dossier(self, projet, titre="Stands", kind=None, predefini=False):
         return creer_dossier(Dossier(

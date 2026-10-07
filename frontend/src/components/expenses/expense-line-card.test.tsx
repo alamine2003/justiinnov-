@@ -67,4 +67,14 @@ describe("CarteDeLigne — le justificatif de la ligne (décision 107)", () => {
     // Nommé par sa ligne : chaque carte a le sien.
     expect(screen.getByRole("button", { name: "Déposer la pièce de « Taxi »" })).toBeInTheDocument()
   })
+
+  it("nomme le dépôt d'une pièce de plus par son texte visible (WCAG 2.5.3)", () => {
+    afficher(ligne({ has_proof: true, allowed_actions: ["upload"] as Expense["allowed_actions"] }), [piece])
+
+    // Le bouton dit « Déposer une autre pièce » : son nom accessible le
+    // reprend, au lieu de « Déposer la pièce de… », qu'un utilisateur de
+    // commande vocale ne pouvait pas prononcer en lisant l'écran.
+    const bouton = screen.getByRole("button", { name: "Déposer une autre pièce pour « Taxi »" })
+    expect(bouton).toHaveTextContent("Déposer une autre pièce")
+  })
 })

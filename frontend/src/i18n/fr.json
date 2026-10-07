@@ -231,11 +231,6 @@
       "fr": "Français",
       "en": "English"
     },
-    "projet_type": {
-      "congres": "Congrès",
-      "voyage": "Voyage",
-      "soutien_financier": "Soutien financier"
-    },
     "historique_action": {
       "created": "Création",
       "updated": "Modification",
@@ -265,7 +260,8 @@
       "exchange_rate": "Taux de change",
       "cost_center": "Centres de coûts",
       "expense_title": "Intitulés de dépenses",
-      "marketing_category": "Catégories marketing"
+      "marketing_category": "Catégories marketing",
+      "project_type": "Types de projets"
     }
   },
   "layout": {
@@ -455,7 +451,7 @@
       "fichier": "Fichier",
       "fichier_aide": "Export des dépenses ou classeur historique, au format .xlsx.",
       "fichier_requis": "Choisissez un classeur .xlsx.",
-      "simulation": "Simulation (dry run)",
+      "simulation": "Simulation (essai à blanc)",
       "simulation_aide": "Vérifie le classeur et compte ce qui serait créé, sans rien écrire.",
       "simuler": "Simuler l'import",
       "importer": "Importer",
@@ -472,7 +468,8 @@
       "aucun_projet": "Aucun projet ouvert aux dossiers",
       "projet_aide": "Le classeur s'importe dans ce projet, et dans son pays.",
       "projet_requis": "Choisissez le projet dans lequel importer.",
-      "type_aide": "Le dossier du projet qui reçoit les lignes du classeur."
+      "type_aide": "Le dossier du projet qui reçoit les lignes du classeur.",
+      "ouvrir_dossier": "Ouvrir le dossier"
     },
     "renommer": {
       "bouton": "Renommer",
@@ -637,7 +634,8 @@
       "sans_justificatif": "Sans justificatif",
       "remplacer_ou_ajouter": "Déposer une autre pièce",
       "motif_rejet": "Rejetée : {{motif}}",
-      "deposer_aria": "Déposer la pièce de « {{ligne}} »"
+      "deposer_aria": "Déposer la pièce de « {{ligne}} »",
+      "remplacer_ou_ajouter_aria": "Déposer une autre pièce pour « {{ligne}} »"
     },
     "dossier": {
       "sans_justificatif_one": "{{count}} ligne sans justificatif",
@@ -1047,7 +1045,7 @@
       "utilisateurs": "Utilisateurs",
       "pays": "Pays",
       "permissions": "Permissions",
-      "types-de-dossiers": "Types de dossiers"
+      "types-de-projets": "Types de projets"
     },
     "general": {
       "parametres_titre": "Paramètres du serveur et du workflow",
@@ -1197,12 +1195,47 @@
       "taux_invalide": "Indiquez un taux décimal strictement positif."
     },
     "types_dossiers": {
-      "titre": "Types de dossiers",
-      "description": "La liste commune aux filiales : chaque nouveau projet reçoit d'office un dossier par type actif de son type de projet. Tenue par le super administrateur ; un type se désactive, il ne se supprime pas.",
       "chargement_impossible": "Impossible de charger les types de dossiers",
       "nom_placeholder": "Stands",
       "noun_pluriel": "types de dossiers",
-      "motif_mention": "obligatoire pour une modification"
+      "ajouter": "Ajouter un type de dossier",
+      "ordre": "Ordre",
+      "titre_colonne": "Type de dossier",
+      "aucun": "Aucun type de dossier : ce type de projet n'ouvre pas de projet.",
+      "modifier_aria": "Modifier le type de dossier « {{nom}} »",
+      "nom_requis": "Indiquez le nom du type de dossier.",
+      "dialogue_ajouter": "Ajouter un type de dossier à « {{type}} »",
+      "dialogue_modifier": "Modifier « {{nom}} »",
+      "dialogue_aide": "Les nouveaux projets reçoivent ce dossier ; les projets existants se complètent depuis leur fiche."
+    },
+    "types_projets": {
+      "titre": "Types de projets et leurs dossiers",
+      "description": "Deux listes communes aux filiales. Chaque projet ouvert sous un type reçoit d'office un dossier par type de dossier actif, dans l'ordre affiché. Tenues par le super administrateur ; rien ne se supprime, un type se désactive.",
+      "chargement_impossible": "Impossible de charger les types de projets",
+      "noun_pluriel": "types de projets",
+      "historique": "Historique",
+      "ajouter": "Ajouter un type de projet",
+      "modifier": "Modifier",
+      "modifier_aria": "Modifier le type de projet « {{nom}} »",
+      "sans_dossier": "Aucun dossier actif : n'ouvre pas de projet",
+      "ordre": "ordre {{ordre}}",
+      "projets_one": "{{count}} projet",
+      "projets_other": "{{count}} projets",
+      "ordre_aide": "Les plus petits d'abord ; à égalité, par nom. Vide : après les autres.",
+      "nom": "Nom",
+      "nom_placeholder": "Formation",
+      "nom_en": "Nom en anglais",
+      "nom_en_placeholder": "Training",
+      "nom_requis": "Indiquez le nom du type de projet.",
+      "actif_aide": "Désactivé, il n'ouvre plus de projet ; ses projets gardent leurs dossiers.",
+      "dialogue_ajouter": "Ajouter un type de projet",
+      "dialogue_ajouter_aide": "Son code, calculé du nom, ne changera plus : les projets le portent.",
+      "dialogue_modifier": "Modifier « {{nom}} »",
+      "dialogue_modifier_aide": "Code {{code}} : il ne change pas. Le motif reste au journal.",
+      "erreur_champs": "Corrigez les champs signalés.",
+      "aucun": "Aucun type de projet",
+      "aucun_aide": "Sans type de projet, aucun projet ne s'ouvre : le super administrateur en ajoute un.",
+      "ordre_placeholder": "Après les autres"
     }
   },
   "audit": {
@@ -1414,7 +1447,7 @@
   },
   "guides": {
     "titre": "Guide vidéo",
-    "description": "Les gestes de la déclaration, du projet à la soumission, montrés pas à pas. Les vidéos sont muettes et sous-titrées, dans la langue de l'interface.",
+    "description": "Les gestes de la déclaration, du projet à la soumission et à l'import d'un classeur, montrés pas à pas. Les vidéos sont muettes et sous-titrées, dans la langue de l'interface.",
     "sous_titres": "Sous-titres",
     "sommaire": "Les guides",
     "aucun": {
@@ -1448,6 +1481,8 @@
       "chargement": "Chargement des étapes…",
       "erreur": "Les étapes n'ont pas pu être chargées ; les sous-titres de la vidéo les donnent."
     },
-    "illisible": "Votre navigateur ne lit pas cette vidéo. Ouvrez la plateforme dans Chrome, Edge ou Firefox à jour."
+    "illisible": "Votre navigateur ne lit pas cette vidéo. Ouvrez la plateforme dans Chrome, Edge ou Firefox à jour.",
+    "numero": "{{numero}}. {{titre}}",
+    "video_indisponible": "Cette vidéo n'a pas pu être chargée. Rechargez la page ; les étapes ci-dessous restent lisibles."
   }
 }

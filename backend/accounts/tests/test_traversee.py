@@ -32,6 +32,7 @@ from core.models import (
     Manager,
     MarketingCategory,
     Project,
+    ProjectType,
     Team,
 )
 from core.statuts import Status
@@ -42,7 +43,7 @@ from notifications.models import Notification
 #: Modèles exposés par un viewset sans périmètre de pays : un taux de change
 #: vaut pour tout le monde, la liste des types de dossiers est commune aux
 #: filiales (décision 101). Tout autre modèle doit figurer dans le décor.
-SANS_PERIMETRE = {ExchangeRate, DossierKind}
+SANS_PERIMETRE = {ExchangeRate, DossierKind, ProjectType}
 
 #: Réponses acceptables pour un objet hors périmètre : introuvable, ou
 #: refusé par le rôle avant même d'être cherché. Jamais 200, jamais 400 —

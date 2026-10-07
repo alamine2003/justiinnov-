@@ -20,8 +20,9 @@ import { ChampMotif } from "@/components/projects/rename-project"
 import { useAuth } from "@/context/use-auth"
 import { ApiError } from "@/lib/api"
 import { updateProject } from "@/lib/countries"
-import { PROJECT_KINDS, PROJECT_STATUSES, projectKindLabel, projectStatusLabel } from "@/lib/labels"
+import { PROJECT_STATUSES, projectStatusLabel } from "@/lib/labels"
 import type { Project, ProjectKind, ProjectStatus } from "@/lib/types"
+import { typesActifs, useTypesDeProjets } from "@/lib/types-de-projets"
 import { normalizeDecimal } from "@/lib/utils"
 
 /**
@@ -68,7 +69,9 @@ function EditDialog({
   const [description, setDescription] = useState(project.description ?? "")
   const [budget, setBudget] = useState(project.budget ?? "")
   const [active, setActive] = useState(project.is_active)
-  const [kind, setKind] = useState<ProjectKind | "">(project.kind || "")
+  const [kind, setKind] = useState<ProjectKind>(project.kind || "")
+  // Typer un projet d'avant la 2.0 : parmi les types actifs (décision 119).
+  const types = typesActifs(useTypesDeProjets().data)
   const [motif, setMotif] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -119,12 +122,12 @@ function EditDialog({
               <NativeSelect
                 id="edit-projet-kind"
                 value={kind}
-                onChange={(e) => setKind(e.target.value as ProjectKind | "")}
+                onChange={(e) => setKind(e.target.value)}
               >
                 <option value="">{t("projets.formulaire.choisir_type")}</option>
-                {PROJECT_KINDS.map((value) => (
-                  <option key={value} value={value}>
-                    {projectKindLabel(t, value)}
+                {types.map((type) => (
+                  <option key={type.code} value={type.code}>
+                    {type.libelle}
                   </option>
                 ))}
               </NativeSelect>

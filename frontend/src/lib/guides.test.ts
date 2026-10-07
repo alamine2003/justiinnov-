@@ -91,14 +91,32 @@ describe("texte des guides vidéo", () => {
     return suite < 0 ? texte.slice(debut) : texte.slice(debut, debut + id.length + 4 + suite)
   }
 
-  /** Les sous-titres d'un guide dans une langue, interpolations remplacées par « … ». */
+  /** La valeur d'une clé du dictionnaire (« a.b.c »), pour remplacer un libellé interpolé. */
+  function libelle(langue: LangueDeGuide, cle: string) {
+    let valeur: unknown = langue === "fr" ? fr : en
+    for (const partie of cle.split(".")) valeur = (valeur as Record<string, unknown>)?.[partie]
+    return typeof valeur === "string" ? valeur : "…"
+  }
+
+  /**
+   * Les sous-titres d'un guide dans une langue. Un libellé interpolé
+   * (`${t("cle")}`) prend sa valeur du dictionnaire : compté pour « … », un
+   * sous-titre de 89 caractères passait pour 66.
+   */
   function legendes(id: IdDeGuide, langue: LangueDeGuide) {
     const corps = partie(bloc("LEGENDES"), id).match(new RegExp(`\\n {4}${langue}: \\(t\\) => \\[\\n([\\s\\S]*?)\\n {4}\\],`))
     expect(corps, `${id}/${langue}`).not.toBeNull()
     return corps![1]
       .split("\n")
       .filter((ligne) => /^ {6}["`]/.test(ligne))
-      .map((ligne) => ligne.trim().replace(/,$/, "").slice(1, -1).replace(/\$\{[^}]*\}/g, "…"))
+      .map((ligne) =>
+        ligne
+          .trim()
+          .replace(/,$/, "")
+          .slice(1, -1)
+          .replace(/\$\{t\("([^"]+)"[^}]*\}/g, (_, cle: string) => libelle(langue, cle))
+          .replace(/\$\{[^}]*\}/g, "…"),
+      )
   }
 
   const tous = (langue: LangueDeGuide) => GUIDES.flatMap((guide) => legendes(guide.id, langue))
@@ -122,9 +140,31 @@ describe("texte des guides vidéo", () => {
     }
   })
 
-  it("dit en anglais « file », le mot de l'écran filmé", () => {
-    for (const texte of textes(en.guides)) expect(texte).not.toMatch(/\bdossiers?\b/i)
-    for (const legende of tous("en")) expect(legende).not.toMatch(/\bdossiers?\b/i)
+  it("dit en anglais « dossier », jamais « file » pour un dossier", () => {
+    // Décision de la 2.2 : « file » désignait aussi le champ « File » du
+    // classeur sur l'écran filmé. Le dossier garde son nom en anglais.
+    for (const texte of textes(en.guides)) expect(texte).not.toMatch(/\bfiles?\b/i)
+    // Seul « Choose the file » parle d'un fichier : la pièce à déposer.
+    for (const legende of tous("en")) expect(legende.replace("Choose the file", "")).not.toMatch(/\bfiles?\b/i)
+  })
+
+  it("tient chaque sous-titre en deux lignes du lecteur : 84 caractères au plus", () => {
+    for (const langue of LANGUES_DES_GUIDES) {
+      for (const legende of tous(langue)) expect(legende.length, legende).toBeLessThanOrEqual(84)
+    }
+  })
+
+  it("dit que soumettre est immédiat et sans retour, et ce que valent les pièces manquantes", () => {
+    const francais = legendes("soumettre-un-dossier", "fr").join(" ")
+    expect(francais).toMatch(/sans confirmation ni retour/)
+    expect(francais).toMatch(/seul le siège peut le rouvrir/)
+    expect(francais).toMatch(/brouillon d'un collègue/)
+    expect(francais).toMatch(/avertissement/)
+    const anglais = legendes("soumettre-un-dossier", "en").join(" ")
+    expect(anglais).toMatch(/no confirmation and no way back/)
+    expect(anglais).toMatch(/only headquarters can reopen/)
+    expect(anglais).toMatch(/colleague's draft/)
+    expect(anglais).toMatch(/warning/)
   })
 
   it("écrit « financial support » sans article", () => {
@@ -156,7 +196,7 @@ describe("texte des guides vidéo", () => {
     const source = readFileSync(join(process.cwd(), "scripts", "guides", "classeur.ts"), "utf8")
     const colonnes = [...source.match(/COLONNES_DU_CLASSEUR = \[([^\]]*)\]/)![1].matchAll(/"([^"]+)"/g)].map((c) => c[1])
     expect(colonnes.length).toBeGreaterThan(0)
-    for (const [langue, soumettre] of [["fr", /soumettez ensuite le dossier/], ["en", /then submit the file/]] as const) {
+    for (const [langue, soumettre] of [["fr", /soumettez ensuite le dossier/], ["en", /then submit the dossier/]] as const) {
       const sousTitres = legendes("importer-un-classeur", langue)
       expect(sousTitres.some((s) => colonnes.every((colonne) => s.includes(colonne))), langue).toBe(true)
       expect(sousTitres.at(-1), langue).toMatch(soumettre)

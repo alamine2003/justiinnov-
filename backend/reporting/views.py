@@ -26,7 +26,7 @@ from budget.aggregates import (
     to_xof,
 )
 from core.journal import tracer
-from core.models import Country, DossierKind, Project, ProjectKind
+from core.models import Country, DossierKind, Project, ProjectType
 from expenses.models import AuditLog
 from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 
@@ -297,7 +297,7 @@ class BreakdownView(APIView):
                 "by_project": self._group(counted, "project__name", _("Hors projet")),
                 "by_project_kind": self._group(
                     counted, "dossier__project__kind", _("Sans type de projet"),
-                    libelles=dict(ProjectKind.choices),
+                    libelles={t.code: t.libelle for t in ProjectType.objects.all()},
                 ),
                 "by_dossier_kind": self._group(
                     counted, "dossier__kind__name", _("Sans type de dossier")

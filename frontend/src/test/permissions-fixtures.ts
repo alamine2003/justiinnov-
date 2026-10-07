@@ -21,6 +21,7 @@ export const PERMISSIONS_DU_PAYS: Permissions = {
   "projets.rename": true,
   "projets.update": false,
   "dossier_kinds.manage": false,
+  "project_types.manage": false,
   "referentiel.update": false,
   "budgets.create": false,
   "budgets.update": false,

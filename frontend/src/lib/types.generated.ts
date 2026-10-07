@@ -1558,6 +1558,88 @@ export interface paths {
         patch: operations["permissions_partial_update"]
         trace?: never
     }
+    "/api/project-types/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description La liste commune des types de projets (décision 119).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un projet —,
+         *     tenue par le super administrateur seul (``project_types.manage``,
+         *     verrouillé à la RH et au pays, comme les types de dossiers). Pas de
+         *     cloisonnement : elle vaut pour les dix-sept filiales. Un type ne se
+         *     supprime pas (405) : il se désactive, et n'ouvre plus de projet.
+         *     Toute modification exige un motif (décision 109).
+         */
+        get: operations["project_types_list"]
+        put?: never
+        /**
+         * @description La liste commune des types de projets (décision 119).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un projet —,
+         *     tenue par le super administrateur seul (``project_types.manage``,
+         *     verrouillé à la RH et au pays, comme les types de dossiers). Pas de
+         *     cloisonnement : elle vaut pour les dix-sept filiales. Un type ne se
+         *     supprime pas (405) : il se désactive, et n'ouvre plus de projet.
+         *     Toute modification exige un motif (décision 109).
+         */
+        post: operations["project_types_create"]
+        delete?: never
+        options?: never
+        head?: never
+        patch?: never
+        trace?: never
+    }
+    "/api/project-types/{id}/": {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        /**
+         * @description La liste commune des types de projets (décision 119).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un projet —,
+         *     tenue par le super administrateur seul (``project_types.manage``,
+         *     verrouillé à la RH et au pays, comme les types de dossiers). Pas de
+         *     cloisonnement : elle vaut pour les dix-sept filiales. Un type ne se
+         *     supprime pas (405) : il se désactive, et n'ouvre plus de projet.
+         *     Toute modification exige un motif (décision 109).
+         */
+        get: operations["project_types_retrieve"]
+        /**
+         * @description La liste commune des types de projets (décision 119).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un projet —,
+         *     tenue par le super administrateur seul (``project_types.manage``,
+         *     verrouillé à la RH et au pays, comme les types de dossiers). Pas de
+         *     cloisonnement : elle vaut pour les dix-sept filiales. Un type ne se
+         *     supprime pas (405) : il se désactive, et n'ouvre plus de projet.
+         *     Toute modification exige un motif (décision 109).
+         */
+        put: operations["project_types_update"]
+        post?: never
+        delete?: never
+        options?: never
+        head?: never
+        /**
+         * @description La liste commune des types de projets (décision 119).
+         *
+         *     Lue par tout compte connecté — le pays y choisit le type d'un projet —,
+         *     tenue par le super administrateur seul (``project_types.manage``,
+         *     verrouillé à la RH et au pays, comme les types de dossiers). Pas de
+         *     cloisonnement : elle vaut pour les dix-sept filiales. Un type ne se
+         *     supprime pas (405) : il se désactive, et n'ouvre plus de projet.
+         *     Toute modification exige un motif (décision 109).
+         */
+        patch: operations["project_types_partial_update"]
+        trace?: never
+    }
     "/api/projects/": {
         parameters: {
             query?: never
@@ -2301,8 +2383,6 @@ export interface components {
             /** Actif */
             is_active?: boolean
         }
-        /** @enum {unknown} */
-        BlankEnum: ""
         Breakdown: {
             readonly year: number
             readonly by_team: components["schemas"]["BreakdownRow"][]
@@ -2566,9 +2646,10 @@ export interface components {
          *     * `user` - Compte utilisateur
          *     * `beneficiary` - Bénéficiaire
          *     * `dossier_kind` - Type de dossier
+         *     * `project_type` - Type de projet
          * @enum {string}
          */
-        ChangeLogModelEnum: "country" | "manager" | "team" | "cost_center" | "project" | "expense_title" | "marketing_category" | "budget" | "reallocation" | "exchange_rate" | "workflow_configuration" | "user" | "beneficiary" | "dossier_kind"
+        ChangeLogModelEnum: "country" | "manager" | "team" | "cost_center" | "project" | "expense_title" | "marketing_category" | "budget" | "reallocation" | "exchange_rate" | "workflow_configuration" | "user" | "beneficiary" | "dossier_kind" | "project_type"
         ChangePasswordRequest: {
             current_password: string
             new_password: string
@@ -3064,11 +3145,12 @@ export interface components {
         DossierKind: {
             readonly id: number
             /** Type de projet */
-            project_kind: components["schemas"]["ProjectKindEnum"]
+            project_kind: string
             readonly project_kind_display: string
             /** Nom */
             name: string
             description: string
+            ordre: number
             /** Actif */
             is_active: boolean
             /**
@@ -3091,10 +3173,11 @@ export interface components {
          */
         DossierKindRequest: {
             /** Type de projet */
-            project_kind: components["schemas"]["ProjectKindEnum"]
+            project_kind: string
             /** Nom */
             name: string
             description?: string
+            ordre?: number
             /** Actif */
             is_active?: boolean
             motif?: string
@@ -3689,6 +3772,7 @@ export interface components {
             country?: number
         }
         ImportResult: {
+            readonly dossier: number | null
             readonly lignes_creees: number
             readonly equipes_creees: number
             readonly managers_crees: number
@@ -4156,6 +4240,21 @@ export interface components {
             previous: string | null
             results: components["schemas"]["Project"][]
         }
+        PaginatedProjectTypeList: {
+            /** @example 123 */
+            count: number
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next: string | null
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous: string | null
+            results: components["schemas"]["ProjectType"][]
+        }
         PaginatedProofList: {
             /** @example 123 */
             count: number
@@ -4304,10 +4403,11 @@ export interface components {
          */
         PatchedDossierKindRequest: {
             /** Type de projet */
-            project_kind?: components["schemas"]["ProjectKindEnum"]
+            project_kind?: string
             /** Nom */
             name?: string
             description?: string
+            ordre?: number
             /** Actif */
             is_active?: boolean
             motif?: string
@@ -4474,11 +4574,29 @@ export interface components {
             /** Format: decimal */
             budget?: string | null
             /** Type de projet */
-            kind?: components["schemas"]["ProjectKindEnum"] | components["schemas"]["BlankEnum"]
+            kind?: string | null
             /** Actif */
             is_active?: boolean
             /** Équipe */
             team?: number | null
+            motif?: string
+        }
+        /**
+         * @description Un type de projet de la liste commune (décision 119).
+         *
+         *     Le ``code`` est calculé du nom à la création et ne se saisit jamais :
+         *     projets et types de dossiers le portent. Toute modification exige un
+         *     motif (décision 109). ``libelle`` est le nom dans la langue du lecteur.
+         */
+        PatchedProjectTypeRequest: {
+            /** Nom */
+            name?: string
+            /** Nom en anglais */
+            name_en?: string
+            description?: string
+            ordre?: number
+            /** Actif */
+            is_active?: boolean
             motif?: string
         }
         /**
@@ -4657,6 +4775,8 @@ export interface components {
             readonly "projets.rename": boolean
             /** @description Changer le statut ou la description d'un projet, le désactiver, typer un projet d'avant la 2.0 ; motif obligatoire. */
             readonly "projets.update": boolean
+            /** @description Ajouter, renommer, ordonner ou désactiver un type de projet de la liste commune aux filiales. */
+            readonly "project_types.manage": boolean
             /** @description Ajouter, renommer ou désactiver un type de dossier de la liste commune aux filiales. */
             readonly "dossier_kinds.manage": boolean
             /** @description Renommer, rattacher, activer ou désactiver une entité du référentiel. */
@@ -4727,7 +4847,7 @@ export interface components {
             /** Format: decimal */
             budget: string | null
             /** Type de projet */
-            kind: components["schemas"]["ProjectKindEnum"] | components["schemas"]["BlankEnum"]
+            kind: string | null
             readonly kind_display: string
             /** Année */
             readonly year: number | null
@@ -4755,13 +4875,6 @@ export interface components {
             readonly updated_at: string
         }
         /**
-         * @description * `congres` - Congrès
-         *     * `voyage` - Voyage
-         *     * `soutien_financier` - Soutien financier
-         * @enum {string}
-         */
-        ProjectKindEnum: "congres" | "voyage" | "soutien_financier"
-        /**
          * @description Un projet, son type et sa référence (décision 100).
          *
          *     La référence, l'année et le rang sont attribués à la création
@@ -4781,7 +4894,7 @@ export interface components {
             /** Format: decimal */
             budget?: string | null
             /** Type de projet */
-            kind?: components["schemas"]["ProjectKindEnum"] | components["schemas"]["BlankEnum"]
+            kind?: string | null
             /** Actif */
             is_active?: boolean
             /** Équipe */
@@ -4796,6 +4909,57 @@ export interface components {
          * @enum {string}
          */
         ProjectStatusEnum: "planned" | "active" | "on_hold" | "completed"
+        /**
+         * @description Un type de projet de la liste commune (décision 119).
+         *
+         *     Le ``code`` est calculé du nom à la création et ne se saisit jamais :
+         *     projets et types de dossiers le portent. Toute modification exige un
+         *     motif (décision 109). ``libelle`` est le nom dans la langue du lecteur.
+         */
+        ProjectType: {
+            readonly id: number
+            readonly code: string
+            /** Nom */
+            name: string
+            /** Nom en anglais */
+            name_en: string
+            readonly libelle: string
+            description: string
+            ordre: number
+            /** Actif */
+            is_active: boolean
+            /** @default 0 */
+            readonly dossier_kinds_actifs: number
+            readonly projets: number | null
+            /**
+             * Créé le
+             * Format: date-time
+             */
+            readonly created_at: string
+            /**
+             * Modifié le
+             * Format: date-time
+             */
+            readonly updated_at: string
+        }
+        /**
+         * @description Un type de projet de la liste commune (décision 119).
+         *
+         *     Le ``code`` est calculé du nom à la création et ne se saisit jamais :
+         *     projets et types de dossiers le portent. Toute modification exige un
+         *     motif (décision 109). ``libelle`` est le nom dans la langue du lecteur.
+         */
+        ProjectTypeRequest: {
+            /** Nom */
+            name: string
+            /** Nom en anglais */
+            name_en?: string
+            description?: string
+            ordre?: number
+            /** Actif */
+            is_active?: boolean
+            motif?: string
+        }
         /**
          * @description Une pièce justificative, déposée sur la ligne qu'elle prouve (décision 107).
          *
@@ -6152,12 +6316,7 @@ export interface operations {
                 page?: number
                 /** @description Nombre de résultats à retourner par page. */
                 page_size?: number
-                /**
-                 * @description * `congres` - Congrès
-                 *     * `voyage` - Voyage
-                 *     * `soutien_financier` - Soutien financier
-                 */
-                project_kind?: "congres" | "soutien_financier" | "voyage"
+                project_kind?: string
                 /** @description Un terme de recherche. */
                 search?: string
             }
@@ -6296,12 +6455,7 @@ export interface operations {
                 /** @description Nombre de résultats à retourner par page. */
                 page_size?: number
                 project?: number
-                /**
-                 * @description * `congres` - Congrès
-                 *     * `voyage` - Voyage
-                 *     * `soutien_financier` - Soutien financier
-                 */
-                project__kind?: "congres" | "soutien_financier" | "voyage"
+                project__kind?: string
                 /** @description Un terme de recherche. */
                 search?: string
                 /**
@@ -7491,8 +7645,9 @@ export interface operations {
                  *     * `user` - Compte utilisateur
                  *     * `beneficiary` - Bénéficiaire
                  *     * `dossier_kind` - Type de dossier
+                 *     * `project_type` - Type de projet
                  */
-                model_name?: "beneficiary" | "budget" | "cost_center" | "country" | "dossier_kind" | "exchange_rate" | "expense_title" | "manager" | "marketing_category" | "project" | "reallocation" | "team" | "user" | "workflow_configuration"
+                model_name?: "beneficiary" | "budget" | "cost_center" | "country" | "dossier_kind" | "exchange_rate" | "expense_title" | "manager" | "marketing_category" | "project" | "project_type" | "reallocation" | "team" | "user" | "workflow_configuration"
                 object_id?: number
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
@@ -8141,18 +8296,145 @@ export interface operations {
             }
         }
     }
+    project_types_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean
+                /** @description Quel champ utiliser pour classer les résultats. */
+                ordering?: string
+                /** @description Un numéro de page de l'ensemble des résultats. */
+                page?: number
+                /** @description Nombre de résultats à retourner par page. */
+                page_size?: number
+                /** @description Un terme de recherche. */
+                search?: string
+            }
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["PaginatedProjectTypeList"]
+                }
+            }
+        }
+    }
+    project_types_create: {
+        parameters: {
+            query?: never
+            header?: never
+            path?: never
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectTypeRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["ProjectTypeRequest"]
+                "multipart/form-data": components["schemas"]["ProjectTypeRequest"]
+            }
+        }
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ProjectType"]
+                }
+            }
+        }
+    }
+    project_types_retrieve: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Type de projet. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: never
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ProjectType"]
+                }
+            }
+        }
+    }
+    project_types_update: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Type de projet. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectTypeRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["ProjectTypeRequest"]
+                "multipart/form-data": components["schemas"]["ProjectTypeRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ProjectType"]
+                }
+            }
+        }
+    }
+    project_types_partial_update: {
+        parameters: {
+            query?: never
+            header?: never
+            path: {
+                /** @description Un(une) valeur entière unique identifiant ce(cette) Type de projet. */
+                id: number
+            }
+            cookie?: never
+        }
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedProjectTypeRequest"]
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedProjectTypeRequest"]
+                "multipart/form-data": components["schemas"]["PatchedProjectTypeRequest"]
+            }
+        }
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown
+                }
+                content: {
+                    "application/json": components["schemas"]["ProjectType"]
+                }
+            }
+        }
+    }
     projects_list: {
         parameters: {
             query?: {
                 country?: number
                 is_active?: boolean
                 is_historical?: boolean
-                /**
-                 * @description * `congres` - Congrès
-                 *     * `voyage` - Voyage
-                 *     * `soutien_financier` - Soutien financier
-                 */
-                kind?: "congres" | "soutien_financier" | "voyage"
+                kind?: string
                 /** @description Quel champ utiliser pour classer les résultats. */
                 ordering?: string
                 /** @description Un numéro de page de l'ensemble des résultats. */

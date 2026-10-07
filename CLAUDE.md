@@ -107,9 +107,9 @@ l'application.
   (`budgets.create`, `budgets.update`, `budgets.delete`,
   `reallocations.request`, `reallocations.decide`, `rates.manage` :
   `super_admin`, fixe, jamais l'`admin` — qui règle la matrice et se les
-  rouvrirait sinon) — de même que **la liste des types de dossiers**
-  (`dossier_kinds.manage`, décision 108), qui fixe les dossiers de chaque
-  projet ; **l'administration est aux administrateurs** —
+  rouvrirait sinon) — de même que **les listes des types de projets et
+  des types de dossiers** (`project_types.manage`, `dossier_kinds.manage`,
+  décisions 108 et 119), qui fixent les dossiers de chaque projet ; **l'administration est aux administrateurs** —
   `admin` et `super_admin` gardent comptes, configuration, référentiel,
   audit et exports et règlent toute la matrice (décision 58).
   Le `manager` ne reçoit jamais l'administration (comptes, configuration,
@@ -183,7 +183,10 @@ l'application.
   `expenses.0017`.
 - **Le projet est la rubrique principale** (version 2.0, décisions 100 à
   111) : Pays › Projet › Dossier › Lignes. Un projet a un type (congrès,
-  voyage, soutien financier) et une référence calculée, `TG-P-2026-001`
+  voyage, soutien financier… : la liste `ProjectType` est en base,
+  commune aux filiales et réglée par le seul `super_admin` dans
+  « Configuration › Types de projets », décision 119 ; son code ne change
+  jamais, un type se désactive) et une référence calculée, `TG-P-2026-001`
   (`core.numerotation`). Le pays l'ouvre (`projets.create`, au pays seul)
   et en corrige le titre (`projets.rename`) ; le siège le modifie, le
   type et le désactive (`projets.update`) ; **toute modification exige un

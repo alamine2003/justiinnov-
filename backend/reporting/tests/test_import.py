@@ -17,8 +17,9 @@ from accounts.models import Role
 from accounts.tests.test_scoping import make_user
 from budget.models import ExchangeRate
 from core.journal import Trace
+from core import types_de_projets
 from core.models import (
-    ChangeLog, DossierKind, Manager, Project, ProjectKind, Team, WorkflowConfiguration,
+    ChangeLog, DossierKind, Manager, Project, Team, WorkflowConfiguration,
 )
 from core.numerotation import creer_projet
 from expenses.models import AuditLog, Dossier, Expense
@@ -207,7 +208,7 @@ class ImportTests(ExpenseTestCase):
         pays : ses lignes existent déjà, les réimporter consommerait deux
         fois l'enveloppe."""
         autre = creer_projet(Project(
-            country=self.togo, name="Congrès de Kara", kind=ProjectKind.CONGRES,
+            country=self.togo, name="Congrès de Kara", kind_id=types_de_projets.CONGRES,
         ))
         creer_les_dossiers_predefinis(
             autre, auteur=self.owner.username, trace=Trace.depuis_compte(self.owner)
@@ -288,7 +289,7 @@ class ImportTests(ExpenseTestCase):
         """Un type ajouté au catalogue après la création du projet : le
         projet n'a pas ce dossier, l'import le dit au lieu d'en ouvrir un."""
         tshirts = DossierKind.objects.get_or_create(
-            project_kind=ProjectKind.CONGRES, name="T-shirts"
+            project_kind_id=types_de_projets.CONGRES, name="T-shirts"
         )[0]
 
         response = self._importer(self._classeur([self._ligne()]), kind=tshirts.pk)
@@ -646,6 +647,9 @@ class ClasseurHistoriqueTests(ExpenseTestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertFalse(response.data["erreurs"])
         self.assertEqual(response.data["lignes_creees"], 4)
+        # La réponse nomme le dossier qui a reçu les lignes : l'écran
+        # propose de l'ouvrir.
+        self.assertEqual(response.data["dossier"], self.dossier.pk)
         # Les deux N°ORDRE vont au dossier prédéfini du type (décision 106).
         self.assertEqual(self.dossier.expenses.count(), 4)
         self.dossier.refresh_from_db()

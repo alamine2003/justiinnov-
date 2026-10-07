@@ -126,6 +126,9 @@ class ImportErrorSerializer(serializers.Serializer):
 
 
 class ImportResultSerializer(serializers.Serializer):
+    #: Le dossier qui reçoit les lignes, nul quand l'import est refusé avant
+    #: de l'avoir trouvé (projet sans type, classeur illisible…).
+    dossier = serializers.IntegerField(read_only=True, allow_null=True)
     lignes_creees = serializers.IntegerField(read_only=True)
     equipes_creees = serializers.IntegerField(read_only=True)
     managers_crees = serializers.IntegerField(read_only=True)
