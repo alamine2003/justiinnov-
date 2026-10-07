@@ -384,7 +384,7 @@ msgstr "Submit"
 
 #: accounts/permissions.py:428
 msgid "Déclarer un dossier : ses lignes partent avec lui, sans retour."
-msgstr "Declare a file: its lines go with it, with no way back."
+msgstr "Declare a dossier: its lines go with it, with no way back."
 
 #: accounts/permissions.py:432
 msgid "Mettre en contrôle"
@@ -420,11 +420,11 @@ msgstr "Validate, reject or flag a supporting document as incomplete."
 
 #: accounts/permissions.py:452
 msgid "Rouvrir un dossier"
-msgstr "Reopen a file"
+msgstr "Reopen a dossier"
 
 #: accounts/permissions.py:453
 msgid "Renvoyer un dossier déclaré au pays pour demander des comptes, motif à l'appui."
-msgstr "Send a declared file back to the country to ask for explanations, with a stated reason."
+msgstr "Send a declared dossier back to the country to ask for explanations, with a stated reason."
 
 #: accounts/permissions.py:465
 msgid "Demander la rectification d'un constat"
@@ -444,7 +444,7 @@ msgstr "Approve — the line goes back to review — or refuse a request. Never 
 
 #: accounts/permissions.py:479
 msgid "Renommer un dossier"
-msgstr "Rename a file"
+msgstr "Rename a dossier"
 
 #: accounts/permissions.py:480
 msgid "Changer le titre d'un dossier de son pays tant qu'il n'est pas clôturé ; l'ancien titre reste au journal."
@@ -1014,11 +1014,11 @@ msgstr "Historical project"
 
 #: core/models.py:304 core/models.py:394 expenses/models.py:228 expenses/serializers.py:949
 msgid "Type de dossier"
-msgstr "File type"
+msgstr "Dossier type"
 
 #: core/models.py:305
 msgid "Types de dossiers"
-msgstr "File types"
+msgstr "Dossier types"
 
 #: core/models.py:322
 msgid "Intitulé"
@@ -1162,7 +1162,7 @@ msgstr "This item received a line or a document while being withdrawn: nothing w
 
 #: core/serializers.py:126
 msgid "Des lignes, dossiers, enveloppes ou comptes s'y réfèrent : cette entité ne change plus de pays."
-msgstr "Lines, files, envelopes or accounts refer to it: this entity can no longer change country."
+msgstr "Lines, dossiers, envelopes or accounts refer to it: this entity can no longer change country."
 
 #: core/serializers.py:150
 msgid "Cette équipe existe déjà pour ce pays."
@@ -1206,11 +1206,11 @@ msgstr "Enter the name of the project type."
 
 #: core/serializers.py:357
 msgid "Ce type de dossier existe déjà pour ce type de projet."
-msgstr "This file type already exists for this project type."
+msgstr "This dossier type already exists for this project type."
 
 #: core/serializers.py:371
 msgid "Des dossiers emploient ce type : son type de projet ne change plus."
-msgstr "Files use this type: its project type no longer changes."
+msgstr "Dossiers use this type: its project type no longer changes."
 
 #: core/serializers.py:484
 msgid "Ce pays porte des dépenses ou des enveloppes : son code et sa devise ne se modifient plus."
@@ -1331,7 +1331,7 @@ msgstr "Opened by"
 
 #: expenses/models.py:259
 msgid "Dossier de justification"
-msgstr "Justification file"
+msgstr "Justification dossier"
 
 #: expenses/models.py:260 reporting/exports.py:569
 msgid "Dossiers de justification"
@@ -1359,7 +1359,7 @@ msgstr "Cheque"
 
 #: expenses/models.py:500 expenses/models.py:767
 msgid "Dossier"
-msgstr "File"
+msgstr "Dossier"
 
 #: expenses/models.py:514
 msgid "Date et heure"
@@ -1701,27 +1701,27 @@ msgstr "Device / session"
 
 #: expenses/numerotation.py:62
 msgid "Choisissez le projet dans lequel ouvrir ce dossier."
-msgstr "Choose the project in which to open this file."
+msgstr "Choose the project in which to open this dossier."
 
 #: expenses/numerotation.py:65
 msgid "Ce projet n'a pas de type : il n'accepte pas de nouveau dossier."
-msgstr "This project has no type: it does not accept new files."
+msgstr "This project has no type: it does not accept new dossiers."
 
 #: expenses/numerotation.py:66
 msgid "Ce projet est désactivé : il n'accepte plus de dossier."
-msgstr "This project is deactivated: it no longer accepts files."
+msgstr "This project is deactivated: it no longer accepts dossiers."
 
 #: expenses/numerotation.py:68
 msgid "Choisissez le type du dossier : stands, voyages, billets…"
-msgstr "Choose the file type: stands, trips, tickets…"
+msgstr "Choose the dossier type: stands, trips, tickets…"
 
 #: expenses/numerotation.py:70
 msgid "Ce type de dossier ne s'ouvre pas dans ce projet."
-msgstr "This file type cannot be opened in this project."
+msgstr "This dossier type cannot be opened in this project."
 
 #: expenses/serializers.py:142
 msgid "Le dossier est déclaré : le type de ses pièces ne se modifie plus."
-msgstr "This file has been declared: the type of its supporting documents can no longer be changed."
+msgstr "This dossier has been declared: the type of its supporting documents can no longer be changed."
 
 #: expenses/serializers.py:212
 msgid "Ce manager n'est pas rattaché à ce pays."
@@ -1760,7 +1760,7 @@ msgstr "The file content does not match its extension ({extension})."
 
 #: expenses/serializers.py:455 expenses/views.py:572
 msgid "Le dossier est clôturé : plus aucun justificatif ne peut y être ajouté."
-msgstr "The file is closed: no further supporting document can be added to it."
+msgstr "The dossier is closed: no further supporting document can be added to it."
 
 #: expenses/serializers.py:479
 msgid "Choisissez la ligne de dépense que cette pièce prouve."
@@ -1781,7 +1781,7 @@ msgstr "This field is fixed at upload time: upload a new version rather than mod
 
 #: expenses/serializers.py:549
 msgid "Pièce invalide pour ce dossier."
-msgstr "Invalid document for this file."
+msgstr "Invalid document for this dossier."
 
 #: expenses/serializers.py:553
 msgid "Cette pièce a déjà été remplacée."
@@ -1801,7 +1801,7 @@ msgstr "This expense has been declared: it can no longer be modified. Only a dra
 
 #: expenses/serializers.py:713
 msgid "Le dossier appartient à un autre pays."
-msgstr "The file belongs to another country."
+msgstr "The dossier belongs to another country."
 
 #: expenses/serializers.py:725
 msgid "Cette entité appartient à un autre pays."
@@ -1814,7 +1814,7 @@ msgstr "This line must carry its dossier's team ({team})."
 
 #: expenses/serializers.py:765
 msgid "Une ligne porte le projet de son dossier."
-msgstr "A line carries the project of its file."
+msgstr "A line carries the project of its dossier."
 
 #: expenses/serializers.py:793
 #, python-brace-format
@@ -1836,7 +1836,7 @@ msgstr "No known rate to convert {source} to {target} on that date. Publish it u
 
 #: expenses/serializers.py:1059 expenses/transitions.py:159
 msgid "Ce dossier est déclaré : il ne peut plus être modifié."
-msgstr "This file has been declared: it can no longer be modified."
+msgstr "This dossier has been declared: it can no longer be modified."
 
 #: expenses/serializers.py:1090
 msgid "Ce projet appartient à un autre pays."
@@ -1844,7 +1844,7 @@ msgstr "This project belongs to another country."
 
 #: expenses/serializers.py:1114
 msgid "Le projet et le type d'un dossier ne changent plus après sa création."
-msgstr "A file's project and type no longer change after it is created."
+msgstr "A dossier's project and type no longer change after it is created."
 
 #: expenses/serializers.py:1121
 msgid "Un dossier ne change pas de pays : ouvrez un nouveau dossier dans l'autre pays."
@@ -1915,7 +1915,7 @@ msgstr "This expense has no known author: it cannot be reviewed."
 
 #: expenses/transitions.py:194
 msgid "Vous avez ouvert ce dossier : son contrôle revient à quelqu'un d'autre."
-msgstr "You opened this file: its review is up to someone else."
+msgstr "You opened this dossier: its review is up to someone else."
 
 #: expenses/transitions.py:197
 msgid "Vous avez saisi cette dépense : son contrôle revient à quelqu'un d'autre."
@@ -1928,7 +1928,7 @@ msgstr "This line has been the subject of a rectification request: it can no lon
 #: expenses/transitions.py:235
 #, python-brace-format
 msgid "Le dossier {number} est déjà déclaré ({status}) : il n'accepte plus de nouvelle ligne. Ouvrez un nouveau dossier pour cette dépense."
-msgstr "File {number} has already been declared ({status}): it no longer accepts new lines. Open a new file for this expense."
+msgstr "Dossier {number} has already been declared ({status}): it no longer accepts new lines. Open a new dossier for this expense."
 
 #: expenses/transitions.py:311
 #, python-brace-format
@@ -1951,21 +1951,21 @@ msgstr " and {count} other(s)"
 #: expenses/transitions.py:346
 #, python-brace-format
 msgid "{count} ligne(s) incomplète(s) : {detail}. Renseignez l'équipe et le manager de chaque ligne avant de soumettre le dossier."
-msgstr "{count} incomplete line(s): {detail}. Fill in the team and manager of each line before submitting the file."
+msgstr "{count} incomplete line(s): {detail}. Fill in the team and manager of each line before submitting the dossier."
 
 #: expenses/transitions.py:378
 #, python-brace-format
 msgid "Ce dossier contient {count} ligne(s) en brouillon saisie(s) par quelqu'un d'autre ({author}) : seul leur auteur peut les déclarer."
-msgstr "This file contains {count} draft line(s) entered by someone else ({author}): only their author can declare them."
+msgstr "This dossier contains {count} draft line(s) entered by someone else ({author}): only their author can declare them."
 
 #: expenses/transitions.py:407
 msgid "Un dossier se soumet avec ses lignes de dépenses : ajoutez-en au moins une."
-msgstr "A file is submitted with its expense lines: add at least one."
+msgstr "A dossier is submitted with its expense lines: add at least one."
 
 #: expenses/transitions.py:508
 #, python-brace-format
 msgid "{count} ligne(s) ont déjà été constatées par le siège : {detail}. Un dossier ne se rouvre pas après constat."
-msgstr "{count} line(s) have already been recorded by headquarters: {detail}. A file cannot be reopened once a finding has been made."
+msgstr "{count} line(s) have already been recorded by headquarters: {detail}. A dossier cannot be reopened once a finding has been made."
 
 #: expenses/transitions.py:544
 msgid "Seul l'auteur d'un brouillon peut le soumettre."
@@ -1987,11 +1987,11 @@ msgstr "%(count)s line(s) without supporting document: the dossier cannot be jus
 
 #: expenses/transitions.py:598
 msgid "Justifiez chaque ligne avant le dossier."
-msgstr "Justify each line before the file."
+msgstr "Justify each line before the dossier."
 
 #: expenses/transitions.py:606
 msgid "Tranchez chaque ligne avant de constater la non-justification du dossier."
-msgstr "Decide on each line before recording the file as unjustified."
+msgstr "Decide on each line before recording the dossier as unjustified."
 
 #: expenses/transitions.py:688
 #, python-brace-format
@@ -2004,7 +2004,7 @@ msgstr "A closed dossier can no longer be renamed."
 
 #: expenses/transitions.py:870
 msgid "Le titre d'un dossier ne peut pas être vide."
-msgstr "A file's title cannot be empty."
+msgstr "A dossier's title cannot be empty."
 
 #: expenses/transitions.py:908
 msgid "Cet élément est déclaré : il ne peut plus être supprimé. Seul un brouillon peut l'être."
@@ -2021,11 +2021,11 @@ msgstr "Only the author of a draft can delete it."
 #: expenses/transitions.py:977
 #, python-brace-format
 msgid "Ce dossier contient des lignes saisies par quelqu'un d'autre ({author}) : il ne peut pas être supprimé."
-msgstr "This file contains lines entered by someone else ({author}): it cannot be deleted."
+msgstr "This dossier contains lines entered by someone else ({author}): it cannot be deleted."
 
 #: expenses/transitions.py:984
 msgid "Ce dossier contient une ligne déclarée : il ne peut plus être supprimé."
-msgstr "This file contains a declared line: it can no longer be deleted."
+msgstr "This dossier contains a declared line: it can no longer be deleted."
 
 #: expenses/transitions.py:991
 msgid "Ce dossier contient une ligne qui a fait l'objet d'une demande de rectification : il ne se supprime plus."
@@ -2468,7 +2468,7 @@ msgstr "Dossier “%(number)s” is another account's draft"
 #: reporting/imports.py:619
 #, python-format
 msgid "Le dossier « %(number)s » porte l'équipe « %(team)s » : la ligne doit porter la même."
-msgstr "File \"%(number)s\" carries team \"%(team)s\": the line must carry the same one."
+msgstr "Dossier \"%(number)s\" carries team \"%(team)s\": the line must carry the same one."
 
 #: reporting/imports.py:627
 #, python-format
@@ -2717,7 +2717,7 @@ msgstr "No project type"
 
 #: reporting/views.py:303
 msgid "Sans type de dossier"
-msgstr "No file type"
+msgstr "No dossier type"
 
 #: reporting/views.py:306
 msgid "Sans catégorie"
@@ -2762,7 +2762,7 @@ msgstr "Unknown project."
 
 #: reporting/views.py:555
 msgid "Type de dossier inconnu."
-msgstr "Unknown file type."
+msgstr "Unknown dossier type."
 
 #: reporting/views.py:574
 msgid "Pays inconnu."

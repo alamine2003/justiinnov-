@@ -134,7 +134,7 @@
     "expenses": "Lines",
     "proofs": "Documents",
     "status": "Status",
-    "dossier": "File",
+    "dossier": "Dossier",
     "replaces": "Replaces",
     "budget": "Budget",
     "created_by": "Entered by",
@@ -349,16 +349,16 @@
     }
   },
   "dossiers": {
-    "nom_one": "file",
-    "nom_other": "files",
+    "nom_one": "dossier",
+    "nom_other": "dossiers",
     "noms_pays": "countries",
     "noms_beneficiaires": "beneficiaries",
     "liste": {
-      "titre": "Justification files",
-      "description": "Every file you can see, whatever its project. A file is opened in its project, from the Projects section.",
-      "chargement_impossible": "Unable to load the files",
+      "titre": "Justification dossiers",
+      "description": "Every dossier you can see, whatever its project. A dossier is opened in its project, from the Projects section.",
+      "chargement_impossible": "Unable to load the dossiers",
       "recherche_placeholder": "Number, title or project…",
-      "recherche_aria": "Search for a file",
+      "recherche_aria": "Search for a dossier",
       "filtrer_statut": "Filter by status",
       "tous_statuts": "All statuses",
       "filtrer_pays": "Filter by country",
@@ -371,9 +371,9 @@
         "ecart": "Gap"
       },
       "vide": {
-        "titre": "No file",
+        "titre": "No dossier",
         "aide_creer": "Create a project: its dossiers are opened automatically, you only have to fill them.",
-        "aide_filtres": "No file matches these filters."
+        "aide_filtres": "No dossier matches these filters."
       },
       "ouverts": "Open",
       "exercice": "Financial year {{annee}} only",
@@ -388,10 +388,10 @@
       "choisir_pays": "Choose a country."
     },
     "detail": {
-      "chargement_impossible": "Unable to load the file",
-      "chargement": "Loading the file…",
-      "introuvable_titre": "File not found",
-      "introuvable_texte": "This file does not exist or is outside your scope.",
+      "chargement_impossible": "Unable to load the dossier",
+      "chargement": "Loading the dossier…",
+      "introuvable_titre": "Dossier not found",
+      "introuvable_texte": "This dossier does not exist or is outside your scope.",
       "referentiel_indisponible": "Country reference data unavailable",
       "avertissement_budgetaire": "Budget warning",
       "suppression_impossible": "Unable to delete",
@@ -410,8 +410,8 @@
       },
       "vide": {
         "titre": "No line",
-        "aide_ajouter": "Add the expenses of this file before submitting it.",
-        "aide_verrouille": "This file contains no expense."
+        "aide_ajouter": "Add the expenses of this dossier before submitting it.",
+        "aide_verrouille": "This dossier contains no expense."
       },
       "impute_sur": "charged to {{budget}}",
       "saisie_par": "entered by {{nom}}",
@@ -431,14 +431,14 @@
     },
     "reouverture": {
       "rouvrir": "Reopen",
-      "titre": "Reopen file {{numero}}",
-      "description": "The file and its lines return to draft; the country is notified and will have to submit it again. The reason is kept in the audit log.",
+      "titre": "Reopen dossier {{numero}}",
+      "description": "The dossier and its lines return to draft; the country is notified and will have to submit it again. The reason is kept in the audit log.",
       "motif": "Reason",
       "motif_placeholder": "Document to replace, amount to correct…",
       "motif_requis": "A reopening must be justified.",
       "lignes_bloquantes": "A line already justified or closed prevents reopening.",
       "impossible": "Unable to reopen",
-      "bandeau_titre": "File reopened by headquarters",
+      "bandeau_titre": "Dossier reopened by headquarters",
       "bandeau_motif": "Reason: {{motif}}"
     },
     "circuit": {
@@ -465,14 +465,14 @@
       "ligne": "Line {{numero}}",
       "bouton": "Import",
       "choisir_projet": "Choose a project…",
-      "aucun_projet": "No project open to files",
+      "aucun_projet": "No project open to dossiers",
       "projet_aide": "The workbook is imported into this project, and its country.",
       "projet_requis": "Choose the project to import into.",
       "type_aide": "The project's dossier that receives the workbook's lines."
     },
     "renommer": {
       "bouton": "Rename",
-      "titre": "Rename file {{numero}}",
+      "titre": "Rename dossier {{numero}}",
       "description": "Only the title changes: amounts, lines, documents and status stay as they are. The former title is kept in the audit log. Once the dossier is closed, it no longer changes.",
       "titre_requis": "Enter the new title.",
       "impossible": "Rename failed"
@@ -515,7 +515,7 @@
       "manager_responsable": "Responsible manager",
       "beneficiaire": "Prospect / beneficiary",
       "equipe_requise": "Choose one of your teams.",
-      "equipe_du_dossier": "Team (the file's)"
+      "equipe_du_dossier": "Team (the dossier's)"
     },
     "circuit": {
       "soumettre": "Submit",
@@ -526,7 +526,7 @@
     },
     "rejet": {
       "description_depense": "The expense remains charged to the budget: the money is gone. The reason is mandatory and stays attached to the history.",
-      "description_dossier": "The file remains charged to the budget: the money is gone. The reason is mandatory and stays attached to the history.",
+      "description_dossier": "The dossier remains charged to the budget: the money is gone. The reason is mandatory and stays attached to the history.",
       "motif": "Reason for rejection",
       "motif_placeholder": "Unreadable invoice, inconsistent amount…",
       "motif_requis": "A rejection must state a reason.",
@@ -534,7 +534,7 @@
     },
     "justification": {
       "description_depense": "The justified amount is the one the supporting documents attest. The server computes the gap with the expense.",
-      "description_dossier": "All the lines must already be justified: the file records their justification and the documents that attest it.",
+      "description_dossier": "All the lines must already be justified: the dossier records their justification and the documents that attest it.",
       "montant_requis": "Enter the justified amount, in figures.",
       "impossible": "Unable to justify",
       "montant": "Justified amount",
@@ -547,7 +547,7 @@
     "rectification": {
       "rectifier": "Rectify",
       "titre": "Request a rectification — {{titre}}",
-      "description": "Was this line justified or closed by mistake? An administrator will decide. If approved, the line goes back to review, its justified amount is reset to zero and head office rules again; the dossier follows. The reason is mandatory and kept in the audit log.",
+      "description": "Was this line justified or closed by mistake? An administrator will decide. If approved, the line goes back to review, its justified amount is reset to zero and headquarters rules again; the dossier follows. The reason is mandatory and kept in the audit log.",
       "motif": "Reason",
       "motif_placeholder": "Wrong justified amount, document mistaken for another…",
       "motif_requis": "A rectification must be motivated.",
@@ -584,8 +584,8 @@
     "vide": {
       "titre": "No supporting document",
       "aide_deposer": "Upload the invoice, receipt or discharge that attests the expense.",
-      "aide_sans_piece": "The file was declared without a supporting document.",
-      "aide_cloture": "The file is closed: no further document can be uploaded."
+      "aide_sans_piece": "The dossier was declared without a supporting document.",
+      "aide_cloture": "The dossier is closed: no further document can be uploaded."
     },
     "par": "by {{nom}}",
     "previsualiser_aria": "Preview {{nom}}",
@@ -832,7 +832,7 @@
       "a_controler": "Lines to review",
       "brouillon": "Draft lines",
       "non_justifiees": "Unjustified lines",
-      "dossiers_ouverts": "Open files",
+      "dossiers_ouverts": "Open dossiers",
       "aide": {
         "a_controler": "submitted or in review",
         "brouillon": "not submitted yet",
@@ -877,7 +877,7 @@
       "vide_titre": "No expense for this period",
       "vide_indication": "Change the year or the country to see a breakdown.",
       "par_type_projet": "By project type",
-      "par_type_dossier": "By file type",
+      "par_type_dossier": "By dossier type",
       "axe": "Break down by"
     },
     "alertes_soustitre": "most serious first",
@@ -1193,9 +1193,9 @@
       "taux_invalide": "Enter a strictly positive decimal rate."
     },
     "types_dossiers": {
-      "chargement_impossible": "Unable to load file types",
+      "chargement_impossible": "Unable to load dossier types",
       "nom_placeholder": "Stands",
-      "noun_pluriel": "file types",
+      "noun_pluriel": "dossier types",
       "ajouter": "Add a dossier type",
       "ordre": "Order",
       "titre_colonne": "Dossier type",
@@ -1354,7 +1354,7 @@
     "nom_other": "projects",
     "reference": "Project",
     "type": "Project type",
-    "type_de_dossier": "File type",
+    "type_de_dossier": "Dossier type",
     "sans_type": "No type",
     "a_typer": "To be typed",
     "historique": "History",
@@ -1369,7 +1369,7 @@
       "filtrer_pays": "Filter by country",
       "filtrer_type": "Filter by project type",
       "colonnes": {
-        "dossiers": "Files"
+        "dossiers": "Dossiers"
       },
       "vide": {
         "titre": "No project",
@@ -1394,7 +1394,7 @@
       "introuvable_titre": "Project not found",
       "introuvable_texte": "This project does not exist or is outside your scope.",
       "actualisation": "Refreshing project",
-      "filtrer_type": "Filter by file type",
+      "filtrer_type": "Filter by dossier type",
       "historique_aide": "This project holds the dossiers opened before version 2.0. It receives no new one.",
       "a_typer_aide": "This project predates version 2.0 and has no type yet. Headquarters types it from “Edit”: it then receives its predefined dossiers.",
       "desactive_aide": "This project is deactivated: its dossiers remain readable.",
@@ -1403,7 +1403,7 @@
     },
     "dossier": {
       "choisir_type": "Choose a type…",
-      "type_requis": "Choose the file's type."
+      "type_requis": "Choose the dossier's type."
     },
     "renommer": {
       "bouton": "Rename",
@@ -1452,23 +1452,23 @@
     "liste": {
       "ouvrir-un-projet": {
         "titre": "Open a project",
-        "description": "Create a congress, a trip or financial support, which receives its files automatically."
+        "description": "Create a congress, a trip or financial support, which receives its dossiers automatically."
       },
       "saisir-une-ligne": {
         "titre": "Enter an expense",
-        "description": "Add a line to a file in your name: what, when, where, how much, for which team and under which manager."
+        "description": "Add a line to a dossier in your name: what, when, where, how much, for which team and under which manager."
       },
       "joindre-une-piece": {
         "titre": "Attach a document",
         "description": "Upload the receipt or invoice that proves an expense, from its line."
       },
       "soumettre-un-dossier": {
-        "titre": "Submit a file",
-        "description": "Send a complete file to head office: its lines go with it."
+        "titre": "Submit a dossier",
+        "description": "Send a complete dossier to headquarters: its lines go with it."
       },
       "importer-un-classeur": {
         "titre": "Import a workbook",
-        "description": "Load the lines of an Excel workbook into a file, after a simulation."
+        "description": "Load the lines of an Excel workbook into a dossier, after a simulation."
       }
     },
     "etapes": {
