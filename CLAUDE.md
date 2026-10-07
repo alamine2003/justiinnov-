@@ -109,7 +109,8 @@ l'application.
   `super_admin`, fixe, jamais l'`admin` — qui règle la matrice et se les
   rouvrirait sinon) — de même que **les listes des types de projets et
   des types de dossiers** (`project_types.manage`, `dossier_kinds.manage`,
-  décisions 108 et 119), qui fixent les dossiers de chaque projet ; **l'administration est aux administrateurs** —
+  décisions 108 et 119), qui fixent les dossiers de chaque projet, et
+  **la corbeille** (`corbeille.supprimer`, décision 120) ; **l'administration est aux administrateurs** —
   `admin` et `super_admin` gardent comptes, configuration, référentiel,
   audit et exports et règlent toute la matrice (décision 58).
   Le `manager` ne reçoit jamais l'administration (comptes, configuration,
@@ -143,7 +144,9 @@ l'application.
   référentiel (`/api/history/`), lui, reste ouvert au siège entier.
 - **Une dépense soumise est irréversible.** Elle ne revient pas au brouillon,
   ne se modifie plus, ne se supprime pas. Seul un brouillon — jamais soumis,
-  donc sans valeur probante — peut être retiré par son auteur. **Une seule
+  donc sans valeur probante — peut être retiré par son auteur (hors la
+  corbeille du `super_admin`, réservée à l'avant-ouverture : voir « Rien ne
+  se supprime »). **Une seule
   exception : la réouverture** (`reopen`, capacité `dossiers.reopen` :
   `admin` seul, jamais le pays ni le `super_admin`), motivée (`note`,
   gardée dans `Dossier.reopen_note`), tracée (`AuditLog` `reopened` sur le
@@ -237,7 +240,18 @@ l'application.
   (décision 113), avant l'ouverture aux filiales — `manage.py
   remise_a_zero_des_essais`, une fois, sur sauvegarde fraîche, chaque objet
   retiré tracé `purged` au journal. Elle ne se refait pas : la commande
-  refuse une seconde fois.
+  refuse une seconde fois. **Et, jusqu'à la mise en ligne finale, la
+  corbeille** (décision 120) : tant que « Configuration › Général » la tient
+  ouverte (`WorkflowConfiguration.suppressions_ouvertes`, fermée par
+  défaut, réglée par le `super_admin` seul), le `super_admin`
+  (`corbeille.supprimer`, verrouillée à l'`admin` et au pays) met à la
+  corbeille un projet, un dossier, une ligne ou un justificatif, quel que
+  soit son état, avec ce qui en dépend et un motif (`POST /api/corbeille/`).
+  L'objet quitte sa table — enveloppes et numérotation se recalculent, un
+  numéro libéré resservira —, sa copie figée reste dans `ElementSupprime`,
+  que la base refuse de modifier ou de supprimer, son fichier reste au
+  stockage, et chaque objet laisse `trashed` au journal. La corbeille ne se
+  vide pas et ne restaure rien ; on la **ferme à la mise en ligne finale**.
 - **Les chiffres se calculent côté serveur.** Solde, écart, taux : l'interface
   affiche, elle ne recalcule pas. Les actions possibles aussi : chaque
   dossier et chaque ligne portent `allowed_actions` — saisie (`edit`,

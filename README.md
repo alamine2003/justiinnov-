@@ -197,6 +197,15 @@ la sienne. La fiche d'un projet a son historique —
 une seule chronologie, lue avec `audit.read` (décision 110) — et l'audit son tableau de bord —
 `GET /api/audit/synthese/?debut=&fin=&country=` (décision 111) ; le journal
 d'audit se filtre par période et par projet (`?debut=&fin=&projet=`).
+Avant la mise en ligne finale, le super administrateur retire les saisies
+d'essai par la **corbeille** (décision 120) : `POST /api/corbeille/`
+(`{nature: projet|dossier|ligne|piece, id, motif}`, capacité
+`corbeille.supprimer`, seulement tant que
+`WorkflowConfiguration.suppressions_ouvertes` est vrai) ; la liste
+`GET /api/corbeille/?tetes=true&nature=&country=&racine=&search=` et le
+fichier d'une pièce gardée `GET /api/corbeille/{id}/fichier/` se lisent
+avec `audit.read`. La corbeille ne se vide pas (ni `PUT`, ni `PATCH`, ni
+`DELETE`, et un déclencheur en base).
 Dans l'interface, « Projets » remplace « Dossiers » dans la navigation : la
 liste des projets (`GET /api/projects/`, onglets par pays par
 `GET /api/projects/par-pays/`) mène à la fiche d'un projet, qui liste ses

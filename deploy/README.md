@@ -1506,6 +1506,31 @@ résisté est repris par l'ordonnanceur (`supprimer_fichiers`).
 des étapes 2 et 3. Ce dump, la copie mensuelle d'octobre et le coffre
 distant gardent les essais : rien n'est perdu, rien n'est à effacer.
 
+### Repartir de zéro par la corbeille, puis la fermer (décision 120)
+
+Depuis la 2.3.0, le super administrateur retire les essais **depuis
+l'interface**, sans commande : c'est le chemin ordinaire. La corbeille garde
+une copie de chaque objet retiré et son fichier ; elle ne se vide pas.
+
+1. **Sauvegarder** comme à l'étape 1 ci-dessus : la corbeille garde une
+   copie, mais un dump pris juste avant reste la seule photographie
+   complète.
+2. **Ouvrir** : connecté en super administrateur, « Configuration ›
+   Général › Corbeille », interrupteur « Suppressions ouvertes ». Le
+   changement est tracé dans l'historique (configuration).
+3. **Retirer** : sur la fiche de chaque projet d'essai, « Mettre à la
+   corbeille », motif à l'appui — le projet part avec ses dossiers, leurs
+   lignes et leurs justificatifs. Un projet qui porte une enveloppe est
+   refusé : supprimer d'abord l'enveloppe (page Budgets, jamais servie une
+   fois ses lignes retirées) ou la rattacher ailleurs. Le projet
+   « Historique » ne se retire pas ; ses dossiers, si.
+4. **Vérifier** : la page « Corbeille » liste ce qui est parti ; le
+   Pilotage et les enveloppes ne comptent plus les essais ; un nouveau
+   projet repart à `-001`.
+5. **Fermer à la mise en ligne finale** : même interrupteur. Plus aucun
+   bouton « Mettre à la corbeille » n'apparaît, et l'API refuse (400).
+   Consigner la date dans le journal d'exploitation.
+
 ## Reprise à un instant donné
 
 Le dump de 02:00 dit où l'on était cette nuit-là. **Les segments de journal
