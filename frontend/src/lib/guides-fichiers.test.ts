@@ -19,8 +19,13 @@ import { GUIDES, LANGUES_DES_GUIDES } from "./guides"
 
 const DOSSIER = join(process.cwd(), "public", "guides")
 
-/** Le poids maximal de `public/guides/`, en octets (décision 118 : 5,8 Mo mesurés en 2.1.0). */
-const BUDGET_EN_OCTETS = 6_000_000
+/**
+ * Le poids maximal de `public/guides/`, en octets (décision 118). 6 000 000
+ * jusqu'à la 2.1.1 (5,8 Mo mesurés en 2.1.0, 5,94 Mo en 2.1.1) ; relevé à la
+ * 2.2, dont les guides montrent plus de gestes (6 590 846 octets mesurés) :
+ * le débit est gardé, pour la lisibilité du texte filmé.
+ */
+const BUDGET_EN_OCTETS = 8_000_000
 
 /**
  * Les trois fichiers d'un guide, chacun avec la signature qui ouvre un

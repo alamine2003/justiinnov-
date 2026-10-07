@@ -1,25 +1,25 @@
 WEBVTT
 
 1
-00:00:01.693 --> 00:00:11.217
-Open the file of the right type, in a project you opened yourself: only you can add lines to it.
+00:00:01.596 --> 00:00:09.636
+Open the dossier of the right type, in a project you opened yourself.
 
 2
-00:00:11.217 --> 00:00:15.743
+00:00:09.636 --> 00:00:14.149
 Click “Add” to enter an expense.
 
 3
-00:00:15.743 --> 00:00:25.323
+00:00:14.149 --> 00:00:23.637
 Describe the expense: what was paid, when and where.
 
 4
-00:00:25.323 --> 00:00:33.135
-Enter the amount in the country's currency (if paid in another currency, it is converted).
+00:00:23.637 --> 00:00:34.728
+Amount in the country's currency; otherwise open “Paid in another currency”.
 
 5
-00:00:33.135 --> 00:00:41.643
-A team and a responsible manager are required to submit: the team comes from the file, choose the manager.
+00:00:34.728 --> 00:00:41.576
+A team and a responsible manager are required to submit: choose the manager.
 
 6
-00:00:41.643 --> 00:00:53.150
-Click “Save”. The line stays a draft, still editable, until it is submitted.
+00:00:41.576 --> 00:00:52.066
+Click “Save”: the line stays a draft that only you can edit.

@@ -1,17 +1,25 @@
 WEBVTT
 
 1
-00:00:02.285 --> 00:00:07.777
-Quand les dépenses du dossier sont complètes, avec leurs pièces, soumettez-le.
+00:00:01.661 --> 00:00:10.672
+Ouvrez le dossier et relisez ses lignes : chacune doit avoir sa pièce.
 
 2
-00:00:07.777 --> 00:00:14.367
-Cliquez sur « Soumettre » : toutes les lignes partent avec le dossier.
+00:00:10.672 --> 00:00:15.891
+« Soumettre » agit tout de suite, sans confirmation ni retour en arrière.
 
 3
-00:00:14.367 --> 00:00:19.915
-Le dossier est soumis : ses lignes ne se modifient plus, le siège les contrôle.
+00:00:15.891 --> 00:00:21.442
+Vos lignes partent avec le dossier ; un brouillon d'un collègue bloque l'envoi.
 
 4
-00:00:19.915 --> 00:00:28.596
-Une pièce oubliée se dépose encore depuis sa ligne, jusqu'à la clôture du dossier.
+00:00:21.442 --> 00:00:25.557
+Cliquez sur « Soumettre ».
+
+5
+00:00:25.557 --> 00:00:31.323
+Le dossier est soumis : ses lignes ne changent plus, seul le siège peut le rouvrir.
+
+6
+00:00:31.323 --> 00:00:39.571
+Une ligne sans pièce part avec un avertissement ; le dossier attend ses pièces.
