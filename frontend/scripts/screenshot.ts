@@ -461,8 +461,14 @@ async function main() {
   expect(repNav.some((t) => t.includes("Guide vidéo")), "le pays voit « Guide vidéo »")
   await goto(rep, "/guide", 1200)
   await shot(rep, "guide_video")
-  const sommaire = rep.getByRole("navigation", { name: "Les guides" }).getByRole("button")
+  // Le sommaire est fait de liens `?video=` (2.2) : un guide s'ouvre aussi
+  // dans un nouvel onglet.
+  const sommaire = rep.getByRole("navigation", { name: "Les guides" }).getByRole("link")
   expect((await sommaire.count()) === 5, "le guide propose les cinq gestes du manager")
+  expect(
+    (await sommaire.nth(4).getAttribute("href"))?.endsWith("?video=importer-un-classeur") === true,
+    "chaque guide du sommaire a son adresse",
+  )
   // Le type compte autant que le statut : le serveur de développement
   // répond 200 avec index.html pour un fichier absent.
   for (const [selecteur, attribut, type] of [
