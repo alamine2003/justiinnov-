@@ -568,6 +568,7 @@ class WorkflowConfigurationSerializer(serializers.ModelSerializer):
 
     require_review_step = StrictBooleanField()
     warn_without_proof_submission = StrictBooleanField()
+    suppressions_ouvertes = StrictBooleanField()
     unjustified_alert_days = SeuilField(min_value=0)
     alert_thresholds = serializers.ListField(child=SeuilField(min_value=0))
     unusual_expense_factor = serializers.DecimalField(
@@ -587,6 +588,7 @@ class WorkflowConfigurationSerializer(serializers.ModelSerializer):
             "default_overrun_policy",
             "default_overrun_policy_display",
             "warn_without_proof_submission",
+            "suppressions_ouvertes",
             "updated_at",
         ]
         read_only_fields = ["updated_at"]

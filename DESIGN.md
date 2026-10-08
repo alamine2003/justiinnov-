@@ -241,7 +241,7 @@ avec le défilement.
 
 `AppLayout` (`components/layout/app-layout.tsx`) range les entrées dans une
 **barre latérale** dès `lg`, par groupe : **Suivi** (Pilotage, Projets,
-Registre), **Budget** (Budgets, Pays), **Contrôle** (Audit, si
+Registre), **Budget** (Budgets, Pays), **Contrôle** (Audit et Corbeille, si
 `can("audit.read")`), **Administration** (Configuration, si
 `can("configuration.manage")`), **Aide** (Guide vidéo, s'il reste au compte
 au moins un guide à suivre). Un groupe que les droits laissent vide ne
@@ -683,6 +683,37 @@ une enveloppe qui a servi se désactive au lieu de se supprimer. Boutons
 serveur (une dépense imputée entre-temps, `400` sur `budget`) s'affiche en
 `<FormError>` dans le dialogue, qui reste ouvert. Après une suppression, la
 page relit les enveloppes.
+
+### Mettre à la corbeille
+
+Avant la mise en ligne finale, le super administrateur retire les saisies
+d'essai (décision 120). Un seul composant,
+`components/corbeille/mettre-a-la-corbeille.tsx` : un bouton
+`text-destructive` avec `Trash2` — icône dans une carte de ligne ou une
+pièce (`aria-label` « Mettre « … » à la corbeille »), libellé
+« Mettre à la corbeille » (`outline`) dans l'en-tête d'une fiche projet ou
+dossier — qui ouvre un dialogue : la conséquence d'abord (ce qui part avec
+l'objet, une phrase par nature, puis « la corbeille en garde une copie et
+les fichiers ; elle ne se vide pas et ne remet rien en place »), le motif
+obligatoire (`ChampMotif`), « Annuler » (`outline`) et « Mettre à la
+corbeille » (`destructive`). Un refus du serveur s'affiche en `<FormError>`
+dans le dialogue, qui reste ouvert. Le composant ne décide pas s'il
+s'affiche : la carte de ligne et la fiche dossier lisent `allowed_actions`
+(`trash`), la pièce `can_trash`, la fiche projet la capacité
+`corbeille.supprimer` et `me.workflow.suppressions_ouvertes`. Après coup,
+la fiche dossier revient au projet, la fiche projet à la liste ; une ligne
+retirée laisse un avis « « … » est dans la corbeille ».
+
+La page **Corbeille** (`/corbeille`, groupe Contrôle, `audit.read`) suit le
+journal d'audit : un avis dit si les suppressions sont ouvertes
+(`destructive`) ou fermées, puis recherche, nature et pays, et un tableau
+des éléments choisis — date, élément (nature en `Badge outline`,
+référence en mono, « avec N éléments »), pays, montant, auteur, motif. Un
+chevron (`aria-expanded`) déplie, en retrait sur `bg-muted/40`, ce qu'un
+élément a emporté ; une pièce gardée se télécharge. Rien ne s'y modifie.
+Dans « Configuration › Général », une carte « Corbeille » porte
+l'interrupteur, qui s'enregistre seul ; grisé pour qui n'a pas
+`corbeille.supprimer`.
 
 ### Bénéficiaires : contact à compléter
 

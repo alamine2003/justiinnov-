@@ -1,5 +1,6 @@
 import { FileWarning, Loader2, Paperclip, Pencil, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { MettreALaCorbeille } from "@/components/corbeille/mettre-a-la-corbeille"
 import { Button } from "@/components/ui/button"
 import { BarreEcart } from "@/components/ui/charts"
 import { OriginalAmount } from "@/components/expenses/original-amount"
@@ -33,6 +34,7 @@ export function CarteDeLigne({
   deleting,
   onEdit,
   onDelete,
+  onTrashed,
   onTransition,
   onRequestRectification,
   onError,
@@ -46,6 +48,8 @@ export function CarteDeLigne({
   deleting: boolean
   onEdit: (expense: Expense) => void
   onDelete: (expense: Expense) => void
+  /** Mise à la corbeille par le super administrateur (décision 120). */
+  onTrashed: (expense: Expense) => void
   onTransition: (
     expense: Expense,
     action: ExpenseTransitionName,
@@ -196,6 +200,15 @@ export function CarteDeLigne({
                 <Trash2 className="h-4 w-4" />
               )}
             </Button>
+          )}
+          {expense.allowed_actions.includes("trash") && (
+            <MettreALaCorbeille
+              nature="ligne"
+              id={expense.id}
+              libelle={expense.title}
+              icone
+              onDone={() => onTrashed(expense)}
+            />
           )}
           <WorkflowActions
             amount={expense.amount}

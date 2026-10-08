@@ -72,7 +72,8 @@
     },
     "reduire_menu": "Collapse menu",
     "deplier_menu": "Expand menu",
-    "guide": "Video guide"
+    "guide": "Video guide",
+    "corbeille": "Bin"
   },
   "erreurs": {
     "injoignable": "Server unreachable. Check your connection.",
@@ -213,7 +214,8 @@
       "proof_to_review": "Document to review",
       "imported": "Import",
       "renamed": "Rename",
-      "purged": "Test data reset"
+      "purged": "Test data reset",
+      "trashed": "Moved to the bin"
     },
     "beneficiaire_type": {
       "prospect": "Prospect",
@@ -1236,6 +1238,15 @@
       "aucun": "No project type",
       "aucun_aide": "Without a project type, no project can be opened: the super administrator adds one.",
       "ordre_placeholder": "After the others"
+    },
+    "corbeille": {
+      "titre": "Bin",
+      "libelle": "Deletions open",
+      "aide": "When open, the super administrator can move to the bin the projects, dossiers, lines and supporting documents entered during the trials. Close it at the final go-live: nothing will be deleted any more.",
+      "lecture_seule": "Only the super administrator opens or closes the bin.",
+      "ouverte": "The bin is open.",
+      "fermee": "The bin is closed.",
+      "voir": "Open the bin"
     }
   },
   "audit": {
@@ -1287,7 +1298,8 @@
         "Rectification": "Corrections",
         "BudgetReallocation": "Reallocations",
         "Export": "Exports",
-        "ExpenseImport": "Imports"
+        "ExpenseImport": "Imports",
+        "ElementSupprime": "Bin"
       },
       "retirer": "Remove the “{{filtre}}” filter"
     },
@@ -1484,5 +1496,54 @@
     "illisible": "Your browser cannot play this video. Open the platform in an up-to-date Chrome, Edge or Firefox.",
     "numero": "{{numero}}. {{titre}}",
     "video_indisponible": "This video could not be loaded. Reload the page; the steps below remain readable."
+  },
+  "corbeille": {
+    "bouton": "Move to the bin",
+    "aria": "Move “{{libelle}}” to the bin",
+    "titre": "Move to the bin: {{libelle}}",
+    "emporte": {
+      "projet": "The project goes with its dossiers, their lines and their supporting documents.",
+      "dossier": "The dossier goes with its lines and their supporting documents.",
+      "ligne": "The line goes with its supporting documents and its rectification requests.",
+      "piece": "The supporting document goes with all its versions; the line stays."
+    },
+    "avertissement": "All of this leaves the lists, the envelopes and the dashboards. The bin keeps a copy and the files; it is never emptied and restores nothing.",
+    "impossible": "Moving to the bin failed.",
+    "fait": "“{{libelle}}” is in the bin.",
+    "page": {
+      "titre": "Bin",
+      "description": "What the super administrator removed before the final go-live, with who, when and why. Nothing here can be changed or deleted.",
+      "ouverte": "Deletions are open: the super administrator can still move entries to the bin.",
+      "fermee": "Deletions are closed: nothing else goes to the bin.",
+      "indisponible": "The bin could not be loaded.",
+      "recherche_placeholder": "Reference, label, reason or author…",
+      "recherche_aria": "Search the bin",
+      "nature_aria": "Filter by kind",
+      "toutes_natures": "All kinds",
+      "col_date": "Removed on",
+      "col_element": "Item",
+      "col_pays": "Country",
+      "col_montant": "Amount",
+      "col_par": "By",
+      "col_motif": "Reason",
+      "col_actions": "Actions",
+      "emportes_one": "with {{count}} item",
+      "emportes_other": "with {{count}} items",
+      "voir_emportes": "Show what went with “{{libelle}}”",
+      "masquer_emportes": "Hide what went with “{{libelle}}”",
+      "telecharger": "Download the supporting document “{{libelle}}”",
+      "telechargement_impossible": "The supporting document could not be downloaded.",
+      "vide_titre": "The bin is empty",
+      "vide_aide": "Nothing has been moved to the bin.",
+      "noun_singulier": "item",
+      "noun_pluriel": "items"
+    },
+    "natures": {
+      "projet": "Projects",
+      "dossier": "Dossiers",
+      "ligne": "Lines",
+      "piece": "Supporting documents"
+    },
+    "motif_placeholder": "Why remove this item?"
   }
 }

@@ -501,6 +501,13 @@ class WorkflowConfiguration(models.Model):
     #: et les verrous vivent dans ``accounts.permissions`` ; ``core`` ne les
     #: connaît pas, il ne fait que garder le choix.
     capability_roles = models.JSONField(_("Matrice des droits"), default=dict, blank=True)
+    #: La corbeille du super administrateur (décision 120) : ouverte pour
+    #: retirer les saisies d'essai avant la mise en ligne finale, fermée
+    #: ensuite. Fermée par défaut : rien ne se retire sans qu'on l'ait
+    #: décidé.
+    suppressions_ouvertes = models.BooleanField(
+        _("Suppressions ouvertes (corbeille)"), default=False, db_default=False
+    )
     updated_at = models.DateTimeField(_("Modifié le"), auto_now=True)
 
     class Meta:

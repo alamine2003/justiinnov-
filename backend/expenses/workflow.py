@@ -73,6 +73,7 @@ from django.utils.translation import gettext_lazy as _
 
 from accounts.permissions import COUNTRY_ROLES, roles_pour
 
+from core.models import WorkflowConfiguration
 from core.regles import RegleViolee
 
 # Les états et leurs ensembles vivent dans ``core.statuts`` (décision 40) et
@@ -161,6 +162,9 @@ SAISIE_CAPACITES = {
     # Le titre d'un dossier, jusqu'à la clôture (décisions 104 et 108) : seul ce qui ne
     # porte ni montant ni preuve se modifie après la déclaration.
     "rename": "dossiers.rename",
+    # La corbeille du super administrateur (décision 120) : quel que soit
+    # l'état, tant que la configuration la tient ouverte.
+    "trash": "corbeille.supprimer",
 }
 
 #: Actions soumises à la règle des quatre yeux : tout acte de contrôle, de
@@ -282,15 +286,30 @@ def breaks_four_eyes(action, author, username):
 #: Actions d'une ligne, dans l'ordre où l'interface les propose : la saisie
 #: d'abord, le contrôle ensuite.
 #: Une pièce se dépose sur la ligne qu'elle prouve (décision 107).
-EXPENSE_ACTIONS = ("edit", "upload", "delete", "review", "justify", "reject", "close")
+EXPENSE_ACTIONS = (
+    "edit", "upload", "delete", "review", "justify", "reject", "close", "trash",
+)
 
 #: Actions d'un dossier, dans le même ordre que le circuit.
 #: Un dossier ne se crée ni ne se retire : il est prédéfini par son projet
 #: (décision 106) ; ses pièces se déposent sur ses lignes (décision 107).
 DOSSIER_ACTIONS = (
     "edit", "rename", "add_line",
-    "submit", "review", "justify", "reject", "close", "reopen",
+    "submit", "review", "justify", "reject", "close", "reopen", "trash",
 )
+
+
+def corbeille_ouverte(configuration=None):
+    """La corbeille du super administrateur est-elle ouverte (décision 120) ?
+
+    Lu sur la configuration de la requête, comme la matrice : ce que
+    ``allowed_actions`` propose peut avoir une minute de retard sur une
+    fermeture — le service, lui, relit la base avant de retirer quoi que
+    ce soit (``corbeille.exiger_la_corbeille_ouverte``).
+    """
+    if configuration is None:
+        configuration = WorkflowConfiguration.charger()
+    return bool(configuration.suppressions_ouvertes)
 
 
 def agit_en_auteur(objet, role, username):
@@ -324,6 +343,8 @@ def peut_saisir(action, objet, *, role, username, configuration=None):
     if role not in roles_pour(SAISIE_CAPACITES[action], configuration):
         return False
     auteur_ou_anonyme = not objet.created_by or objet.created_by == username
+    if action == "trash":
+        return corbeille_ouverte(configuration)
     if action == "rename":
         # Jusqu'à la clôture (décision 108), par tout compte qui a la
         # capacité — pas seulement l'auteur (décision 104).

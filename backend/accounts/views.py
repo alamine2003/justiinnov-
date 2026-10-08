@@ -296,13 +296,22 @@ class WorkflowConfigurationView(APIView):
         # Lue en base et verrouillée, pas depuis le cache : deux
         # modifications simultanées se succèdent au lieu de s'écraser, et le
         # journal décrit exactement l'état que chacune a trouvé.
-        configuration, _ = (
+        configuration, _cree = (
             WorkflowConfiguration.objects.select_for_update().get_or_create(pk=1)
         )
         serializer = WorkflowConfigurationSerializer(
             configuration, data=request.data, partial=True
         )
         serializer.is_valid(raise_exception=True)
+        corbeille = serializer.validated_data.get("suppressions_ouvertes")
+        if corbeille is not None and corbeille != configuration.suppressions_ouvertes:
+            # La RH configure la plateforme, mais n'ouvre pas la corbeille
+            # qui retirerait ce qu'elle contrôle (décision 120).
+            access = get_access(request.user)
+            if access is None or access.role not in roles_pour("corbeille.supprimer"):
+                raise PermissionDenied(
+                    _("Seul le super administrateur ouvre ou ferme la corbeille.")
+                )
         modifiables = [
             name for name, field in serializer.fields.items() if not field.read_only
         ]

@@ -321,6 +321,18 @@ async function main() {
   expectData((await hq.locator("tbody tr").count()) > 0, "l'historique du référentiel a des entrées")
   await shot(hq, "audit_referentiel")
 
+  // Décision 120 : la corbeille se lit au siège, avec l'état de l'interrupteur.
+  await goto(hq, "/corbeille", 1200)
+  expect(
+    (await hq.getByRole("heading", { name: "Corbeille" }).count()) === 1,
+    "la page Corbeille s'ouvre au siège",
+  )
+  expect(
+    (await hq.getByText(/Les suppressions sont (ouvertes|fermées)/).count()) === 1,
+    "la corbeille dit si les suppressions sont ouvertes",
+  )
+  await shot(hq, "corbeille")
+
   await goto(hq, "/countries")
   const hqCountries = await hq.locator("tbody tr").count()
   expectData(hqCountries > 1, `le siège voit plusieurs pays (${hqCountries})`)
@@ -401,7 +413,9 @@ async function main() {
   const ficheDossier = await hq.evaluate(() =>
     [...document.querySelectorAll("main a")].map((a) => a.getAttribute("href")).find((h) => h && /^\/dossiers\/\d+$/.test(h)),
   )
-  const ecrans = ["/", "/projets", "/dossiers", "/registre", "/audit", "/budgets", "/configuration", "/countries"]
+  const ecrans = [
+    "/", "/projets", "/dossiers", "/registre", "/audit", "/corbeille", "/budgets", "/configuration", "/countries",
+  ]
   if (fiche) ecrans.push(fiche)
   if (ficheDossier) ecrans.push(ficheDossier)
   // 1 366 × 657 : un portable 1 366 × 768, barre du navigateur déduite.
@@ -546,7 +560,7 @@ async function main() {
   await shot(rep, "budgets_representant")
 
   // Pages réservées au siège : la garde ramène au tableau de bord.
-  for (const chemin of ["/configuration", "/audit"]) {
+  for (const chemin of ["/configuration", "/audit", "/corbeille"]) {
     await rep.goto(`${BASE}${chemin}`)
     await rep.waitForURL((url) => url.pathname === "/", { timeout: 10000 }).catch(() => {})
     await rep.waitForTimeout(800)

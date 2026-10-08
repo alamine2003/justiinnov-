@@ -272,6 +272,21 @@ CAPACITES = (
         _("Relire la trace des actions sensibles, décisions du siège comprises."),
         _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
+    # La corbeille retire ce que les pays ont déclaré, constats compris
+    # (décision 120) : au super administrateur seul, comme les enveloppes —
+    # la RH, qui contrôle ces déclarations et règle la matrice, se la
+    # rouvrirait sinon. Elle n'agit que tant que la configuration la tient
+    # ouverte (``suppressions_ouvertes``).
+    Capacite(
+        "corbeille.supprimer", GROUPE_ADMINISTRATION,
+        _("Mettre à la corbeille"),
+        _(
+            "Retirer un projet, un dossier, une ligne ou un justificatif, avec "
+            "ce qui en dépend, tant que les suppressions sont ouvertes. La "
+            "corbeille garde une copie et le fichier, et ne se vide pas."
+        ),
+        _ALLOCATEUR, verrouillees=frozenset({Role.ADMIN, *COUNTRY_ROLES}), fixes=_ALLOCATEUR,
+    ),
     Capacite(
         "history.read", GROUPE_ADMINISTRATION,
         _("Historique du référentiel"),

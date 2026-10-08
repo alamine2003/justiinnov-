@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ProofPreview } from "@/components/expenses/proof-preview"
 import { ProofStatusBadge } from "@/components/expenses/status-badge"
 import { estRemplacable } from "@/lib/circuit"
+import { MettreALaCorbeille } from "@/components/corbeille/mettre-a-la-corbeille"
 import { useAuth } from "@/context/use-auth"
 import { fetchConfiguration } from "@/lib/accounts"
 import {
@@ -161,6 +162,18 @@ export function ProofPanel({
         >
           <FileCheck2 className="h-3.5 w-3.5" />
         </Button>
+      )}
+      {/* La corbeille du super administrateur (décision 120) : le serveur
+          dit si la pièce peut partir seule. */}
+      {proof.can_trash && (
+        <MettreALaCorbeille
+          nature="piece"
+          id={proof.id}
+          libelle={proof.original_name}
+          icone
+          className="h-7 w-7"
+          onDone={() => void onChanged()}
+        />
       )}
     </div>
   )

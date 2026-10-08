@@ -65,6 +65,8 @@ class MeWorkflowSerializer(serializers.Serializer):
     """Politique du circuit que l'interface doit connaître."""
 
     require_review_step = serializers.BooleanField(read_only=True)
+    #: La corbeille du super administrateur est ouverte (décision 120).
+    suppressions_ouvertes = serializers.BooleanField(read_only=True)
 
 
 class TokenAuthSerializer(serializers.Serializer):
@@ -317,7 +319,10 @@ class MeSerializer(serializers.ModelSerializer):
         le serveur refuserait l'étape, ou l'inverse.
         """
         configuration = WorkflowConfiguration.charger()
-        return {"require_review_step": configuration.require_review_step}
+        return {
+            "require_review_step": configuration.require_review_step,
+            "suppressions_ouvertes": configuration.suppressions_ouvertes,
+        }
 
     @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
     def get_alert_thresholds(self, user):

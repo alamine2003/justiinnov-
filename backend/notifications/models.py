@@ -49,6 +49,9 @@ class Notification(models.Model):
         #: au contrôle et au pays.
         RECTIFICATION_REQUESTED = "rectification_requested", _("Demande de rectification")
         RECTIFICATION_DECIDED = "rectification_decided", _("Décision sur une rectification")
+        #: Avant la mise en ligne finale, le super administrateur retire des
+        #: saisies d'essai (décision 120) : le pays qui les a faites le sait.
+        TRASHED = "trashed", _("Mise à la corbeille")
 
     class Level(models.TextChoices):
         INFO = "info", _("Information")

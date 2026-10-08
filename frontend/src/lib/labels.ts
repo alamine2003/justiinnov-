@@ -105,6 +105,7 @@ export const AUDIT_ACTIONS = [
   "updated",
   "deleted",
   "purged",
+  "trashed",
   "submitted",
   "reviewed",
   "justified",

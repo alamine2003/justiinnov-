@@ -48,14 +48,14 @@ COMPTEURS_CIRCUIT = {
     "pieces": [([A.PROOF_UPLOADED, A.PROOF_REPLACED], None)],
     "sorties": [([A.DOWNLOADED], None)],
     "imports": [([A.IMPORTED], None)],
-    "suppressions": [([A.DELETED, A.PURGED], None)],
+    "suppressions": [([A.DELETED, A.PURGED, A.TRASHED], None)],
     "renommages": [([A.RENAMED], None)],
 }
 
 #: Ce qui, dans le circuit, mérite qu'on y regarde à deux fois.
 SENSIBLES_CIRCUIT = [
     A.REOPENED, A.RECTIFICATION_REQUESTED, A.RECTIFICATION_DECIDED, A.RECTIFIED,
-    A.DELETED, A.PURGED, A.UNJUSTIFIED, A.REJECTED, A.IMPORTED,
+    A.DELETED, A.PURGED, A.TRASHED, A.UNJUSTIFIED, A.REJECTED, A.IMPORTED,
 ]
 #: Et dans le référentiel, les comptes, la configuration.
 SENSIBLES_REFERENTIEL = Q(

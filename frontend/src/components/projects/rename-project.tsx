@@ -134,10 +134,13 @@ export function ChampMotif({
   id,
   value,
   onChange,
+  placeholder,
 }: {
   id: string
   value: string
   onChange: (value: string) => void
+  /** La question que le motif doit trancher, quand ce n'est pas une modification. */
+  placeholder?: string
 }) {
   const { t } = useTranslation()
   return (
@@ -149,7 +152,7 @@ export function ChampMotif({
         onChange={(e) => onChange(e.target.value)}
         rows={2}
         maxLength={1000}
-        placeholder={t("projets.motif.placeholder")}
+        placeholder={placeholder ?? t("projets.motif.placeholder")}
         required
       />
       <p className="text-xs text-muted-foreground">{t("projets.motif.aide")}</p>

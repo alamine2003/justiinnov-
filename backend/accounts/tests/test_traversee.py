@@ -36,7 +36,9 @@ from core.models import (
     Team,
 )
 from core.statuts import Status
-from expenses.models import AuditLog, Beneficiary, Dossier, Expense, Proof, Rectification
+from expenses.models import (
+    AuditLog, Beneficiary, Dossier, ElementSupprime, Expense, Proof, Rectification,
+)
 from expenses.tests.base import in_memory_storage
 from notifications.models import Notification
 
@@ -178,6 +180,19 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
             ),
         }
 
+        # La corbeille n'a pas d'équipe : elle se cloisonne par pays.
+        corbeille = {
+            "ivoire": ElementSupprime.objects.create(
+                nature=ElementSupprime.Nature.LIGNE, objet_id=1, country=cls.ivoire,
+                motif="Essai", supprime_par="seed",
+            ),
+            "autre_equipe": None,
+            "mien": ElementSupprime.objects.create(
+                nature=ElementSupprime.Nature.LIGNE, objet_id=2, country=cls.togo,
+                motif="Essai", supprime_par="seed",
+            ),
+        }
+
         def notification(recipient, country):
             return Notification.objects.create(
                 recipient=recipient, kind=Notification.Kind.PROOF_MISSING,
@@ -202,6 +217,7 @@ class TraverseeDuCloisonnementTests(ScopingTestCase):
             Rectification: rectifications,
             Proof: pieces,
             AuditLog: journaux,
+            ElementSupprime: corbeille,
             # Une notification appartient à une personne.
             Notification: {
                 "ivoire": notification(cls.rep_ivoire, cls.ivoire),

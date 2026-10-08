@@ -24,7 +24,7 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
     totp_confirmed: true,
     language: "fr",
     supervision: false,
-    workflow: { require_review_step: false },
+    workflow: { require_review_step: false, suppressions_ouvertes: false },
     alert_thresholds: [],
     ...overrides,
     permissions: {

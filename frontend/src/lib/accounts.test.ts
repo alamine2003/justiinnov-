@@ -24,7 +24,7 @@ function profil(overrides: Partial<Me>): Me {
     permissions: {
       ...PERMISSIONS_DU_PAYS,
     },
-    workflow: { require_review_step: false },
+    workflow: { require_review_step: false, suppressions_ouvertes: false },
     ...overrides,
   }
 }

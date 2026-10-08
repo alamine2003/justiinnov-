@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { AlertTriangle, ChevronRight, FileText, FileWarning, Loader2, Plus, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -10,6 +10,7 @@ import { RefreshIndicator } from "@/components/ui/refresh-indicator"
 import { StatCard } from "@/components/ui/stat-card"
 import { BarreEcart } from "@/components/ui/charts"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
+import { MettreALaCorbeille } from "@/components/corbeille/mettre-a-la-corbeille"
 import { CarteDeLigne } from "@/components/expenses/expense-line-card"
 import { ExpenseForm } from "@/components/expenses/expense-form"
 import { ProofPanel } from "@/components/expenses/proof-panel"
@@ -59,6 +60,7 @@ export function DossierDetailPage() {
 
 function FicheDossier({ dossierId }: { dossierId: number }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { me } = useAuth()
 
   // Le dossier est celui de l'URL : en passant du 12 au 13, rien du 12 ne
@@ -388,6 +390,15 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
         />
         <RenameDossier dossier={dossier} onRename={rename} />
         <ReopenDossier dossier={dossier} onReopen={reopen} />
+        {dossier.allowed_actions.includes("trash") && (
+          <MettreALaCorbeille
+            nature="dossier"
+            id={dossier.id}
+            libelle={dossier.number}
+            // Le dossier n'existe plus : retour au projet, ou à la liste.
+            onDone={() => navigate(dossier.project ? `/projets/${dossier.project}` : "/dossiers")}
+          />
+        )}
       </PageHeader>
 
       {/* Le circuit en frise : où en est le dossier, avant tout chiffre. */}
@@ -483,6 +494,11 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
                       setFormOpen(true)
                     }}
                     onDelete={(ligne) => void removeDraft(ligne)}
+                    onTrashed={(ligne) => {
+                      setActionError(null)
+                      setNotice(t("corbeille.fait", { libelle: ligne.title }))
+                      query.reload()
+                    }}
                     onTransition={runExpenseTransition}
                     onRequestRectification={requestLineRectification}
                     onError={setActionError}

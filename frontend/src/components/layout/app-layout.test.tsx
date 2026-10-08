@@ -55,7 +55,7 @@ describe("AppLayout — barre latérale", () => {
     monter()
 
     expect(within(barre()).getAllByRole("link").map((lien) => lien.textContent)).toEqual([
-      "Pilotage", "Projets", "Registre", "Budgets", "Pays", "Audit", "Configuration",
+      "Pilotage", "Projets", "Registre", "Budgets", "Pays", "Audit", "Corbeille", "Configuration",
     ])
     for (const groupe of ["Suivi", "Budget", "Contrôle", "Administration"]) {
       expect(within(barre()).getByText(groupe)).toBeInTheDocument()
@@ -70,6 +70,7 @@ describe("AppLayout — barre latérale", () => {
     expect(within(barre()).queryByText("Contrôle")).toBeNull()
     expect(within(barre()).queryByText("Administration")).toBeNull()
     expect(within(barre()).queryByRole("link", { name: "Audit" })).toBeNull()
+    expect(within(barre()).queryByRole("link", { name: "Corbeille" })).toBeNull()
   })
 
   it("ouvre le guide vidéo à qui a un guide à suivre, et à lui seul", () => {
