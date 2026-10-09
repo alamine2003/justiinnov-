@@ -355,8 +355,8 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         # Relecture sous verrou : l'instance validée a été lue sans verrou,
         # et une soumission a pu passer entre-temps. Écrire depuis l'objet
         # périmé ramenait le dossier au brouillon sans réouverture ni trace.
-        serializer.instance = transitions.verrouiller(serializer.instance)
         with traduire_les_regles():
+            serializer.instance = transitions.verrouiller(serializer.instance)
             transitions.exiger_un_brouillon(serializer.instance)
             transitions.exiger_l_auteur_du_brouillon(
                 serializer.instance, get_access(self.request.user)
@@ -474,11 +474,11 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         # soumission, qui verrouille le dossier puis ses lignes — l'ordre
         # inverse pouvait s'interbloquer. Déplacer un brouillon vers un
         # dossier déjà déclaré l'y perdrait, exactement comme l'y créer.
-        dossier_vise = transitions.verrouiller_le_dossier_vise(
-            serializer.validated_data.get("dossier"), serializer.instance
-        )
-        serializer.instance = transitions.verrouiller(serializer.instance)
         with traduire_les_regles():
+            dossier_vise = transitions.verrouiller_le_dossier_vise(
+                serializer.validated_data.get("dossier"), serializer.instance
+            )
+            serializer.instance = transitions.verrouiller(serializer.instance)
             transitions.exiger_un_brouillon(serializer.instance)
             transitions.exiger_l_auteur_du_brouillon(
                 serializer.instance, get_access(self.request.user)

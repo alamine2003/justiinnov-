@@ -103,7 +103,7 @@ function DialogueDeCorbeille({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!motif.trim()) {
-      setError(t("projets.motif.requis"))
+      setError(t("corbeille.motif_requis"))
       return
     }
     setSaving(true)
@@ -126,7 +126,9 @@ function DialogueDeCorbeille({
   }
 
   return (
-    <Dialog open onOpenChange={onOpenChange}>
+    // Pendant l'envoi, le dialogue ne se ferme pas : un refus du serveur
+    // serait perdu, et une acceptation naviguerait après « Annuler ».
+    <Dialog open onOpenChange={(ouvert) => !saving && onOpenChange(ouvert)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("corbeille.titre", { libelle })}</DialogTitle>
@@ -143,7 +145,12 @@ function DialogueDeCorbeille({
           />
           <DialogFooter>
             <div>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() => onOpenChange(false)}
+              >
                 {t("commun.annuler")}
               </Button>
               <Button type="submit" variant="destructive" disabled={saving} className="ml-2">

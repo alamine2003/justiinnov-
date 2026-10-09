@@ -65,6 +65,7 @@ export function CorbeillePage() {
     { fallback: t("corbeille.page.indisponible") },
   )
   const elements = query.data?.results ?? []
+  const filtree = Boolean(nature || pays || debouncedSearch)
   const count = query.data?.count ?? 0
 
   return (
@@ -154,11 +155,12 @@ export function CorbeillePage() {
                 {query.loading ? (
                   <SkeletonRows columns={COLONNES} />
                 ) : elements.length === 0 ? (
+                  // Sous un filtre, la corbeille n'est pas vide : rien ne correspond.
                   <EmptyRow
                     colSpan={COLONNES}
                     icon={Trash2}
-                    title={t("corbeille.page.vide_titre")}
-                    hint={t("corbeille.page.vide_aide")}
+                    title={filtree ? t("corbeille.page.aucun_titre") : t("corbeille.page.vide_titre")}
+                    hint={filtree ? t("corbeille.page.aucun_aide") : t("corbeille.page.vide_aide")}
                   />
                 ) : (
                   elements.map((element) => (

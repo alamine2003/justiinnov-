@@ -41,7 +41,7 @@ from .models import (
     compute_sha256,
 )
 from .numerotation import refus_d_ouverture
-from .corbeille import prouve_un_constat
+from .corbeille import prouve_un_constat, versions_chargees
 from .stockage import effacer_sans_bruit, noter_depot
 from .transitions import peut_decider_rectification
 from .workflow import (
@@ -432,9 +432,11 @@ class ProofSerializer(serializers.ModelSerializer):
             return False
         if not corbeille_ouverte(configuration):
             return False
-        # La pièce elle-même ; le service relit aussi ses autres versions,
-        # qui partent avec elle (``corbeille.prouve_un_constat``).
-        return not prouve_un_constat(proof)
+        # Toutes ses versions partent avec elle : aucune ne doit prouver un
+        # constat. Lues dans les pièces déjà chargées du dossier quand la
+        # fiche les a préchargées ; la pièce seule sinon — le service, lui,
+        # relit toujours toute la chaîne (``corbeille._chaine``).
+        return not any(prouve_un_constat(version) for version in versions_chargees(proof))
 
     def validate_file(self, uploaded):
         if uploaded.size > settings.MAX_PROOF_SIZE:

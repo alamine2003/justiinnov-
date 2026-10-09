@@ -99,7 +99,9 @@ def journal_du_projet(projet_id):
         .values_list("objet_id", flat=True)
     )
     return (
-        Q(object_type="Dossier", object_id__in=dossiers)
+        # La mise à la corbeille du projet lui-même (décision 120).
+        Q(object_type="Project", object_id=projet_id)
+        | Q(object_type="Dossier", object_id__in=dossiers)
         | Q(object_type="Expense", object_id__in=lignes)
         | Q(object_type="Proof", object_id__in=pieces)
         | Q(object_type="Rectification", object_id__in=rectifications)

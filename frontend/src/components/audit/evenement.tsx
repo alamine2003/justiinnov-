@@ -52,7 +52,11 @@ export function Evenement({ entree }: { entree: EntreeHistorique }) {
             {entree.source === "circuit" ? t("audit.source.circuit") : t("audit.source.referentiel")}
           </span>
           <span className="font-medium">
-            {entree.source === "circuit" && entree.objet === "Dossier" && entree.object_id != null ? (
+            {/* Un dossier mis à la corbeille n'a plus de fiche (décision 120). */}
+            {entree.source === "circuit" &&
+            entree.objet === "Dossier" &&
+            entree.object_id != null &&
+            entree.action !== "trashed" ? (
               <Link to={`/dossiers/${entree.object_id}`} className="hover:underline">
                 {objet}
               </Link>

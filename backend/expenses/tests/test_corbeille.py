@@ -18,6 +18,7 @@ from django.db import DatabaseError, connection, transaction
 from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 
+from accounts.permissions import get_access
 from budget.aggregates import consumption
 from budget.models import Budget
 from core import types_de_projets
@@ -252,6 +253,157 @@ class CorbeilleTests(ExpenseTestCase):
             {(e["object_type"], e["action"]) for e in journal if e["action"] == "trashed"},
             {("Expense", "trashed"), ("Dossier", "trashed")},
         )
+
+    # -- Chasse aux bugs de la 2.3.0 ------------------------------------------
+
+    def test_une_piece_de_dossier_ne_part_pas_si_une_ligne_est_constatee(self):
+        """Une pièce d'avant la 2.0 prouve toutes les lignes de son dossier :
+        une seule ligne justifiée suffit à la retenir, même si le dossier,
+        lui, est encore en contrôle."""
+        Dossier.objects.filter(pk=self.dossier.pk).update(status=Status.IN_REVIEW)
+        self.ligne_cloturee()
+        piece = Proof.objects.create(
+            dossier=self.dossier, file=ContentFile(b"%PDF-1.4 d", name="d.pdf"),
+            original_name="d.pdf", sha256="e" * 64, uploaded_by="owner.togo",
+        )
+        self.login(self.doo)
+        detail = self.client.get(f"/api/dossiers/{self.dossier.pk}/").data
+        self.assertFalse(next(p for p in detail["proofs"] if p["id"] == piece.pk)["can_trash"])
+
+        reponse = self.jeter("piece", piece.pk)
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Proof.objects.filter(pk=piece.pk).exists())
+
+    def test_la_derniere_ligne_d_un_dossier_declare_ne_part_pas_seule(self):
+        """Vidé, un dossier déclaré se clôturerait à vide et garderait pour
+        toujours la place de son type dans le projet."""
+        ligne = self.make_expense(status=Status.SUBMITTED)
+        Dossier.objects.filter(pk=self.dossier.pk).update(status=Status.SUBMITTED)
+
+        reponse = self.jeter("ligne", ligne.pk)
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(self.dossier.number, str(reponse.data))
+        self.assertTrue(Expense.objects.filter(pk=ligne.pk).exists())
+        # Avec une autre ligne, ou en brouillon, elle part.
+        self.make_expense(status=Status.SUBMITTED, title="Repas")
+        self.assertEqual(self.jeter("ligne", ligne.pk).status_code, status.HTTP_201_CREATED)
+
+    def test_la_tete_est_la_version_choisie(self):
+        ligne = self.make_expense()
+        premiere = self.piece(ligne)
+        self.piece(ligne, b"%PDF-1.4 v2", replaces=premiere, version=2, sha256="b" * 64)
+
+        reponse = self.jeter("piece", premiere.pk)
+
+        self.assertEqual(reponse.data["element"]["objet_id"], premiere.pk)
+
+    def test_le_motif_va_a_l_historique_du_projet_retire(self):
+        self.jeter("projet", self.projet.pk)
+
+        entree = ChangeLog.objects.get(
+            model_name=ChangeLog.Models.PROJECT, action=ChangeLog.Actions.DELETED,
+            object_id=self.projet.pk,
+        )
+        self.assertEqual(entree.motif, MOTIF)
+
+    def test_le_journal_du_projet_retire_montre_son_retrait(self):
+        self.jeter("projet", self.projet.pk)
+        self.login(self.controller)
+
+        journal = self.client.get("/api/audit/", {"projet": self.projet.pk}).data["results"]
+
+        self.assertIn(("Project", "trashed"), {(e["object_type"], e["action"]) for e in journal})
+
+    def test_une_decision_de_rectification_verrouille_le_dossier_d_abord(self):
+        """Même ordre que la corbeille — dossier, puis ligne et demandes —
+        sinon les deux s'interbloquent."""
+        from expenses.transitions import _verrouiller_la_demande
+
+        ligne = self.ligne_cloturee()
+        demande = Rectification.objects.create(
+            expense=ligne, motif="Montant à revoir", requested_by="owner.togo",
+            previous_status=Status.CLOSED, previous_justified_amount=ligne.amount,
+        )
+        rh = get_access(self.controller)
+        with CaptureQueriesContext(connection) as requetes, transaction.atomic():
+            _verrouiller_la_demande(demande, rh)
+        verrous = [q["sql"] for q in requetes if "FOR UPDATE" in q["sql"]]
+        # La cible du premier verrou, pas une simple jointure : l'ancien
+        # verrou de la demande joignait déjà le dossier.
+        self.assertIn('FROM "expenses_dossier"', verrous[0])
+        self.assertNotIn("expenses_rectification", verrous[0])
+        self.assertIn('FROM "expenses_rectification"', verrous[1])
+
+    def test_un_objet_disparu_pendant_l_attente_du_verrou_repond_404(self):
+        """Une requête qui attendait le verrou d'un objet mis à la corbeille
+        entre-temps le trouve absent : 404, pas 500."""
+        from unittest import mock
+
+        from expenses import transitions
+
+        ligne = self.make_expense()
+
+        def retire_pendant_l_attente(*args, **kwargs):
+            Expense.objects.filter(pk=ligne.pk).delete()
+
+        self.login(self.owner)
+        with mock.patch.object(transitions, "exiger_la_capacite", retire_pendant_l_attente):
+            reponse = self.client.delete(f"/api/expenses/{ligne.pk}/")
+
+        self.assertEqual(reponse.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_un_objet_introuvable_ailleurs_reste_un_defaut(self):
+        """Seules les relectures sous verrou se traduisent en 404 : ailleurs,
+        un objet introuvable est un défaut, que le gestionnaire ne masque pas."""
+        from core.exceptions import gestionnaire_d_exception
+
+        self.assertIsNone(gestionnaire_d_exception(Dossier.DoesNotExist("parti"), {}))
+
+    def test_une_version_posee_sur_une_ligne_suit_la_piece_de_dossier_qu_elle_remplace(self):
+        """Chaîne mixte : v1 d'avant la 2.0, sans ligne, remplacée par v2 sur
+        une ligne brouillon ; une autre ligne du dossier est clôturée. v1
+        prouve encore le dossier : v2 ne part pas, et la fiche le dit."""
+        v1 = Proof.objects.create(
+            dossier=self.dossier, file=ContentFile(b"%PDF-1.4 a", name="a.pdf"),
+            original_name="a.pdf", sha256="c" * 64, uploaded_by="owner.togo",
+        )
+        v2 = self.piece(self.make_expense(), replaces=v1, version=2, sha256="d" * 64)
+        self.ligne_cloturee()
+        self.login(self.doo)
+
+        detail = self.client.get(f"/api/dossiers/{self.dossier.pk}/").data
+
+        self.assertFalse(next(p for p in detail["proofs"] if p["id"] == v2.pk)["can_trash"])
+        self.assertEqual(self.jeter("piece", v2.pk).status_code, status.HTTP_400_BAD_REQUEST)
+        # Archivée, v1 ne prouve plus rien : la chaîne part.
+        Proof.objects.filter(pk=v1.pk).update(status=Proof.ProofStatus.ARCHIVED)
+        detail = self.client.get(f"/api/dossiers/{self.dossier.pk}/").data
+        self.assertTrue(next(p for p in detail["proofs"] if p["id"] == v2.pk)["can_trash"])
+        self.assertEqual(self.jeter("piece", v2.pk).status_code, status.HTTP_201_CREATED)
+
+    def test_la_fiche_ne_fait_pas_une_requete_par_piece_de_dossier(self):
+        def requetes_de_la_fiche():
+            self.login(self.doo)
+            with CaptureQueriesContext(connection) as requetes:
+                self.client.get(f"/api/dossiers/{self.dossier.pk}/")
+            return len(requetes)
+
+        def piece_de_dossier(n):
+            Proof.objects.create(
+                dossier=self.dossier, file=ContentFile(b"%PDF-1.4 x", name=f"{n}.pdf"),
+                original_name=f"{n}.pdf", sha256=f"{n:064d}", uploaded_by="owner.togo",
+            )
+
+        self.make_expense()
+        piece_de_dossier(1)
+        requetes_de_la_fiche()  # caches de configuration et de session chauds
+        une = requetes_de_la_fiche()
+        for n in range(2, 6):
+            piece_de_dossier(n)
+
+        self.assertEqual(requetes_de_la_fiche(), une)
 
     def test_un_objet_inconnu_n_existe_pas(self):
         self.assertEqual(self.jeter("ligne", 999999).status_code, status.HTTP_404_NOT_FOUND)

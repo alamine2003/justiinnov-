@@ -33,7 +33,7 @@ describe("MettreALaCorbeille (décision 120)", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Mettre à la corbeille" }).at(-1)!)
 
-    expect(await screen.findByText(/Indiquez le motif/)).toBeInTheDocument()
+    expect(await screen.findByText(/Indiquez pourquoi cet élément part à la corbeille/)).toBeInTheDocument()
     expect(mettreALaCorbeille).not.toHaveBeenCalled()
   })
 
@@ -56,6 +56,24 @@ describe("MettreALaCorbeille (décision 120)", () => {
 
     fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Essai" } })
     fireEvent.click(screen.getAllByRole("button", { name: "Mettre à la corbeille" }).at(-1)!)
+
+    expect(await screen.findByText("Les suppressions sont fermées.")).toBeInTheDocument()
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
+  it("ne se ferme pas pendant l'envoi : le refus du serveur ne se perd pas", async () => {
+    let refuser: (raison: unknown) => void = () => {}
+    mettreALaCorbeille.mockImplementation(
+      () => new Promise((_resolve, reject) => { refuser = reject }),
+    )
+    const onDone = monter()
+
+    fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Essai" } })
+    fireEvent.click(screen.getAllByRole("button", { name: "Mettre à la corbeille" }).at(-1)!)
+    const annuler = await screen.findByRole("button", { name: "Annuler" })
+    await waitFor(() => expect(annuler).toBeDisabled())
+    fireEvent.click(annuler)
+    refuser(new ApiError(400, "Refus", { nature: ["Les suppressions sont fermées."] }))
 
     expect(await screen.findByText("Les suppressions sont fermées.")).toBeInTheDocument()
     expect(onDone).not.toHaveBeenCalled()

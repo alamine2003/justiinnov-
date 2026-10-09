@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
 import { DossierDetailPage } from "./detail"
@@ -47,10 +47,13 @@ function dossier(id: number): Dossier {
   } as unknown as Dossier
 }
 
+const fetchRectifications = vi.fn(() =>
+  Promise.resolve({ count: 0, next: null, previous: null, results: [] }),
+)
 vi.mock("@/lib/expenses", async (original) => ({
   ...(await original<typeof import("@/lib/expenses")>()),
   fetchDossier: (id: number) => Promise.resolve(dossier(id)),
-  fetchRectifications: () => Promise.resolve({ count: 0, next: null, previous: null, results: [] }),
+  fetchRectifications: () => fetchRectifications(),
   fetchBeneficiaries: () => Promise.resolve({ count: 0, next: null, previous: null, results: [] }),
 }))
 vi.mock("@/lib/countries", () => ({
@@ -82,10 +85,21 @@ vi.mock("@/components/expenses/workflow-actions", () => ({
 
 // La carte de ligne ouvre l'édition ; le formulaire montre les choix reçus.
 vi.mock("@/components/expenses/expense-line-card", () => ({
-  CarteDeLigne: ({ expense, onEdit }: { expense: { title: string }; onEdit: (e: unknown) => void }) => (
+  CarteDeLigne: ({
+    expense,
+    onEdit,
+    onTrashed,
+  }: {
+    expense: { title: string }
+    onEdit: (e: unknown) => void
+    onTrashed: (e: unknown) => void
+  }) => (
     <li>
       <button type="button" onClick={() => onEdit(expense)}>
         Modifier {expense.title}
+      </button>
+      <button type="button" onClick={() => onTrashed(expense)}>
+        Retirer {expense.title}
       </button>
     </li>
   ),
@@ -149,5 +163,26 @@ describe("fiche d'un dossier", () => {
     expect(choix).toHaveTextContent("Impression")
     expect(choix).toHaveTextContent("Ancien intitulé")
     expect(choix).toHaveTextContent("Imprimerie fermée")
+  })
+
+  it("après la corbeille d'une ligne, relit ses rectifications et le dit sans parler de budget", async () => {
+    fetchRectifications.mockClear()
+    render(
+      <MemoryRouter initialEntries={["/dossiers/20"]}>
+        <Routes>
+          <Route path="/dossiers/:id" element={<DossierDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const retirer = await screen.findByRole("button", { name: "Retirer Kakémonos" })
+    await waitFor(() => expect(fetchRectifications).toHaveBeenCalled())
+    const avant = fetchRectifications.mock.calls.length
+    fireEvent.click(retirer)
+
+    expect(await screen.findByText("« Kakémonos » est dans la corbeille.")).toBeInTheDocument()
+    expect(screen.getByText("Mis à la corbeille")).toBeInTheDocument()
+    expect(screen.queryByText("Avertissement budgétaire")).toBeNull()
+    // Les demandes de la ligne sont parties avec elle : le rail se relit.
+    await waitFor(() => expect(fetchRectifications.mock.calls.length).toBeGreaterThan(avant))
   })
 })
