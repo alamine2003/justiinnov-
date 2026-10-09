@@ -113,6 +113,7 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
   ) => {
     setActionError(null)
     setNotice(null)
+    setRetiree(null)
     const result = await transitionExpense(expense.id, action, payload)
     if (result.warning) setNotice(result.warning)
     // La ligne est remplacée sur place ; le dossier (totaux, statut) est
@@ -132,6 +133,7 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
     if (!dossier) return
     setActionError(null)
     setNotice(null)
+    setRetiree(null)
     const { warning, ...result } = await transitionDossier(dossier.id, action, payload)
     if (warning) setNotice(warning)
     // La transition renvoie le détail complet : il remplace l'écran sans
@@ -147,6 +149,7 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
     if (!dossier) return
     setActionError(null)
     setNotice(null)
+    setRetiree(null)
     await reopenDossier(dossier.id, note)
     query.reload()
   }
@@ -156,6 +159,7 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
   const rename = async (label: string) => {
     setActionError(null)
     setNotice(null)
+    setRetiree(null)
     query.setData(await renameDossier(dossierId, label))
   }
 
@@ -166,6 +170,7 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
   const requestLineRectification = async (expense: Expense, motif: string) => {
     setActionError(null)
     setNotice(null)
+    setRetiree(null)
     await requestRectification(expense.id, motif)
     query.reload()
     rectifications.reload()
@@ -174,6 +179,7 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
   const afterRectificationDecided = async () => {
     setActionError(null)
     setNotice(null)
+    setRetiree(null)
     query.reload()
     rectifications.reload()
   }

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JUSTI GH\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 10:53+0000\n"
+"POT-Creation-Date: 2026-10-09 11:08+0000\n"
 "PO-Revision-Date: 2026-09-05 00:00+0000\n"
 "Last-Translator: Équipe JUSTI GH\n"
 "Language-Team: English\n"
@@ -478,7 +478,13 @@ msgstr "Load an expense workbook of one's country, as drafts, into a project's p
 msgid "Votre rôle ne permet pas cette action."
 msgstr "Your role does not allow this action."
 
-#: accounts/referentiel.py:94 accounts/referentiel.py:169 budget/models.py:136 budget/serializers.py:104 core/models.py:74 core/models.py:94 core/models.py:120 core/models.py:221 core/models.py:322 core/models.py:342 core/models.py:383 core/models.py:412 expenses/models.py:70 expenses/models.py:206 expenses/models.py:504 expenses/models.py:865 expenses/models.py:948 expenses/models.py:1003 expenses/serializers.py:283 reporting/exports.py:528 reporting/exports.py:549
+#: accounts/referentiel.py:94 accounts/referentiel.py:169 budget/models.py:136
+#: budget/serializers.py:104 core/models.py:74 core/models.py:94
+#: core/models.py:120 core/models.py:221 core/models.py:322 core/models.py:342
+#: core/models.py:383 core/models.py:412 expenses/models.py:70
+#: expenses/models.py:206 expenses/models.py:504 expenses/models.py:865
+#: expenses/models.py:948 expenses/models.py:1003 expenses/serializers.py:283
+#: reporting/exports.py:528 reporting/exports.py:549
 msgid "Pays"
 msgstr "Country"
 
@@ -486,7 +492,8 @@ msgstr "Country"
 msgid "Indiquez le pays de ce responsable."
 msgstr "Name the country this manager belongs to."
 
-#: accounts/referentiel.py:366 accounts/referentiel.py:368 expenses/serializers.py:261
+#: accounts/referentiel.py:366 accounts/referentiel.py:368
+#: expenses/serializers.py:261
 msgid "Choisissez une de vos équipes."
 msgstr "Choose one of your teams."
 
@@ -642,11 +649,15 @@ msgstr "Require approval"
 msgid "Année"
 msgstr "Year"
 
-#: budget/models.py:148 budget/serializers.py:108 core/models.py:251 core/models.py:387 expenses/models.py:224 expenses/models.py:521 expenses/models.py:989 expenses/serializers.py:968
+#: budget/models.py:148 budget/serializers.py:108 core/models.py:251
+#: core/models.py:387 expenses/models.py:224 expenses/models.py:521
+#: expenses/models.py:989 expenses/serializers.py:968
 msgid "Projet"
 msgstr "Project"
 
-#: budget/models.py:156 budget/serializers.py:112 core/models.py:102 core/models.py:385 core/serializers.py:193 expenses/models.py:214 expenses/models.py:508
+#: budget/models.py:156 budget/serializers.py:112 core/models.py:102
+#: core/models.py:385 core/serializers.py:193 expenses/models.py:214
+#: expenses/models.py:508
 msgid "Équipe"
 msgstr "Team"
 
@@ -662,7 +673,9 @@ msgstr "Amount"
 msgid "Politique de dépassement"
 msgstr "Overrun policy"
 
-#: budget/models.py:178 core/models.py:30 core/models.py:67 core/models.py:98 core/models.py:124 core/models.py:175 core/models.py:229 core/models.py:302 core/models.py:326 core/models.py:346 expenses/models.py:83
+#: budget/models.py:178 core/models.py:30 core/models.py:67 core/models.py:98
+#: core/models.py:124 core/models.py:175 core/models.py:229 core/models.py:302
+#: core/models.py:326 core/models.py:346 expenses/models.py:83
 msgid "Actif"
 msgstr "Active"
 
@@ -704,7 +717,9 @@ msgstr "Target envelope"
 msgid "Justification"
 msgstr "Justification"
 
-#: budget/models.py:283 core/models.py:225 expenses/models.py:243 expenses/models.py:584 expenses/models.py:700 expenses/models.py:783 reporting/exports.py:549
+#: budget/models.py:283 core/models.py:225 expenses/models.py:243
+#: expenses/models.py:584 expenses/models.py:700 expenses/models.py:783
+#: reporting/exports.py:549
 msgid "Statut"
 msgstr "Status"
 
@@ -836,7 +851,8 @@ msgstr "A justification is required."
 msgid "La source et la destination doivent différer."
 msgstr "Source and target must differ."
 
-#: budget/serializers.py:418 budget/transitions.py:171 budget/transitions.py:223
+#: budget/serializers.py:418 budget/transitions.py:171
+#: budget/transitions.py:223
 #, python-brace-format
 msgid "Les deux enveloppes doivent être dans la même devise ({source} → {target})."
 msgstr "Both envelopes must be in the same currency ({source} → {target})."
@@ -879,7 +895,7 @@ msgstr "The target envelope is deactivated: the transfer can no longer be made."
 msgid "Le disponible de l'enveloppe source ne couvre plus ce montant."
 msgstr "The source envelope's available balance no longer covers this amount."
 
-#: budget/transitions.py:251 expenses/transitions.py:1274
+#: budget/transitions.py:251 expenses/transitions.py:1280
 msgid "Un refus doit être motivé."
 msgstr "A refusal must state a reason."
 
@@ -912,23 +928,23 @@ msgstr "The platform only tracks the group's African subsidiaries; \"%(code)s\" 
 msgid "Gestion des pays et organisations"
 msgstr "Countries and organisations"
 
-#: core/exceptions.py:56
+#: core/exceptions.py:55
 msgid "Service momentanément indisponible. Réessayez dans quelques instants."
 msgstr "Service temporarily unavailable. Please try again in a moment."
 
-#: core/exceptions.py:59
+#: core/exceptions.py:58
 msgid "Requête incorrecte."
 msgstr "Bad request."
 
-#: core/exceptions.py:60
+#: core/exceptions.py:59
 msgid "Accès refusé."
 msgstr "Access denied."
 
-#: core/exceptions.py:61
+#: core/exceptions.py:60
 msgid "Ressource introuvable."
 msgstr "Resource not found."
 
-#: core/exceptions.py:62
+#: core/exceptions.py:61
 msgid "Erreur interne du serveur."
 msgstr "Internal server error."
 
@@ -936,7 +952,9 @@ msgstr "Internal server error."
 msgid "Modifié le"
 msgstr "Updated on"
 
-#: core/models.py:27 core/models.py:42 core/models.py:96 core/models.py:170 core/models.py:223 core/models.py:297 core/models.py:344 expenses/models.py:72
+#: core/models.py:27 core/models.py:42 core/models.py:96 core/models.py:170
+#: core/models.py:223 core/models.py:297 core/models.py:344
+#: expenses/models.py:72
 msgid "Nom"
 msgstr "Name"
 
@@ -968,7 +986,8 @@ msgstr "IANA identifier, e.g. Africa/Abidjan."
 msgid "Manager(s)"
 msgstr "Manager(s)"
 
-#: core/models.py:97 core/models.py:172 core/models.py:224 core/models.py:298 core/models.py:325 core/models.py:345 expenses/models.py:517
+#: core/models.py:97 core/models.py:172 core/models.py:224 core/models.py:298
+#: core/models.py:325 core/models.py:345 expenses/models.py:517
 msgid "Description"
 msgstr "Description"
 
@@ -976,7 +995,8 @@ msgstr "Description"
 msgid "Code"
 msgstr "Code"
 
-#: core/models.py:123 core/models.py:405 expenses/models.py:204 expenses/models.py:943 expenses/models.py:999 reporting/exports.py:549
+#: core/models.py:123 core/models.py:405 expenses/models.py:204
+#: expenses/models.py:943 expenses/models.py:999 reporting/exports.py:549
 msgid "Libellé"
 msgstr "Label"
 
@@ -992,7 +1012,8 @@ msgstr "English name"
 msgid "Ordre"
 msgstr "Order"
 
-#: core/models.py:179 core/models.py:235 core/models.py:295 core/models.py:397 core/serializers.py:182 core/serializers.py:347
+#: core/models.py:179 core/models.py:235 core/models.py:295 core/models.py:397
+#: core/serializers.py:182 core/serializers.py:347
 msgid "Type de projet"
 msgstr "Project type"
 
@@ -1028,7 +1049,8 @@ msgstr "Reference"
 msgid "Projet historique"
 msgstr "Historical project"
 
-#: core/models.py:306 core/models.py:396 expenses/models.py:228 expenses/serializers.py:972
+#: core/models.py:306 core/models.py:396 expenses/models.py:228
+#: expenses/serializers.py:972
 msgid "Type de dossier"
 msgstr "Dossier type"
 
@@ -1144,7 +1166,8 @@ msgstr "By"
 msgid "Adresse IP"
 msgstr "IP address"
 
-#: core/models.py:424 core/serializers.py:199 core/serializers.py:295 core/serializers.py:355 core/serializers.py:710 expenses/models.py:1019
+#: core/models.py:424 core/serializers.py:199 core/serializers.py:295
+#: core/serializers.py:355 core/serializers.py:710 expenses/models.py:1019
 msgid "Motif"
 msgstr "Reason"
 
@@ -1289,33 +1312,33 @@ msgstr "Unknown time zone: %(value)s (IANA identifier expected, e.g. Africa/Abid
 msgid "Les suppressions sont fermées : la corbeille ne s'ouvre que dans Configuration, par le super administrateur."
 msgstr "Deletions are closed: only the super administrator can open the bin, in Configuration."
 
-#: expenses/corbeille.py:309
+#: expenses/corbeille.py:328
 msgid "Le motif est obligatoire."
 msgstr "The reason is required."
 
-#: expenses/corbeille.py:311
+#: expenses/corbeille.py:330
 msgid "Nature inconnue."
 msgstr "Unknown kind."
 
-#: expenses/corbeille.py:324
+#: expenses/corbeille.py:343
 msgid "Le projet « Historique » range les dossiers d'avant la 2.0 : il ne se retire pas."
 msgstr "The “Historical” project holds the dossiers from before 2.0: it cannot be removed."
 
-#: expenses/corbeille.py:334
+#: expenses/corbeille.py:353
 #, python-brace-format
 msgid "{count} ligne(s) d'un autre dossier ({dossier}) citent encore ce projet : mettez-les à la corbeille d'abord."
 msgstr "{count} line(s) of another dossier ({dossier}) still refer to this project: move them to the bin first."
 
-#: expenses/corbeille.py:342
+#: expenses/corbeille.py:361
 msgid "Ce projet porte une enveloppe : supprimez-la ou rattachez-la ailleurs avant de mettre le projet à la corbeille."
 msgstr "This project carries an envelope: delete it or attach it elsewhere before moving the project to the bin."
 
-#: expenses/corbeille.py:361
+#: expenses/corbeille.py:380
 #, python-brace-format
 msgid "C'est la dernière ligne d'un dossier déclaré : mettez plutôt le dossier {dossier} à la corbeille."
 msgstr "This is the last line of a declared dossier: move the dossier {dossier} to the bin instead."
 
-#: expenses/corbeille.py:377
+#: expenses/corbeille.py:400
 msgid "Cette pièce prouve une ligne déjà constatée : elle ne part pas seule. Mettez la ligne à la corbeille si elle doit partir."
 msgstr "This document supports a line that has already been settled: it cannot go on its own. Move the line to the bin if it must go."
 
@@ -1439,7 +1462,8 @@ msgstr "Charged envelope"
 msgid "Résolue automatiquement ; obligatoire avant validation."
 msgstr "Resolved automatically; required before validation."
 
-#: expenses/models.py:542 expenses/models.py:605 expenses/models.py:697 expenses/serializers.py:1223
+#: expenses/models.py:542 expenses/models.py:605 expenses/models.py:697
+#: expenses/serializers.py:1223
 msgid "Dépense"
 msgstr "Expense"
 
@@ -2024,125 +2048,125 @@ msgstr "This line has been the subject of a rectification request: it can no lon
 msgid "Le dossier {number} est déjà déclaré ({status}) : il n'accepte plus de nouvelle ligne. Ouvrez un nouveau dossier pour cette dépense."
 msgstr "Dossier {number} has already been declared ({status}): it no longer accepts new lines. Open a new dossier for this expense."
 
-#: expenses/transitions.py:311
+#: expenses/transitions.py:321
 #, python-brace-format
 msgid "{count} ligne(s) ne sont pas dans l'état attendu : {detail}. {instruction}"
 msgstr "{count} line(s) are not in the expected state: {detail}. {instruction}"
 
-#: expenses/transitions.py:333
+#: expenses/transitions.py:343
 msgid "sans équipe"
 msgstr "no team"
 
-#: expenses/transitions.py:335
+#: expenses/transitions.py:345
 msgid "sans manager"
 msgstr "no manager"
 
-#: expenses/transitions.py:342
+#: expenses/transitions.py:352
 #, python-brace-format
 msgid " et {count} autre(s)"
 msgstr " and {count} other(s)"
 
-#: expenses/transitions.py:346
+#: expenses/transitions.py:356
 #, python-brace-format
 msgid "{count} ligne(s) incomplète(s) : {detail}. Renseignez l'équipe et le manager de chaque ligne avant de soumettre le dossier."
 msgstr "{count} incomplete line(s): {detail}. Fill in the team and manager of each line before submitting the dossier."
 
-#: expenses/transitions.py:378
+#: expenses/transitions.py:388
 #, python-brace-format
 msgid "Ce dossier contient {count} ligne(s) en brouillon saisie(s) par quelqu'un d'autre ({author}) : seul leur auteur peut les déclarer."
 msgstr "This dossier contains {count} draft line(s) entered by someone else ({author}): only their author can declare them."
 
-#: expenses/transitions.py:407
+#: expenses/transitions.py:417
 msgid "Un dossier se soumet avec ses lignes de dépenses : ajoutez-en au moins une."
 msgstr "A dossier is submitted with its expense lines: add at least one."
 
-#: expenses/transitions.py:508
+#: expenses/transitions.py:518
 #, python-brace-format
 msgid "{count} ligne(s) ont déjà été constatées par le siège : {detail}. Un dossier ne se rouvre pas après constat."
 msgstr "{count} line(s) have already been recorded by headquarters: {detail}. A dossier cannot be reopened once a finding has been made."
 
-#: expenses/transitions.py:544
+#: expenses/transitions.py:554
 msgid "Seul l'auteur d'un brouillon peut le soumettre."
 msgstr "Only the author of a draft can submit it."
 
-#: expenses/transitions.py:568
+#: expenses/transitions.py:578
 msgid "Justifiez-les ou marquez-les non justifiées avant de clôturer."
 msgstr "Justify them or mark them unjustified before closing."
 
-#: expenses/transitions.py:580
+#: expenses/transitions.py:590
 #, python-format
 msgid "%(count)s ligne(s) sans justificatif : le dossier ne peut pas être clôturé."
 msgstr "%(count)s line(s) without supporting document: the dossier cannot be closed."
 
-#: expenses/transitions.py:592
+#: expenses/transitions.py:602
 #, python-format
 msgid "%(count)s ligne(s) sans justificatif : le dossier ne peut pas être justifié."
 msgstr "%(count)s line(s) without supporting document: the dossier cannot be justified."
 
-#: expenses/transitions.py:598
+#: expenses/transitions.py:608
 msgid "Justifiez chaque ligne avant le dossier."
 msgstr "Justify each line before the dossier."
 
-#: expenses/transitions.py:606
+#: expenses/transitions.py:616
 msgid "Tranchez chaque ligne avant de constater la non-justification du dossier."
 msgstr "Decide on each line before recording the dossier as unjustified."
 
-#: expenses/transitions.py:688
+#: expenses/transitions.py:697
 #, python-brace-format
 msgid "Le montant justifié ne peut pas dépasser la dépense ({amount})."
 msgstr "The justified amount cannot exceed the expense ({amount})."
 
-#: expenses/transitions.py:867
+#: expenses/transitions.py:875
 msgid "Un dossier clôturé ne se renomme plus."
 msgstr "A closed dossier can no longer be renamed."
 
-#: expenses/transitions.py:870
+#: expenses/transitions.py:878
 msgid "Le titre d'un dossier ne peut pas être vide."
 msgstr "A dossier's title cannot be empty."
 
-#: expenses/transitions.py:908
+#: expenses/transitions.py:916
 msgid "Cet élément est déclaré : il ne peut plus être supprimé. Seul un brouillon peut l'être."
 msgstr "This item has been declared: it can no longer be deleted. Only a draft can be."
 
-#: expenses/transitions.py:918
+#: expenses/transitions.py:926
 msgid "Ce brouillon a déjà été déclaré, puis rouvert : il ne se supprime pas. Corrigez-le et soumettez-le à nouveau."
 msgstr "This draft was already declared, then reopened: it cannot be deleted. Correct it and submit it again."
 
-#: expenses/transitions.py:923
+#: expenses/transitions.py:931
 msgid "Seul l'auteur d'un brouillon peut le supprimer."
 msgstr "Only the author of a draft can delete it."
 
-#: expenses/transitions.py:977
+#: expenses/transitions.py:985
 #, python-brace-format
 msgid "Ce dossier contient des lignes saisies par quelqu'un d'autre ({author}) : il ne peut pas être supprimé."
 msgstr "This dossier contains lines entered by someone else ({author}): it cannot be deleted."
 
-#: expenses/transitions.py:984
+#: expenses/transitions.py:992
 msgid "Ce dossier contient une ligne déclarée : il ne peut plus être supprimé."
 msgstr "This dossier contains a declared line: it can no longer be deleted."
 
-#: expenses/transitions.py:991
+#: expenses/transitions.py:999
 msgid "Ce dossier contient une ligne qui a fait l'objet d'une demande de rectification : il ne se supprime plus."
 msgstr "This dossier contains a line that has been the subject of a rectification request: it can no longer be deleted."
 
-#: expenses/transitions.py:1067
+#: expenses/transitions.py:1074
 msgid "Le dossier est clôturé : ses justificatifs ne se contrôlent plus."
 msgstr "The dossier is closed: its supporting documents can no longer be reviewed."
 
-#: expenses/transitions.py:1112
+#: expenses/transitions.py:1119
 msgid "Cette demande de rectification a déjà été traitée."
 msgstr "This rectification request has already been processed."
 
-#: expenses/transitions.py:1116
+#: expenses/transitions.py:1123
 msgid "Vous ne pouvez pas décider d'une rectification que vous avez demandée."
 msgstr "You cannot decide on a rectification you requested yourself."
 
-#: expenses/transitions.py:1210
+#: expenses/transitions.py:1216
 #, python-brace-format
 msgid "Seule une ligne justifiée ou clôturée se rectifie : celle-ci est « {status} »."
 msgstr "Only a justified or closed line can be rectified: this one is “{status}”."
 
-#: expenses/transitions.py:1217
+#: expenses/transitions.py:1223
 msgid "Une demande de rectification est déjà en attente sur cette ligne."
 msgstr "A rectification request is already pending on this line."
 

@@ -166,6 +166,7 @@ describe("fiche d'un dossier", () => {
   })
 
   it("après la corbeille d'une ligne, relit ses rectifications et le dit sans parler de budget", async () => {
+    fetchRectifications.mockClear()
     render(
       <MemoryRouter initialEntries={["/dossiers/20"]}>
         <Routes>
@@ -173,12 +174,15 @@ describe("fiche d'un dossier", () => {
         </Routes>
       </MemoryRouter>,
     )
-    fireEvent.click(await screen.findByRole("button", { name: "Retirer Kakémonos" }))
+    const retirer = await screen.findByRole("button", { name: "Retirer Kakémonos" })
+    await waitFor(() => expect(fetchRectifications).toHaveBeenCalled())
+    const avant = fetchRectifications.mock.calls.length
+    fireEvent.click(retirer)
 
     expect(await screen.findByText("« Kakémonos » est dans la corbeille.")).toBeInTheDocument()
     expect(screen.getByText("Mis à la corbeille")).toBeInTheDocument()
     expect(screen.queryByText("Avertissement budgétaire")).toBeNull()
     // Les demandes de la ligne sont parties avec elle : le rail se relit.
-    await waitFor(() => expect(fetchRectifications.mock.calls.length).toBeGreaterThanOrEqual(2))
+    await waitFor(() => expect(fetchRectifications.mock.calls.length).toBeGreaterThan(avant))
   })
 })

@@ -269,11 +269,21 @@ def verrouiller_le_dossier_vise(dossier, ligne):
     vise = dossier if dossier is not None else getattr(ligne, "dossier", None)
     if vise is None:
         return None
+    return _verrouiller_le_dossier(vise)
+
+
+def relire_sous_verrou(queryset, pk):
+    """L'objet ``pk`` du queryset (verrouillé), ou :class:`HorsPerimetre`.
+
+    Lu avant le verrou, l'objet a pu disparaître pendant l'attente : retiré
+    par son auteur (brouillon) ou mis à la corbeille par le super
+    administrateur (décision 120). Il n'existe plus, ni pour cette écriture
+    ni pour personne : 404. Seules ces relectures se traduisent ainsi —
+    ailleurs, un objet introuvable reste un défaut, et répond 500.
+    """
     try:
-        return _verrouiller_le_dossier(vise)
-    except Dossier.DoesNotExist:
-        # Retiré par son auteur pendant qu'on attendait son verrou : il
-        # n'existe plus, ni pour cette écriture ni pour personne.
+        return queryset.get(pk=pk)
+    except queryset.model.DoesNotExist:
         raise HorsPerimetre() from None
 
 
@@ -281,10 +291,10 @@ def verrouiller_le_dossier_vise(dossier, ligne):
 
 
 def _verrouiller_le_dossier(dossier):
-    return (
+    return relire_sous_verrou(
         Dossier.objects.select_related("country", "team", "owner")
-        .select_for_update(of=("self",))
-        .get(pk=dossier.pk)
+        .select_for_update(of=("self",)),
+        dossier.pk,
     )
 
 
@@ -638,10 +648,9 @@ def _apres_sur_le_dossier(dossier, action, note, trace):
 
 
 def _verrouiller_la_ligne(expense):
-    return (
-        Expense.objects.avec_les_relations()
-        .select_for_update(of=("self",))
-        .get(pk=expense.pk)
+    return relire_sous_verrou(
+        Expense.objects.avec_les_relations().select_for_update(of=("self",)),
+        expense.pk,
     )
 
 
@@ -858,10 +867,9 @@ def renommer(dossier, label, acteur, trace):
     d'audit.
     """
     exiger_la_capacite("dossiers.rename", acteur)
-    instance = (
-        Dossier.objects.select_related("country")
-        .select_for_update(of=("self",))
-        .get(pk=dossier.pk)
+    instance = relire_sous_verrou(
+        Dossier.objects.select_related("country").select_for_update(of=("self",)),
+        dossier.pk,
     )
     if instance.status in PROOF_LOCKED_STATUSES:
         raise RegleViolee("status", _("Un dossier clôturé ne se renomme plus."))
@@ -896,10 +904,10 @@ def retirer_brouillon(objet, acteur, trace):
     travail de quelqu'un d'autre sous couvert de ranger le sien.
     """
     exiger_la_capacite("expenses.delete", acteur)
-    instance = (
+    instance = relire_sous_verrou(
         type(objet)._default_manager.select_related("country")
-        .select_for_update(of=("self",))
-        .get(pk=objet.pk)
+        .select_for_update(of=("self",)),
+        objet.pk,
     )
     if instance.status not in DELETABLE_STATUSES:
         raise RegleViolee(
@@ -1054,12 +1062,11 @@ def controler_piece(proof, statut, acteur, *, motif="", trace):
     # une pièce se rejetait pendant que le dossier se clôturait, chacun
     # croyant l'autre inchangé — et le dossier se fermait sur une pièce
     # rejetée, ce que la décision 115 refuse.
-    dossier_id = Proof.objects.values_list("dossier_id", flat=True).get(pk=proof.pk)
+    dossier_id = Proof.objects.filter(pk=proof.pk).values_list("dossier_id", flat=True).first()
     Dossier.objects.select_for_update().filter(pk=dossier_id).first()
-    piece = (
-        Proof.objects.select_related("dossier__country")
-        .select_for_update(of=("self",))
-        .get(pk=proof.pk)
+    piece = relire_sous_verrou(
+        Proof.objects.select_related("dossier__country").select_for_update(of=("self",)),
+        proof.pk,
     )
     if piece.dossier.status in PROOF_LOCKED_STATUSES:
         raise RegleViolee(
@@ -1151,12 +1158,11 @@ def _verrouiller_la_demande(rectification, acteur):
         .first()
     )
     Dossier.objects.select_for_update().filter(pk=dossier_id).first()
-    verrouillee = (
+    verrouillee = relire_sous_verrou(
         Rectification.objects.select_related(
             "expense__country", "expense__dossier", "expense__team"
-        )
-        .select_for_update(of=("self",))
-        .get(pk=rectification.pk)
+        ).select_for_update(of=("self",)),
+        rectification.pk,
     )
     verifier_la_decision_de_rectification(verrouillee, acteur)
     return verrouillee

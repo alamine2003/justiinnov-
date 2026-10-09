@@ -267,9 +267,27 @@ def prouve_un_constat(piece):
     """
     if piece.expense_id:
         return piece.expense.status in RECTIFIABLE_STATUSES
-    return piece.dossier.status in RECTIFIABLE_STATUSES or piece.dossier.expenses.filter(
-        status__in=RECTIFIABLE_STATUSES
-    ).exists()
+    # Rejetée ou archivée, elle ne prouve plus rien (``lignes_sans_preuve``).
+    if piece.status in (Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED):
+        return False
+    return piece.dossier.status in RECTIFIABLE_STATUSES or _une_ligne_constatee(piece.dossier)
+
+
+def _une_ligne_constatee(dossier):
+    """Une ligne du dossier est-elle justifiée ou clôturée ?
+
+    Lu sur les lignes préchargées de la fiche quand elles le sont, sinon
+    une requête — mémorisée sur le dossier : ses pièces le partagent, et
+    une fiche « Historique » à quarante pièces ne fait pas quarante requêtes.
+    """
+    chargees = getattr(dossier, "_prefetched_objects_cache", {}).get("expenses")
+    if chargees is not None:
+        return any(ligne.status in RECTIFIABLE_STATUSES for ligne in chargees)
+    if not hasattr(dossier, "_une_ligne_constatee"):
+        dossier._une_ligne_constatee = dossier.expenses.filter(
+            status__in=RECTIFIABLE_STATUSES
+        ).exists()
+    return dossier._une_ligne_constatee
 
 
 def _verrouiller(nature, pk):
@@ -300,7 +318,8 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
     pour le projet « Historique » (né d'une migration, pas d'un pays) ; pour
     un projet qui porte une enveloppe (qui le protège en base) ; pour la
     pièce d'une ligne constatée, qui resterait justifiée sans preuve — c'est
-    alors la ligne qui part.
+    alors la ligne qui part ; pour la dernière ligne d'un dossier déclaré,
+    qui le laisserait vide — c'est alors le dossier qui part.
     """
     exiger_la_capacite("corbeille.supprimer", acteur)
     exiger_la_corbeille_ouverte()
@@ -367,6 +386,10 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
     else:
         dossier = objet.dossier
         _exiger_le_perimetre(acteur, dossier.country_id)
+        # Les lignes du dossier sous verrou avant de juger : une ligne se
+        # justifie sous son seul verrou, et ne doit pas devenir constatée
+        # entre ce contrôle et le retrait de sa preuve.
+        list(dossier.expenses.select_for_update(of=("self",)).values_list("pk", flat=True))
         # Toutes ses versions partent : aucune ne doit prouver un constat.
         # Une pièce d'avant la 2.0, sans ligne, prouve le dossier entier.
         versions = _chaine(objet)
