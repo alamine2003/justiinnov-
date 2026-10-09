@@ -36,12 +36,13 @@ from accounts.permissions import exiger_la_capacite
 from budget.models import Budget
 from core import journal
 from core.models import Project, WorkflowConfiguration
+from core.requetes import motif_du_journal
 from core.regles import HorsPerimetre, RegleViolee
 from notifications import triggers
 
 from .audit import enregistrer, preparer
 from .models import AuditLog, Dossier, ElementSupprime, Expense, Proof, Rectification
-from .workflow import RECTIFIABLE_STATUSES
+from .workflow import RECTIFIABLE_STATUSES, Status
 
 Nature = ElementSupprime.Nature
 TRASHED = AuditLog.Action.TRASHED
@@ -131,16 +132,26 @@ class _Retrait:
         )
         return copie
 
-    def pieces(self, pieces):
+    def _copie_de_piece(self, piece):
+        dossier = piece.dossier
+        self._copie(
+            Nature.PIECE, piece,
+            reference=dossier.number, libelle=str(piece),
+            country=dossier.country, fichier=piece.file.name, sha256=piece.sha256,
+        )
+
+    def pieces(self, pieces, choisie=None):
         """Des justificatifs, le plus récent d'abord : une version protège
-        celle qu'elle remplace. Leur fichier reste dans le stockage."""
+        celle qu'elle remplace. Leur fichier reste dans le stockage.
+
+        ``choisie`` — la version que le super administrateur a visée — est
+        copiée la première : elle est la tête que les autres citent.
+        """
+        if choisie is not None:
+            self._copie_de_piece(choisie)
         for piece in pieces.select_related("dossier__country").order_by("-pk"):
-            dossier = piece.dossier
-            self._copie(
-                Nature.PIECE, piece,
-                reference=dossier.number, libelle=str(piece),
-                country=dossier.country, fichier=piece.file.name, sha256=piece.sha256,
-            )
+            if choisie is None or piece.pk != choisie.pk:
+                self._copie_de_piece(piece)
             piece.delete()
 
     def ligne(self, ligne):
@@ -196,8 +207,11 @@ class _Retrait:
         )
         for dossier in dossiers:
             self.dossier(dossier)
-        # Le signal de l'historique du référentiel trace aussi sa suppression.
-        projet.delete()
+        # Le signal de l'historique du référentiel trace aussi sa
+        # suppression ; le motif y va comme à toute modification d'un
+        # projet (décision 109).
+        with motif_du_journal(self.motif):
+            projet.delete()
 
     def terminer(self):
         ElementSupprime.objects.bulk_create(self.copies)
@@ -207,6 +221,27 @@ class _Retrait:
 def _exiger_le_perimetre(acteur, country_id):
     if not acteur.has_global_scope and country_id not in acteur.country_ids:
         raise HorsPerimetre()
+
+
+def versions_chargees(piece):
+    """Les versions d'une pièce, prises dans les pièces de son dossier déjà
+    préchargées (fiche d'un dossier) — sans requête ; la pièce seule si
+    rien n'est préchargé."""
+    chargees = getattr(piece.dossier, "_prefetched_objects_cache", {}).get("proofs")
+    if chargees is None:
+        return [piece]
+    par_id = {p.pk: p for p in chargees}
+    suivante = {p.replaces_id: p for p in chargees if p.replaces_id}
+    versions = [piece]
+    courante = piece
+    while courante.replaces_id in par_id:
+        courante = par_id[courante.replaces_id]
+        versions.append(courante)
+    courante = piece
+    while courante.pk in suivante:
+        courante = suivante[courante.pk]
+        versions.append(courante)
+    return versions
 
 
 def _chaine(piece):
@@ -223,10 +258,18 @@ def _chaine(piece):
 
 
 def prouve_un_constat(piece):
-    """La pièce prouve-t-elle une ligne justifiée ou clôturée — ou, d'avant
-    la 2.0 et sans ligne, un dossier constaté ? Elle ne part alors pas seule."""
-    statut = piece.expense.status if piece.expense_id else piece.dossier.status
-    return statut in RECTIFIABLE_STATUSES
+    """La pièce prouve-t-elle une ligne justifiée ou clôturée ? Elle ne part
+    alors pas seule.
+
+    Une pièce d'avant la 2.0, sans ligne, prouve **toutes** les lignes de son
+    dossier (``Dossier.lignes_sans_preuve``) : il suffit que l'une soit
+    constatée — les lignes se justifient une à une, avant leur dossier.
+    """
+    if piece.expense_id:
+        return piece.expense.status in RECTIFIABLE_STATUSES
+    return piece.dossier.status in RECTIFIABLE_STATUSES or piece.dossier.expenses.filter(
+        status__in=RECTIFIABLE_STATUSES
+    ).exists()
 
 
 def _verrouiller(nature, pk):
@@ -307,6 +350,18 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
         retrait.dossier(objet)
     elif nature == Nature.LIGNE:
         _exiger_le_perimetre(acteur, objet.country_id)
+        # Vidé de sa dernière ligne, un dossier déclaré se justifierait et se
+        # clôturerait à vide — et, clôturé, garderait pour toujours la place
+        # de son type dans le projet. C'est alors le dossier qui part.
+        dossier = objet.dossier
+        if dossier.status != Status.DRAFT and not dossier.expenses.exclude(pk=objet.pk).exists():
+            raise RegleViolee(
+                "nature",
+                _(
+                    "C'est la dernière ligne d'un dossier déclaré : mettez plutôt "
+                    "le dossier {dossier} à la corbeille."
+                ).format(dossier=dossier.number),
+            )
         team = objet.team
         retrait.ligne(objet)
     else:
@@ -325,7 +380,8 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
             )
         team = dossier.team
         retrait.pieces(
-            Proof.objects.filter(pk__in=[v.pk for v in versions]).select_for_update(of=("self",))
+            Proof.objects.filter(pk__in=[v.pk for v in versions]).select_for_update(of=("self",)),
+            choisie=objet,
         )
 
     retrait.terminer()

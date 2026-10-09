@@ -18,6 +18,7 @@ from django.db import DatabaseError, connection, transaction
 from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 
+from accounts.permissions import get_access
 from budget.aggregates import consumption
 from budget.models import Budget
 from core import types_de_projets
@@ -252,6 +253,93 @@ class CorbeilleTests(ExpenseTestCase):
             {(e["object_type"], e["action"]) for e in journal if e["action"] == "trashed"},
             {("Expense", "trashed"), ("Dossier", "trashed")},
         )
+
+    # -- Chasse aux bugs de la 2.3.0 ------------------------------------------
+
+    def test_une_piece_de_dossier_ne_part_pas_si_une_ligne_est_constatee(self):
+        """Une pièce d'avant la 2.0 prouve toutes les lignes de son dossier :
+        une seule ligne justifiée suffit à la retenir, même si le dossier,
+        lui, est encore en contrôle."""
+        Dossier.objects.filter(pk=self.dossier.pk).update(status=Status.IN_REVIEW)
+        self.ligne_cloturee()
+        piece = Proof.objects.create(
+            dossier=self.dossier, file=ContentFile(b"%PDF-1.4 d", name="d.pdf"),
+            original_name="d.pdf", sha256="e" * 64, uploaded_by="owner.togo",
+        )
+        self.login(self.doo)
+        detail = self.client.get(f"/api/dossiers/{self.dossier.pk}/").data
+        self.assertFalse(next(p for p in detail["proofs"] if p["id"] == piece.pk)["can_trash"])
+
+        reponse = self.jeter("piece", piece.pk)
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Proof.objects.filter(pk=piece.pk).exists())
+
+    def test_la_derniere_ligne_d_un_dossier_declare_ne_part_pas_seule(self):
+        """Vidé, un dossier déclaré se clôturerait à vide et garderait pour
+        toujours la place de son type dans le projet."""
+        ligne = self.make_expense(status=Status.SUBMITTED)
+        Dossier.objects.filter(pk=self.dossier.pk).update(status=Status.SUBMITTED)
+
+        reponse = self.jeter("ligne", ligne.pk)
+
+        self.assertEqual(reponse.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(self.dossier.number, str(reponse.data))
+        self.assertTrue(Expense.objects.filter(pk=ligne.pk).exists())
+        # Avec une autre ligne, ou en brouillon, elle part.
+        self.make_expense(status=Status.SUBMITTED, title="Repas")
+        self.assertEqual(self.jeter("ligne", ligne.pk).status_code, status.HTTP_201_CREATED)
+
+    def test_la_tete_est_la_version_choisie(self):
+        ligne = self.make_expense()
+        premiere = self.piece(ligne)
+        self.piece(ligne, b"%PDF-1.4 v2", replaces=premiere, version=2, sha256="b" * 64)
+
+        reponse = self.jeter("piece", premiere.pk)
+
+        self.assertEqual(reponse.data["element"]["objet_id"], premiere.pk)
+
+    def test_le_motif_va_a_l_historique_du_projet_retire(self):
+        self.jeter("projet", self.projet.pk)
+
+        entree = ChangeLog.objects.get(
+            model_name=ChangeLog.Models.PROJECT, action=ChangeLog.Actions.DELETED,
+            object_id=self.projet.pk,
+        )
+        self.assertEqual(entree.motif, MOTIF)
+
+    def test_le_journal_du_projet_retire_montre_son_retrait(self):
+        self.jeter("projet", self.projet.pk)
+        self.login(self.controller)
+
+        journal = self.client.get("/api/audit/", {"projet": self.projet.pk}).data["results"]
+
+        self.assertIn(("Project", "trashed"), {(e["object_type"], e["action"]) for e in journal})
+
+    def test_une_decision_de_rectification_verrouille_le_dossier_d_abord(self):
+        """Même ordre que la corbeille — dossier, puis ligne et demandes —
+        sinon les deux s'interbloquent."""
+        from expenses.transitions import _verrouiller_la_demande
+
+        ligne = self.ligne_cloturee()
+        demande = Rectification.objects.create(
+            expense=ligne, motif="Montant à revoir", requested_by="owner.togo",
+            previous_status=Status.CLOSED, previous_justified_amount=ligne.amount,
+        )
+        rh = get_access(self.controller)
+        with CaptureQueriesContext(connection) as requetes, transaction.atomic():
+            _verrouiller_la_demande(demande, rh)
+        verrous = [q["sql"] for q in requetes if "FOR UPDATE" in q["sql"]]
+        self.assertIn('"expenses_dossier"', verrous[0])
+
+    def test_un_objet_disparu_pendant_la_requete_repond_404(self):
+        """Une requête qui attendait le verrou d'un objet mis à la corbeille
+        entre-temps le trouve absent : 404, pas 500."""
+        from core.exceptions import gestionnaire_d_exception
+
+        reponse = gestionnaire_d_exception(Dossier.DoesNotExist("parti"), {})
+
+        self.assertEqual(reponse.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_un_objet_inconnu_n_existe_pas(self):
         self.assertEqual(self.jeter("ligne", 999999).status_code, status.HTTP_404_NOT_FOUND)

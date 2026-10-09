@@ -32,6 +32,7 @@ import os
 import threading
 import time
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import InterfaceError, OperationalError
 from django.http import JsonResponse
 from django.utils.translation import gettext_lazy
@@ -155,6 +156,15 @@ def gestionnaire_d_exception(exc, context):
         )
         reponse["Retry-After"] = str(DELAI_DE_REESSAI)
         return reponse
+    if isinstance(exc, ObjectDoesNotExist):
+        # Un objet relu sous verrou a disparu pendant l'attente : la
+        # corbeille du super administrateur l'a retiré (décision 120). Pour
+        # le demandeur, il n'existe plus — 404, comme un objet hors
+        # périmètre. Journalisé : ailleurs, ce serait un défaut à voir.
+        logger.warning("Objet disparu pendant la requête : %s", exc)
+        return Response(
+            {"detail": str(MESSAGES[404])}, status=status.HTTP_404_NOT_FOUND
+        )
     return gestionnaire_drf(exc, context)
 
 

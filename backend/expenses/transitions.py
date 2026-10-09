@@ -1139,7 +1139,18 @@ def _verrouiller_la_demande(rectification, acteur):
     Le statut est contrôlé **après** la prise du verrou : lu avant, deux
     approbations simultanées le verraient toutes deux « en attente » et
     défaisaient le constat deux fois.
+
+    Le dossier d'abord, puis la demande : c'est l'ordre des autres services
+    (``controler_piece``) et de la corbeille, qui verrouille le dossier
+    avant de retirer la ligne et ses demandes (décision 120). Dans l'ordre
+    inverse, les deux s'interbloquaient.
     """
+    dossier_id = (
+        Rectification.objects.filter(pk=rectification.pk)
+        .values_list("expense__dossier_id", flat=True)
+        .first()
+    )
+    Dossier.objects.select_for_update().filter(pk=dossier_id).first()
     verrouillee = (
         Rectification.objects.select_related(
             "expense__country", "expense__dossier", "expense__team"
