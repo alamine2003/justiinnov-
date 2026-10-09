@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
-import { AlertTriangle, ChevronRight, FileText, FileWarning, Loader2, Plus, RotateCcw } from "lucide-react"
+import { AlertTriangle, ChevronRight, FileText, FileWarning, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -97,6 +97,8 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
 
   const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /** Ce que le super administrateur vient de mettre à la corbeille. */
+  const [retiree, setRetiree] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -315,6 +317,13 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       )}
+      {retiree && (
+        <Alert>
+          <Trash2 className="h-4 w-4" />
+          <AlertTitle>{t("corbeille.fait_titre")}</AlertTitle>
+          <AlertDescription>{retiree}</AlertDescription>
+        </Alert>
+      )}
       {/* Rouvert par le siège : le motif reste affiché tant que le dossier
           n'a pas été soumis à nouveau. */}
       {dossier.reopen_note && estBrouillon(dossier.status) && (
@@ -396,7 +405,10 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
             id={dossier.id}
             libelle={dossier.number}
             // Le dossier n'existe plus : retour au projet, ou à la liste.
-            onDone={() => navigate(dossier.project ? `/projets/${dossier.project}` : "/dossiers")}
+            // `replace` : « Retour » ne doit pas ramener sur la fiche retirée.
+            onDone={() =>
+              navigate(dossier.project ? `/projets/${dossier.project}` : "/dossiers", { replace: true })
+            }
           />
         )}
       </PageHeader>
@@ -496,8 +508,17 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
                     onDelete={(ligne) => void removeDraft(ligne)}
                     onTrashed={(ligne) => {
                       setActionError(null)
-                      setNotice(t("corbeille.fait", { libelle: ligne.title }))
+                      setRetiree(t("corbeille.fait", { libelle: ligne.title }))
+                      // La carte part tout de suite, comme au retrait d'un
+                      // brouillon ; ses demandes de rectification sont parties
+                      // avec elle (décision 120).
+                      query.setData((current) =>
+                        current
+                          ? { ...current, expenses: current.expenses.filter((e) => e.id !== ligne.id) }
+                          : current,
+                      )
                       query.reload()
+                      rectifications.reload()
                     }}
                     onTransition={runExpenseTransition}
                     onRequestRectification={requestLineRectification}

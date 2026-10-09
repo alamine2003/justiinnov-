@@ -74,9 +74,15 @@ describe("CorbeillePage (décision 120)", () => {
   })
 
   it("filtre par nature, et revient à la première page", async () => {
-    fetchCorbeille.mockResolvedValue(page([]))
+    // Plus d'une page : la pagination est là, on passe à la deuxième.
+    const vingtCinq = Array.from({ length: 25 }, (_, i) => element({ id: i + 1, libelle: `Élément ${i + 1}` }))
+    fetchCorbeille.mockResolvedValue({ count: 60, next: null, previous: null, results: vingtCinq })
     render(<CorbeillePage />)
-    await screen.findByText("La corbeille est vide")
+    await screen.findByText("Élément 1")
+    fireEvent.click(screen.getByRole("button", { name: /Suivant/ }))
+    await waitFor(() =>
+      expect(fetchCorbeille).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }), expect.anything()),
+    )
 
     fireEvent.change(screen.getByLabelText("Filtrer par nature"), { target: { value: "ligne" } })
 
@@ -87,4 +93,16 @@ describe("CorbeillePage (décision 120)", () => {
       ),
     )
   })
+
+  it("sous un filtre sans résultat, ne dit pas la corbeille vide", async () => {
+    fetchCorbeille.mockResolvedValue(page([]))
+    render(<CorbeillePage />)
+    await screen.findByText("La corbeille est vide")
+
+    fireEvent.change(screen.getByLabelText("Filtrer par nature"), { target: { value: "piece" } })
+
+    expect(await screen.findByText("Aucun élément ne correspond")).toBeInTheDocument()
+    expect(screen.queryByText("La corbeille est vide")).toBeNull()
+  })
+
 })

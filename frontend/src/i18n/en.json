@@ -1512,9 +1512,9 @@
     "fait": "“{{libelle}}” is in the bin.",
     "page": {
       "titre": "Bin",
-      "description": "What the super administrator removed before the final go-live, with who, when and why. Nothing here can be changed or deleted.",
+      "description": "What the super administrator removed before the final go-live: who removed it, when and why. Nothing here can be changed or deleted.",
       "ouverte": "Deletions are open: the super administrator can still move entries to the bin.",
-      "fermee": "Deletions are closed: nothing else goes to the bin.",
+      "fermee": "Deletions are closed: nothing more can be moved to the bin.",
       "indisponible": "The bin could not be loaded.",
       "recherche_placeholder": "Reference, label, reason or author…",
       "recherche_aria": "Search the bin",
@@ -1536,7 +1536,9 @@
       "vide_titre": "The bin is empty",
       "vide_aide": "Nothing has been moved to the bin.",
       "noun_singulier": "item",
-      "noun_pluriel": "items"
+      "noun_pluriel": "items",
+      "aucun_titre": "No item matches",
+      "aucun_aide": "Search and filters apply to the items that were chosen; expand them to see what went with them."
     },
     "natures": {
       "projet": "Projects",
@@ -1544,6 +1546,8 @@
       "ligne": "Lines",
       "piece": "Supporting documents"
     },
-    "motif_placeholder": "Why remove this item?"
+    "motif_placeholder": "Why remove this item?",
+    "motif_requis": "Say why this item goes to the bin: the reason stays in the log.",
+    "fait_titre": "Moved to the bin"
   }
 }

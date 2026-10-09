@@ -184,7 +184,8 @@ export function ProjetDetailPage() {
             libelle={projet.reference ?? projet.name}
             onDone={() => {
               invalidateReferentiel((key) => key === "projects" || key.startsWith("country:"))
-              navigate("/projets")
+              // `replace` : « Retour » ne doit pas ramener sur la fiche retirée.
+              navigate("/projets", { replace: true })
             }}
           />
         )}

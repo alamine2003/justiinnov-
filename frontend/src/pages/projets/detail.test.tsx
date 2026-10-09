@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { MemoryRouter, Route, Routes } from "react-router-dom"
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ProjetDetailPage } from "./detail"
 import { invalidateReferentiel } from "@/lib/referentiel"
@@ -22,6 +22,8 @@ vi.mock("@/lib/countries", () => ({
   fetchProjectHistory: (...args: unknown[]) => fetchProjectHistory(...args),
   fetchProjectTypes: () => pageDesTypesDeProjets(),
 }))
+const { mettreALaCorbeille } = vi.hoisted(() => ({ mettreALaCorbeille: vi.fn() }))
+vi.mock("@/lib/corbeille", () => ({ mettreALaCorbeille }))
 vi.mock("@/lib/expenses", () => ({
   fetchDossiers: (...args: unknown[]) => fetchDossiers(...args),
 }))
@@ -281,5 +283,31 @@ describe("ProjetDetailPage — corbeille", () => {
     afficher()
     await screen.findByText("Historique (avant 2.0)")
     expect(bouton()).toBeNull()
+  })
+
+  it("après la corbeille, « Retour » ne ramène pas sur la fiche retirée", async () => {
+    droits = { "corbeille.supprimer": true }
+    corbeilleOuverte = true
+    mettreALaCorbeille.mockResolvedValue({ element: { id: 1 }, emportes: {} })
+    function Revenir() {
+      const navigate = useNavigate()
+      return <button type="button" onClick={() => navigate(-1)}>Revenir</button>
+    }
+    render(
+      <MemoryRouter initialEntries={["/avant", "/projets/7"]} initialIndex={1}>
+        <Routes>
+          <Route path="/avant" element={<p>Page d'avant</p>} />
+          <Route path="/projets" element={<Revenir />} />
+          <Route path="/projets/:id" element={<ProjetDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole("button", { name: "Mettre à la corbeille" }))
+    fireEvent.change(screen.getByLabelText("Motif"), { target: { value: "Essai" } })
+    fireEvent.click(screen.getAllByRole("button", { name: "Mettre à la corbeille" }).at(-1)!)
+    fireEvent.click(await screen.findByRole("button", { name: "Revenir" }))
+
+    expect(await screen.findByText("Page d'avant")).toBeInTheDocument()
   })
 })
