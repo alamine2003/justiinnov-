@@ -261,9 +261,9 @@ export interface paths {
          * @description La corbeille du super administrateur (décision 120).
          *
          *     Il y met un projet, un dossier, une ligne ou un justificatif, avec ce
-         *     qui en dépend, tant que la configuration la tient ouverte ; la RH et la
-         *     direction la relisent, comme le journal d'audit. Elle ne se vide ni ne
-         *     se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
+         *     qui en dépend, tant que la configuration la tient ouverte, et seul il
+         *     la relit : la RH n'en voit que la trace, au journal d'audit (2.3.2).
+         *     Elle ne se vide ni ne se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
          */
         get: operations["corbeille_list"]
         put?: never
@@ -271,9 +271,9 @@ export interface paths {
          * @description La corbeille du super administrateur (décision 120).
          *
          *     Il y met un projet, un dossier, une ligne ou un justificatif, avec ce
-         *     qui en dépend, tant que la configuration la tient ouverte ; la RH et la
-         *     direction la relisent, comme le journal d'audit. Elle ne se vide ni ne
-         *     se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
+         *     qui en dépend, tant que la configuration la tient ouverte, et seul il
+         *     la relit : la RH n'en voit que la trace, au journal d'audit (2.3.2).
+         *     Elle ne se vide ni ne se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
          */
         post: operations["corbeille_create"]
         delete?: never
@@ -293,9 +293,9 @@ export interface paths {
          * @description La corbeille du super administrateur (décision 120).
          *
          *     Il y met un projet, un dossier, une ligne ou un justificatif, avec ce
-         *     qui en dépend, tant que la configuration la tient ouverte ; la RH et la
-         *     direction la relisent, comme le journal d'audit. Elle ne se vide ni ne
-         *     se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
+         *     qui en dépend, tant que la configuration la tient ouverte, et seul il
+         *     la relit : la RH n'en voit que la trace, au journal d'audit (2.3.2).
+         *     Elle ne se vide ni ne se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
          */
         get: operations["corbeille_retrieve"]
         put?: never

@@ -5,8 +5,8 @@ un projet, un dossier, une ligne ou un justificatif, avec ce qui en
 dépend : l'objet quitte sa table — enveloppes et numérotation se
 recalculent —, la corbeille en garde une copie que la base refuse de
 modifier ou de supprimer, et le stockage garde le fichier. Fermée, rien ne
-part ; la RH lit la corbeille, ne la remplit pas et ne l'ouvre pas ; le
-pays n'y a pas accès.
+part. Ni la RH ni le pays n'y ont accès (2.3.2) : la RH en relit la trace
+au journal d'audit.
 """
 
 from datetime import timedelta
@@ -454,7 +454,7 @@ class CorbeilleTests(ExpenseTestCase):
         self.piece(ligne, b"%PDF-1.4 conserve")
         self.jeter("ligne", ligne.pk)
         copie = ElementSupprime.objects.get(nature="piece")
-        self.login(self.controller)
+        self.login(self.doo)
 
         reponse = self.client.get(f"/api/corbeille/{copie.pk}/fichier/")
 
@@ -480,7 +480,7 @@ class CorbeilleTests(ExpenseTestCase):
         ligne = self.make_expense()
         self.piece(ligne)
         self.jeter("dossier", self.dossier.pk)
-        self.login(self.controller)
+        self.login(self.doo)
 
         tetes = self.client.get("/api/corbeille/", {"tetes": "true"}).data["results"]
         tete = tetes[0]
@@ -502,7 +502,7 @@ class CorbeilleTests(ExpenseTestCase):
         self.assertEqual(self._requetes_de_la_liste(), une)
 
     def _requetes_de_la_liste(self):
-        self.login(self.controller)
+        self.login(self.doo)
         with CaptureQueriesContext(connection) as requetes:
             self.assertEqual(self.client.get("/api/corbeille/").status_code, status.HTTP_200_OK)
         return len(requetes)
@@ -527,11 +527,28 @@ class CorbeilleTests(ExpenseTestCase):
                 self.assertEqual(reponse.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Expense.objects.filter(pk=ligne.pk).exists())
 
-    def test_la_rh_lit_la_corbeille_le_pays_non(self):
+    def test_seul_le_super_admin_voit_la_corbeille(self):
+        """Ni la RH ni le pays ne la lisent : ni la liste, ni un élément, ni
+        un fichier gardé (2.3.2). La RH garde la trace au journal d'audit."""
+        ligne = self.make_expense()
+        self.piece(ligne)
+        self.jeter("ligne", ligne.pk)
+        copie = ElementSupprime.objects.get(nature="piece")
+
+        for compte in (self.controller, self.owner):
+            self.login(compte)
+            for chemin in (
+                "/api/corbeille/",
+                f"/api/corbeille/{copie.pk}/",
+                f"/api/corbeille/{copie.pk}/fichier/",
+            ):
+                with self.subTest(compte=compte.username, chemin=chemin):
+                    self.assertEqual(self.client.get(chemin).status_code, status.HTTP_403_FORBIDDEN)
         self.login(self.controller)
+        journal = self.client.get("/api/audit/", {"action": "trashed"}).data["results"]
+        self.assertTrue(journal)
+        self.login(self.doo)
         self.assertEqual(self.client.get("/api/corbeille/").status_code, status.HTTP_200_OK)
-        self.login(self.owner)
-        self.assertEqual(self.client.get("/api/corbeille/").status_code, status.HTTP_403_FORBIDDEN)
 
     def test_seul_le_super_admin_ouvre_ou_ferme_la_corbeille(self):
         ouvrir_la_corbeille(False)

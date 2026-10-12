@@ -704,7 +704,9 @@ s'affiche : la carte de ligne et la fiche dossier lisent `allowed_actions`
 la fiche dossier revient au projet, la fiche projet à la liste ; une ligne
 retirée laisse un avis « « … » est dans la corbeille ».
 
-La page **Corbeille** (`/corbeille`, groupe Contrôle, `audit.read`) suit le
+La page **Corbeille** (`/corbeille`, groupe Contrôle, `corbeille.supprimer` :
+le super administrateur seul — la RH n'a ni l'entrée, ni la page, ni la
+section de Configuration) suit le
 journal d'audit : un avis dit si les suppressions sont ouvertes
 (`destructive`) ou fermées, puis recherche, nature et pays, et un tableau
 des éléments choisis — date, élément (nature en `Badge outline`,

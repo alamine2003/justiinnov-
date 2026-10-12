@@ -974,7 +974,7 @@
         "/api/corbeille/": {
             "get": {
                 "operationId": "corbeille_list",
-                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte ; la RH et la\ndirection la relisent, comme le journal d'audit. Elle ne se vide ni ne\nse modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
+                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte, et seul il\nla relit : la RH n'en voit que la trace, au journal d'audit (2.3.2).\nElle ne se vide ni ne se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
                 "parameters": [
                     {
                         "in": "query",
@@ -1090,7 +1090,7 @@
             },
             "post": {
                 "operationId": "corbeille_create",
-                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte ; la RH et la\ndirection la relisent, comme le journal d'audit. Elle ne se vide ni ne\nse modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
+                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte, et seul il\nla relit : la RH n'en voit que la trace, au journal d'audit (2.3.2).\nElle ne se vide ni ne se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
                 "tags": [
                     "corbeille"
                 ],
@@ -1139,7 +1139,7 @@
         "/api/corbeille/{id}/": {
             "get": {
                 "operationId": "corbeille_retrieve",
-                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte ; la RH et la\ndirection la relisent, comme le journal d'audit. Elle ne se vide ni ne\nse modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
+                "description": "La corbeille du super administrateur (décision 120).\n\nIl y met un projet, un dossier, une ligne ou un justificatif, avec ce\nqui en dépend, tant que la configuration la tient ouverte, et seul il\nla relit : la RH n'en voit que la trace, au journal d'audit (2.3.2).\nElle ne se vide ni ne se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.",
                 "parameters": [
                     {
                         "in": "path",

@@ -204,7 +204,8 @@ d'essai par la **corbeille** (décision 120) : `POST /api/corbeille/`
 `WorkflowConfiguration.suppressions_ouvertes` est vrai) ; la liste
 `GET /api/corbeille/?tetes=true&nature=&country=&racine=&search=` et le
 fichier d'une pièce gardée `GET /api/corbeille/{id}/fichier/` se lisent
-avec `audit.read`. La corbeille ne se vide pas (ni `PUT`, ni `PATCH`, ni
+avec la même capacité — le `super_admin` seul (2.3.2) ; la RH n'en voit que
+les entrées `trashed` du journal d'audit. La corbeille ne se vide pas (ni `PUT`, ni `PATCH`, ni
 `DELETE`, et un déclencheur en base).
 Dans l'interface, « Projets » remplace « Dossiers » dans la navigation : la
 liste des projets (`GET /api/projects/`, onglets par pays par

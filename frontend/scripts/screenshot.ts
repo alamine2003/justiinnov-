@@ -321,17 +321,20 @@ async function main() {
   expectData((await hq.locator("tbody tr").count()) > 0, "l'historique du référentiel a des entrées")
   await shot(hq, "audit_referentiel")
 
-  // Décision 120 : la corbeille se lit au siège, avec l'état de l'interrupteur.
-  await goto(hq, "/corbeille", 1200)
+  // Décision 120, 2.3.2 : la corbeille est au super administrateur seul ;
+  // la RH n'en a ni l'entrée, ni la page, ni le réglage.
   expect(
-    (await hq.getByRole("heading", { name: "Corbeille" }).count()) === 1,
-    "la page Corbeille s'ouvre au siège",
+    (await hq.getByRole("link", { name: "Corbeille" }).count()) === 0,
+    "la RH n'a pas l'entrée Corbeille",
   )
+  await hq.goto(`${BASE}/corbeille`)
+  await hq.waitForURL((url) => url.pathname === "/", { timeout: 10000 }).catch(() => {})
+  expect(new URL(hq.url()).pathname === "/", "/corbeille redirige la RH vers le tableau de bord")
+  await goto(hq, "/configuration", 1200)
   expect(
-    (await hq.getByText(/Les suppressions sont (ouvertes|fermées)/).count()) === 1,
-    "la corbeille dit si les suppressions sont ouvertes",
+    (await hq.getByRole("switch", { name: "Suppressions ouvertes" }).count()) === 0,
+    "la configuration ne montre pas la corbeille à la RH",
   )
-  await shot(hq, "corbeille")
 
   await goto(hq, "/countries")
   const hqCountries = await hq.locator("tbody tr").count()
@@ -414,7 +417,7 @@ async function main() {
     [...document.querySelectorAll("main a")].map((a) => a.getAttribute("href")).find((h) => h && /^\/dossiers\/\d+$/.test(h)),
   )
   const ecrans = [
-    "/", "/projets", "/dossiers", "/registre", "/audit", "/corbeille", "/budgets", "/configuration", "/countries",
+    "/", "/projets", "/dossiers", "/registre", "/audit", "/budgets", "/configuration", "/countries",
   ]
   if (fiche) ecrans.push(fiche)
   if (ficheDossier) ecrans.push(ficheDossier)

@@ -192,11 +192,12 @@ export default function App() {
               </RequirePermission>
             }
           />
-          {/* La corbeille se lit comme le journal d'audit (décision 120). */}
+          {/* La corbeille est au super administrateur seul, lecture comprise
+              (décision 120, 2.3.2) : la RH n'en voit que la trace d'audit. */}
           <Route
             path="/corbeille"
             element={
-              <RequirePermission permission="audit.read">
+              <RequirePermission permission="corbeille.supprimer">
                 <CorbeillePage />
               </RequirePermission>
             }
