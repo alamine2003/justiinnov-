@@ -829,9 +829,9 @@ class CorbeilleViewSet(
     """La corbeille du super administrateur (décision 120).
 
     Il y met un projet, un dossier, une ligne ou un justificatif, avec ce
-    qui en dépend, tant que la configuration la tient ouverte ; la RH et la
-    direction la relisent, comme le journal d'audit. Elle ne se vide ni ne
-    se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
+    qui en dépend, tant que la configuration la tient ouverte, et seul il
+    la relit : la RH n'en voit que la trace, au journal d'audit (2.3.2).
+    Elle ne se vide ni ne se modifie : ni ``PUT``, ni ``PATCH``, ni ``DELETE``.
     """
 
     queryset = (
@@ -841,7 +841,7 @@ class CorbeilleViewSet(
     )
     serializer_class = ElementSupprimeSerializer
     permission_classes = [RolePermission]
-    read_capability = "audit.read"
+    read_capability = "corbeille.supprimer"
     write_capability = "corbeille.supprimer"
     country_field = None
     filterset_class = ElementSupprimeFilter

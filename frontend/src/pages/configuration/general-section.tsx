@@ -24,7 +24,7 @@ import { RatesSection } from "@/pages/configuration/rates-section"
 import { Chargement, Erreur } from "@/pages/configuration/section-states"
 
 export function GeneralSection() {
-  const { refreshProfile } = useAuth()
+  const { can, refreshProfile } = useAuth()
   const { t } = useTranslation()
   const query = useQuery("configuration:page", () => fetchConfiguration())
   const config = query.data
@@ -132,16 +132,18 @@ export function GeneralSection() {
         }}
       />
 
-      <InterrupteurDeLaCorbeille
-        ouverte={config.workflow.suppressions_ouvertes}
-        onSaved={async (workflow) => {
-          query.setData((current) => (current ? { ...current, workflow } : current))
-          invalidateReferentiel("configuration")
-          // Les boutons « Mettre à la corbeille » lisent l'interrupteur dans
-          // le profil : il se relit tout de suite.
-          await refreshProfile().catch(() => undefined)
-        }}
-      />
+      {can("corbeille.supprimer") && (
+        <InterrupteurDeLaCorbeille
+          ouverte={config.workflow.suppressions_ouvertes}
+          onSaved={async (workflow) => {
+            query.setData((current) => (current ? { ...current, workflow } : current))
+            invalidateReferentiel("configuration")
+            // Les boutons « Mettre à la corbeille » lisent l'interrupteur dans
+            // le profil : il se relit tout de suite.
+            await refreshProfile().catch(() => undefined)
+          }}
+        />
+      )}
 
       <RatesSection />
     </div>
@@ -151,9 +153,9 @@ export function GeneralSection() {
 /**
  * La corbeille du super administrateur (décision 120) : ouverte pendant
  * les essais, fermée à la mise en ligne finale. Seul qui a
- * `corbeille.supprimer` la règle ; la RH la voit, grisée. L'interrupteur
- * s'enregistre seul : il n'attend pas le formulaire du circuit, que la RH
- * enregistre sans pouvoir y toucher.
+ * `corbeille.supprimer` la voit et la règle (2.3.2) : la RH n'en voit rien.
+ * L'interrupteur s'enregistre seul : il n'attend pas le formulaire du
+ * circuit, que la RH enregistre sans y toucher.
  */
 function InterrupteurDeLaCorbeille({
   ouverte,
@@ -208,7 +210,7 @@ function InterrupteurDeLaCorbeille({
             />
           </div>
         </div>
-        {can("audit.read") && (
+        {can("corbeille.supprimer") && (
           <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/corbeille" />}>
             {t("configuration.corbeille.voir")}
           </Button>

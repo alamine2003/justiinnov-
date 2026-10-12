@@ -245,8 +245,9 @@ l'application.
   corbeille** (décision 120) : tant que « Configuration › Général » la tient
   ouverte (`WorkflowConfiguration.suppressions_ouvertes`, fermée par
   défaut, réglée par le `super_admin` seul), le `super_admin`
-  (`corbeille.supprimer`, verrouillée à l'`admin` et au pays) met à la
-  corbeille un projet, un dossier, une ligne ou un justificatif, quel que
+  (`corbeille.supprimer`, verrouillée à l'`admin` et au pays — qui ne voient
+  ni la page, ni le menu, ni le réglage de la corbeille, seulement sa trace
+  au journal d'audit) met à la corbeille un projet, un dossier, une ligne ou un justificatif, quel que
   soit son état, avec ce qui en dépend et un motif (`POST /api/corbeille/`).
   L'objet quitte sa table — enveloppes et numérotation se recalculent, un
   numéro libéré resservira —, sa copie figée reste dans `ElementSupprime`,

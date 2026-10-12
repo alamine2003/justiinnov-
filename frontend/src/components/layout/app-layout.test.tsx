@@ -52,6 +52,8 @@ afterEach(() => localStorage.clear())
  */
 describe("AppLayout — barre latérale", () => {
   it("range les entrées par groupe, dans l'ordre", () => {
+    droits = new Set(["audit.read", "configuration.manage", "corbeille.supprimer"])
+
     monter()
 
     expect(within(barre()).getAllByRole("link").map((lien) => lien.textContent)).toEqual([
@@ -60,6 +62,13 @@ describe("AppLayout — barre latérale", () => {
     for (const groupe of ["Suivi", "Budget", "Contrôle", "Administration"]) {
       expect(within(barre()).getByText(groupe)).toBeInTheDocument()
     }
+  })
+
+  it("ne montre pas la corbeille à la RH, qui lit pourtant l'audit (2.3.2)", () => {
+    monter()
+
+    expect(within(barre()).getByRole("link", { name: "Audit" })).toBeInTheDocument()
+    expect(within(barre()).queryByRole("link", { name: "Corbeille" })).toBeNull()
   })
 
   it("tait un groupe que les droits du compte laissent vide", () => {

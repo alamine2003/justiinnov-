@@ -88,18 +88,15 @@ describe("GeneralSection — corbeille", () => {
     expect(await screen.findByText(/La corbeille est ouverte\./)).toBeInTheDocument()
   })
 
-  it("la RH la voit sans pouvoir la régler", async () => {
+  it("la RH n'en voit rien (2.3.2)", async () => {
     corbeille = false
 
     monter()
 
-    // Le Switch de Base UI se dit désactivé par `aria-disabled`.
-    expect(await screen.findByRole("switch", { name: "Suppressions ouvertes" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    )
-    expect(
-      screen.getByText(/Seul le super administrateur ouvre ou ferme la corbeille\./),
-    ).toBeInTheDocument()
+    // Le reste de la page se charge : la section de la corbeille, elle, n'y est pas.
+    expect(await screen.findByRole("button", { name: "Enregistrer la politique" })).toBeInTheDocument()
+    expect(screen.queryByRole("switch", { name: "Suppressions ouvertes" })).toBeNull()
+    expect(screen.queryByText("Corbeille")).toBeNull()
+    expect(screen.queryByRole("link", { name: "Voir la corbeille" })).toBeNull()
   })
 })

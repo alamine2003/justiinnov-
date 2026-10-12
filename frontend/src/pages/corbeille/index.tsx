@@ -35,8 +35,8 @@ const NATURES: NatureSupprimee[] = ["projet", "dossier", "ligne", "piece"]
 const COLONNES = 7
 
 /**
- * La corbeille du super administrateur (décision 120), lue par la RH et la
- * direction (`audit.read`) : ce qui a été retiré avant la mise en ligne
+ * La corbeille du super administrateur (décision 120), qu'il est seul à
+ * lire (2.3.2 ; la RH n'en voit que la trace d'audit) : ce qui a été retiré avant la mise en ligne
  * finale, avec qui, quand et pourquoi. La liste montre ce qui a été choisi ;
  * chaque élément se déplie sur ce qu'il a emporté. Rien ne s'y modifie ni
  * ne s'y supprime ; un justificatif gardé se télécharge.

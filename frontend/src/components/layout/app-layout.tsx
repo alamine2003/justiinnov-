@@ -217,12 +217,13 @@ export function AppLayout() {
         {
           cle: "controle",
           titre: t("nav.groupe.controle"),
-          entrees: can("audit.read")
-            ? [
-                { to: "/audit", icon: ScrollText, label: t("nav.audit") },
-                { to: "/corbeille", icon: Trash2, label: t("nav.corbeille") },
-              ]
-            : [],
+          entrees: [
+            ...(can("audit.read") ? [{ to: "/audit", icon: ScrollText, label: t("nav.audit") }] : []),
+            // La corbeille : au super administrateur seul (décision 120, 2.3.2).
+            ...(can("corbeille.supprimer")
+              ? [{ to: "/corbeille", icon: Trash2, label: t("nav.corbeille") }]
+              : []),
+          ],
         },
         {
           cle: "administration",
