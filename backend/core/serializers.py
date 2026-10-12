@@ -8,6 +8,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator, UniqueValidator
 
+from .africa import validate_devise
 from .models import (
     ChangeLog,
     CostCenter,
@@ -477,6 +478,20 @@ class CountryWriteSerializer(serializers.ModelSerializer):
     #: autre pays ce qui a été déclaré dans celui-ci.
     CHAMPS_FIGES = ("code", "currency")
 
+    def validate_currency(self, value):
+        """Une devise des filiales, en majuscules (décision 121).
+
+        Une devise déjà enregistrée et renvoyée telle quelle passe : un pays
+        ouvert avant la 2.3.3 avec un code inconnu doit rester modifiable —
+        désactivé, renommé — sans que sa devise, figée par ses dépenses,
+        bloque tout le formulaire.
+        """
+        devise = value.strip().upper()
+        if self.instance is not None and devise == self.instance.currency:
+            return devise
+        validate_devise(devise)
+        return devise
+
     def validate_code(self, value):
         """Normalise le code avant de l'enregistrer.
 
@@ -643,6 +658,8 @@ class AvailableCountrySerializer(serializers.Serializer):
 
     code = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
+    #: Sa devise officielle, que le formulaire propose d'office (décision 121).
+    currency = serializers.CharField(read_only=True)
 
 
 class ConfigurationAlertesSerializer(serializers.Serializer):

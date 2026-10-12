@@ -120,3 +120,82 @@ class ChampsFigesDuPaysTests(ApiTestCase):
         response = self._modifier(name="Togo (siège Lomé)", currency="XOF")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+
+class DeviseDuPaysTests(ApiTestCase):
+    """Une devise des filiales, et pas une faute de frappe (décision 121).
+
+    « XFO » pour « XOF » a été accepté en production le 12 octobre 2026 :
+    aucun taux ne le convertissait, le pays sortait de la consolidation, et
+    sa devise s'est figée dès la première dépense.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate()
+
+    def _creer(self, devise):
+        return self.client.post(
+            "/api/countries/",
+            {"name": "Bénin", "code": "BJ", "currency": devise, "timezone": "Africa/Porto-Novo"},
+        )
+
+    def test_une_devise_inconnue_est_refusee(self):
+        response = self._creer("XFO")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("currency", response.data)
+        self.assertIn("XOF", str(response.data["currency"]))
+        self.assertFalse(Country.objects.filter(code="BJ").exists())
+
+    def test_une_devise_des_filiales_est_acceptee_meme_hors_officielle(self):
+        """XOF et XAF sont à parité : un pays de la CEMAC peut tenir ses
+        comptes en XOF, comme le Congo de la production."""
+        response = self._creer("xaf")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(Country.objects.get(code="BJ").currency, "XAF")
+
+    def test_on_ne_corrige_pas_vers_une_devise_inconnue(self):
+        response = self.client.patch(
+            f"/api/countries/{self.country.pk}/", {"currency": "XFO"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("currency", response.data)
+
+    def test_un_pays_ouvert_avec_une_devise_inconnue_reste_modifiable(self):
+        """Sa devise renvoyée telle quelle ne bloque pas le formulaire, et une
+        correction vers une devise des filiales passe tant qu'il ne porte
+        pas d'argent."""
+        Country.objects.filter(pk=self.country.pk).update(currency="XFO")
+
+        renomme = self.client.patch(
+            f"/api/countries/{self.country.pk}/",
+            {"name": "Togo (Lomé)", "currency": "XFO"},
+            format="json",
+        )
+        corrige = self.client.patch(
+            f"/api/countries/{self.country.pk}/", {"currency": "XOF"}, format="json"
+        )
+
+        self.assertEqual(renomme.status_code, status.HTTP_200_OK, renomme.data)
+        self.assertEqual(corrige.status_code, status.HTTP_200_OK, corrige.data)
+        self.country.refresh_from_db()
+        self.assertEqual(self.country.currency, "XOF")
+
+    def test_la_creation_propose_la_devise_officielle(self):
+        response = self.client.get("/api/countries/disponibles/")
+
+        par_code = {pays["code"]: pays["currency"] for pays in response.data}
+        self.assertEqual(par_code["BJ"], "XOF")
+        self.assertEqual(par_code["CG"], "XAF")
+        self.assertEqual(par_code["CD"], "CDF")
+
+
+class ListeDesDevisesTests(TestCase):
+    def test_chaque_filiale_a_sa_devise_officielle_dans_la_liste(self):
+        from core.africa import AFRICAN_COUNTRIES, DEVISES_AUTORISEES, DEVISES_OFFICIELLES
+
+        self.assertEqual(set(DEVISES_OFFICIELLES), set(AFRICAN_COUNTRIES))
+        self.assertLessEqual(set(DEVISES_OFFICIELLES.values()), DEVISES_AUTORISEES)

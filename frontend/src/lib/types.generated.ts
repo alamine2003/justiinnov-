@@ -2401,6 +2401,7 @@ export interface components {
         AvailableCountry: {
             readonly code: string
             readonly name: string
+            readonly currency: string
         }
         Beneficiary: {
             readonly id: number
