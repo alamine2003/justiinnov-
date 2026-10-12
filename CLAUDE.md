@@ -66,7 +66,11 @@ l'application.
   dans `backend/core/africa.py`, un pays se crée depuis elle et tout autre
   code est refusé. Au démarrage, seules la Côte d'Ivoire et le Togo sont
   créées ; les autres le seront à leur entrée dans le dispositif. Ouvrir une
-  filiale demande de modifier ce fichier, donc une décision explicite.
+  filiale demande de modifier ce fichier, donc une décision explicite. Sa
+  devise aussi vient de là : la devise officielle est proposée d'office, et
+  seule une devise des filiales, ou USD, EUR, est acceptée
+  (`DEVISES_AUTORISEES`, décision 121) — un code inconnu sortirait le pays
+  de la consolidation.
 - **Trois rôles, pas un de plus** (décision 89). Côté pays, le `manager`
   ouvre les projets **de son pays** (qui naissent avec leurs dossiers),
   saisit les lignes, dépose la pièce de chaque ligne, soumet et importe. Au siège, l'`admin` (RH) **contrôle chaque dossier de

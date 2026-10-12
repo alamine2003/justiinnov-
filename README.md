@@ -22,6 +22,9 @@ Gabon, Mauritanie, Burkina Faso, Niger, Bénin, Guinée, Togo, Gambie,
 Djibouti, Tchad, Congo et République démocratique du Congo. La liste est
 dans `backend/core/africa.py` : un pays se crée depuis elle, tout autre code
 ISO est refusé, et l'ouvrir à une nouvelle filiale se fait dans ce fichier.
+Le même fichier fixe la devise officielle de chaque filiale, proposée à la
+création, et les devises qu'un pays peut porter (`DEVISES_AUTORISEES` :
+celles des filiales, USD et EUR ; décision 121).
 Au démarrage, seules la Côte d'Ivoire et le Togo sont créées ; les autres le
 seront à leur entrée dans le dispositif.
 

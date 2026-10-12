@@ -116,10 +116,14 @@ function CountryFormBody({
               value={values.code}
               onChange={(e) => {
                 const choisi = disponibles.data?.find((p) => p.code === e.target.value)
+                // La devise officielle du pays est proposée d'office : le
+                // serveur refuse un code inconnu (décision 121), et « XFO »
+                // tapé à la main avait sorti un pays de la consolidation.
                 setValues((v) => ({
                   ...v,
                   code: choisi?.code ?? "",
                   name: choisi?.name ?? "",
+                  currency: choisi?.currency ?? v.currency,
                 }))
               }}
               disabled={disponibles.loading}

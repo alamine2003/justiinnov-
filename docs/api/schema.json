@@ -8896,11 +8896,16 @@
                     "name": {
                         "type": "string",
                         "readOnly": true
+                    },
+                    "currency": {
+                        "type": "string",
+                        "readOnly": true
                     }
                 },
                 "required": [
                     "code",
-                    "name"
+                    "name",
+                    "currency"
                 ]
             },
             "Beneficiary": {
