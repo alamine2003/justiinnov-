@@ -17,13 +17,9 @@
 import { spawnSync } from "node:child_process"
 
 /** Identifiant GHSA → pourquoi l'avis ne bloque pas. À retirer dès que le correctif est publié. */
-export const AVIS_TOLERES: ReadonlyMap<string, string> = new Map([
-  [
-    "GHSA-vfj7-8cjw-p6xm",
-    "braces <= 3.0.3, sans correctif publié (octobre 2026). Atteint par la CLI shadcn " +
-      "(fast-glob → micromatch → braces), outil de développement dont les motifs " +
-      "sont écrits par le développeur ; absent de l'image livrée (nginx + dist/).",
-  ],
+export const AVIS_TOLERES: ReadonlyMap<string, string> = new Map<string, string>([
+  // GHSA-vfj7-8cjw-p6xm (braces, via la CLI shadcn) : retiré le 29 octobre
+  // 2026, le correctif est publié et le fichier de verrouillage le prend.
 ])
 
 const GRAVITES_BLOQUANTES = new Set(["high", "critical"])
