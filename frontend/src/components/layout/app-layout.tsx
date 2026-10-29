@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import {
   Activity,
   Briefcase,
+  ChartColumn,
   Download,
   Globe,
   Info,
@@ -395,6 +396,24 @@ export function AppLayout() {
                 >
                   <ShieldCheck className="mr-2 h-4 w-4" aria-hidden />
                   {t("nav.activer_2fa")}
+                </Button>
+              )}
+              {!closed && me?.bi_url && (
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  nativeButton={false}
+                  render={
+                    <a
+                      href={me.bi_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={t("nav.bi")}
+                    />
+                  }
+                >
+                  <ChartColumn className="mr-2 h-4 w-4" aria-hidden />
+                  {t("nav.bi")}
                 </Button>
               )}
               {!closed && can("configuration.manage") && me?.supervision === true && (

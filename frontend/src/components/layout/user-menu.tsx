@@ -1,4 +1,4 @@
-import { Activity, CircleUserRound, Download, LogOut, ShieldCheck, Users } from "lucide-react"
+import { Activity, ChartColumn, CircleUserRound, Download, LogOut, ShieldCheck, Users } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
@@ -18,8 +18,9 @@ import { useInstallPrompt } from "@/lib/install-prompt"
 import { STATUS_TONES } from "@/lib/status-styles"
 
 /**
- * Supervision (Grafana), servie par Caddy sous le même domaine : le chemin
- * est relatif à l'origine, quel que soit l'environnement.
+ * Supervision (Grafana). Grafana a son adresse propre depuis la décision
+ * 122 ; Caddy renvoie ce chemin, relatif à l'origine, vers son dossier
+ * « Supervision » : le lien reste le même quel que soit l'environnement.
  */
 export const SUPERVISION_PATH = "/grafana/"
 
@@ -30,8 +31,9 @@ export const SUPERVISION_PATH = "/grafana/"
  * L'entrée « Installer l'application » n'apparaît que lorsque le navigateur
  * a signalé que la page est installable (Chrome, Edge) : ailleurs, elle ne
  * mènerait à rien. « Activer la double authentification » n'apparaît qu'à
- * un compte qui ne l'a pas encore enrôlée, et « Supervision » aux
- * administrateurs, seuls à avoir un compte Grafana.
+ * un compte qui ne l'a pas encore enrôlée, « BI de pilotage » à qui le
+ * serveur en donne l'adresse (`bi_url`, capacité `bi.consulter`), et
+ * « Supervision » aux administrateurs, seuls à avoir un compte Grafana.
  */
 export function UserMenu({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation()
@@ -94,6 +96,18 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
         {/* Nouvel onglet : Grafana a sa propre session, l'application garde
             la sienne. Ce n'est pas un droit mais un réglage de déploiement :
             sans Grafana derrière Caddy, le lien mènerait à un 404. */}
+        {/* L'adresse vient du serveur, qui ne la donne qu'à qui a
+            `bi.consulter` sur une pile où Grafana tourne (décision 122). */}
+        {me?.bi_url && (
+          <DropdownMenuItem
+            render={
+              <a href={me.bi_url} target="_blank" rel="noopener noreferrer">
+                <ChartColumn aria-hidden />
+                {t("nav.bi")}
+              </a>
+            }
+          />
+        )}
         {can("configuration.manage") && me?.supervision === true && (
           <DropdownMenuItem
             render={

@@ -23,10 +23,14 @@ tag v1.2.3 ▶ CI ──▶ images ghcr.io ──▶ production   (approbation r
 |---|---|
 | `docker-compose.prod.yml` | la pile : Postgres, MinIO, backend, ordonnanceur, frontend, Caddy, sauvegardes (base, pièces, copie hors machine) et, sous le profil optionnel `supervision`, Prometheus, exporteurs et Grafana |
 | `minio/Dockerfile` | l'image de MinIO et de son client `mc`, construite depuis les sources aux versions de production ; publiée par la livraison, jamais sous une étiquette existante (décision 94) |
-| `Caddyfile` | entrée publique, TLS automatique, route `/grafana/` quand `SUPERVISION=1`, 404 sinon |
+| `Caddyfile` | entrée publique, TLS automatique ; quand `SUPERVISION=1`, importe `caddy/bi-1.caddy` (Grafana sur `BI_DOMAIN`) et renvoie `/grafana/` vers sa supervision, 404 sinon |
+| `caddy/bi-0.caddy`, `caddy/bi-1.caddy` | l'adresse propre de Grafana, ou rien, selon `SUPERVISION` (décision 122) |
 | `prometheus/prometheus.yml` | cibles de collecte : backend (sous jeton), base, serveur |
-| `grafana/provisioning/` | source de données Prometheus et chargement des tableaux de bord au démarrage de Grafana |
-| `grafana/dashboards/justi-innov.json` | le tableau de bord de la plateforme |
+| `grafana/provisioning/` | sources de données (Prometheus ; PostgreSQL du BI, sous le rôle `justi_bi`) et chargement des deux dossiers de tableaux de bord au démarrage de Grafana |
+| `grafana/dashboards/supervision/justi-innov.json` | le tableau de bord de la plateforme (supervision) |
+| `grafana/dashboards/pilotage/*.json`, `grafana/pilotage.py` | les six tableaux du BI de pilotage, produits par le générateur — on modifie le générateur, jamais le JSON (« BI de pilotage », plus bas) |
+| `creer_role_bi.sql` | le rôle `justi_bi`, qui ne lit que le schéma `bi` ; rejoué par `restaurer.sh` |
+| `docker-compose.tunnel-base.yml` | publie la base sur `127.0.0.1` du serveur seulement, pour pgAdmin à travers un tunnel SSH (« pgAdmin par tunnel SSH », plus bas) |
 | `preparer_serveur.sh` | prépare une machine Ubuntu neuve (« Préparer un serveur », plus bas) |
 | `deploy.sh` | vérifie la configuration (`compose config`), tire une étiquette d'images, relance la pile, attend qu'elle soit saine ; sinon montre l'état et les journaux de chaque service non sain et rétablit l'étiquette précédente. Une livraison réussie réinscrit étiquette et noms d'images dans le `.env`, pour que les commandes ci-dessous marchent ensuite telles quelles |
 | `.env.example` | modèle du `.env` du serveur, jamais versionné ; aucun service ne le lit en bloc (« Secrets et variables », plus bas) |
@@ -510,7 +514,7 @@ lignes et pièces de démonstration — c'est ce que fait la CI pour ses
 captures. Ni l'un ni l'autre sur un serveur réel.
 
 Le back-office Django (`/admin/`) n'est monté qu'en développement (décision 44) et n'est de toute façon pas joignable depuis l'extérieur :
-Caddy n'envoie à nginx que ce qui n'est pas `/grafana/`, et nginx ne relaie
+Caddy n'envoie à nginx que ce qui n'est pas `/grafana/` (Grafana a son adresse propre), et nginx ne relaie
 à Django que `/api/` — `https://<domaine>/admin/` affiche l'application,
 pas le back-office. Il reste accessible depuis le serveur, soumis aux mêmes
 verrous que l'API (mot de passe provisoire, double authentification si elle
@@ -534,9 +538,10 @@ docker compose -f docker-compose.prod.yml run --rm sauvegarde-distante --une-foi
 ```
 
 Si la supervision est activée (`SUPERVISION=1`), vérifiez-la aussi :
-`https://<domaine>/grafana/` demande le compte `GRAFANA_ADMIN_USER` /
+`https://bi.<domaine>/` (`BI_URL`) demande le compte `GRAFANA_ADMIN_USER` /
 `GRAFANA_ADMIN_PASSWORD`, et le tableau de bord « JUSTI GH —
-supervision » doit montrer ses quatre cibles « en ligne ». Une cible
+supervision », dans le dossier « Supervision », doit montrer ses quatre
+cibles « en ligne ». Une cible
 `backend` « hors ligne » alors que l'API répond signifie presque toujours
 un `METRICS_TOKEN` vide ou différent entre `.env` et le conteneur (relancez
 la pile après l'avoir changé). Créez alors les comptes « direction » et
@@ -2190,10 +2195,14 @@ Tant que personne n'a tranché, l'interface reste hors surveillance.
 ## Supervision (Prometheus et Grafana)
 
 Quatre services de la pile, sur le réseau interne ; seul Grafana est
-atteignable, par Caddy, sur `https://<domaine>/grafana/`, derrière ses
-propres comptes — distincts de ceux de l'application. Les administrateurs
-de l'application y arrivent par l'entrée « Supervision » du menu de leur
-compte, qui ouvre `/grafana/` dans un nouvel onglet.
+atteignable, par Caddy, sur son adresse propre — `BI_DOMAIN`, par défaut
+`bi.<domaine>` (décision 122) —, derrière ses propres comptes, distincts de
+ceux de l'application. Grafana y sert deux dossiers : « Supervision »
+(Prometheus, ci-dessous) et « Pilotage », le BI de la direction (« BI de
+pilotage », plus bas). Les administrateurs de l'application arrivent à la
+supervision par l'entrée « Supervision » du menu de leur compte, qui ouvre
+`/grafana/` dans un nouvel onglet — Caddy renvoie ce chemin vers le dossier
+« Supervision » de la nouvelle adresse.
 
 ### Un profil Compose optionnel
 
@@ -2211,8 +2220,8 @@ COMPOSE_PROFILES=supervision
 | Effet de `SUPERVISION=1` | Par qui |
 |---|---|
 | `prometheus`, `postgres-exporter`, `node-exporter`, `grafana` font partie de la pile (`profiles: ["supervision"]`) | `deploy.sh` et `restaurer.sh` exportent `COMPOSE_PROFILES=supervision` d'après `SUPERVISION` ; `docker compose` lancé à la main lit `COMPOSE_PROFILES` dans `.env`, d'où la seconde ligne — `deploy.sh` signale un `.env` où les deux se contredisent |
-| Caddy route `/grafana/` vers Grafana | `docker-compose.prod.yml` transmet `SUPERVISION` à Caddy ; le Caddyfile n'a pas de bloc conditionnel, la variable est substituée dans une expression constante (`"1" == "1"`) avant l'analyse, et le fichier valide dans les deux cas — sans supervision, `/grafana/` répond 404 avec une phrase, pas la page d'accueil de l'application ni un 502 |
-| L'interface montre l'entrée « Supervision » | le backend reçoit `SUPERVISION` (`x-django`) et renvoie le drapeau `supervision` sur `/api/configuration/` ; l'interface ne l'affiche que s'il est vrai |
+| Caddy sert Grafana sur `BI_DOMAIN` et renvoie `/grafana/` vers sa supervision | `docker-compose.prod.yml` transmet `SUPERVISION`, `BI_DOMAIN` et `BI_URL` à Caddy ; le Caddyfile importe `caddy/bi-<SUPERVISION>.caddy` — `bi-0.caddy` est vide, pas de certificat demandé pour un service absent — et le renvoi de `/grafana/` dépend d'une expression constante (`"1" == "1"`) substituée avant l'analyse ; le fichier valide dans les deux cas (la CI le vérifie) — sans supervision, `/grafana/` répond 404 avec une phrase. `SUPERVISION` ne vaut que 0 ou 1 : `deploy.sh` refuse le reste, qui empêcherait Caddy de démarrer |
+| L'interface montre l'entrée « Supervision », et « BI de pilotage » à qui a `bi.consulter` | le backend reçoit `SUPERVISION` et `BI_URL` (`x-django`), renvoie le drapeau `supervision` sur `/api/me/` et `/api/configuration/`, et `bi_url` sur `/api/me/` ; l'interface n'affiche que ce qui mène quelque part |
 
 `METRICS_TOKEN` et `GRAFANA_ADMIN_PASSWORD` ne servent que si le profil
 est actif, mais Compose interpole toute la pile avant d'appliquer les
@@ -2239,15 +2248,22 @@ COMPOSE_PROFILES=supervision docker compose -f docker-compose.prod.yml config --
 
 Grafana est partagé avec la direction et l'équipe technique. Trois comptes,
 pas plus : l'administrateur (`GRAFANA_ADMIN_USER` /
-`GRAFANA_ADMIN_PASSWORD`, réservé à l'exploitation), **« direction »** en
-lecture seule et **« technique »** en édition. `docker-compose.prod.yml`
+`GRAFANA_ADMIN_PASSWORD`, réservé à l'exploitation), **« direction »** et
+**« technique »**, tous deux en lecture seule (Viewer) depuis la 2.4.0 : un
+Editor de Grafana interroge n'importe quelle source depuis « Explore », et la
+source du BI montre les chiffres de toutes les filiales — que seule la
+direction doit voir (décision 122). Les tableaux viennent du dépôt ; nul n'a
+besoin d'éditer dans Grafana. `docker-compose.prod.yml`
 règle ce qui rend le partage sûr et confortable :
 
 | Variable | Effet |
 |---|---|
 | `GF_USERS_VIEWERS_CAN_EDIT=false` | un Viewer ne modifie rien, pas même « pour voir » : la direction lit |
 | `GF_USERS_EDITORS_CAN_ADMIN=false` | un Editor ne gère ni comptes ni organisation |
-| `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH` | le tableau de bord « JUSTI GH — supervision » est la page d'accueil de chacun |
+| `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH` | « Pilotage — vue d'ensemble » est la page d'accueil de chacun ; la supervision est dans son dossier |
+| `GF_SECURITY_COOKIE_SAMESITE=strict`, `GF_SECURITY_CONTENT_SECURITY_POLICY=true` | cookie de session réservé au site, politique de sécurité du contenu de Grafana |
+| `GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION=1h`, `…_LIFETIME_DURATION=12h` | une session oubliée ouverte se ferme |
+| `GF_SECURITY_DISABLE_GRAVATAR=true`, `GF_PLUGINS_PREINSTALL_DISABLED=true` | rien ne part vers Gravatar ni grafana.com |
 | `GF_USERS_DEFAULT_THEME=light` | thème clair par défaut, comme l'application ; chacun change le sien |
 | `GF_USERS_DEFAULT_LANGUAGE=fr-FR` | interface en français par défaut, comme l'application ; chacun change la sienne |
 | `GF_USERS_ALLOW_SIGN_UP=false`, `GF_AUTH_ANONYMOUS_ENABLED=false` | pas d'inscription, pas d'accès anonyme |
@@ -2257,7 +2273,7 @@ Grafana (Administration › Users and access › Users › New user, puis le rô
 dans l'organisation) ou par l'API, depuis n'importe quel poste :
 
 ```bash
-GRAFANA=https://<domaine>/grafana
+GRAFANA=https://bi.<domaine>
 AUTH="$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD"
 # Un nouveau compte reçoit le rôle Viewer (GF_USERS_AUTO_ASSIGN_ORG_ROLE) :
 # « direction » n'a rien de plus à régler.
@@ -2267,25 +2283,41 @@ curl -fsS -u "$AUTH" -H 'Content-Type: application/json' \
 curl -fsS -u "$AUTH" -H 'Content-Type: application/json' \
     -X POST "$GRAFANA/api/admin/users" \
     -d '{"name":"Équipe technique","login":"technique","password":"<mot de passe 2>"}'
-# « technique » passe Editor ; l'identifiant est celui renvoyé ("id") par la
-# création, ou se lit dans GET /api/org/users.
+# Un compte « technique » créé Editor avant la 2.4.0 repasse Viewer ;
+# l'identifiant est celui renvoyé ("id") par la création, ou se lit dans
+# GET /api/org/users.
 curl -fsS -u "$AUTH" -H 'Content-Type: application/json' \
-    -X PATCH "$GRAFANA/api/org/users/<id de technique>" -d '{"role":"Editor"}'
+    -X PATCH "$GRAFANA/api/org/users/<id de technique>" -d '{"role":"Viewer"}'
 ```
+
+Puis le dossier « Pilotage » se ferme à tous sauf « direction » (et
+l'administrateur, qui voit tout) : Grafana n'a pas de fichier pour cela,
+le réglage se fait une fois et reste dans le volume `grafana_data`.
+
+```bash
+# Remplace les droits du dossier : « direction » en lecture, rien d'autre.
+curl -fsS -u "$AUTH" -H 'Content-Type: application/json' \
+    -X POST "$GRAFANA/api/folders/pilotage/permissions" \
+    -d '{"items":[{"userId":<id de direction>,"permission":1}]}'
+curl -fsS -u "$AUTH" "$GRAFANA/api/folders/pilotage/permissions"   # vérifier : une seule entrée
+```
+
+Connecté en « technique », le dossier « Pilotage » ne doit plus
+apparaître.
 
 Remettez chaque mot de passe par un autre canal que l'e-mail, et
 changez-le si la personne change : ce sont des comptes de fonction, pas de
-personne. Un Viewer voit les mesures d'exploitation, jamais une donnée
-métier (voir plus bas) ; un Editor peut composer d'autres tableaux de bord
-et poser des alertes, mais le tableau de bord de la plateforme vient du
-dépôt et reste en lecture seule pour tous.
+personne. « technique » voit les mesures d'exploitation, jamais une donnée
+métier ; « direction » voit en plus le pilotage, c'est-à-dire les chiffres
+des filiales. Les tableaux viennent du dépôt et restent en lecture seule
+pour tous.
 
 | Service | Image | Rôle |
 |---|---|---|
 | `prometheus` | `prom/prometheus:v3.14.0` | collecte toutes les 15 s, garde 90 jours ou 2 Go de mesures (`--storage.tsdb.retention.*`) dans le volume `prometheus_data` |
 | `postgres-exporter` | `prometheuscommunity/postgres-exporter:v0.20.1` | connexions, taille, transactions, verrous de la base, avec le rôle applicatif |
 | `node-exporter` | `prom/node-exporter:v1.12.1` | processeur, mémoire, disque du serveur (lit `/proc`, `/sys` et `/` de l'hôte, en lecture seule) |
-| `grafana` | `grafana/grafana:13.2.2` | affichage ; source de données et tableau de bord provisionnés depuis `grafana/`, volume `grafana_data` pour le reste |
+| `grafana` | `grafana/grafana:13.2.2` | affichage ; sources de données et tableaux de bord provisionnés depuis `grafana/`, volume `grafana_data` pour le reste |
 
 Le backend expose ses compteurs (`django-prometheus`) sur `/metrics`, que
 Prometheus interroge directement sur `backend:8000` avec le jeton
@@ -2296,15 +2328,14 @@ mauvais jeton, 401. Le point n'est pas routé par nginx ni par Caddy : il
 n'est pas joignable depuis l'extérieur. Le nom `backend`, sous lequel
 Prometheus l'interroge, est ajouté à `ALLOWED_HOSTS` par
 `backend/config/settings.py` — `DJANGO_ALLOWED_HOSTS` ne porte que le
-domaine public. Prometheus est servi sous `/grafana/` par Caddy, qui
-transmet le préfixe tel quel : Grafana le sert lui-même
-(`GF_SERVER_SERVE_FROM_SUB_PATH`) ; retirer le préfixe le faisait boucler
-sur sa page de connexion.
+domaine public. Grafana est servi à la racine de son adresse propre
+(`GF_SERVER_ROOT_URL` = `BI_URL`) : plus de sous-chemin, plus de préfixe à
+transmettre.
 
 Le tableau de bord « JUSTI GH — supervision » (`uid` `justi-innov`) est
 en lecture seule dans Grafana : il vient du dépôt. Pour le modifier, faites
 la modification dans Grafana, exportez le JSON (Share › Export) et
-remplacez `grafana/dashboards/justi-innov.json` ; la livraison suivante — ou
+remplacez `grafana/dashboards/supervision/justi-innov.json` ; la livraison suivante — ou
 un `deploy.sh` rejoué — le recharge. Il montre :
 
 - l'état des cibles de collecte (`up`) : un backend « hors ligne » alors
@@ -2316,8 +2347,8 @@ un `deploy.sh` rejoué — le recharge. Il montre :
   transactions validées et annulées, les verrous ;
 - le processeur, la mémoire, le disque et la charge du serveur.
 
-Ce sont des mesures, pas des données métier : rien du contenu des dossiers
-n'y transite, et la rétention de 90 jours ne contredit pas la conservation
+Ce tableau-là montre des mesures, pas des données métier : rien du contenu
+des dossiers n'y transite, et la rétention de 90 jours ne contredit pas la conservation
 illimitée de la plateforme. Il n'y a pas d'alerte automatique depuis
 Grafana : les alertes budgétaires viennent de l'application
 (`notify_alerts`). Une alerte d'exploitation (disque, 5xx) se pose dans
@@ -2333,9 +2364,9 @@ docker run --rm -v "$PWD/prometheus/prometheus.yml:/p.yml:ro" \
     -v /tmp/jeton-factice:/run/secrets/metrics_token:ro \
     --entrypoint promtool prom/prometheus:v3.14.0 check config /p.yml
 docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
-    -e SUPERVISION=1 \
-    -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11-alpine \
-    caddy validate --config /etc/caddy/Caddyfile                # et avec SUPERVISION=0
+    -e SUPERVISION=1 -e BI_DOMAIN=bi.exemple.org -e BI_URL=https://bi.exemple.org \
+    -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$PWD/caddy:/etc/caddy/caddy:ro" \
+    caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile   # et avec SUPERVISION=0
 docker compose -f docker-compose.prod.yml config >/dev/null   # avec le .env
 ```
 
@@ -2348,3 +2379,117 @@ arrêt et un rechargement à quiconque joint le réseau interne).
 docker compose -f docker-compose.prod.yml kill -s HUP prometheus
 docker compose -f docker-compose.prod.yml logs --tail 5 prometheus   # « Completed loading of configuration file »
 ```
+
+## BI de pilotage (décision 122)
+
+Le dossier « Pilotage » de Grafana porte six tableaux pour la direction,
+tous pays confondus, recalculés à chaque affichage :
+
+| Tableau | Ce qu'il montre |
+|---|---|
+| Vue d'ensemble (page d'accueil) | attribué, engagé, consommé, justifié, écart non prouvé, disponible en FCFA ; taux d'exécution et de justification ; file de contrôle, dossiers ouverts, alertes ; consolidation et exécution par pays ; alertes en cours (dépassements, seuils, justificatifs, dépenses inhabituelles) |
+| Enveloppes | chaque enveloppe dans sa devise, son niveau et son alerte ; projection de fin d'exercice au rythme observé ; comparaison avec l'exercice précédent ; enveloppes de projet ; réallocations |
+| Justification et preuves | dépensé contre justifié par pays ; pièces par état et par type, motifs de rejet ; délais médians (dépense → soumission → constat, dépôt de la pièce) ; dossiers déclarés avec des lignes sans preuve |
+| Activité et tendances | montant par mois et par pays ; par catégorie, type de projet, mode de paiement ; dix premiers bénéficiaires et concentration ; comparaison des filiales ; par équipe, manager, projet |
+| Contrôle | file de la RH et son ancienneté ; constats et délai de constat par mois ; non-justifiées, réouvertures ; rectifications |
+| Anomalies et traçabilité | dépenses inhabituelles, doublons probables, dépenses du week-end ; devises sans taux et paiements en devise étrangère ; actions sensibles, sorties de données ; comptes, double authentification, connexions ; corbeille |
+
+**D'où viennent les chiffres.** Le backend pose, après chaque migration, un
+schéma PostgreSQL `bi` : des vues SQL (`backend/reporting/bi/vues.sql`) qui
+appliquent les règles du serveur — engagé, consommé, conversion en FCFA au
+taux de la date de référence, arrondi au pair, seuils d'alerte de la
+configuration, preuves utilisables. Des tests comparent chaque vue aux
+calculs de l'application (`reporting/tests/test_bi.py`) : un écart entre le
+BI et l'écran « Pilotage » de l'application est un défaut. Une vue qui ne
+s'installe pas est écrite au journal du backend (`reporting.bi`) et
+n'empêche pas l'application de démarrer ; les tableaux restent alors vides.
+
+**Qui lit quoi.** Grafana se connecte avec le rôle `justi_bi`
+(`creer_role_bi.sql`) : lecture seule des vues du schéma `bi`, rien du
+schéma `public` (ni comptes, ni jetons, ni secrets de double
+authentification, ni pièces), cinq connexions au plus, requêtes coupées à
+30 secondes. Les vues ne portent ni adresse, ni téléphone, ni mot de passe ;
+elles portent le nom des bénéficiaires et des comptes. Dans Grafana, seul
+le compte « direction » ouvre le dossier (« Comptes Grafana », plus haut).
+Dans l'application, l'entrée « BI de pilotage » du menu du compte apparaît
+à qui a la capacité `bi.consulter` — le `super_admin` par défaut ; la RH si
+la matrice la lui ouvre, jamais le pays — : elle ne fait que montrer le
+lien, l'accès est le compte Grafana.
+
+**Mise en service**, une fois, en root sur le serveur, après avoir posé les
+fichiers de `deploy/` à jour (« Réduire les pouvoirs de la livraison »,
+plus haut) :
+
+1. L'adresse : `bi.<APP_DOMAIN>` par défaut. Avec sslip.io, elle résout
+   d'elle-même ; avec un vrai domaine, ajoutez son enregistrement DNS (A)
+   avant, sans quoi Caddy n'obtient pas de certificat. Une autre adresse se
+   règle par `BI_DOMAIN` et `BI_URL` dans `.env`.
+2. Le rôle, avec un mot de passe tiré au sort qui ne passe ni par l'écran
+   ni par l'historique du shell :
+   ```bash
+   cd /home/deploy/justi-innov
+   BI="$(openssl rand -hex 24)"
+   docker compose -f docker-compose.prod.yml exec -T db \
+       psql -U justi -d justi_innov -v ON_ERROR_STOP=1 \
+       -v role_bi=justi_bi -v mot_de_passe="$BI" -f - < creer_role_bi.sql
+   printf 'BI_DB_PASSWORD=%s\n' "$BI" >> .env
+   unset BI
+   ```
+   (`-U` : le rôle propriétaire, `POSTGRES_MIGRATION_USER` s'il existe.)
+3. `SUPERVISION=1` et `COMPOSE_PROFILES=supervision` dans `.env` (s'ils n'y
+   sont pas), puis `deploy.sh` rejoué avec l'étiquette en cours — Caddy
+   demande le certificat de la nouvelle adresse, Grafana charge les deux
+   dossiers. `deploy.sh` prévient si `BI_DB_PASSWORD` manque.
+4. Les comptes Grafana et le dossier fermé à « direction » (« Comptes
+   Grafana », plus haut).
+5. Vérifier : `https://bi.<domaine>/` s'ouvre sur « Pilotage — vue
+   d'ensemble », dont les montants sont ceux de l'écran « Pilotage » de
+   l'application pour le même exercice ; l'entrée « BI de pilotage »
+   apparaît dans le menu du compte d'un `super_admin`.
+
+**Variables** (`.env.example`) : `BI_DOMAIN`, `BI_URL`, `BI_IP_AUTORISEES`
+(plages CIDR séparées par des espaces ; par défaut toutes — Grafana demande
+de toute façon un mot de passe), `BI_DB_USER` (`justi_bi`),
+`BI_DB_PASSWORD`. Après une restauration, `restaurer.sh` rejoue le rôle si
+`BI_DB_PASSWORD` est renseigné.
+
+**Modifier un tableau.** Les JSON de `grafana/dashboards/pilotage/` sont
+produits par `grafana/pilotage.py` ; on modifie le générateur, puis :
+
+```bash
+python3 deploy/grafana/pilotage.py              # réécrit les JSON
+docker compose run --rm --entrypoint python backend manage.py test reporting.tests.test_bi_tableaux
+```
+
+Le test exécute chaque requête de chaque panneau sous les droits du rôle du
+BI et vérifie que les JSON sont ceux du générateur. Une colonne renommée
+dans une vue casse ce test, pas le tableau de la direction.
+
+## pgAdmin par tunnel SSH
+
+pgAdmin, sur le poste, administre la base sans qu'elle soit jamais ouverte
+sur Internet : le serveur la publie sur sa seule boucle locale, et un
+tunnel SSH y mène.
+
+1. Sur le serveur, en root, ajouter la surcharge à la liste du `.env`
+   (avec celles qui y sont déjà, séparées par « : »), puis rejouer
+   `deploy.sh` avec l'étiquette en cours :
+   ```
+   COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tunnel-base.yml
+   ```
+   Vérifier que la base n'écoute que sur la boucle locale :
+   `ss -ltn | grep 5432` doit montrer `127.0.0.1:5432`, jamais `0.0.0.0`.
+2. Sur le poste, ouvrir le tunnel et le laisser ouvert :
+   `ssh -N -L 5433:127.0.0.1:5432 root@<hôte>`.
+3. Dans pgAdmin, « Register › Server » : hôte `localhost`, port `5433`,
+   base `justi_innov`, SSL désactivé (le tunnel chiffre). Pour lire,
+   l'utilisateur `justi_bi` suffit : il ne voit que le schéma `bi`. Pour
+   administrer (requêtes lentes, index, taille des tables, sessions), le
+   rôle propriétaire.
+
+**On ne modifie jamais une donnée déclarée depuis pgAdmin** : une ligne,
+une pièce, un statut changés à la main ne laissent aucune trace au journal
+d'audit, et c'est la raison d'être de la plateforme. Une correction passe
+par l'application (réouverture, rectification, corbeille avant
+l'ouverture), une évolution du schéma par une migration. Fermer l'accès :
+retirer la surcharge de `COMPOSE_FILE` et rejouer `deploy.sh`.

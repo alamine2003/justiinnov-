@@ -729,6 +729,10 @@ if not DEBUG:
 # exposé par ``/api/me/`` et ``/api/configuration/`` ; absent (CI,
 # développement), il vaut faux.
 SUPERVISION = os.environ.get("SUPERVISION", "0") == "1"
+# Adresse publique de Grafana — BI de pilotage et supervision (décision
+# 122) —, sur son domaine propre (BI_DOMAIN de Caddy). ``/api/me/`` en
+# déduit le lien « BI de pilotage » ; vide, le lien n'apparaît pas.
+BI_URL = os.environ.get("BI_URL", "").strip().rstrip("/")
 # Jeton présenté par le collecteur Prometheus sur ``/metrics``. Vide : le
 # point de collecte n'est pas exposé.
 METRICS_TOKEN = os.environ.get("METRICS_TOKEN", "")

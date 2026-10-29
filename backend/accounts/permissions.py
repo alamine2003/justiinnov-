@@ -272,6 +272,20 @@ CAPACITES = (
         _("Relire la trace des actions sensibles, décisions du siège comprises."),
         _ADMINISTRATEURS, verrouillees=_JAMAIS_LE_PAYS,
     ),
+    # Le BI de pilotage (décision 122) : la direction regarde les chiffres de
+    # toutes les filiales dans Grafana. La capacité ne fait que montrer le
+    # lien (``/api/me/``, ``bi_url``) ; l'accès lui-même est le compte
+    # Grafana, créé à part. Au super administrateur toujours, ouvrable à la
+    # RH par la matrice, jamais au pays : on y lit tous les pays.
+    Capacite(
+        "bi.consulter", GROUPE_ADMINISTRATION,
+        _("BI de pilotage"),
+        _(
+            "Voir le lien vers les tableaux de pilotage de Grafana, tous pays "
+            "confondus. Le compte Grafana se crée à part, dans Grafana."
+        ),
+        _ALLOCATEUR, verrouillees=_JAMAIS_LE_PAYS, fixes=_ALLOCATEUR,
+    ),
     # La corbeille retire ce que les pays ont déclaré, constats compris
     # (décision 120) : au super administrateur seul, comme les enveloppes —
     # la RH, qui contrôle ces déclarations et règle la matrice, se la

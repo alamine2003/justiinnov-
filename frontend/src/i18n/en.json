@@ -60,6 +60,7 @@
     "reservee_siege": "This page is restricted to headquarters: you have been taken back to the dashboard.",
     "equipes": "Teams",
     "supervision": "Monitoring",
+    "bi": "Management BI",
     "activer_2fa": "Enable two-factor authentication",
     "totp_active": "2FA active",
     "projets": "Projects",
