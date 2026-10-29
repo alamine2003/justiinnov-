@@ -1,0 +1,1032 @@
+{
+  "uid": "bi-activite",
+  "title": "Pilotage — activité et tendances",
+  "description": "Où va l'argent : par mois, catégorie, type de projet, bénéficiaire, filiale.",
+  "tags": [
+    "pilotage",
+    "justi-gh"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-1y",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": true
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "annee",
+        "label": "Exercice",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "bi"
+        },
+        "query": "SELECT annee AS __value, annee::text AS __text FROM (SELECT annee FROM bi.consolidation_pays UNION SELECT annee FROM bi.lignes UNION SELECT extract(year FROM bi.aujourd_hui())::integer) AS exercices ORDER BY annee DESC",
+        "definition": "Exercices",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "pays",
+        "label": "Pays",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "bi"
+        },
+        "query": "SELECT nom AS __text, id AS __value FROM bi.pays ORDER BY nom",
+        "definition": "Pays",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "type_projet",
+        "label": "Type de projet",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "bi"
+        },
+        "query": "SELECT DISTINCT type_projet AS __text, type_projet_code AS __value FROM bi.lignes WHERE type_projet_code IS NOT NULL ORDER BY 1",
+        "definition": "Types de projets",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "allValue": "'__tous'",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "Pilotage",
+      "type": "dashboards",
+      "tags": [
+        "pilotage"
+      ],
+      "asDropdown": true,
+      "includeVars": true,
+      "keepTime": false
+    }
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Lignes déclarées",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Montant déclaré (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coalesce(sum(montant_xof), 0) FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "locale",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Montant moyen par ligne (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT avg(montant_xof) FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "locale",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Part des 10 premiers bénéficiaires",
+      "description": "Concentration : part du montant qui va aux dix premiers bénéficiaires.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT bi.ratio(sum(m) FILTER (WHERE rang <= 10), sum(m)) FROM ( SELECT sum(montant_xof) AS m, row_number() OVER (ORDER BY sum(montant_xof) DESC NULLS LAST) AS rang FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) AND beneficiaire_id IS NOT NULL GROUP BY beneficiaire_id) AS b"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 0.8
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "Mois",
+            "columnField": "pays",
+            "valueField": "montant",
+            "emptyValue": "zero"
+          }
+        }
+      ],
+      "type": "barchart",
+      "title": "Montant par mois et par pays (FCFA)",
+      "description": "Engagé et consommé, en FCFA, par mois au fuseau de chaque pays.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT to_char(mois, 'YYYY-MM') AS \"Mois\", pays, sum(montant_xof) AS montant FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) GROUP BY mois, pays ORDER BY mois"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "locale",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "stacking": "normal",
+        "showValue": "never",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "barWidth": 0.8,
+        "groupWidth": 0.7
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 10
+      }
+    },
+    {
+      "transformations": [],
+      "type": "barchart",
+      "title": "Par catégorie (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coalesce(categorie, '(sans catégorie)') AS \"Catégorie\", sum(montant_xof) AS \"Montant\" FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) GROUP BY 1 ORDER BY 2 DESC NULLS LAST LIMIT 15"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "locale",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "stacking": "none",
+        "showValue": "never",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "barWidth": 0.8,
+        "groupWidth": 0.7
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 10
+      }
+    },
+    {
+      "type": "piechart",
+      "title": "Par type de projet (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coalesce(type_projet, '(historique)') AS \"Type\", sum(montant_xof) AS \"Montant\" FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) GROUP BY 1 ORDER BY 2 DESC NULLS LAST"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "locale",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "displayLabels": [],
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 6,
+        "h": 10
+      }
+    },
+    {
+      "type": "piechart",
+      "title": "Par mode de paiement (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT mode_paiement AS \"Mode\", sum(montant_xof) AS \"Montant\" FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) GROUP BY 1 ORDER BY 2 DESC NULLS LAST"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "locale",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "displayLabels": [],
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 18,
+        "y": 14,
+        "w": 6,
+        "h": 10
+      }
+    },
+    {
+      "type": "table",
+      "title": "Dix premiers bénéficiaires (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT beneficiaire AS \"Bénéficiaire\", type_beneficiaire AS \"Type\", string_agg(DISTINCT pays, ', ') AS \"Pays\", count(*) AS \"Lignes\", sum(montant_xof) AS \"Montant\", bi.ratio(sum(montant_xof), sum(sum(montant_xof)) OVER ()) AS \"Part\" FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) AND beneficiaire_id IS NOT NULL GROUP BY beneficiaire_id, beneficiaire, type_beneficiaire ORDER BY 5 DESC NULLS LAST LIMIT 10"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Montant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Part"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 10
+      }
+    },
+    {
+      "type": "table",
+      "title": "Comparaison des filiales (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT pays AS \"Pays\", count(*) AS \"Lignes\", sum(montant_xof) AS \"Montant\", avg(montant_xof) AS \"Moyenne par ligne\", bi.ratio(sum(montant_xof), sum(sum(montant_xof)) OVER ()) AS \"Part\", count(DISTINCT dossier_id) AS \"Dossiers\", count(DISTINCT projet_dossier_id) AS \"Projets\" FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) GROUP BY pays ORDER BY 3 DESC NULLS LAST"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Montant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Moyenne par ligne"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Part"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 10
+      }
+    },
+    {
+      "type": "table",
+      "title": "Par équipe et manager (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT pays AS \"Pays\", coalesce(equipe, '(sans équipe)') AS \"Équipe\", coalesce(manager, '(sans manager)') AS \"Manager\", count(*) AS \"Lignes\", sum(montant_xof) AS \"Montant\", sum(justifie_xof) AS \"Justifié\" FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) GROUP BY 1, 2, 3 ORDER BY 5 DESC NULLS LAST"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Montant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Justifié"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 10
+      }
+    },
+    {
+      "type": "table",
+      "title": "Par projet (FCFA)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT pays AS \"Pays\", coalesce(reference_projet_dossier, '') AS \"Référence\", coalesce(projet_dossier, '(hors projet)') AS \"Projet\", coalesce(type_projet, '') AS \"Type\", count(*) AS \"Lignes\", sum(montant_xof) AS \"Montant\", sum(justifie_xof) AS \"Justifié\" FROM bi.lignes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND ('__tous' IN (${type_projet:sqlstring}) OR type_projet_code IN (${type_projet:sqlstring})) AND (engagee OR consommee) GROUP BY 1, 2, 3, 4 ORDER BY 6 DESC NULLS LAST"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Montant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Justifié"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 10
+      }
+    }
+  ]
+}

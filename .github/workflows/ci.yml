@@ -558,10 +558,28 @@ jobs:
             "docker-compose.prod.yml -f docker-compose.primaire.yml" \
             "docker-compose.prod.yml -f docker-compose.replique.yml" \
             "docker-compose.prod.yml -f docker-compose.derriere-balanceur.yml" \
+            "docker-compose.prod.yml -f docker-compose.tunnel-base.yml" \
             "docker-compose.balanceur.yml"; do
             # shellcheck disable=SC2086
             docker compose -f $fichiers config -q || { echo "::error::$fichiers ne s'interpole pas"; exit 1; }
             echo "✔ $fichiers"
+          done
+          # Et avec la supervision : Grafana, sa source du BI, son adresse.
+          COMPOSE_PROFILES=supervision docker compose -f docker-compose.prod.yml config -q \
+            || { echo "::error::la pile ne s'interpole pas avec la supervision"; exit 1; }
+          echo "✔ docker-compose.prod.yml (supervision)"
+
+      - name: Caddy accepte son fichier, avec et sans supervision
+        # Le Caddyfile importe caddy/bi-<SUPERVISION>.caddy : un fichier
+        # manquant ou mal formé empêcherait Caddy, donc la plateforme, de
+        # démarrer (décision 122).
+        run: |
+          for supervision in 0 1; do
+            docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
+              -e SUPERVISION=$supervision -e BI_DOMAIN=bi.exemple.org -e BI_URL=https://bi.exemple.org \
+              -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$PWD/caddy:/etc/caddy/caddy:ro" \
+              caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile
+            echo "✔ SUPERVISION=$supervision"
           done
 
       - name: La base démarre, une fois le volume des sauvegardes préparé

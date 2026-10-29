@@ -89,6 +89,9 @@ services:
       REDIS_URL: "redis://redis:6379/0"
     volumes:
       - ./backend:/app
+      # Lus par les tests du BI : le rôle (creer_role_bi.sql) et les
+      # tableaux de pilotage (grafana/), comme en CI.
+      - ./deploy:/deploy:ro
     depends_on:
       db:
         condition: service_healthy
