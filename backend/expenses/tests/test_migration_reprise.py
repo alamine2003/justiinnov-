@@ -7,18 +7,21 @@ remonte la base à l'état précédent, y dépose ces lignes, puis rejoue la
 migration.
 """
 
-from datetime import date, datetime, timezone as tz
+from datetime import date, datetime
+from datetime import timezone as tz
 from decimal import Decimal
 
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
+from reporting.tests.sans_vues_bi import SansVuesBI
+
 AVANT = [("expenses", "0006_auditlog_imported"), ("budget", "0004_controle_et_integrite")]
 APRES = [("expenses", "0007_controle_et_integrite")]
 
 
-class RepriseDesDonneesTests(TransactionTestCase):
+class RepriseDesDonneesTests(SansVuesBI, TransactionTestCase):
     def _migrer(self, cible):
         executor = MigrationExecutor(connection)
         executor.migrate(cible)

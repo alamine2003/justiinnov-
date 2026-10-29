@@ -247,6 +247,29 @@ if [ -n "${POSTGRES_MIGRATION_USER:-}" ]; then
   unset RESTAURATION_BASE RESTAURATION_ROLE RESTAURATION_MOT_DE_PASSE
 fi
 
+# Le rôle du BI (décision 122) : la restauration (--no-privileges) a retiré
+# ses droits sur le schéma bi ; on les repose, avec le même mot de passe
+# que Grafana lit dans .env. Sans BI configuré, rien à faire.
+bi_mot_de_passe="$(valeur BI_DB_PASSWORD)"
+if [ -n "$bi_mot_de_passe" ]; then
+  role_bi="$(valeur BI_DB_USER)"
+  role_bi="${role_bi:-justi_bi}"
+  echo "→ Droits du rôle du BI « $role_bi » sur « $base_cible »…"
+  export RESTAURATION_BASE="$base_cible"
+  export RESTAURATION_ROLE_BI="$role_bi"
+  export RESTAURATION_MOT_DE_PASSE_BI="$bi_mot_de_passe"
+  compose run --rm -T \
+    -e RESTAURATION_BASE -e RESTAURATION_ROLE_BI -e RESTAURATION_MOT_DE_PASSE_BI \
+    --entrypoint sh sauvegarde -c '
+      psql -d "$RESTAURATION_BASE" -v ON_ERROR_STOP=1 \
+        -v role_bi="$RESTAURATION_ROLE_BI" \
+        -v mot_de_passe="$RESTAURATION_MOT_DE_PASSE_BI" \
+        -f /creer_role_bi.sql
+    '
+  unset RESTAURATION_BASE RESTAURATION_ROLE_BI RESTAURATION_MOT_DE_PASSE_BI
+fi
+unset bi_mot_de_passe role_bi
+
 if [ "$base_cible" = "$base_pile" ]; then
   echo "→ Relance du backend et de l'ordonnanceur…"
   compose up -d --wait backend scheduler

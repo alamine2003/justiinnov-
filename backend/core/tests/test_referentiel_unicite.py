@@ -11,6 +11,7 @@ from django.test import TransactionTestCase
 from rest_framework import status
 
 from core.models import Country, Project, Team
+from reporting.tests.sans_vues_bi import SansVuesBI
 
 from .test_api import ApiTestCase
 
@@ -97,7 +98,7 @@ AVANT = [("core", "0009_historique_immuable")]
 APRES = [("core", "0010_equipe_et_projet_uniques_par_pays")]
 
 
-class RenommageDesDoublonsTests(TransactionTestCase):
+class RenommageDesDoublonsTests(SansVuesBI, TransactionTestCase):
     """La migration renomme les doublons existants avant de contraindre.
 
     Une base en service peut porter deux « Équipe Lomé » au Togo : sans
