@@ -13,11 +13,13 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
+from reporting.tests.sans_vues_bi import SansVuesBI
+
 AVANT = [("core", "0015_historique_des_beneficiaires"), ("expenses", "0018_contacts_des_beneficiaires")]
 APRES = [("expenses", "0019_dossiers_dans_un_projet")]
 
 
-class RepriseDesProjetsTests(TransactionTestCase):
+class RepriseDesProjetsTests(SansVuesBI, TransactionTestCase):
     def _migrer(self, cible):
         executor = MigrationExecutor(connection)
         executor.migrate(cible)

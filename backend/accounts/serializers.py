@@ -13,7 +13,7 @@ from rest_framework import serializers
 from core.models import Country, Team, WorkflowConfiguration
 
 from .models import DEFAULT_LANGUAGE, HEADQUARTERS_ROLES, Role, UserProfile, aligner_drapeaux
-from .permissions import CAPACITES, CAPACITES_PAR_CLE, capacites_du_role
+from .permissions import CAPACITES, CAPACITES_PAR_CLE, capacites_du_role, roles_pour
 from .validators import valider_email_professionnel
 
 
@@ -221,6 +221,7 @@ class MeSerializer(serializers.ModelSerializer):
     workflow = serializers.SerializerMethodField()
     alert_thresholds = serializers.SerializerMethodField()
     supervision = serializers.SerializerMethodField()
+    bi_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -228,7 +229,7 @@ class MeSerializer(serializers.ModelSerializer):
             "id", "username", "first_name", "last_name", "email",
             "role", "role_display", "countries", "teams", "has_global_scope",
             "must_change_password", "totp_required", "totp_confirmed", "language",
-            "permissions", "workflow", "alert_thresholds", "supervision",
+            "permissions", "workflow", "alert_thresholds", "supervision", "bi_url",
         ]
 
     def _role(self, user):
@@ -341,6 +342,20 @@ class MeSerializer(serializers.ModelSerializer):
         compte ne propose « Supervision » que là où Grafana existe.
         """
         return bool(settings.SUPERVISION)
+
+    @extend_schema_field(serializers.URLField(allow_null=True))
+    def get_bi_url(self, user):
+        """Adresse de la vue d'ensemble du BI de pilotage (décision 122).
+
+        Nulle sans Grafana dans la pile (``SUPERVISION``), sans adresse
+        (``BI_URL``) ou sans la capacité ``bi.consulter`` : l'interface ne
+        montre le lien que s'il mène quelque part, et à qui doit le voir.
+        """
+        if not (settings.SUPERVISION and settings.BI_URL):
+            return None
+        if self._role(user) not in roles_pour("bi.consulter"):
+            return None
+        return f"{settings.BI_URL}/d/bi-vue-ensemble"
 
 
 class MePreferencesSerializer(serializers.Serializer):

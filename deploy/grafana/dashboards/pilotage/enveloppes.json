@@ -1,0 +1,621 @@
+{
+  "uid": "bi-enveloppes",
+  "title": "Pilotage — enveloppes",
+  "description": "Consommation, dépassements, projection et comparaison des enveloppes.",
+  "tags": [
+    "pilotage",
+    "justi-gh"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-1y",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": true
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "annee",
+        "label": "Exercice",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "bi"
+        },
+        "query": "SELECT annee AS __value, annee::text AS __text FROM (SELECT annee FROM bi.consolidation_pays UNION SELECT annee FROM bi.lignes UNION SELECT extract(year FROM bi.aujourd_hui())::integer) AS exercices ORDER BY annee DESC",
+        "definition": "Exercices",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "pays",
+        "label": "Pays",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "bi"
+        },
+        "query": "SELECT nom AS __text, id AS __value FROM bi.pays ORDER BY nom",
+        "definition": "Pays",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "Pilotage",
+      "type": "dashboards",
+      "tags": [
+        "pilotage"
+      ],
+      "asDropdown": true,
+      "includeVars": true,
+      "keepTime": false
+    }
+  ],
+  "panels": [
+    {
+      "type": "table",
+      "title": "Enveloppes",
+      "description": "Montants dans la devise du pays. Les réallocations approuvées sont déjà dans le montant.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT pays AS \"Pays\", CASE portee WHEN 'pays' THEN 'Pays' WHEN 'projet' THEN 'Projet' WHEN 'equipe' THEN 'Équipe' ELSE 'Manager' END AS \"Portée\", cible AS \"Enveloppe\", devise AS \"Devise\", montant AS \"Montant\", engage AS \"Engagé\", consomme AS \"Consommé\", justifie AS \"Justifié\", disponible AS \"Disponible\", taux_execution AS \"Exécution\", libelle_niveau AS \"Niveau\", CASE alerte WHEN 'budget_overrun' THEN 'Dépassement de ' || depassement::text WHEN 'budget_threshold' THEN 'Seuil ' || seuil_atteint::integer || ' %' ELSE '' END AS \"Alerte\", CASE politique_depassement WHEN 'block' THEN 'Bloquer' WHEN 'warn' THEN 'Alerter' ELSE 'Approbation' END AS \"Politique\" FROM bi.enveloppes WHERE annee = $annee AND pays_id IN (${pays:csv}) ORDER BY pays, portee DESC, cible"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Montant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Engagé"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Consommé"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Justifié"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Disponible"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exécution"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.8
+                    },
+                    {
+                      "color": "red",
+                      "value": 1.0000001
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 11
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Devises sans taux",
+      "description": "Devises sans taux publié à la date de référence : leurs pays manquent à la projection et à la comparaison en FCFA, ci-dessous.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coalesce(string_agg(DISTINCT devise, ', ') FILTER (WHERE taux_xof IS NULL), 'Aucune') FROM bi.consolidation_pays WHERE annee = $annee AND pays_id IN (${pays:csv})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 3
+      }
+    },
+    {
+      "transformations": [],
+      "type": "barchart",
+      "title": "Projection de fin d'exercice (FCFA)",
+      "description": "Engagé et consommé ramenés à l'année entière au rythme observé depuis le 1er janvier. Une projection au-dessus de l'attribué annonce un dépassement si le rythme se maintient.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT pays AS \"Pays\", attribue_xof AS \"Attribué\", bi.arrondi((consomme_xof + engage_xof) / greatest(least(bi.aujourd_hui(), make_date($annee, 12, 31)) - make_date($annee, 1, 1) + 1, 1) * (make_date($annee, 12, 31) - make_date($annee, 1, 1) + 1), 0) AS \"Projection\" FROM bi.consolidation_pays WHERE annee = $annee AND pays_id IN (${pays:csv}) AND taux_xof IS NOT NULL ORDER BY pays"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "locale",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "stacking": "none",
+        "showValue": "never",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "barWidth": 0.8,
+        "groupWidth": 0.7
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 15
+      }
+    },
+    {
+      "transformations": [],
+      "type": "barchart",
+      "title": "Comparaison avec l'exercice précédent (FCFA)",
+      "description": "Engagé et consommé, aux taux de chaque exercice.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT p.nom AS \"Pays\", coalesce(sum(c.consomme_xof + c.engage_xof) FILTER (WHERE c.annee = $annee - 1), 0) AS \"Exercice précédent\", coalesce(sum(c.consomme_xof + c.engage_xof) FILTER (WHERE c.annee = $annee), 0) AS \"Exercice choisi\" FROM bi.pays AS p JOIN bi.consolidation_pays AS c ON c.pays_id = p.id WHERE c.annee IN ($annee, $annee - 1) AND p.id IN (${pays:csv}) GROUP BY p.nom ORDER BY p.nom"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "locale",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "stacking": "none",
+        "showValue": "never",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "barWidth": 0.8,
+        "groupWidth": 0.7
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 15
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Exécution des enveloppes de projet",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT cible || ' (' || pays || ')' AS \"Projet\", taux_execution AS \"Exécution\" FROM bi.enveloppes WHERE annee = $annee AND pays_id IN (${pays:csv}) AND portee = 'projet' AND taux_execution IS NOT NULL ORDER BY taux_execution DESC LIMIT 20"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 1.0000001
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "valueMode": "color",
+        "namePlacement": "left"
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 10
+      }
+    },
+    {
+      "type": "table",
+      "title": "Réallocations",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT r.demandee_le AS \"Demandée le\", r.pays AS \"Pays\", es.cible AS \"De\", ec.cible AS \"Vers\", r.montant AS \"Montant\", r.devise AS \"Devise\", r.libelle_etat AS \"État\", r.demandee_par AS \"Demandée par\", r.decidee_par AS \"Décidée par\" FROM bi.reallocations AS r LEFT JOIN bi.enveloppes AS es ON es.id = r.enveloppe_source_id LEFT JOIN bi.enveloppes AS ec ON ec.id = r.enveloppe_cible_id WHERE r.annee = $annee AND r.pays_id IN (${pays:csv}) ORDER BY r.demandee_le DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Montant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Demandée le"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "time:DD/MM/YYYY HH:mm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 10
+      }
+    }
+  ]
+}

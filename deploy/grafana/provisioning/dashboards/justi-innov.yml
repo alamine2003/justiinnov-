@@ -1,5 +1,5 @@
 # Tableaux de bord provisionnés depuis le dépôt : tout fichier JSON déposé
-# dans `deploy/grafana/dashboards/` apparaît dans Grafana, et une
+# dans `deploy/grafana/dashboards/supervision/` apparaît dans Grafana, et une
 # modification faite dans l'interface est écrasée au redémarrage
 # (`allowUiUpdates: false`). Le tableau de bord se modifie donc dans le
 # dépôt — exportez-le depuis Grafana (Share › Export) et remplacez le JSON.

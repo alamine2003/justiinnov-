@@ -38,6 +38,7 @@ seront à leur entrée dans le dispositif.
 | Stockage  | MinIO (justificatifs, API S3)                 | 9000, console 9001 |
 | Ordonnanceur | `manage.py run_scheduler` (alertes, rapports) | —  |
 | Supervision (production) | Prometheus + Grafana, sur `/grafana/` | — |
+| BI de pilotage (production) | un second Grafana, sur `bi.<domaine>` | — |
 
 En développement, les ports ne sont ouverts que sur la boucle locale. La
 supervision n'existe que dans la pile de production
@@ -588,6 +589,28 @@ page d'accueil de chacun. Les administrateurs de l'application y accèdent
 par l'entrée « Supervision » du menu de leur compte, qui ouvre `/grafana/`
 dans un nouvel onglet — Grafana a ses propres comptes, distincts de ceux de
 l'application.
+
+**BI de pilotage** (décision 122, version 2.4.0). Un second Grafana, sur
+son adresse propre (`https://bi.<domaine>/`), où seuls l'administrateur et
+le compte « direction » entrent, porte six tableaux de bord sur les
+chiffres de toutes les filiales : vue d'ensemble (sa page d'accueil),
+enveloppes, justification et preuves, activité et tendances,
+contrôle, anomalies et traçabilité. Ils lisent le schéma PostgreSQL `bi` —
+des vues que le backend repose après chaque migration
+(`backend/reporting/bi/`) et qui appliquent les règles de calcul du
+serveur, tests de parité à l'appui — sous un rôle qui ne lit que lui
+(`deploy/creer_role_bi.sql`). Il est séparé de celui de la supervision
+parce que, dans Grafana sans licence, tout compte peut interroger toute
+source : l'équipe technique ne doit pas atteindre les chiffres des
+filiales. Les tableaux sont produits par `deploy/grafana/pilotage.py`, et
+un test exécute chacune de leurs requêtes
+sous ce rôle. Dans l'application, l'entrée « BI de pilotage » du menu du
+compte (`me.bi_url`) apparaît à qui a la capacité `bi.consulter` — le
+`super_admin` par défaut. L'administration de la base se fait avec
+pgAdmin, sur le poste, à travers un tunnel SSH
+(`deploy/docker-compose.tunnel-base.yml`). Tout est dans
+[`deploy/README.md`](deploy/README.md), « BI de pilotage » et « pgAdmin par
+tunnel SSH ».
 
 **Sauvegardes.** La pile sauvegarde chaque nuit la base (`pg_dump -Fc`) et
 met en miroir le bucket des justificatifs dans le volume `sauvegardes`. Les

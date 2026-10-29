@@ -184,6 +184,11 @@ sauvegarder_base() {
     fichier="$fichier$SUFFIXE_CHIFFRE"
   fi
   partiel="$fichier.partiel"
+  # Le schéma `bi` (décision 122) n'est que des vues sur les tables : des
+  # données dérivées, que le backend repose après chaque migration. Hors du
+  # dump, une restauration n'a jamais à les concilier avec la base d'arrivée
+  # (restaurer.sh).
+  HORS_BI="--exclude-schema=bi"
 
   # Écriture dans un fichier temporaire puis renommage : un dump interrompu
   # ne laisse pas de fichier à moitié écrit qu'on croirait complet.
@@ -193,7 +198,7 @@ sauvegarder_base() {
     # d'un openssl content donnerait un « succès » chiffré et vide.
     temoin="$partiel.pgdump"
     (
-      if [ -n "${DATABASE_URL:-}" ]; then pg_dump -Fc "$DATABASE_URL"; else pg_dump -Fc; fi
+      if [ -n "${DATABASE_URL:-}" ]; then pg_dump -Fc $HORS_BI "$DATABASE_URL"; else pg_dump -Fc $HORS_BI; fi
       echo "$?" > "$temoin"
     ) | openssl smime -encrypt -binary -aes-256-cbc -outform DER \
           -out "$partiel" "$CLE_PUBLIQUE"
@@ -207,9 +212,9 @@ sauvegarder_base() {
     fi
   else
     if [ -n "${DATABASE_URL:-}" ]; then
-      pg_dump -Fc --file "$partiel" "$DATABASE_URL"
+      pg_dump -Fc $HORS_BI --file "$partiel" "$DATABASE_URL"
     else
-      pg_dump -Fc --file "$partiel"
+      pg_dump -Fc $HORS_BI --file "$partiel"
     fi
     if [ $? -ne 0 ]; then
       rm -f "$partiel"

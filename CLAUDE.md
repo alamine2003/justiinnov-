@@ -146,6 +146,24 @@ l'application.
   journal relit les décisions de l'administrateur autant que celles des
   pays : c'est l'outil de supervision du `super_admin`. L'historique du
   référentiel (`/api/history/`), lui, reste ouvert au siège entier.
+- **Le BI de pilotage est à la direction** (décision 122). Un Grafana à
+  part (`grafana-bi`), sur son adresse propre (`bi.<domaine>`), où
+  n'entrent que l'administrateur et « direction », lit le schéma
+  PostgreSQL `bi` — jamais le Grafana de la supervision, dont tout compte
+  pourrait interroger la source :
+  des vues que le backend repose après chaque migration
+  (`backend/reporting/bi/vues.sql`) et qui appliquent les règles du
+  serveur — une vue qui diverge d'un calcul de l'application est un
+  défaut, `reporting/tests/test_bi.py` les compare. Le rôle `justi_bi`
+  (`deploy/creer_role_bi.sql`) ne lit que ce schéma ; aucune vue ne porte
+  d'adresse, de téléphone ni de secret. Ces vues sont dérivées : hors des
+  sauvegardes, retirées avant une restauration. Les tableaux sortent de
+  `deploy/grafana/pilotage.py`, jamais d'une retouche du JSON ; chacune de
+  leurs requêtes est exécutée sous ce rôle par
+  `reporting/tests/test_bi_tableaux.py`. Dans l'application, la capacité
+  `bi.consulter` (`super_admin`, fixe ; jamais le pays) ne fait que
+  montrer le lien (`me.bi_url`). La base s'administre avec pgAdmin à
+  travers un tunnel SSH ; aucune donnée déclarée ne s'y modifie.
 - **Une dépense soumise est irréversible.** Elle ne revient pas au brouillon,
   ne se modifie plus, ne se supprime pas. Seul un brouillon — jamais soumis,
   donc sans valeur probante — peut être retiré par son auteur (hors la
@@ -366,7 +384,8 @@ l'application.
 | Ordre des applications (`core < accounts < notifications < budget < expenses < reporting`) | `backend/core/tests/test_dependances.py` |
 | Calculs budgétaires | `backend/budget/aggregates.py` |
 | Interface | `DESIGN.md` |
-| Serveur, supervision Grafana, sauvegardes | `deploy/README.md` |
+| Serveur, supervision et BI Grafana, pgAdmin, sauvegardes | `deploy/README.md` |
+| Schéma `bi` (vues du BI de pilotage) et tableaux Grafana | `backend/reporting/bi/`, `deploy/grafana/pilotage.py` |
 | Comportement sous panne : ce qui a cédé, ce qui tient, ce qui reste | `docs/audit-resilience.md` |
 | Infrastructure de la base : dimensionnement, sauvegardes, reprise | `docs/infra-base-de-donnees.md` |
 

@@ -4028,6 +4028,8 @@ export interface components {
             readonly workflow: components["schemas"]["MeWorkflow"]
             readonly alert_thresholds: number[]
             readonly supervision: boolean
+            /** Format: uri */
+            readonly bi_url: string | null
         }
         /** @description Politique du circuit que l'interface doit connaître. */
         MeWorkflow: {
@@ -4899,6 +4901,8 @@ export interface components {
             readonly "configuration.manage": boolean
             /** @description Relire la trace des actions sensibles, décisions du siège comprises. */
             readonly "audit.read": boolean
+            /** @description Voir le lien vers les tableaux de pilotage de Grafana, tous pays confondus. Le compte Grafana se crée à part, dans Grafana. */
+            readonly "bi.consulter": boolean
             /** @description Retirer un projet, un dossier, une ligne ou un justificatif, avec ce qui en dépend, tant que les suppressions sont ouvertes. La corbeille garde une copie et le fichier, et ne se vide pas. */
             readonly "corbeille.supprimer": boolean
             /** @description Lire qui a modifié quoi dans le référentiel, sur son périmètre. */

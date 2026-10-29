@@ -66,6 +66,8 @@ services:
       ACME_EMAIL: ci@example.invalid
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Le Caddyfile importe caddy/bi-0.caddy (supervision inactive).
+      - ./deploy/caddy:/etc/caddy/caddy:ro
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:

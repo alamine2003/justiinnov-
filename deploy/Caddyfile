@@ -2,16 +2,22 @@
 # conteneur nginx du frontend, qui sert l'interface et relaie `/api/` vers
 # Django — sauf `/grafana/`, qui va à Grafana quand la supervision est
 # activée. Caddy pose `X-Forwarded-Proto: https`, que nginx transmet et que
-# Django lit (`SECURE_PROXY_SSL_HEADER`) pour ne pas rediriger en boucle.
+# Django lit (`SECURE_PROXY_SSL_HEADER`) pour ne pas rediriger en boucle. Le
+# Grafana du BI de pilotage a son adresse propre, `BI_DOMAIN`
+# (caddy/bi-1.caddy, décision 122).
 #
 # Le même fichier sert en CI, en clair : `APP_DOMAIN=http://:8080` désactive
 # TLS (docker-compose.ci.yml). Rien d'autre ne change entre les deux.
 #
 # Vérification, sans lancer la pile, avec et sans supervision :
 #   docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
-#       -e SUPERVISION=1 \
-#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11-alpine \
+#       -e SUPERVISION=1 -e BI_DOMAIN=bi.exemple.org \
+#       -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+#       -v "$PWD/caddy:/etc/caddy/caddy:ro" caddy:2.11-alpine \
 #       caddy validate --config /etc/caddy/Caddyfile
+#
+# SUPERVISION ne vaut que 0 ou 1 (deploy.sh refuse le reste) : Caddy importe
+# `caddy/bi-<SUPERVISION>.caddy` et n'en trouverait pas d'autre.
 {
 	# Entre guillemets, et ce n'est pas une question de style. Un placeholder
 	# nu qui s'expanse en chaîne vide donne « email » sans argument : Caddy
@@ -96,3 +102,7 @@
 		format console
 	}
 }
+
+# Le Grafana du BI de pilotage, sur son adresse propre, si la supervision
+# est activée (caddy/bi-1.caddy).
+import caddy/bi-{$SUPERVISION:0}.caddy

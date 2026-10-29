@@ -16,6 +16,8 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
+from reporting.tests.sans_vues_bi import SansVuesBI
+
 AVANT = [("accounts", "0005_totp_dernier_compteur"), ("expenses", "0016_index_de_tri_des_listes")]
 APRES = [
     ("accounts", "0007_matrice_trois_roles"),
@@ -23,7 +25,7 @@ APRES = [
 ]
 
 
-class TroisRolesTests(TransactionTestCase):
+class TroisRolesTests(SansVuesBI, TransactionTestCase):
     def _migrer(self, cible):
         executor = MigrationExecutor(connection)
         executor.migrate(cible)

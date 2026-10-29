@@ -535,7 +535,10 @@ role_display`) avec une pastille **« 2FA active »** (`Badge`,
 `STATUS_TONES.SUCCES`) quand `totp_confirmed` est vrai ; les équipes d'un
 manager qui y est rattaché ; **« Activer la double authentification »**
 (icône `ShieldCheck`, lien vers `/2fa`) tant que `totp_confirmed` est
-faux — rien quand le serveur ne connaît pas la 2FA ; **« Supervision »**
+faux — rien quand le serveur ne connaît pas la 2FA ; **« BI de pilotage »**
+(icône `ChartColumn`) quand le serveur en donne l'adresse (`me.bi_url`,
+capacité `bi.consulter` sur une pile où Grafana tourne), en nouvel onglet ;
+**« Supervision »**
 (icône `Activity`) pour les administrateurs seulement
 (`can("configuration.manage")`) **et** sur une pile qui l'expose
 (`me.supervision`, d'après `DJANGO_SUPERVISION` : sans Grafana derrière

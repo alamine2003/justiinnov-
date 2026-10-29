@@ -52,6 +52,12 @@ compose() {
 # COMPOSE_PROFILES du .env qui contredit SUPERVISION est signalé, parce que
 # `docker compose` lancé à la main le suivrait, lui.
 supervision="$(valeur SUPERVISION)"
+# Caddy importe caddy/bi-<SUPERVISION>.caddy : une autre valeur que 0 ou 1
+# (« true », « oui ») l'empêcherait de démarrer, donc la plateforme entière.
+case "$supervision" in
+  ""|0|1) ;;
+  *) echo "✘ SUPERVISION vaut « ${supervision} » dans .env : 0 ou 1 seulement." >&2; exit 1 ;;
+esac
 profils_env="$(valeur COMPOSE_PROFILES)"
 profils_sans="$(printf '%s' "$profils_env" | tr ',' '\n' | grep -vx 'supervision' | paste -sd, - || true)"
 if [ "$supervision" = "1" ]; then
@@ -92,6 +98,9 @@ fi
 
 if [ "$supervision" = "1" ]; then
   echo "→ Supervision activée (profil Compose « supervision »)."
+  if [ -z "$(valeur BI_DB_PASSWORD)" ]; then
+    echo "⚠ BI_DB_PASSWORD est vide dans .env : les tableaux du BI de pilotage resteront vides. Créez le rôle du BI (deploy/README.md, « BI de pilotage »)." >&2
+  fi
 else
   echo "→ Supervision désactivée (SUPERVISION≠1) : Prometheus, exporteurs et Grafana ne sont pas lancés."
 fi
@@ -211,9 +220,9 @@ fi
 # pour Compose), Grafana tournerait sans être routé. On les arrête, en
 # gardant leurs volumes pour une réactivation.
 if [ "$supervision" != "1" ]; then
-  if COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}supervision" compose ps -q prometheus postgres-exporter node-exporter grafana 2>/dev/null | grep -q .; then
+  if COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}supervision" compose ps -q prometheus postgres-exporter node-exporter grafana grafana-bi 2>/dev/null | grep -q .; then
     echo "→ Arrêt des services de supervision, désactivés dans .env…"
-    COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}supervision" compose stop prometheus postgres-exporter node-exporter grafana
+    COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}supervision" compose stop prometheus postgres-exporter node-exporter grafana grafana-bi
   fi
 fi
 

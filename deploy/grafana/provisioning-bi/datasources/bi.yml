@@ -1,0 +1,37 @@
+# Source du BI de pilotage (décision 122) : la base de l'application, lue
+# sous le rôle `justi_bi`, qui ne voit que le schéma `bi` (des vues, en
+# lecture seule, sans adresse, téléphone, mot de passe ni secret) — voir
+# `deploy/creer_role_bi.sql`. Les tableaux `dashboards/pilotage/`
+# référencent l'`uid` ; ne le changez pas sans eux.
+#
+# Elle n'existe que dans le Grafana du BI (`grafana-bi`), jamais dans celui
+# de la supervision : dans Grafana sans licence, tout compte de
+# l'organisation — lecture seule comprise — peut interroger toute source
+# (`/api/ds/query`), quels que soient les droits des dossiers. Seuls
+# l'administrateur et « direction » ont un compte sur ce Grafana-ci.
+#
+# Sans `BI_DB_PASSWORD` dans `.env`, la source existe mais ne se connecte
+# pas : les tableaux de pilotage restent vides.
+apiVersion: 1
+
+datasources:
+  - name: BI JUSTI GH
+    uid: bi
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: db:5432
+    user: ${BI_DB_USER}
+    isDefault: false
+    editable: false
+    jsonData:
+      database: ${POSTGRES_DB}
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+      # La moitié de la limite du rôle (CONNECTION LIMIT 8) : le reste pour
+      # pgAdmin et psql sous le même rôle.
+      maxOpenConns: 4
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${BI_DB_PASSWORD}

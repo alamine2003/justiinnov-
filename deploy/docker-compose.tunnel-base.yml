@@ -1,0 +1,21 @@
+# Surcharge pour pgAdmin (décision 122) : publie la base sur la boucle
+# locale du serveur, et elle seule, pour qu'un tunnel SSH y mène.
+#
+#   COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tunnel-base.yml   (.env)
+#   ssh -N -L 5433:127.0.0.1:5432 root@<hôte>                           (poste)
+#
+# puis pgAdmin, sur le poste, se connecte à localhost:5433. Rien n'est
+# ouvert sur Internet : `127.0.0.1` n'est joignable que depuis le serveur
+# lui-même, donc à travers une session SSH, et la base garde son mot de
+# passe. Publier sur `0.0.0.0` exposerait la base entière au monde — et
+# Docker publie en contournant ufw (voir docker-compose.primaire.yml).
+#
+# Pour lire, le rôle du BI (`justi_bi`) suffit : il ne voit que le schéma
+# `bi`, en lecture seule. Le rôle propriétaire administre (sauvegardes,
+# index, requêtes lentes), mais on ne modifie jamais une donnée déclarée
+# depuis pgAdmin : elle ne laisserait aucune trace au journal d'audit
+# (deploy/README.md, « pgAdmin par tunnel SSH »).
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"

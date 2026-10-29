@@ -13571,6 +13571,12 @@
                     "supervision": {
                         "type": "boolean",
                         "readOnly": true
+                    },
+                    "bi_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "nullable": true,
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -13591,7 +13597,8 @@
                     "permissions",
                     "workflow",
                     "alert_thresholds",
-                    "supervision"
+                    "supervision",
+                    "bi_url"
                 ]
             },
             "MeWorkflow": {
@@ -15484,6 +15491,11 @@
                         "readOnly": true,
                         "description": "Relire la trace des actions sensibles, décisions du siège comprises."
                     },
+                    "bi.consulter": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Voir le lien vers les tableaux de pilotage de Grafana, tous pays confondus. Le compte Grafana se crée à part, dans Grafana."
+                    },
                     "corbeille.supprimer": {
                         "type": "boolean",
                         "readOnly": true,
@@ -15661,6 +15673,7 @@
                     "users.update",
                     "configuration.manage",
                     "audit.read",
+                    "bi.consulter",
                     "corbeille.supprimer",
                     "history.read",
                     "countries.create",

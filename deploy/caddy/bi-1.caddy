@@ -1,0 +1,34 @@
+# Le Grafana du BI de pilotage (service `grafana-bi`, décision 122) sur son
+# adresse propre, `BI_DOMAIN` (par défaut `bi.<APP_DOMAIN>`), importé par
+# le Caddyfile quand SUPERVISION=1.
+#
+# Pourquoi une adresse à part plutôt qu'un sous-chemin : une autre origine.
+# Sous le même nom que l'application, un script injecté par une faille de
+# Grafana lirait le `localStorage` de l'application, où vit le jeton de
+# session ; sur une autre origine, le navigateur les sépare.
+{$BI_DOMAIN} {
+	encode zstd gzip
+
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	header Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	header Referrer-Policy "same-origin"
+	header X-Content-Type-Options "nosniff"
+
+	# Filtrage par adresse, facultatif : `BI_IP_AUTORISEES` (plages CIDR
+	# séparées par des espaces) ; par défaut, toutes — Grafana demande de
+	# toute façon un mot de passe. `client_ip` tient compte des mandataires
+	# de confiance déclarés en tête du Caddyfile.
+	@hors_liste not client_ip {$BI_IP_AUTORISEES:0.0.0.0/0 ::/0}
+	handle @hors_liste {
+		respond "Accès au BI refusé depuis cette adresse." 403
+	}
+
+	handle {
+		reverse_proxy grafana-bi:3000
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

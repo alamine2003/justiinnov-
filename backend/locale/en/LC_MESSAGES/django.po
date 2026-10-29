@@ -233,6 +233,18 @@ msgid "Relire la trace des actions sensibles, décisions du siège comprises."
 msgstr ""
 "Review the trail of sensitive actions, headquarters decisions included."
 
+#: accounts/permissions.py
+msgid "BI de pilotage"
+msgstr "Management BI"
+
+#: accounts/permissions.py
+msgid ""
+"Voir le lien vers les tableaux de pilotage de Grafana, tous pays confondus. "
+"Le compte Grafana se crée à part, dans Grafana."
+msgstr ""
+"See the link to the Grafana management dashboards, all countries combined. "
+"The Grafana account is created separately, in Grafana."
+
 #: accounts/permissions.py:282
 msgid "Mettre à la corbeille"
 msgstr "Move to the bin"

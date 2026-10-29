@@ -1,0 +1,18 @@
+# Grafana du BI de pilotage (service `grafana-bi`, décision 122) : les six
+# tableaux de `deploy/grafana/dashboards/pilotage/`, produits par
+# `deploy/grafana/pilotage.py` — on modifie le générateur, jamais le JSON.
+# Une modification faite dans l'interface est écrasée au redémarrage
+# (`allowUiUpdates: false`) : le dépôt fait foi.
+apiVersion: 1
+
+providers:
+  - name: pilotage
+    folder: Pilotage
+    folderUid: pilotage
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

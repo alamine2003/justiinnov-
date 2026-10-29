@@ -62,6 +62,7 @@ verifier() {
 
 cat > "$DOUBLURES/pg_dump" <<'DOUBLURE'
 #!/bin/sh
+[ -n "${JOURNAL_PGDUMP:-}" ] && echo "$*" >> "$JOURNAL_PGDUMP"
 sortie=""
 suivant=0
 for arg in "$@"; do
@@ -152,6 +153,12 @@ verifier "un dump réussi sort en 0" "$CODE" "0"
 verifier "  … écrit un fichier" "$(compter "$DESTINATION/base" '*.dump')" "1"
 verifier "  … et une copie mensuelle" "$(compter "$DESTINATION/base/mensuel" '*.dump')" "1"
 verifier "  … et pose le marqueur de réussite" "$(marqueur base)" "oui"
+
+# Le schéma bi n'est que des vues (décision 122) : dans le dump, il ferait
+# échouer le `pg_restore --clean` d'une base qui a d'autres vues.
+decor base-sans-bi
+JOURNAL_PGDUMP="$BAC/pgdump.log" lancer base
+verifier "le dump laisse le schéma bi de côté" "$(compte -- "--exclude-schema=bi" "$BAC/pgdump.log")" "1"
 
 decor base-echec
 CODE_PGDUMP=1 lancer base
