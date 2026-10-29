@@ -37,7 +37,8 @@ seront à leur entrée dans le dispositif.
 | Base      | PostgreSQL 16                                 | 5433  |
 | Stockage  | MinIO (justificatifs, API S3)                 | 9000, console 9001 |
 | Ordonnanceur | `manage.py run_scheduler` (alertes, rapports) | —  |
-| Supervision et BI (production) | Prometheus + Grafana, sur `bi.<domaine>` | — |
+| Supervision (production) | Prometheus + Grafana, sur `/grafana/` | — |
+| BI de pilotage (production) | un second Grafana, sur `bi.<domaine>` | — |
 
 En développement, les ports ne sont ouverts que sur la boucle locale. La
 supervision n'existe que dans la pile de production
@@ -576,29 +577,33 @@ propriétaire.
 secondes les compteurs du backend (`django-prometheus`, exposés sur
 `/metrics` sous le jeton `METRICS_TOKEN`), ceux de la base
 (`postgres-exporter`) et ceux du serveur (`node-exporter`) ; Grafana les
-affiche sur son adresse propre, `https://bi.<domaine>/`, dans le dossier
-« Supervision », sur un tableau de bord provisionné depuis
-`deploy/grafana/dashboards/supervision/justi-innov.json` :
+affiche sur `https://<domaine>/grafana/`, sur un tableau de bord
+provisionné depuis `deploy/grafana/dashboards/justi-innov.json` :
 requêtes par seconde et latence par vue, erreurs 5xx, connexions et taille
 de la base, processeur, mémoire et disque du serveur, état des cibles de
 collecte. Grafana est **partagé avec la direction et l'équipe technique** :
 outre l'administrateur (`GRAFANA_ADMIN_PASSWORD`), un compte « direction »
-et un compte « technique », tous deux en lecture seule, créés à la mise en
-service (`deploy/README.md`). Les administrateurs de l'application y
-accèdent par l'entrée « Supervision » du menu de leur compte, qui ouvre
-`/grafana/` — renvoyé par Caddy vers la nouvelle adresse — dans un nouvel
-onglet ; Grafana a ses propres comptes, distincts de ceux de l'application.
+en lecture seule et un compte « technique » en édition, créés à la mise en
+service (`deploy/README.md`) ; le tableau de bord de la plateforme est la
+page d'accueil de chacun. Les administrateurs de l'application y accèdent
+par l'entrée « Supervision » du menu de leur compte, qui ouvre `/grafana/`
+dans un nouvel onglet — Grafana a ses propres comptes, distincts de ceux de
+l'application.
 
-**BI de pilotage** (décision 122, version 2.4.0). Le même Grafana porte,
-dans le dossier « Pilotage » fermé à tous sauf « direction », six tableaux
-de bord sur les chiffres de toutes les filiales : vue d'ensemble (sa page
-d'accueil), enveloppes, justification et preuves, activité et tendances,
+**BI de pilotage** (décision 122, version 2.4.0). Un second Grafana, sur
+son adresse propre (`https://bi.<domaine>/`), où seuls l'administrateur et
+le compte « direction » entrent, porte six tableaux de bord sur les
+chiffres de toutes les filiales : vue d'ensemble (sa page d'accueil),
+enveloppes, justification et preuves, activité et tendances,
 contrôle, anomalies et traçabilité. Ils lisent le schéma PostgreSQL `bi` —
 des vues que le backend repose après chaque migration
 (`backend/reporting/bi/`) et qui appliquent les règles de calcul du
 serveur, tests de parité à l'appui — sous un rôle qui ne lit que lui
-(`deploy/creer_role_bi.sql`). Les tableaux sont produits par
-`deploy/grafana/pilotage.py`, et un test exécute chacune de leurs requêtes
+(`deploy/creer_role_bi.sql`). Il est séparé de celui de la supervision
+parce que, dans Grafana sans licence, tout compte peut interroger toute
+source : l'équipe technique ne doit pas atteindre les chiffres des
+filiales. Les tableaux sont produits par `deploy/grafana/pilotage.py`, et
+un test exécute chacune de leurs requêtes
 sous ce rôle. Dans l'application, l'entrée « BI de pilotage » du menu du
 compte (`me.bi_url`) apparaît à qui a la capacité `bi.consulter` — le
 `super_admin` par défaut. L'administration de la base se fait avec

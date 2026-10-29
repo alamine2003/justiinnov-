@@ -341,6 +341,22 @@ def camembert(titre, sql, unite=None, description=""):
     }
 
 
+def lignes_sans_taux(depuis):
+    """Les lignes qu'un montant en FCFA laisse de côté, faute de taux.
+
+    ``bi.lignes.montant_xof`` est vide quand la devise n'a aucun taux à la
+    date de référence, et ``sum()`` l'ignore : un total ne doit pas absorber
+    une devise sans le dire (``aggregates.to_xof``). Chaque tableau qui somme
+    des FCFA porte donc ce compte. ``depuis`` : ``FROM … WHERE …``.
+    """
+    return stat(
+        "Lignes sans taux", f"SELECT count(*) {depuis} AND montant_xof IS NULL",
+        seuils=[{"color": "green", "value": None}, {"color": "orange", "value": 1}],
+        description="Lignes dont la devise n'a aucun taux publié à la date de référence : "
+                    "elles ne sont pas dans les montants en FCFA de ce tableau.",
+    )
+
+
 def tableau_de_bord(uid, titre, description, grille, variables, liens=True):
     return {
         "uid": uid,
@@ -491,6 +507,13 @@ def enveloppes():
          "Disponible": DEVISE, "Exécution": TAUX},
         "Montants dans la devise du pays. Les réallocations approuvées sont déjà dans le montant."),
         24, 11)
+    g.ajouter(stat(
+        "Devises sans taux",
+        f"""SELECT coalesce(string_agg(DISTINCT devise, ', ') FILTER (WHERE taux_xof IS NULL), 'Aucune')
+              FROM bi.consolidation_pays WHERE {filtre}""",
+        texte=True,
+        description="Devises sans taux publié à la date de référence : leurs pays manquent à la "
+                    "projection et à la comparaison en FCFA, ci-dessous."), 24, 3)
     g.ajouter(barres(
         "Projection de fin d'exercice",
         f"""SELECT pays AS "Pays", attribue_xof AS "Attribué",
@@ -542,16 +565,17 @@ def justification():
     g.ajouter(stat("Taux de justification",
                    f"SELECT bi.ratio(sum(justifie_xof), sum(montant_xof)) {lignes} AND consommee",
                    "percentunit", 1, SEUILS_JUSTIFICATION,
-                   "Justifié / consommé, sur les pays choisis."), 6, 4)
+                   "Justifié / consommé, sur les pays choisis."), 5, 4)
     g.ajouter(stat("Écart non prouvé",
                    f"SELECT coalesce(sum(montant_xof - justifie_xof), 0) {lignes} AND consommee",
-                   FCFA), 6, 4)
+                   FCFA), 5, 4)
     g.ajouter(stat("Lignes déclarées sans pièce",
                    f"SELECT count(*) {lignes} AND NOT brouillon AND NOT a_preuve",
-                   seuils=[{"color": "green", "value": None}, {"color": "red", "value": 1}]), 6, 4)
+                   seuils=[{"color": "green", "value": None}, {"color": "red", "value": 1}]), 5, 4)
     g.ajouter(stat("Pièces rejetées",
                    f"SELECT count(*) FROM bi.pieces WHERE annee = $annee AND {PAR_PAYS} "
-                   "AND etat_code = 'rejected'"), 6, 4)
+                   "AND etat_code = 'rejected'"), 5, 4)
+    g.ajouter(lignes_sans_taux(f"{lignes} AND NOT brouillon"), 4, 4)
     g.ajouter(barres(
         "Dépensé et justifié par pays",
         f"""SELECT pays AS "Pays", sum(montant_xof) AS "Consommé", sum(justifie_xof) AS "Justifié"
@@ -615,9 +639,9 @@ def activite():
     g = Grille()
     filtre = f"annee = $annee AND {PAR_PAYS} AND {PAR_TYPE} AND (engagee OR consommee)"
     lignes = f"FROM bi.lignes WHERE {filtre}"
-    g.ajouter(stat("Lignes déclarées", f"SELECT count(*) {lignes}"), 6, 4)
-    g.ajouter(stat("Montant déclaré", f"SELECT coalesce(sum(montant_xof), 0) {lignes}", FCFA), 6, 4)
-    g.ajouter(stat("Montant moyen par ligne", f"SELECT avg(montant_xof) {lignes}", FCFA), 6, 4)
+    g.ajouter(stat("Lignes déclarées", f"SELECT count(*) {lignes}"), 5, 4)
+    g.ajouter(stat("Montant déclaré", f"SELECT coalesce(sum(montant_xof), 0) {lignes}", FCFA), 5, 4)
+    g.ajouter(stat("Montant moyen par ligne", f"SELECT avg(montant_xof) {lignes}", FCFA), 5, 4)
     g.ajouter(stat("Part des 10 premiers bénéficiaires",
                    f"""SELECT bi.ratio(sum(m) FILTER (WHERE rang <= 10), sum(m)) FROM (
                          SELECT sum(montant_xof) AS m,
@@ -627,7 +651,8 @@ def activite():
                    [{"color": "green", "value": None}, {"color": "orange", "value": 0.5},
                     {"color": "red", "value": 0.8}],
                    "Concentration : part du montant qui va aux dix premiers bénéficiaires."),
-              6, 4)
+              5, 4)
+    g.ajouter(lignes_sans_taux(lignes), 4, 4)
     g.ajouter(barres(
         "Montant par mois et par pays",
         f"""SELECT to_char(mois, 'YYYY-MM') AS "Mois", pays, sum(montant_xof) AS montant
@@ -692,15 +717,16 @@ def activite():
 def controle():
     g = Grille()
     file_ = f"FROM bi.file_controle WHERE {PAR_PAYS}"
-    g.ajouter(stat("Lignes à contrôler", f"SELECT count(*) {file_}"), 6, 4)
+    g.ajouter(stat("Lignes à contrôler", f"SELECT count(*) {file_}"), 5, 4)
     g.ajouter(stat("Montant à contrôler", f"SELECT coalesce(sum(montant_xof), 0) {file_}", FCFA),
-              6, 4)
+              5, 4)
     g.ajouter(stat("Attente moyenne", f"SELECT avg(jours_en_attente) {file_}", JOURS, 1,
                    [{"color": "green", "value": None}, {"color": "orange", "value": 15},
-                    {"color": "red", "value": 30}]), 6, 4)
+                    {"color": "red", "value": 30}]), 5, 4)
     g.ajouter(stat("Plus longue attente", f"SELECT max(jours_en_attente) {file_}", JOURS, 1,
                    [{"color": "green", "value": None}, {"color": "orange", "value": 15},
-                    {"color": "red", "value": 30}]), 6, 4)
+                    {"color": "red", "value": 30}]), 5, 4)
+    g.ajouter(lignes_sans_taux(file_), 4, 4)
     g.ajouter(tableau(
         "File de contrôle",
         f"""SELECT numero_dossier AS "Dossier", libelle AS "Ligne", pays AS "Pays",

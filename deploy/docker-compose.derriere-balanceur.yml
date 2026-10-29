@@ -59,11 +59,18 @@ services:
       # ACME_EMAIL sur les deux machines ; seul l'aiguillage s'en sert.
       SUPERVISION: ${SUPERVISION:-0}
       MANDATAIRES_DE_CONFIANCE: ${BALANCEUR_RESEAU:?BALANCEUR_RESEAU manquant}
+      # Le BI de pilotage (décision 122) n'est pas pris en charge dans ce
+      # mode : l'aiguillage n'en connaît pas l'adresse. En clair, sur un port
+      # que rien ne publie, son site ne demande aucun certificat.
+      BI_DOMAIN: "http://:81"
 
   backend:
     environment:
       DJANGO_NUM_PROXIES: "3"
+      # Pas de lien « BI de pilotage » vers une adresse qui ne répond pas.
+      BI_URL: ""
 
   scheduler:
     environment:
       DJANGO_NUM_PROXIES: "3"
+      BI_URL: ""

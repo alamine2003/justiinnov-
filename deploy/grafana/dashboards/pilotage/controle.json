@@ -138,7 +138,7 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 6,
+        "w": 5,
         "h": 4
       }
     },
@@ -198,9 +198,9 @@
       },
       "id": 2,
       "gridPos": {
-        "x": 6,
+        "x": 5,
         "y": 0,
-        "w": 6,
+        "w": 5,
         "h": 4
       }
     },
@@ -268,9 +268,9 @@
       },
       "id": 3,
       "gridPos": {
-        "x": 12,
+        "x": 10,
         "y": 0,
-        "w": 6,
+        "w": 5,
         "h": 4
       }
     },
@@ -338,9 +338,74 @@
       },
       "id": 4,
       "gridPos": {
-        "x": 18,
+        "x": 15,
         "y": 0,
-        "w": 6,
+        "w": 5,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Lignes sans taux",
+      "description": "Lignes dont la devise n'a aucun taux publié à la date de référence : elles ne sont pas dans les montants en FCFA de ce tableau.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM bi.file_controle WHERE pays_id IN (${pays:csv}) AND montant_xof IS NULL"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
         "h": 4
       }
     },
@@ -460,7 +525,7 @@
           "show": false
         }
       },
-      "id": 5,
+      "id": 6,
       "gridPos": {
         "x": 0,
         "y": 4,
@@ -529,7 +594,7 @@
         "barWidth": 0.8,
         "groupWidth": 0.7
       },
-      "id": 6,
+      "id": 7,
       "gridPos": {
         "x": 16,
         "y": 4,
@@ -542,7 +607,7 @@
       "title": "Décisions de l'exercice",
       "collapsed": false,
       "panels": [],
-      "id": 7,
+      "id": 8,
       "gridPos": {
         "x": 0,
         "y": 15,
@@ -611,7 +676,7 @@
         "barWidth": 0.8,
         "groupWidth": 0.7
       },
-      "id": 8,
+      "id": 9,
       "gridPos": {
         "x": 0,
         "y": 16,
@@ -681,7 +746,7 @@
         "barWidth": 0.8,
         "groupWidth": 0.7
       },
-      "id": 9,
+      "id": 10,
       "gridPos": {
         "x": 12,
         "y": 16,
@@ -742,7 +807,7 @@
         "textMode": "value",
         "orientation": "auto"
       },
-      "id": 10,
+      "id": 11,
       "gridPos": {
         "x": 0,
         "y": 25,
@@ -803,7 +868,7 @@
         "textMode": "value",
         "orientation": "auto"
       },
-      "id": 11,
+      "id": 12,
       "gridPos": {
         "x": 6,
         "y": 25,
@@ -868,7 +933,7 @@
         "textMode": "value",
         "orientation": "auto"
       },
-      "id": 12,
+      "id": 13,
       "gridPos": {
         "x": 12,
         "y": 25,
@@ -930,7 +995,7 @@
         "textMode": "value",
         "orientation": "auto"
       },
-      "id": 13,
+      "id": 14,
       "gridPos": {
         "x": 18,
         "y": 25,
@@ -1016,7 +1081,7 @@
           "show": false
         }
       },
-      "id": 14,
+      "id": 15,
       "gridPos": {
         "x": 0,
         "y": 29,

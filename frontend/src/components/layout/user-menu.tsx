@@ -18,9 +18,8 @@ import { useInstallPrompt } from "@/lib/install-prompt"
 import { STATUS_TONES } from "@/lib/status-styles"
 
 /**
- * Supervision (Grafana). Grafana a son adresse propre depuis la décision
- * 122 ; Caddy renvoie ce chemin, relatif à l'origine, vers son dossier
- * « Supervision » : le lien reste le même quel que soit l'environnement.
+ * Supervision (Grafana), servie par Caddy sous le même domaine : le chemin
+ * est relatif à l'origine, quel que soit l'environnement.
  */
 export const SUPERVISION_PATH = "/grafana/"
 

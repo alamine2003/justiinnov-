@@ -34,6 +34,18 @@
   DO $$ BEGIN RAISE EXCEPTION 'Passez le mot de passe du rôle : -v mot_de_passe=...'; END $$;
 \endif
 
+-- Joué par un autre rôle que le propriétaire des tables, ALTER DEFAULT
+-- PRIVILEGES (plus bas) vaudrait pour ses objets à lui : les vues, que le
+-- propriétaire recrée après chaque migration, ne seraient plus lisibles et
+-- le BI se viderait au premier redémarrage. On refuse plutôt. Avant la
+-- première migration (pas de django_migrations), rien à vérifier.
+SELECT format('DO $refus$ BEGIN RAISE EXCEPTION %L; END $refus$', format(
+  'Jouez ce script en tant que %s, propriétaire des tables, et non %s.',
+  t.tableowner, current_user))
+FROM pg_tables AS t
+WHERE t.schemaname = 'public' AND t.tablename = 'django_migrations'
+  AND t.tableowner <> current_user \gexec
+
 SELECT format(
   'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION',
   :'role_bi')
@@ -42,8 +54,9 @@ ALTER ROLE :"role_bi" WITH PASSWORD :'mot_de_passe';
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'role_bi') \gexec
 
 -- debut des droits (rejoué tel quel par reporting/tests/test_bi.py)
--- Quelques connexions suffisent à Grafana ; au-delà, c'est un abus.
-ALTER ROLE :"role_bi" CONNECTION LIMIT 5;
+-- Quatre pour Grafana (provisioning-bi/datasources/bi.yml), le reste pour
+-- pgAdmin et psql ; au-delà, c'est un abus.
+ALTER ROLE :"role_bi" CONNECTION LIMIT 8;
 -- Lecture seule, même si un jour un droit d'écriture lui était donné par
 -- erreur ; requêtes bornées ; une transaction oubliée ne tient pas de verrou.
 ALTER ROLE :"role_bi" SET default_transaction_read_only = on;

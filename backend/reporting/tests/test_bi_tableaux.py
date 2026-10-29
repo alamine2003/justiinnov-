@@ -10,9 +10,17 @@ le tableau de la direction.
 import importlib.util
 import json
 import re
+from datetime import date
 from pathlib import Path
 
 from django.conf import settings
+from django.utils import timezone
+
+from core import types_de_projets
+from core.models import Project
+from core.numerotation import creer_projet
+from expenses.models import Dossier
+from expenses.workflow import Status
 
 from .test_bi import SousLeRoleDuBI
 
@@ -109,3 +117,36 @@ class TableauxDePilotageTests(SousLeRoleDuBI):
     def test_le_json_se_relit(self):
         for nom in pilotage.TABLEAUX:
             json.loads((GRAFANA / "dashboards" / "pilotage" / nom).read_text(encoding="utf-8"))
+
+    def test_chaque_tableau_en_fcfa_dit_ce_qu_il_laisse_faute_de_taux(self):
+        """``sum(montant_xof)`` ignore une devise sans taux : chaque tableau
+        qui somme des FCFA nomme les devises ou compte les lignes laissées."""
+        for nom, fabrique in pilotage.TABLEAUX.items():
+            tableau = fabrique()
+            sommes = [sql for _, sql in _requetes(tableau) if "_xof" in sql]
+            if not sommes:
+                continue
+            with self.subTest(tableau=nom):
+                self.assertTrue(
+                    {"Lignes sans taux", "Devises sans taux"} & {p["title"] for p in tableau["panels"]},
+                    f"{nom} somme des FCFA sans dire ce qui manque faute de taux",
+                )
+
+    def test_les_lignes_sans_taux_sont_comptees(self):
+        """Une ligne du Gabon (dollars, aucun taux) manque au montant en FCFA
+        de l'activité, et le compte des lignes sans taux la donne."""
+        projet = creer_projet(Project(
+            country=self.gabon, name="Congrès de Libreville", kind_id=types_de_projets.CONGRES,
+        ))
+        dossier = Dossier.objects.create(
+            number="GA-1", label="Libreville", country=self.gabon, project=projet,
+            date=date(self.year, 3, 1), status=Status.SUBMITTED,
+        )
+        self.make_expense(
+            "1000.00", dossier=dossier, country=self.gabon, project=projet,
+            team=None, status=Status.SUBMITTED, date=timezone.now(),
+        )
+        tableau = pilotage.activite()
+        sans_taux = next(p for p in tableau["panels"] if p["title"] == "Lignes sans taux")
+        sql = _interpoler(sans_taux["targets"][0]["rawSql"], self.year, [self.gabon.pk], pilotage.TOUS)
+        self.assertEqual(self.en_tant_que_bi(sql), [(1,)])

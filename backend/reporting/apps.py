@@ -2,7 +2,15 @@ from django.apps import AppConfig
 from django.db.models.signals import post_migrate, pre_migrate
 
 
-def _avant_migration(sender, using, **kwargs):
+def _avant_migration(sender, using, plan=None, **kwargs):
+    # ``migrate`` tourne à chaque démarrage du backend, le plus souvent sans
+    # rien à migrer. Retirer les vues demande alors un verrou exclusif qu'une
+    # requête du BI ou une session pgAdmin peut tenir plus longtemps que le
+    # ``lock_timeout`` des migrations : le backend ne démarrerait plus. Sans
+    # migration, rien ne bouge sous les vues ; ``post_migrate`` les repose de
+    # toute façon, et rattrape lui-même son échec.
+    if not plan:
+        return
     from django.db import connections
 
     from .bi import retirer_les_vues

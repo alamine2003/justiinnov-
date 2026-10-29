@@ -542,7 +542,7 @@ capacité `bi.consulter` sur une pile où Grafana tourne), en nouvel onglet ;
 (icône `Activity`) pour les administrateurs seulement
 (`can("configuration.manage")`) **et** sur une pile qui l'expose
 (`me.supervision`, d'après `DJANGO_SUPERVISION` : sans Grafana derrière
-Caddy le lien mènerait à un 404), qui ouvre `/grafana/` — chemin relatif à l'origine, que Caddy renvoie vers la supervision de Grafana sur son adresse propre — dans
+Caddy le lien mènerait à un 404), qui ouvre `/grafana/` — chemin relatif à l'origine, servi par Caddy — dans
 un nouvel onglet avec `rel="noopener noreferrer"`, parce que Grafana a sa
 propre session ; « Installer l'application » quand le navigateur le
 permet ; « Déconnexion ». Les libellés de menu vivent dans un

@@ -1,10 +1,10 @@
-# Grafana — BI de pilotage et supervision (décision 122) — sur son adresse
-# propre, `BI_DOMAIN` (par défaut `bi.<APP_DOMAIN>`), importé par le
-# Caddyfile quand SUPERVISION=1.
+# Le Grafana du BI de pilotage (service `grafana-bi`, décision 122) sur son
+# adresse propre, `BI_DOMAIN` (par défaut `bi.<APP_DOMAIN>`), importé par
+# le Caddyfile quand SUPERVISION=1.
 #
-# Pourquoi une adresse à part et non plus `/grafana/` : une autre origine.
+# Pourquoi une adresse à part plutôt qu'un sous-chemin : une autre origine.
 # Sous le même nom que l'application, un script injecté par une faille de
-# Grafana aurait lu le `localStorage` de l'application, où vit le jeton de
+# Grafana lirait le `localStorage` de l'application, où vit le jeton de
 # session ; sur une autre origine, le navigateur les sépare.
 {$BI_DOMAIN} {
 	encode zstd gzip
@@ -24,7 +24,7 @@
 	}
 
 	handle {
-		reverse_proxy grafana:3000
+		reverse_proxy grafana-bi:3000
 	}
 
 	log {

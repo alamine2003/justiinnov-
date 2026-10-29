@@ -370,6 +370,8 @@ SELECT d.*, l.numero_dossier, l.libelle, l.montant, l.montant_xof, l.devise, l.a
 
 -- Dossiers, avec leurs lignes sans preuve (Dossier.lignes_sans_preuve) et
 -- l'alerte « justificatif manquant » (alerts.proof_alerts).
+-- `montant_declare` : lignes soumises ou constatées, brouillons exclus — ce
+-- n'est pas le `total_amount` de l'API, qui compte les brouillons.
 CREATE VIEW bi.dossiers AS
 WITH utilisables AS (
   SELECT * FROM expenses_proof WHERE status NOT IN (@@PIECES_INUTILISABLES@@)
@@ -393,7 +395,7 @@ WITH utilisables AS (
          (SELECT count(*) FROM expenses_proof AS pr
            WHERE pr.dossier_id = d.id AND pr.status = 'incomplete') AS pieces_incompletes,
          (SELECT coalesce(sum(e.amount), 0.00) FROM expenses_expense AS e
-           WHERE e.dossier_id = d.id AND e.status IN (@@ENGAGES@@, @@CONSOMMES@@)) AS montant
+           WHERE e.dossier_id = d.id AND e.status IN (@@ENGAGES@@, @@CONSOMMES@@)) AS montant_declare
     FROM expenses_dossier AS d
     JOIN bi.pays AS c ON c.id = d.country_id
     LEFT JOIN core_project AS p ON p.id = d.project_id

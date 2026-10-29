@@ -17,6 +17,11 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
+from django.db import DatabaseError, connection, transaction
+from django.test import TestCase
+from django.utils import timezone
+
 from accounts.models import Role
 from budget.aggregates import (
     budget_figures,
@@ -28,14 +33,9 @@ from budget.models import Budget, ExchangeRate
 from core import types_de_projets
 from core.models import Country, Project, WorkflowConfiguration
 from core.numerotation import creer_projet
-from django.conf import settings
-from django.db import DatabaseError, connection, transaction
-from django.test import TestCase
-from django.utils import timezone
 from expenses.models import AuditLog, Dossier, Expense, Proof
 from expenses.tests.base import ExpenseTestCase
 from expenses.workflow import Status
-
 from reporting.alerts import budget_alerts, proof_alerts, unusual_expense_alerts
 from reporting.bi import GABARIT, jetons, sql_des_vues
 from reporting.scope import bornes_periode
@@ -369,12 +369,17 @@ class SousLeRoleDuBI(DecorBI):
             curseur.execute(f'CREATE ROLE "{self.ROLE}" NOLOGIN')
             curseur.execute(droits)
 
-    def en_tant_que_bi(self, sql):
-        """Exécute ``sql`` sous le rôle du BI ; rend les lignes, ou l'erreur."""
+    def en_tant_que_bi(self, sql, lecture_seule=True):
+        """Exécute ``sql`` sous le rôle du BI ; rend les lignes, ou l'erreur.
+
+        ``lecture_seule`` : la session est en lecture seule, comme celles du
+        rôle par défaut. Sans, il ne reste que les droits du rôle.
+        """
         try:
             with transaction.atomic(), connection.cursor() as curseur:
                 curseur.execute(f'SET LOCAL ROLE "{self.ROLE}"')
-                curseur.execute("SET LOCAL transaction_read_only = on")
+                if lecture_seule:
+                    curseur.execute("SET LOCAL transaction_read_only = on")
                 curseur.execute(sql)
                 resultat = curseur.fetchall() if curseur.description else []
                 raise _Retour(resultat)
@@ -406,13 +411,18 @@ class RoleDuBITests(SousLeRoleDuBI):
                 self.assertIn("permission denied", str(resultat))
 
     def test_il_n_ecrit_rien(self):
+        """Ce sont les droits qui interdisent l'écriture, pas la lecture
+        seule de la session : une session peut la lever."""
         for sql in (
             "CREATE TABLE bi.essai (a int)",
             "CREATE VIEW bi.essai AS SELECT 1",
             "UPDATE public.expenses_expense SET amount = 0",
+            "DELETE FROM public.expenses_auditlog",
         ):
             with self.subTest(sql=sql):
-                self.assertIsInstance(self.en_tant_que_bi(sql), DatabaseError)
+                resultat = self.en_tant_que_bi(sql, lecture_seule=False)
+                self.assertIsInstance(resultat, DatabaseError)
+                self.assertIn("permission denied", str(resultat))
 
     def test_aucune_vue_ne_montre_de_secret_ni_de_coordonnee(self):
         colonnes = lignes(
@@ -449,3 +459,43 @@ class InstallationTests(TestCase):
         self.assertTrue(lignes("SELECT 1 FROM pg_views WHERE schemaname = 'bi' LIMIT 1"))
         bi.installer_les_vues(connection)
         self.assertTrue(lignes("SELECT 1 FROM pg_views WHERE viewname = 'enveloppes'"))
+
+
+class DemarrageTests(TestCase):
+    """``migrate`` tourne à chaque démarrage : les vues ne doivent jamais
+    l'empêcher, même tenues par une requête du BI ou une session pgAdmin."""
+
+    def test_sans_migration_les_vues_ne_sont_pas_retirees(self):
+        from unittest import mock
+
+        from reporting import apps
+
+        with mock.patch("reporting.bi.retirer_les_vues") as retirer:
+            apps._avant_migration(sender=None, using="default", plan=[])
+            retirer.assert_not_called()
+            apps._avant_migration(sender=None, using="default", plan=[("migration", False)])
+            retirer.assert_called_once()
+
+    def test_une_vue_tenue_ailleurs_n_empeche_pas_de_les_reposer(self):
+        """Une autre session lit une vue (verrou partagé) : les reposer
+        demande un verrou exclusif, attend ``lock_timeout``, échoue — et le
+        démarrage continue, les vues d'avant intactes."""
+        from reporting import bi
+
+        autre = connection.get_new_connection(connection.get_connection_params())
+        try:
+            curseur = autre.cursor()
+            curseur.execute("BEGIN")
+            curseur.execute("SELECT 1 FROM bi.enveloppes LIMIT 1")
+            with connection.cursor() as c:
+                c.execute("SET lock_timeout = '500ms'")
+            try:
+                with self.assertLogs("reporting.bi", level="ERROR"):
+                    bi.installer_les_vues(connection)
+            finally:
+                with connection.cursor() as c:
+                    c.execute("RESET lock_timeout")
+            self.assertTrue(lignes("SELECT 1 FROM pg_views WHERE viewname = 'enveloppes'"))
+        finally:
+            autre.rollback()
+            autre.close()

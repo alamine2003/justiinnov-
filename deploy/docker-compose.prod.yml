@@ -27,16 +27,16 @@
 #
 # La supervision (Prometheus, exporteurs, Grafana) est un profil Compose
 # optionnel, `supervision` : `SUPERVISION=1` dans `.env` l'active — deploy.sh
-# et restaurer.sh en déduisent COMPOSE_PROFILES, Caddy sert Grafana sur
-# BI_DOMAIN (BI de pilotage et supervision, décision 122), le backend expose
-# le drapeau `supervision` et l'adresse BI_URL à l'interface. Sans lui, ces
-# quatre services n'existent pas pour Compose et /grafana/ répond 404
+# et restaurer.sh en déduisent COMPOSE_PROFILES, Caddy ouvre /grafana/ et sert
+# le Grafana du BI de pilotage sur BI_DOMAIN (décision 122), le backend
+# expose le drapeau `supervision` et l'adresse BI_URL à l'interface. Sans
+# lui, ces cinq services n'existent pas pour Compose et /grafana/ répond 404
 # (README.md, « Supervision »).
 
 # Les limites de mémoire (`mem_limit`) sont dimensionnées pour une machine de
 # 4 Go : la plateforme elle-même reste sous 3 Go, sauvegardes comprises ; la
-# supervision (Prometheus, Grafana, exporteurs), quand elle est activée,
-# ajoute 640 Mo de plafond — 8 Go sont alors plus confortables. Un service
+# supervision (Prometheus, exporteurs, Grafana et celui du BI), quand elle est
+# activée, ajoute 896 Mo de plafond — 8 Go sont alors plus confortables. Un service
 # qui dépasse sa limite est tué et relancé par `restart`, plutôt que
 # d'emporter la machine avec lui.
 
@@ -423,11 +423,11 @@ services:
       # Obligatoire : vide, la directive `email` du Caddyfile est mal formée
       # et Caddy refuse de démarrer — donc la plateforme entière.
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant}
-      # Si 1, sert Grafana sur BI_DOMAIN (caddy/bi-1.caddy) et renvoie
-      # /grafana/ vers BI_URL ; sinon, ni l'un ni l'autre (Caddyfile).
+      # Si 1, route /grafana/ vers la supervision et sert le Grafana du BI
+      # sur BI_DOMAIN (caddy/bi-1.caddy) ; sinon, ni l'un ni l'autre
+      # (Caddyfile).
       SUPERVISION: ${SUPERVISION:-0}
       BI_DOMAIN: ${BI_DOMAIN:-bi.${APP_DOMAIN}}
-      BI_URL: ${BI_URL:-https://bi.${APP_DOMAIN}}
       # Plages CIDR autorisées sur BI_DOMAIN, séparées par des espaces ;
       # vide : toutes (Grafana demande de toute façon un mot de passe).
       BI_IP_AUTORISEES: ${BI_IP_AUTORISEES:-0.0.0.0/0 ::/0}
@@ -436,8 +436,8 @@ services:
       - ./caddy:/etc/caddy/caddy:ro
       - caddy_data:/data
       - caddy_config:/config
-    # Pas de dépendance sur grafana : il est dans un profil optionnel, et
-    # Caddy résout `grafana:3000` à la requête, pas au démarrage.
+    # Pas de dépendance sur grafana ni grafana-bi : ils sont dans un profil
+    # optionnel, et Caddy résout leurs noms à la requête, pas au démarrage.
     depends_on:
       - frontend
     restart: unless-stopped
@@ -577,25 +577,24 @@ services:
     restart: unless-stopped
     logging: *journal
 
-  # --- Supervision et BI : Prometheus, schéma `bi` → Grafana, sur BI_DOMAIN ---
+  # --- Supervision : Prometheus → Grafana, sur https://<domaine>/grafana/ ---
   #
   # Profil Compose `supervision`, optionnel : activé par SUPERVISION=1 dans
   # .env (deploy.sh et restaurer.sh en déduisent COMPOSE_PROFILES ; pour
   # `docker compose` lancé à la main, `COMPOSE_PROFILES=supervision` dans
-  # .env aussi). Sans le profil, ces quatre services n'existent pas :
+  # .env aussi). Sans le profil, ces cinq services n'existent pas :
   # `compose config --services` ne les liste pas, `up` ne les lance pas, et
-  # une machine de 4 Go garde ses 640 Mo. L'exploitation l'active quand
-  # elle en a besoin ; deploy.sh arrête les quatre s'il trouve le drapeau
+  # une machine de 4 Go garde ses 896 Mo. L'exploitation l'active quand
+  # elle en a besoin ; deploy.sh arrête les cinq s'il trouve le drapeau
   # à 0 alors qu'ils tournent.
   #
   # Prometheus collecte toutes les 15 s les compteurs du backend
   # (django-prometheus, sous le jeton METRICS_TOKEN), ceux de la base
   # (postgres-exporter) et ceux du serveur (node-exporter) ; Grafana les
-  # affiche dans le dossier « Supervision ». Grafana lit aussi, sous le rôle
-  # BI_DB_USER, les vues du schéma `bi` de la base : les six tableaux du
-  # dossier « Pilotage » (décision 122). Rien de tout cela n'est exposé :
-  # seul Caddy sert Grafana, sur son adresse propre (BI_DOMAIN, par défaut
-  # bi.<APP_DOMAIN>), et Grafana demande un mot de passe.
+  # affiche sur le tableau de bord provisionné depuis
+  # grafana/dashboards/supervision/. Rien de tout cela n'est exposé : seul
+  # Caddy sert Grafana, sur le sous-chemin /grafana/, et Grafana demande un
+  # mot de passe. Le BI de pilotage a son propre Grafana (grafana-bi, plus bas).
   prometheus:
     image: prom/prometheus:v3.15.0
     profiles: ["supervision"]
@@ -670,9 +669,11 @@ services:
     profiles: ["supervision"]
     mem_limit: 256m
     environment:
-      # Servi à la racine de son adresse propre derrière Caddy : Grafana
-      # doit la connaître pour construire ses liens et ses redirections.
-      GF_SERVER_ROOT_URL: "${BI_URL:-https://bi.${APP_DOMAIN:?APP_DOMAIN manquant}}/"
+      # Servi sous /grafana/ derrière Caddy, qui transmet le préfixe :
+      # Grafana doit connaître son adresse publique pour construire ses
+      # liens et servir lui-même le sous-chemin.
+      GF_SERVER_ROOT_URL: "https://${APP_DOMAIN:?APP_DOMAIN manquant}/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       # Exigé même profil inactif : Compose interpole toute la pile avant
       # d'appliquer les profils. Un vide ferait démarrer Grafana avec son
@@ -686,10 +687,9 @@ services:
       GF_USERS_VIEWERS_CAN_EDIT: "false"
       GF_USERS_EDITORS_CAN_ADMIN: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
-      # La vue d'ensemble du pilotage accueille chacun à la connexion, dans
-      # le thème et la langue de l'application ; la supervision est dans son
-      # dossier, à un clic.
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/pilotage/vue-d-ensemble.json
+      # Le tableau de bord provisionné accueille chacun à la connexion, dans
+      # le thème et la langue de l'application ; personne n'a à le chercher.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/justi-innov.json
       GF_USERS_DEFAULT_THEME: light
       GF_USERS_DEFAULT_LANGUAGE: fr-FR
       GF_ANALYTICS_REPORTING_ENABLED: "false"
@@ -697,30 +697,14 @@ services:
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_NEWS_NEWS_FEED_ENABLED: "false"
       # Grafana 13 installe au démarrage des greffons depuis grafana.com :
-      # aucun n'est utile ici (Prometheus, PostgreSQL et les panneaux des
-      # tableaux sont intégrés), et rien ne doit partir vers l'extérieur.
+      # aucun n'est utile ici (Prometheus et les panneaux sont intégrés), et
+      # rien ne doit partir vers l'extérieur.
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
       GF_SECURITY_COOKIE_SECURE: "true"
-      # Les chiffres des filiales passent par ici : cookie de session réservé
-      # au site, politique de sécurité du contenu de Grafana, sessions
-      # courtes (1 h d'inactivité, 12 h au plus), aucun avatar chargé chez
-      # Gravatar.
-      GF_SECURITY_COOKIE_SAMESITE: strict
-      GF_SECURITY_CONTENT_SECURITY_POLICY: "true"
-      GF_SECURITY_DISABLE_GRAVATAR: "true"
-      GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION: 1h
-      GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION: 12h
-      # Source « BI JUSTI GH » (grafana/provisioning/datasources/bi.yml) :
-      # le rôle créé par creer_role_bi.sql, qui ne lit que le schéma `bi`.
-      # Sans mot de passe, la source ne se connecte pas et le pilotage
-      # reste vide ; la supervision n'en dépend pas.
-      POSTGRES_DB: ${POSTGRES_DB:-justi_innov}
-      BI_DB_USER: ${BI_DB_USER:-justi_bi}
-      BI_DB_PASSWORD: ${BI_DB_PASSWORD:-}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/dashboards/supervision:/var/lib/grafana/dashboards:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 15s
@@ -730,6 +714,76 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
+    restart: unless-stopped
+    logging: *journal
+
+  # --- BI de pilotage (décision 122) : un second Grafana, sur BI_DOMAIN ---
+  #
+  # Pourquoi pas le Grafana de la supervision : sans licence, tout compte de
+  # son organisation — lecture seule comprise — interroge toute source
+  # (`/api/ds/query`), quels que soient les droits des dossiers. La source
+  # du BI montre les chiffres de toutes les filiales ; elle n'existe donc
+  # qu'ici, où seuls l'administrateur et « direction » ont un compte. Même
+  # profil que la supervision (SUPERVISION=1), 256 Mo de plus.
+  #
+  # Il lit, sous le rôle BI_DB_USER (creer_role_bi.sql), les vues du schéma
+  # `bi` de la base, et affiche les six tableaux de grafana/dashboards/pilotage/
+  # produits par grafana/pilotage.py. Caddy le sert sur son adresse propre
+  # (caddy/bi-1.caddy), une autre origine que l'application.
+  grafana-bi:
+    image: grafana/grafana:13.2.2
+    profiles: ["supervision"]
+    mem_limit: 256m
+    environment:
+      # Servi à la racine de son adresse propre derrière Caddy : Grafana
+      # doit la connaître pour construire ses liens et ses redirections.
+      GF_SERVER_ROOT_URL: "${BI_URL:-https://bi.${APP_DOMAIN:?APP_DOMAIN manquant}}/"
+      # Le même compte d'administration que la supervision ; ses mots de
+      # passe vivent ensuite chacun dans son volume.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD manquant}
+      # Deux comptes : l'administrateur et « direction » (Viewer), créé par
+      # l'administrateur (deploy/README.md, « BI de pilotage »). Pas
+      # d'inscription, pas d'accès anonyme.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_VIEWERS_CAN_EDIT: "false"
+      GF_USERS_EDITORS_CAN_ADMIN: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/vue-d-ensemble.json
+      GF_USERS_DEFAULT_THEME: light
+      GF_USERS_DEFAULT_LANGUAGE: fr-FR
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      # Les chiffres des filiales passent par ici : cookie de session réservé
+      # au site, politique de sécurité du contenu de Grafana, sessions
+      # courtes (1 h d'inactivité, 12 h au plus), aucun avatar chargé chez
+      # Gravatar.
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SECURITY_CONTENT_SECURITY_POLICY: "true"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION: 1h
+      GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION: 12h
+      # Source « BI JUSTI GH » (grafana/provisioning-bi/datasources/bi.yml).
+      # Sans mot de passe, la source ne se connecte pas et le pilotage
+      # reste vide.
+      POSTGRES_DB: ${POSTGRES_DB:-justi_innov}
+      BI_DB_USER: ${BI_DB_USER:-justi_bi}
+      BI_DB_PASSWORD: ${BI_DB_PASSWORD:-}
+    volumes:
+      - grafana_bi_data:/var/lib/grafana
+      - ./grafana/provisioning-bi:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards/pilotage:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
@@ -743,6 +797,7 @@ volumes:
   sauvegardes:
   prometheus_data:
   grafana_data:
+  grafana_bi_data:
 
 # Secrets Compose : la valeur vient du `.env`, atterrit dans un fichier sous
 # /run/secrets du seul service qui le monte, et n'apparaît ni dans

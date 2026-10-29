@@ -262,6 +262,67 @@
       }
     },
     {
+      "type": "stat",
+      "title": "Devises sans taux",
+      "description": "Devises sans taux publié à la date de référence : leurs pays manquent à la projection et à la comparaison en FCFA, ci-dessous.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "bi"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "bi"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coalesce(string_agg(DISTINCT devise, ', ') FILTER (WHERE taux_xof IS NULL), 'Aucune') FROM bi.consolidation_pays WHERE annee = $annee AND pays_id IN (${pays:csv})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 3
+      }
+    },
+    {
       "transformations": [],
       "type": "barchart",
       "title": "Projection de fin d'exercice (FCFA)",
@@ -323,10 +384,10 @@
         "barWidth": 0.8,
         "groupWidth": 0.7
       },
-      "id": 2,
+      "id": 3,
       "gridPos": {
         "x": 0,
-        "y": 11,
+        "y": 14,
         "w": 12,
         "h": 15
       }
@@ -393,10 +454,10 @@
         "barWidth": 0.8,
         "groupWidth": 0.7
       },
-      "id": 3,
+      "id": 4,
       "gridPos": {
         "x": 12,
-        "y": 11,
+        "y": 14,
         "w": 12,
         "h": 15
       }
@@ -462,10 +523,10 @@
         "valueMode": "color",
         "namePlacement": "left"
       },
-      "id": 4,
+      "id": 5,
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 29,
         "w": 12,
         "h": 10
       }
@@ -548,10 +609,10 @@
           "show": false
         }
       },
-      "id": 5,
+      "id": 6,
       "gridPos": {
         "x": 12,
-        "y": 26,
+        "y": 29,
         "w": 12,
         "h": 10
       }

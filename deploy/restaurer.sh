@@ -209,6 +209,15 @@ else
     || psql -d postgres -c 'CREATE DATABASE \"$base_cible\" OWNER \"$proprietaire\"'"
 fi
 
+# Les vues du schéma bi (décision 122) dépendent des tables : tant
+# qu'elles existent, `pg_restore --clean` ne peut pas retirer une table, n'en
+# recrée pas la clé primaire et ajoute les lignes du dump à celles qui sont
+# là — doublons, contraintes perdues. Ce ne sont que des vues : on les
+# retire, le backend les repose à son redémarrage (migrate), et le rôle du
+# BI, plus bas, retrouve ses droits.
+echo "→ Retrait du schéma bi (vues du BI) de « $base_cible »…"
+dans_sauvegarde "psql -d '$base_cible' -v ON_ERROR_STOP=1 -qc 'DROP SCHEMA IF EXISTS bi CASCADE'"
+
 echo "→ Restauration de $dump dans « $base_cible »…"
 # --no-owner --no-privileges : tout appartient au rôle qui restaure (le
 # propriétaire) ; les droits du rôle applicatif sont rejoués juste après,

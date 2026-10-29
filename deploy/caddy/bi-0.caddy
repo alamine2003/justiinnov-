@@ -1,3 +1,3 @@
-# Supervision désactivée (SUPERVISION=0) : pas d'adresse pour Grafana.
+# Supervision désactivée (SUPERVISION=0) : pas d'adresse pour le Grafana du BI.
 # Le Caddyfile importe `bi-<SUPERVISION>.caddy` ; ce fichier vide évite à
 # Caddy de demander un certificat pour un service qui ne tourne pas.

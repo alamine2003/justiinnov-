@@ -576,7 +576,7 @@ jobs:
         run: |
           for supervision in 0 1; do
             docker run --rm -e APP_DOMAIN=exemple.org -e ACME_EMAIL=a@exemple.org \
-              -e SUPERVISION=$supervision -e BI_DOMAIN=bi.exemple.org -e BI_URL=https://bi.exemple.org \
+              -e SUPERVISION=$supervision -e BI_DOMAIN=bi.exemple.org \
               -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$PWD/caddy:/etc/caddy/caddy:ro" \
               caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile
             echo "✔ SUPERVISION=$supervision"
@@ -672,6 +672,28 @@ jobs:
           echo "$sortie"
           echo "$sortie" | grep -q 'aucune transaction validée après' || { echo "::error::l'échec ne dit pas pourquoi"; exit 1; }
           echo "✔ échec franc, motif donné"
+
+      - name: Une restauration sur une base qui porte les vues du BI ne double aucune ligne
+        # Les vues du schéma bi dépendent des tables : sans les retirer
+        # d'abord, `pg_restore --clean` ne pouvait pas retirer une table,
+        # perdait sa clé primaire et ajoutait les lignes du dump à celles déjà
+        # là (décision 122). restaurer.sh, sur une base jetable qui a une vue
+        # bi et une ligne de plus que le dump, doit rendre le dump à l'identique.
+        run: |
+          psql() { docker compose -f docker-compose.prod.yml exec -T db psql -v ON_ERROR_STOP=1 -qtAX -U justi "$@"; }
+          # La reprise, plus haut, a vidé la table : dix lignes, celles du dump.
+          psql -d justi_innov -c "insert into reprise_ci select g, 'ligne ' || g from generate_series(1, 10) g"
+          docker compose -f docker-compose.prod.yml run --rm -T --entrypoint sh sauvegarde \
+            -c 'pg_dump -Fc --exclude-schema=bi --file /sauvegardes/base/ci-bi.dump'
+          ./restaurer.sh ci-bi.dump --base justi_essai_bi
+          psql -d justi_essai_bi -c "create schema if not exists bi; create view bi.essai as select * from reprise_ci"
+          psql -d justi_essai_bi -c "insert into reprise_ci values (5000, 'saisie après le dump')"
+          ./restaurer.sh ci-bi.dump --base justi_essai_bi
+          lignes="$(psql -d justi_essai_bi -c "select count(*) from reprise_ci")"
+          cle="$(psql -d justi_essai_bi -c "select count(*) from pg_constraint where conname = 'reprise_ci_pkey'")"
+          [ "$lignes" = "10" ] || { echo "::error::$lignes lignes après restauration, 10 attendues"; exit 1; }
+          [ "$cle" = "1" ] || { echo "::error::la clé primaire de reprise_ci a disparu"; exit 1; }
+          echo "✔ les 10 lignes du dump, clé primaire en place"
 
       - name: Journaux de la pile
         if: failure()
