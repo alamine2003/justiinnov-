@@ -1251,6 +1251,12 @@ class RectificationSerializer(serializers.ModelSerializer):
             "status", "previous_status", "previous_justified_amount",
             "requested_by", "decided_by", "decided_at", "decision_note",
         ]
+        # Depuis DRF 3.18.2, la contrainte conditionnelle « une demande en
+        # attente par ligne » devient un validateur du sérialiseur, qui
+        # répond par un message générique sur `non_field_errors` avant le
+        # service. C'est le service (`transitions.demander_rectification`)
+        # qui dit pourquoi, sur `expense` ; la base garde la contrainte.
+        validators = []
 
     @extend_schema_field(serializers.BooleanField())
     def get_can_decide(self, rectification):

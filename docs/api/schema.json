@@ -10979,6 +10979,7 @@
                     "external_ref": {
                         "type": "string",
                         "readOnly": true,
+                        "default": "",
                         "title": "Référence d'origine"
                     },
                     "team": {
@@ -11194,6 +11195,7 @@
                     "external_ref": {
                         "type": "string",
                         "readOnly": true,
+                        "default": "",
                         "title": "Référence d'origine"
                     },
                     "team": {
@@ -11588,6 +11590,7 @@
                     "external_ref": {
                         "type": "string",
                         "readOnly": true,
+                        "default": "",
                         "title": "Référence d'origine"
                     },
                     "team": {
