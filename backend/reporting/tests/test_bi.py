@@ -11,6 +11,7 @@ secrets, ni l'écriture. Ses droits sont ceux de ``deploy/creer_role_bi.sql``,
 rejoué ici tel quel.
 """
 
+import os
 import re
 from datetime import date, timedelta
 from decimal import Decimal
@@ -356,7 +357,11 @@ class SousLeRoleDuBI(DecorBI):
     """Le décor, plus le rôle de ``deploy/creer_role_bi.sql`` et de quoi
     exécuter une requête sous ses droits."""
 
-    ROLE = "justi_bi_test"
+    #: Un rôle PostgreSQL vaut pour tout le serveur, pas pour une base : les
+    #: processus de `manage.py test --parallel`, chacun sur sa base, se le
+    #: disputeraient (le second attend que le premier ait fini, jusqu'au
+    #: lock_timeout). Un nom par processus.
+    ROLE = f"justi_bi_test_{os.getpid()}"
 
     def setUp(self):
         super().setUp()

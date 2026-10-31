@@ -26,8 +26,11 @@ function avec(...via: object[]): RapportNpm {
 }
 
 describe("avisBloquants", () => {
+  /** Une tolérance comme celle que portait AVIS_TOLERES jusqu'au correctif de braces. */
+  const TOLERE_BRACES = new Map([["GHSA-vfj7-8cjw-p6xm", "Outil de développement, absent de l'image livrée."]])
+
   it("laisse passer l'avis toléré et la chaîne qui le relaie", () => {
-    const { bloquants, toleresVus } = avisBloquants(RAPPORT_CI)
+    const { bloquants, toleresVus } = avisBloquants(RAPPORT_CI, TOLERE_BRACES)
 
     expect(bloquants).toEqual([])
     expect(toleresVus).toEqual(["GHSA-vfj7-8cjw-p6xm"])
@@ -43,7 +46,7 @@ describe("avisBloquants", () => {
     const { bloquants } = avisBloquants(avec(
       { name: "x", title: "X", url: "https://github.com/advisories/GHSA-aaaa", severity: "critical" },
       { name: "y", title: "Y", url: "https://github.com/advisories/GHSA-bbbb", severity: "high" },
-    ))
+    ), TOLERE_BRACES)
 
     expect(bloquants.map((a) => a.id)).toEqual(["GHSA-aaaa", "GHSA-bbbb"])
   })
@@ -51,7 +54,7 @@ describe("avisBloquants", () => {
   it("ne bloque pas sous le seuil high", () => {
     const { bloquants } = avisBloquants(avec(
       { name: "z", title: "Z", url: "https://github.com/advisories/GHSA-cccc", severity: "moderate" },
-    ))
+    ), TOLERE_BRACES)
 
     expect(bloquants).toEqual([])
   })

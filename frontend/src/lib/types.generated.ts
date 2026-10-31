@@ -3112,7 +3112,10 @@ export interface components {
             readonly kind_name: string | null
             /** Rang */
             readonly sequence: number | null
-            /** Référence d'origine */
+            /**
+             * Référence d'origine
+             * @default
+             */
             readonly external_ref: string
             team: number | null
             readonly team_name: string | null
@@ -3175,7 +3178,10 @@ export interface components {
             readonly kind_name: string | null
             /** Rang */
             readonly sequence: number | null
-            /** Référence d'origine */
+            /**
+             * Référence d'origine
+             * @default
+             */
             readonly external_ref: string
             team: number | null
             readonly team_name: string | null
@@ -3315,7 +3321,10 @@ export interface components {
             readonly kind_name: string | null
             /** Rang */
             readonly sequence: number | null
-            /** Référence d'origine */
+            /**
+             * Référence d'origine
+             * @default
+             */
             readonly external_ref: string
             team: number | null
             readonly team_name: string | null
