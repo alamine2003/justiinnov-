@@ -357,11 +357,15 @@ class SousLeRoleDuBI(DecorBI):
     """Le décor, plus le rôle de ``deploy/creer_role_bi.sql`` et de quoi
     exécuter une requête sous ses droits."""
 
-    #: Un rôle PostgreSQL vaut pour tout le serveur, pas pour une base : les
-    #: processus de `manage.py test --parallel`, chacun sur sa base, se le
-    #: disputeraient (le second attend que le premier ait fini, jusqu'au
-    #: lock_timeout). Un nom par processus.
-    ROLE = f"justi_bi_test_{os.getpid()}"
+    @property
+    def ROLE(self):
+        """Un rôle PostgreSQL vaut pour tout le serveur, pas pour une base :
+        les processus de `manage.py test --parallel`, chacun sur sa base, se
+        le disputeraient (le second attend que le premier ait fini, jusqu'au
+        lock_timeout). Un nom par processus, lu à l'exécution : un attribut
+        de classe serait évalué une fois, dans le processus parent, avant
+        que les processus de test ne s'en séparent."""
+        return f"justi_bi_test_{os.getpid()}"
 
     def setUp(self):
         super().setUp()
@@ -396,6 +400,12 @@ class SousLeRoleDuBI(DecorBI):
 
 class RoleDuBITests(SousLeRoleDuBI):
     """Le rôle du BI ne lit que le schéma ``bi``."""
+
+    def test_le_role_de_test_est_propre_au_processus(self):
+        """Évalué au chargement, le nom serait celui du parent : tous les
+        processus de test le partageraient (CI de l'étiquette v2.4.0)."""
+        self.assertEqual(self.ROLE, f"justi_bi_test_{os.getpid()}")
+        self.assertNotIsInstance(SousLeRoleDuBI.__dict__["ROLE"], str)
 
     def test_il_lit_chaque_vue(self):
         vues = [v["viewname"] for v in lignes(
