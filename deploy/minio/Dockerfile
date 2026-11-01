@@ -59,7 +59,7 @@ RUN go install -trimpath -ldflags "-s -w \
       "${MC_MODULE}" \
  && /sortie/minio --version && /sortie/mc --version
 
-FROM alpine:3.24.2
+FROM alpine:3.24.3
 
 # Certificats pour une copie `mc` vers un stockage en TLS ; rien d'autre.
 RUN apk add --no-cache ca-certificates
