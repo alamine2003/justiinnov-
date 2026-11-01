@@ -665,7 +665,7 @@ services:
     logging: *journal
 
   grafana:
-    image: grafana/grafana:13.2.2
+    image: grafana/grafana:13.3.0
     profiles: ["supervision"]
     mem_limit: 256m
     environment:
@@ -731,7 +731,7 @@ services:
   # produits par grafana/pilotage.py. Caddy le sert sur son adresse propre
   # (caddy/bi-1.caddy), une autre origine que l'application.
   grafana-bi:
-    image: grafana/grafana:13.2.2
+    image: grafana/grafana:13.3.0
     profiles: ["supervision"]
     mem_limit: 256m
     environment:
