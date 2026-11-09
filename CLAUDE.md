@@ -383,6 +383,7 @@ l'application.
 | Journaux `ChangeLog` et `AuditLog` : la seule porte d'écriture | `backend/core/journal.py` |
 | Ordre des applications (`core < accounts < notifications < budget < expenses < reporting`) | `backend/core/tests/test_dependances.py` |
 | Calculs budgétaires | `backend/budget/aggregates.py` |
+| Carte des index (chaque index et la requête qu'il sert) ; périodes en bornes | `backend/config/tests/test_index.py`, `backend/core/periodes.py` (décision 123) |
 | Interface | `DESIGN.md` |
 | Serveur, supervision et BI Grafana, pgAdmin, sauvegardes | `deploy/README.md` |
 | Schéma `bi` (vues du BI de pilotage) et tableaux Grafana | `backend/reporting/bi/`, `deploy/grafana/pilotage.py` |
@@ -401,6 +402,10 @@ l'application.
   rattache les volumes de la base.
 - Frontend sans point-virgule en fin de ligne, guillemets doubles.
 - Un correctif s'accompagne du test qui l'aurait attrapé.
+- Un index s'ajoute avec la requête qu'il sert, inscrite sur la carte
+  (`config/tests/test_index.py`), et sa mesure dans la décision qui le
+  justifie ; une période en jours s'écrit en bornes (`core.periodes`),
+  jamais en `__date` (décision 123).
 
 ## Outillage Claude Code
 

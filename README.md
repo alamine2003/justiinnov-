@@ -62,6 +62,12 @@ en parallèle — se lance sur une base privée (section « Tests »). Entités,
 champs et décisions numérotées (38 à 41 pour ce qui précède) sont dans
 [`docs/model-de-donnees.md`](docs/model-de-donnees.md), qui fait foi.
 
+Chaque index de la base sert une requête nommée sur une **carte** que la
+CI vérifie dans les deux sens — pas d'index sans requête, pas de requête
+qui ait perdu son index — et une période en jours s'écrit en bornes
+(`core/periodes.py`), jamais en `__date`, que Postgres ne sait pas indexer
+(`backend/config/tests/test_index.py`, décision 123).
+
 ## Démarrage (Docker)
 
 ```bash

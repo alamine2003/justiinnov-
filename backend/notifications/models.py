@@ -110,6 +110,11 @@ class Notification(models.Model):
         ]
         indexes = [
             models.Index(fields=["recipient", "read_at"]),
+            # La liste d'une personne, la plus récente d'abord (décision 123) :
+            # sans lui, Postgres lisait toutes ses notifications pour les trier
+            # et n'en garder qu'une page — 16 ms à 10 000 notifications,
+            # 0,02 ms avec ; 1,7 µs de plus par notification écrite.
+            models.Index(fields=["recipient", "-created_at"], name="notification_liste"),
             # ``notify`` cherche d'abord qui a déjà été averti d'un événement,
             # par sa clé seule : sans index dédié, chaque alerte parcourait
             # la table entière.

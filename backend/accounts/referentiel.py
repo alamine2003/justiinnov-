@@ -52,6 +52,7 @@ from core.serializers import (
 
 from core.journal import Trace
 from core.numerotation import creer_projet
+from core.periodes import DepuisLeJour, JusquAuJour
 from core.requetes import motif_du_journal
 
 from .perimetre import ChampCloisonne, compter_par_pays
@@ -583,8 +584,9 @@ class MarketingCategoryViewSet(ScopedViewSet):
 class ChangeLogFilter(django_filters.FilterSet):
     """Par pays, entité, objet, action et période (décision 111)."""
 
-    debut = django_filters.DateFilter(field_name="created_at", lookup_expr="date__gte")
-    fin = django_filters.DateFilter(field_name="created_at", lookup_expr="date__lte")
+    # En bornes, pas en ``__date`` : l'index de ``created_at`` sert (décision 123).
+    debut = DepuisLeJour(field_name="created_at")
+    fin = JusquAuJour(field_name="created_at")
 
     class Meta:
         model = ChangeLog
