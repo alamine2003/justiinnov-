@@ -1,6 +1,5 @@
 """Sérialiseurs des dossiers, dépenses et justificatifs."""
 
-import zipfile
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -30,6 +29,7 @@ from core.models import (
 from core.serializers import DetailField, EntreeHistoriqueSerializer
 
 from .contacts import est_un_telephone, normaliser_telephone
+from .contenu import type_verifie
 from .models import (
     AuditLog,
     Beneficiary,
@@ -53,82 +53,6 @@ from .workflow import (
     dossier_allowed_actions,
     expense_allowed_actions,
 )
-
-#: Octets d'en-tête attendus pour chaque extension acceptée, et type MIME
-#: que le serveur enregistre — jamais celui que le client déclare. Un
-#: fichier HTML nommé ``recu.pdf`` serait sinon rejoué tel quel dans
-#: l'aperçu du siège, dans l'origine de l'application.
-#:
-#: ``.doc`` et ``.xls`` ne sont reconnus qu'à leur en-tête OLE, commun à
-#: tout document Office binaire (Word, Excel, PowerPoint, Outlook…) : le
-#: format ne dit pas plus sans lire le répertoire du conteneur, et un
-#: classeur nommé ``.doc`` reste un document Office, pas un HTML déguisé.
-SIGNATURES = {
-    ".pdf": ((b"%PDF",), "application/pdf"),
-    ".jpg": ((b"\xff\xd8\xff",), "image/jpeg"),
-    ".jpeg": ((b"\xff\xd8\xff",), "image/jpeg"),
-    ".png": ((b"\x89PNG\r\n\x1a\n",), "image/png"),
-    ".webp": ((b"RIFF",), "image/webp"),
-    ".heic": ((), "image/heic"),
-    ".doc": ((b"\xd0\xcf\x11\xe0",), "application/msword"),
-    ".xls": ((b"\xd0\xcf\x11\xe0",), "application/vnd.ms-excel"),
-    ".docx": ((b"PK\x03\x04",), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-    ".xlsx": ((b"PK\x03\x04",), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-    ".csv": ((), "text/csv"),
-    ".txt": ((), "text/plain"),
-}
-_TEXTE = {".csv", ".txt"}
-_DEBUTS_HTML = (b"<!doctype", b"<html", b"<script", b"<svg")
-#: Répertoire qu'un document Office ouvert doit contenir : un ZIP quelconque
-#: renommé ``.docx`` n'en a pas.
-_REPERTOIRES_OFFICE = {".docx": "word/", ".xlsx": "xl/"}
-#: Marques HEIF acceptées après ``ftyp`` : les images HEIC et leurs
-#: conteneurs (``mif1``, ``msf1``) ; un MP4 porte aussi ``ftyp``, pas elles.
-_MARQUES_HEIC = {b"heic", b"heix", b"mif1", b"msf1"}
-
-
-def _repertoire_office(uploaded, repertoire):
-    """Le ZIP contient-il le répertoire du format (``word/``, ``xl/``) ?
-
-    Le premier membre ne suffit pas : ``[Content_Types].xml`` ouvre souvent
-    le fichier, et son ordre n'est pas garanti. C'est le répertoire du
-    conteneur qui dit ce qu'il est.
-    """
-    try:
-        with zipfile.ZipFile(uploaded) as archive:
-            noms = archive.namelist()
-    except (zipfile.BadZipFile, OSError, ValueError):
-        return False
-    finally:
-        uploaded.seek(0)
-    return any(nom.startswith(repertoire) for nom in noms)
-
-
-def type_verifie(uploaded, extension):
-    """Type MIME d'une pièce dont les premiers octets confirment l'extension.
-
-    ``None`` quand le contenu ne correspond pas : un HTML déguisé en PDF, un
-    texte vide ou qui commence par une balise, un binaire dans un ``.csv``,
-    un ZIP quelconque nommé ``.docx``, une vidéo nommée ``.heic``.
-    """
-    debuts, mime = SIGNATURES[extension]
-    tete = uploaded.read(4096)
-    uploaded.seek(0)
-    if extension in _TEXTE:
-        contenu = tete.lstrip()
-        if not contenu or b"\x00" in tete:
-            return None
-        return None if contenu.lower().startswith(_DEBUTS_HTML) else mime
-    if extension == ".webp":
-        return mime if tete[:4] == b"RIFF" and tete[8:12] == b"WEBP" else None
-    if extension == ".heic":
-        return mime if tete[4:8] == b"ftyp" and tete[8:12] in _MARQUES_HEIC else None
-    if not any(tete.startswith(debut) for debut in debuts):
-        return None
-    if extension in _REPERTOIRES_OFFICE:
-        return mime if _repertoire_office(uploaded, _REPERTOIRES_OFFICE[extension]) else None
-    return mime
-
 
 def exiger_un_dossier_de_piece_modifiable(dossier):
     """Le type d'une pièce se fige avec la déclaration de son dossier.

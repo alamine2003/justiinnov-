@@ -52,15 +52,22 @@ circuit) < `reporting` (tableau de bord, alertes, imports, exports). Trois
 primitives portent les règles transversales, tout le reste leur délègue :
 le **journal** (`core.journal.tracer`, seule écriture de `ChangeLog` et
 `AuditLog`), le **périmètre** (`accounts.perimetre.filtrer`, seul filtre par
-pays et par équipe, appliqué sur le queryset) et les **transitions**
+pays et par équipe, appliqué sur le queryset ; `exiger_dans_le_perimetre`
+pour un objet déjà en main) et les **transitions**
 (`expenses/transitions.py`, `budget/transitions.py` : les règles du circuit
 sont des services ; une vue ne porte que verrou HTTP, sérialisation et
 réponse). Le contrat d'API est **généré** depuis le code
 (`docs/api/schema.json`, `frontend/src/lib/types.generated.ts`, section
-« API REST ») ; la suite backend — neuf cents tests, moins de dix secondes
-en parallèle — se lance sur une base privée (section « Tests »). Entités,
-champs et décisions numérotées (38 à 41 pour ce qui précède) sont dans
+« API REST ») ; la suite backend — près de dix-sept cents tests — se
+lance sur une base privée (section « Tests »). Entités,
+champs et décisions numérotées (38 à 41 et 124 pour ce qui précède) sont dans
 [`docs/model-de-donnees.md`](docs/model-de-donnees.md), qui fait foi.
+
+Chaque index de la base sert une requête nommée sur une **carte** que la
+CI vérifie dans les deux sens — pas d'index sans requête, pas de requête
+qui ait perdu son index — et une période en jours s'écrit en bornes
+(`core/periodes.py`), jamais en `__date`, que Postgres ne sait pas indexer
+(`backend/config/tests/test_index.py`, décision 123).
 
 ## Démarrage (Docker)
 
@@ -493,13 +500,12 @@ docker compose run --rm --entrypoint python backend manage.py test
 cd frontend && npx tsc -b && npm run lint && npm run test
 ```
 
-Ce sont les commandes de `CLAUDE.md` et de la CI. La suite backend — neuf
-cents tests, dont les règles du circuit sans HTTP
+Ce sont les commandes de `CLAUDE.md` et de la CI. La suite backend — près de
+dix-sept cents tests, dont les règles du circuit sans HTTP
 (`expenses/tests/test_transitions.py`, `budget/tests/test_transitions.py`),
 un test traversant du cloisonnement (`accounts/tests/test_traversee.py`) et
-un test structurel du journal (`core/tests/test_journal_unique.py`) — tourne
-en une quinzaine de secondes en série, moins de dix avec `--noinput
---parallel auto` (cache en mémoire, hachage rapide : bloc « Réglages de
+un test structurel du journal (`core/tests/test_journal_unique.py`) — se
+lance de préférence en parallèle, avec `--noinput --parallel auto` (cache en mémoire, hachage rapide : bloc « Réglages de
 test » de `config/settings.py`). **Deux suites backend ne tournent pas en
 parallèle sur la même base** : Django crée `test_<POSTGRES_DB>` et la
 détruit à la fin ; la seconde suite détruirait celle de la première. Donnez

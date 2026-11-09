@@ -22,6 +22,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
+from accounts.perimetre import exiger_dans_le_perimetre
 from accounts.permissions import exiger_la_capacite, roles_pour
 from core.journal import tracer
 from core.regles import HorsPerimetre, PermissionRefusee, RegleViolee
@@ -57,11 +58,10 @@ def disponible(budget):
 def exiger_le_perimetre(acteur, *budgets):
     """Chaque enveloppe est dans le périmètre de l'acteur, sinon elle
     n'existe pas pour lui."""
-    if acteur is None or acteur.has_global_scope:
-        return
     for budget in budgets:
-        if budget.country_id not in acteur.country_ids:
-            raise HorsPerimetre()
+        # Une enveloppe se lit par pays entier, même par un manager qui n'en
+        # voit qu'une partie des lignes.
+        exiger_dans_le_perimetre(acteur, budget.country_id)
 
 
 def exiger_le_disponible(source, montant):

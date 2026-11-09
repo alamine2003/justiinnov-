@@ -1,6 +1,5 @@
 """Tableaux de bord temps réel (§5.6) et exports (§5.7)."""
 
-from collections import defaultdict
 from decimal import Decimal
 
 from django.db import transaction
@@ -25,6 +24,7 @@ from budget.aggregates import (
     seuil_d_alerte,
     to_xof,
 )
+from budget.models import CONSOLIDATION_CURRENCY
 from core.journal import tracer
 from core.models import Country, DossierKind, Project, ProjectType
 from expenses.models import AuditLog
@@ -123,7 +123,7 @@ class DashboardView(APIView):
         # Un exercice se consolide aux taux en vigueur à sa date de référence
         # — sa clôture, ou ce jour — pour qu'un exercice clos ne bouge plus.
         rates = current_rates(on_date=date_de_reference(year))
-        rows, _, consolidated = self._per_country(budgets, rates)
+        rows, consolidated = self._per_country(budgets, rates)
         current_alerts = alert_rules.collect(budgets, dossiers, expenses)
 
         return Response(
@@ -175,7 +175,7 @@ class DashboardView(APIView):
         used = totaux["consumed"] + totaux["engaged"]
         execution_rate = _taux(used, totaux["allocated"])
         return {
-            "currency": "XOF",
+            "currency": CONSOLIDATION_CURRENCY,
             **{key: _money(value) for key, value in totaux.items()},
             # Ce qui est sorti sans preuve à l'appui.
             "gap": _money(totaux["consumed"] - totaux["justified"]),
@@ -191,16 +191,6 @@ class DashboardView(APIView):
         """Agrège par pays via :func:`consolidation_par_pays`, seul point de
         calcul partagé avec ``/api/budgets/summary/``."""
         rows, consolidated = consolidation_par_pays(budgets, rates=rates)
-
-        # Totaux en devises locales additionnées : conservés tels quels pour
-        # ne pas changer le contrat de la vue ici ; le sens n'en est assuré
-        # que lorsque tous les pays partagent la même devise.
-        totals = defaultdict(lambda: ZERO)
-        for row in rows:
-            for key in ("allocated", "engaged", "consumed", "justified", "remaining"):
-                totals[key] += row[key]
-        used_total = totals["consumed"] + totals["engaged"]
-
         return (
             [
                 {
@@ -222,17 +212,6 @@ class DashboardView(APIView):
                 }
                 for row in rows
             ],
-            {
-                "allocated": _money(totals["allocated"]),
-                "engaged": _money(totals["engaged"]),
-                "consumed": _money(totals["consumed"]),
-                "justified": _money(totals["justified"]),
-                # Ce qui est sorti sans preuve à l'appui.
-                "gap": _money(totals["consumed"] - totals["justified"]),
-                "remaining": _money(totals["remaining"]),
-                "execution_rate": _ratio(used_total, totals["allocated"]),
-                "justification_rate": _ratio(totals["justified"], totals["consumed"]),
-            },
             {
                 "allocated": str(consolidated["allocated"]),
                 "remaining": str(consolidated["remaining"]),

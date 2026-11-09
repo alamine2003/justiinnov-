@@ -142,10 +142,12 @@ export function DashboardPage() {
   const breakdown = query.data?.breakdown ?? null
   const symbolOf = (id: number, fallback: string) =>
     countries.data?.results.find((c) => c.id === id)?.currency_symbol || fallback
-  // La consolidation se fait en XOF ; le symbole vient du premier pays qui
-  // l'utilise, pour ne pas écrire « FCFA » en dur à côté d'un « XOF ».
+  // La devise de consolidation vient du serveur (``totals.currency``) ; le
+  // symbole, du premier pays qui l'utilise, pour ne pas écrire « FCFA » en
+  // dur à côté d'un « XOF ».
+  const devise = data?.totals.currency ?? ""
   const consolidatedSymbol =
-    countries.data?.results.find((c) => c.currency === "XOF")?.currency_symbol || "XOF"
+    countries.data?.results.find((c) => c.currency === devise)?.currency_symbol || devise
 
   if (query.loading && !data) {
     return (
@@ -167,7 +169,11 @@ export function DashboardPage() {
         title={t("pilotage.titre")}
         description={
           me?.has_global_scope
-            ? t("pilotage.description_siege", { devise: consolidatedSymbol })
+            ? // La devise n'est connue qu'une fois le tableau de bord chargé :
+              // pas de « convertie en . » si la lecture a échoué.
+              consolidatedSymbol
+              ? t("pilotage.description_siege", { devise: consolidatedSymbol })
+              : undefined
             : t("pilotage.description_pays")
         }
       >

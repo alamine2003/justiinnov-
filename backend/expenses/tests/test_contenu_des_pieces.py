@@ -5,9 +5,14 @@ rejoué dans l'aperçu du siège, dans l'origine de l'application. Le type
 MIME enregistré vient du contenu vérifié, jamais de l'en-tête du client.
 """
 
+from io import BytesIO
+
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import SimpleTestCase
 from rest_framework import status
 
+from expenses.contenu import FORMATS, type_verifie
 from expenses.models import Proof
 
 from .base import ExpenseTestCase
@@ -124,3 +129,17 @@ class SignaturesStrictesTests(ExpenseTestCase):
         ole = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 24
 
         self.assertEqual(self._deposer("ancien.doc", ole).status_code, status.HTTP_201_CREATED)
+
+
+class TableDesFormatsTests(SimpleTestCase):
+    """Décision 124 : la table des formats est la seule à dire ce qu'une
+    extension doit contenir."""
+
+    def test_chaque_extension_acceptee_a_sa_verification(self):
+        self.assertEqual(
+            sorted(set(settings.ALLOWED_PROOF_EXTENSIONS) - set(FORMATS)), [],
+            "une extension acceptée sans vérification serait refusée à chaque dépôt",
+        )
+
+    def test_une_extension_inconnue_est_refusee_sans_erreur(self):
+        self.assertIsNone(type_verifie(BytesIO(PDF), ".exe"))

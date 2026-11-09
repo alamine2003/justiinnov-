@@ -7,7 +7,7 @@ n'a pas à le deviner.
 
 from django.urls import path
 
-from . import views
+from . import exports, views
 
 
 def _export(vue, prefixe, nom, formats):
@@ -21,7 +21,9 @@ def _export(vue, prefixe, nom, formats):
     ]
 
 
-TABULAIRES = ("xlsx", "csv", "docx")
+#: Les formats tabulaires sont ceux que ``exports.FORMATS`` sait écrire :
+#: un format de plus s'ajoute là, et ses routes suivent.
+TABULAIRES = tuple(exports.FORMATS)
 
 urlpatterns = [
     path("dashboard/", views.DashboardView.as_view(), name="dashboard"),

@@ -211,13 +211,14 @@ class ThrottledObtainAuthToken(ObtainAuthToken):
 
 
 class BackOfficePermission(RolePermission):
-    """Le back-office est réservé aux administrateurs (``configuration.manage``)."""
+    """Le back-office est réservé aux administrateurs (``configuration.manage``).
+
+    La règle est celle de :class:`RolePermission` : la vue déclare sa
+    capacité, la classe ne la remplace pas (décision 124). Elle n'ajoute que
+    son message.
+    """
 
     message = _("Le back-office est réservé aux administrateurs du siège.")
-
-    def has_permission(self, request, view):
-        access = get_access(request.user)
-        return access is not None and access.role in roles_pour("configuration.manage")
 
 
 class ConfigurationView(APIView):
@@ -230,6 +231,7 @@ class ConfigurationView(APIView):
     """
 
     permission_classes = [BackOfficePermission]
+    read_capability = write_capability = "configuration.manage"
 
     @extend_schema(responses=ConfigurationSerializer)
     def get(self, request):
@@ -280,6 +282,7 @@ class WorkflowConfigurationView(APIView):
     """Lecture et modification de la politique du workflow."""
 
     permission_classes = [BackOfficePermission]
+    read_capability = write_capability = "configuration.manage"
 
     @extend_schema(responses=WorkflowConfigurationSerializer)
     def get(self, request):
@@ -648,6 +651,7 @@ class PermissionMatrixView(APIView):
     """
 
     permission_classes = [BackOfficePermission]
+    read_capability = write_capability = "configuration.manage"
 
     @staticmethod
     def _matrice(configuration, access):

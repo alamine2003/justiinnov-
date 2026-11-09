@@ -52,6 +52,7 @@ from core.serializers import (
 
 from core.journal import Trace
 from core.numerotation import creer_projet
+from core.periodes import DepuisLeJour, JusquAuJour
 from core.requetes import motif_du_journal
 
 from .perimetre import ChampCloisonne, compter_par_pays
@@ -375,8 +376,8 @@ class ProjectViewSet(ScopedViewSet):
         from expenses.predefinis import creer_les_dossiers_predefinis
 
         self._check_country_scope(serializer)
+        serializer.prendre_le_motif()
         donnees = dict(serializer.validated_data)
-        donnees.pop("motif", None)
         equipe = self._equipe_des_dossiers(donnees.pop("team", None))
         with transaction.atomic():
             projet = creer_projet(Project(**donnees))
@@ -398,7 +399,7 @@ class ProjectViewSet(ScopedViewSet):
         # Import local, comme à la création.
         from expenses.predefinis import EQUIPE_DU_PROJET, creer_les_dossiers_predefinis
 
-        motif = serializer.validated_data.pop("motif", "").strip()
+        motif = serializer.prendre_le_motif()
         a_typer = not serializer.instance.kind_id and not serializer.instance.is_historical
         with transaction.atomic(), motif_du_journal(motif):
             projet = serializer.save()
@@ -514,13 +515,12 @@ class ProjectTypeViewSet(NoDestroyModelViewSet):
         return super().get_queryset().annotate(projets=projets)
 
     def perform_update(self, serializer):
-        motif = serializer.validated_data.pop("motif", "").strip()
-        with motif_du_journal(motif):
+        with motif_du_journal(serializer.prendre_le_motif()):
             serializer.save()
         serializer.instance = self.get_queryset().get(pk=serializer.instance.pk)
 
     def perform_create(self, serializer):
-        serializer.validated_data.pop("motif", None)
+        serializer.prendre_le_motif()
         try:
             with transaction.atomic():
                 serializer.save()
@@ -551,12 +551,11 @@ class DossierKindViewSet(NoDestroyModelViewSet):
     write_capability = "dossier_kinds.manage"
 
     def perform_update(self, serializer):
-        motif = serializer.validated_data.pop("motif", "").strip()
-        with motif_du_journal(motif):
+        with motif_du_journal(serializer.prendre_le_motif()):
             serializer.save()
 
     def perform_create(self, serializer):
-        serializer.validated_data.pop("motif", None)
+        serializer.prendre_le_motif()
         serializer.save()
 
 
@@ -583,8 +582,9 @@ class MarketingCategoryViewSet(ScopedViewSet):
 class ChangeLogFilter(django_filters.FilterSet):
     """Par pays, entité, objet, action et période (décision 111)."""
 
-    debut = django_filters.DateFilter(field_name="created_at", lookup_expr="date__gte")
-    fin = django_filters.DateFilter(field_name="created_at", lookup_expr="date__lte")
+    # En bornes, pas en ``__date`` : l'index de ``created_at`` sert (décision 123).
+    debut = DepuisLeJour(field_name="created_at")
+    fin = JusquAuJour(field_name="created_at")
 
     class Meta:
         model = ChangeLog

@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from django.db import transaction
 from django.utils.translation import gettext as _
 
-from accounts.perimetre import PAYS_ENTIER
+from accounts.perimetre import PAYS_ENTIER, exiger_dans_le_perimetre
 from accounts.permissions import exiger_la_capacite
 from budget.models import Budget
 from core import journal
@@ -219,8 +219,8 @@ class _Retrait:
 
 
 def _exiger_le_perimetre(acteur, country_id):
-    if not acteur.has_global_scope and country_id not in acteur.country_ids:
-        raise HorsPerimetre()
+    """La corbeille se lit par pays entier (décision 120)."""
+    exiger_dans_le_perimetre(acteur, country_id)
 
 
 def versions_chargees(piece):

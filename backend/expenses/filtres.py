@@ -9,6 +9,8 @@ from django_filters import rest_framework as filtres_de_l_api
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 
+from core.periodes import DepuisLeJour, JusquAuJour
+
 from .historique import journal_du_projet
 from .models import AuditLog, Dossier, ElementSupprime
 
@@ -16,8 +18,9 @@ from .models import AuditLog, Dossier, ElementSupprime
 class AuditLogFilter(django_filters.FilterSet):
     """Par utilisateur, action, objet, pays, période — et par projet."""
 
-    debut = django_filters.DateFilter(field_name="created_at", lookup_expr="date__gte")
-    fin = django_filters.DateFilter(field_name="created_at", lookup_expr="date__lte")
+    # En bornes, pas en ``__date`` : l'index ``audit_date`` sert (décision 123).
+    debut = DepuisLeJour(field_name="created_at")
+    fin = JusquAuJour(field_name="created_at")
     projet = django_filters.NumberFilter(method="filtrer_par_projet")
 
     class Meta:
@@ -77,8 +80,8 @@ class DossierFilter(filtres_de_l_api.FilterSet):
 class ElementSupprimeFilter(filtres_de_l_api.FilterSet):
     """Par nature, pays, période ; les têtes seules, ou ce qu'une tête a emporté."""
 
-    debut = django_filters.DateFilter(field_name="supprime_le", lookup_expr="date__gte")
-    fin = django_filters.DateFilter(field_name="supprime_le", lookup_expr="date__lte")
+    debut = DepuisLeJour(field_name="supprime_le")
+    fin = JusquAuJour(field_name="supprime_le")
     #: Ce que le super administrateur a choisi de retirer, sans ce qui est
     #: parti avec : la liste de la corbeille se lit ainsi.
     tetes = filtres_de_l_api.BooleanFilter(field_name="racine", lookup_expr="isnull")

@@ -18,6 +18,7 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 
 from core.models import ChangeLog
+from core.periodes import entre_les_jours
 
 from .historique import _entree_circuit, _entree_referentiel
 from .models import AuditLog
@@ -78,8 +79,12 @@ def synthese(circuit, referentiel, *, debut=None, fin=None):
     période (dates incluses).
     """
     debut, fin = _periode(debut, fin)
-    circuit = circuit.filter(created_at__date__gte=debut, created_at__date__lte=fin)
-    referentiel = referentiel.filter(created_at__date__gte=debut, created_at__date__lte=fin)
+    # En bornes, pas en ``__date`` : l'index de ``created_at`` sert ; sur
+    # 600 000 entrées, la même période filtrée passe de 33 à 0,8 ms à la
+    # liste du journal (décision 123).
+    periode = entre_les_jours("created_at", debut, fin)
+    circuit = circuit.filter(periode)
+    referentiel = referentiel.filter(periode)
 
     comptes = {
         (action, objet): n

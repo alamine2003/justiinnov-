@@ -282,7 +282,9 @@ l'application.
   `add_line`, `upload`, `delete`) et circuit — et l'interface n'a aucune
   liste d'états ni de rôles à recopier.
 - **Le cloisonnement par pays est vérifié sur le queryset**, pas seulement à
-  l'affichage. Un objet hors périmètre répond 404, sans révéler son existence.
+  l'affichage — et, pour un objet déjà en main dans un service, par
+  `accounts.perimetre.exiger_dans_le_perimetre`, jamais par un prédicat
+  réécrit (décision 124). Un objet hors périmètre répond 404, sans révéler son existence.
   Les écritures sont revalidées : une charge utile ne doit pas permettre de
   créer une entité chez le voisin.
 - **Toute action sensible laisse une trace** dans `ChangeLog` ou `AuditLog` :
@@ -383,10 +385,12 @@ l'application.
 | Journaux `ChangeLog` et `AuditLog` : la seule porte d'écriture | `backend/core/journal.py` |
 | Ordre des applications (`core < accounts < notifications < budget < expenses < reporting`) | `backend/core/tests/test_dependances.py` |
 | Calculs budgétaires | `backend/budget/aggregates.py` |
+| Carte des index (chaque index et la requête qu'il sert) ; périodes en bornes | `backend/config/tests/test_index.py`, `backend/core/periodes.py` (décision 123) |
 | Interface | `DESIGN.md` |
 | Serveur, supervision et BI Grafana, pgAdmin, sauvegardes | `deploy/README.md` |
 | Schéma `bi` (vues du BI de pilotage) et tableaux Grafana | `backend/reporting/bi/`, `deploy/grafana/pilotage.py` |
 | Comportement sous panne : ce qui a cédé, ce qui tient, ce qui reste | `docs/audit-resilience.md` |
+| Revue d'architecture : écarts SOLID corrigés et restants, par priorité | `docs/revue-architecture-2026-11.md` (décision 124) |
 | Infrastructure de la base : dimensionnement, sauvegardes, reprise | `docs/infra-base-de-donnees.md` |
 
 ## Conventions
@@ -401,6 +405,10 @@ l'application.
   rattache les volumes de la base.
 - Frontend sans point-virgule en fin de ligne, guillemets doubles.
 - Un correctif s'accompagne du test qui l'aurait attrapé.
+- Un index s'ajoute avec la requête qu'il sert, inscrite sur la carte
+  (`config/tests/test_index.py`), et sa mesure dans la décision qui le
+  justifie ; une période en jours s'écrit en bornes (`core.periodes`),
+  jamais en `__date` (décision 123).
 
 ## Outillage Claude Code
 

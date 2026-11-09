@@ -37,6 +37,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 
+from accounts.perimetre import exiger_dans_le_perimetre
 from accounts.permissions import exiger_la_capacite, roles_pour
 from budget.models import Budget
 from core.models import WorkflowConfiguration
@@ -831,27 +832,34 @@ def cloturer(objet, acteur, trace, *, note=""):
     return _transition(objet, "close", acteur, trace, note=note)
 
 
-#: Nom d'action de l'API → service. Les vues passent par ici ; un appelant
-#: qui sait ce qu'il fait appelle le service par son nom.
+#: Nom d'action de l'API → service. Une action nouvelle s'ajoute ici, sans
+#: rouvrir :func:`executer` (décision 124). Le motif suit chaque
+#: transition : l'API l'accepte partout, et une remarque saisie puis perdue
+#: sans un mot ferait croire qu'elle est gardée. Les décisions du siège
+#: (``validate``, ``reject``…) passent par :func:`trancher`.
+_SERVICES = {
+    "submit": lambda objet, acteur, trace, note, montant: soumettre(objet, acteur, trace),
+    "reopen": lambda objet, acteur, trace, note, montant: rouvrir(objet, acteur, note, trace),
+    "review": lambda objet, acteur, trace, note, montant: mettre_en_controle(
+        objet, acteur, trace, note=note
+    ),
+    "close": lambda objet, acteur, trace, note, montant: cloturer(objet, acteur, trace, note=note),
+}
+
+
 def executer(objet, action, acteur, trace, *, note="", justified_amount=None):
     """Joue une transition nommée comme dans l'API (``submit``, ``review``…).
+    Les vues passent par ici ; un appelant qui sait ce qu'il fait appelle le
+    service par son nom.
 
     ``rectify`` n'en fait pas partie : un constat ne se défait qu'à
     l'approbation d'une demande (:func:`approuver_rectification`).
     """
     if action == "rectify":
         raise ValueError("executer : rectify ne se joue qu'en approuvant une demande")
-    if action == "submit":
-        return soumettre(objet, acteur, trace)
-    if action == "reopen":
-        return rouvrir(objet, acteur, note, trace)
-    # Le motif suit chaque transition : l'API l'accepte partout, et une
-    # remarque saisie puis perdue sans un mot ferait croire qu'elle est
-    # gardée.
-    if action == "review":
-        return mettre_en_controle(objet, acteur, trace, note=note)
-    if action == "close":
-        return cloturer(objet, acteur, trace, note=note)
+    service = _SERVICES.get(action)
+    if service is not None:
+        return service(objet, acteur, trace, note, justified_amount)
     return trancher(
         objet, action, acteur, note=note, justified_amount=justified_amount, trace=trace
     )
@@ -1099,12 +1107,7 @@ def controler_piece(proof, statut, acteur, *, motif="", trace):
 def _exiger_le_perimetre(acteur, expense):
     """La ligne est dans le périmètre de l'acteur, sinon elle n'existe pas
     pour lui — pays, et équipes pour un manager qui y est restreint."""
-    if acteur is None:
-        raise HorsPerimetre()
-    if not acteur.has_global_scope and expense.country_id not in acteur.country_ids:
-        raise HorsPerimetre()
-    if acteur.team_ids is not None and expense.team_id not in acteur.team_ids:
-        raise HorsPerimetre()
+    exiger_dans_le_perimetre(acteur, expense.country_id, expense.team_id)
 
 
 def verifier_la_decision_de_rectification(rectification, acteur):
