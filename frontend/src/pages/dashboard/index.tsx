@@ -169,7 +169,11 @@ export function DashboardPage() {
         title={t("pilotage.titre")}
         description={
           me?.has_global_scope
-            ? t("pilotage.description_siege", { devise: consolidatedSymbol })
+            ? // La devise n'est connue qu'une fois le tableau de bord chargé :
+              // pas de « convertie en . » si la lecture a échoué.
+              consolidatedSymbol
+              ? t("pilotage.description_siege", { devise: consolidatedSymbol })
+              : undefined
             : t("pilotage.description_pays")
         }
       >

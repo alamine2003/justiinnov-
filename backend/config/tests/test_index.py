@@ -28,17 +28,19 @@ Les mesures qui justifient chaque index ajouté sont dans
 
 import ast
 import json
+import re
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from django.apps import apps
-from django.db import connection, transaction
+from django.db import connection, models, transaction
 from django.test import SimpleTestCase, TestCase
 
 from budget.models import Budget
 from core.models import ChangeLog
 from core.periodes import entre_les_jours
 from core.statuts import Status
+from expenses.filtres import AuditLogFilter
 from expenses.models import (
     AuditLog,
     Dossier,
@@ -60,19 +62,33 @@ def trente_jours():
     return entre_les_jours("created_at", JOUR - timedelta(days=29), JOUR)
 
 
+#: Les trente jours tels que l'API les reçoit (``?debut=&fin=``) : la carte
+#: passe le filtre réel à l'``EXPLAIN``, pas une copie de sa requête.
+PERIODE = {"debut": str(JOUR - timedelta(days=29)), "fin": str(JOUR)}
+
+
+def filtre_de_l_historique():
+    from accounts.referentiel import ChangeLogFilter
+
+    return ChangeLogFilter(data=PERIODE, queryset=ChangeLog.objects.all())
+
+
 #: Nom de l'index → (requête qui l'emprunte, où le code l'émet).
 #: Une requête est une fonction sans argument : les modèles ne se lisent
-#: qu'une fois l'application prête. Un comptage ou un agrégat n'a pas de
+#: qu'une fois l'application prête. Elle reprend ce que le code émet — le
+#: filtre d'API lui-même, le tri du modèle (``Meta.ordering``) ou de la
+#: vue —, jamais une version simplifiée qui garderait son index quand la
+#: vraie l'a perdu. Un comptage ou un agrégat n'a pas de
 #: tri : ``order_by()`` le dit, comme ``count()`` le fait dans le code.
 CARTE = {
     # Historique du référentiel (``ChangeLog``) : il grossit d'une entrée par
     # connexion, déconnexion et échec.
     "core_changelog_cree_idx": (
-        lambda: ChangeLog.objects.filter(trente_jours()),
+        lambda: filtre_de_l_historique().qs,
         "/api/history/?debut=&fin= (accounts/referentiel.py), synthèse d'audit",
     ),
     "core_changelog_pays_cree_idx": (
-        lambda: ChangeLog.objects.filter(country_id=1).order_by("-created_at")[:25],
+        lambda: ChangeLog.objects.filter(country_id=1).order_by(*ChangeLog._meta.ordering)[:25],
         "/api/history/?country= (accounts/referentiel.py)",
     ),
     "core_changelog_entite_idx": (
@@ -125,12 +141,12 @@ CARTE = {
         "trace d'un objet (expenses/historique.py, expenses/workflow.py)",
     ),
     "audit_date": (
-        lambda: AuditLog.objects.filter(trente_jours()),
+        lambda: AuditLogFilter(data=PERIODE, queryset=AuditLog.objects.all()).qs,
         "/api/audit/?debut=&fin= (expenses/filtres.py), synthèse d'audit",
     ),
     "audit_pays_date": (
-        lambda: AuditLog.objects.filter(country_id=1).order_by("-created_at")[:25],
-        "/api/audit/?country= et le périmètre d'un manager (expenses/views.py)",
+        lambda: AuditLog.objects.filter(country_id=1).order_by(*AuditLog._meta.ordering)[:25],
+        "/api/audit/?country= (expenses/views.py)",
     ),
     "audit_utilisateur": (
         lambda: AuditLog.objects.filter(user="recette.tg.manager").order_by(),
@@ -138,7 +154,7 @@ CARTE = {
     ),
     # Corbeille.
     "corbeille_pays_date": (
-        lambda: ElementSupprime.objects.filter(country_id=1).order_by("-supprime_le")[:25],
+        lambda: ElementSupprime.objects.filter(country_id=1).order_by("-supprime_le", "-pk")[:25],
         "/api/corbeille/?country= (expenses/views.py)",
     ),
     "corbeille_objet": (
@@ -151,7 +167,8 @@ CARTE = {
         "compteur des non lues (notifications/views.py)",
     ),
     "notification_liste": (
-        lambda: Notification.objects.filter(recipient_id=1).order_by("-created_at")[:25],
+        lambda: Notification.objects.filter(recipient_id=1)
+        .order_by(*Notification._meta.ordering)[:25],
         "liste d'une personne (notifications/views.py), décision 123",
     ),
     "notification_dedup_key_idx": (
@@ -230,15 +247,32 @@ def _noeuds(plan):
         yield from _noeuds(enfant)
 
 
+def colonne_de_tete(nom):
+    """La première colonne de l'index ``nom``, telle que la base la nomme."""
+    for modele in apps.get_models():
+        for index in modele._meta.indexes:
+            if index.name == nom:
+                return modele._meta.get_field(index.fields[0].lstrip("-")).column
+    raise LookupError(nom)
+
+
 def emprunte(plan, nom):
-    """L'index ``nom`` sert-il vraiment ? Parcours séquentiel coupé,
-    Postgres lit au besoin un index **en entier** et filtre chaque ligne :
-    cela ne compte pas. L'index sert s'il borne la lecture (``Index Cond``)
-    ou s'il donne l'ordre demandé sans tri."""
+    """L'index ``nom`` sert-il vraiment ?
+
+    Parcours séquentiel coupé, Postgres lit au besoin un index **en entier**
+    — et une condition sur sa deuxième colonne ne l'en empêche pas : un
+    index ``(country, created_at)`` lu pour ``created_at`` seul est parcouru
+    de bout en bout. L'index sert s'il est **borné par sa colonne de tête**
+    (elle figure dans ``Index Cond``), ou s'il donne l'ordre demandé sans
+    tri ni filtre."""
+    colonne = re.compile(rf"\b{re.escape(colonne_de_tete(nom))}\b")
     a_trie = trie(plan)
     return any(
-        n.get("Index Name") == nom and ("Index Cond" in n or not a_trie)
-        and not ("Filter" in n and "Index Cond" not in n)
+        n.get("Index Name") == nom
+        and (
+            colonne.search(n.get("Index Cond", ""))
+            or (not a_trie and "Filter" not in n and "Index Cond" not in n)
+        )
         for n in _noeuds(plan)
     )
 
@@ -277,6 +311,20 @@ class CarteDesIndexTests(TestCase):
                 self.assertTrue(emprunte(plan, nom))
                 self.assertFalse(trie(plan), f"{nom} ne couvre plus l'ordre demandé")
 
+    def test_un_index_lu_sans_sa_colonne_de_tete_ne_sert_pas(self):
+        """``(country, created_at)`` pour une période seule : Postgres le lit
+        en entier. La carte ne doit pas l'accepter."""
+        plan = plan_avec_le_seul_index(
+            "audit_pays_date", lambda: AuditLog.objects.filter(trente_jours()).order_by()
+        )
+        self.assertFalse(emprunte(plan, "audit_pays_date"))
+
+    def test_un_index_lu_en_entier_et_filtre_ne_sert_pas(self):
+        plan = plan_avec_le_seul_index(
+            "audit_date", lambda: AuditLog.objects.filter(created_at__date__gte=JOUR)
+        )
+        self.assertFalse(emprunte(plan, "audit_date"))
+
     def test_l_annulation_ne_laisse_rien(self):
         """Les index retirés le temps d'un plan sont tous revenus."""
         avant = index_declares()
@@ -288,37 +336,73 @@ class CarteDesIndexTests(TestCase):
             self.assertEqual(curseur.fetchone()[0], len(avant))
 
 
-def _filtres_en_date(chemin):
-    """Les ``__date`` d'un module : mots-clés de filtre et ``lookup_expr``."""
-    arbre = ast.parse(chemin.read_text(), filename=str(chemin))
+def champs_horodates():
+    """Les noms des colonnes horodatées des modèles : ``created_at``,
+    ``supprime_le``… et ``date`` des lignes de dépense, qui en est une."""
+    return {
+        champ.name
+        for modele in apps.get_models()
+        for champ in modele._meta.concrete_fields
+        if isinstance(champ, models.DateTimeField)
+    }
+
+
+def _en_date(chemin_orm, horodates):
+    """``champ__date…`` : la transformation ``date`` sur un horodatage."""
+    parties = chemin_orm.split("__")
+    return any(
+        partie == "date" and parties[i - 1] in horodates
+        for i, partie in enumerate(parties) if i
+    )
+
+
+def _filtres_en_date(source, horodates):
+    """Les ``__date`` d'un module : mots-clés de filtre, chaînes (``**{…}``,
+    ``values(…)``) et ``lookup_expr`` ; les docstrings ne comptent pas."""
+    arbre = ast.parse(source)
+    docstrings = {
+        id(noeud.body[0].value)
+        for noeud in ast.walk(arbre)
+        if isinstance(noeud, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        and noeud.body and isinstance(noeud.body[0], ast.Expr)
+        and isinstance(noeud.body[0].value, ast.Constant)
+    }
     for noeud in ast.walk(arbre):
         if isinstance(noeud, ast.keyword) and noeud.arg:
-            # ``created_at__date…``, ``supprime_le__date…`` : la transformation
-            # ``date`` appliquée à un horodatage. Un champ qui s'appelle
-            # ``date`` (``date__range``) n'est pas visé.
-            parties = noeud.arg.split("__")
-            if any(
-                partie == "date" and parties[i - 1].endswith(("_at", "_le"))
-                for i, partie in enumerate(parties) if i
-            ):
+            if _en_date(noeud.arg, horodates):
                 yield noeud.lineno, noeud.arg
             if noeud.arg == "lookup_expr" and isinstance(noeud.value, ast.Constant) \
                     and str(noeud.value.value).startswith("date"):
                 yield noeud.lineno, f"lookup_expr={noeud.value.value!r}"
+        elif isinstance(noeud, ast.Constant) and isinstance(noeud.value, str) \
+                and id(noeud) not in docstrings and _en_date(noeud.value, horodates):
+            yield noeud.lineno, repr(noeud.value)
 
 
 class FiltresDePeriodeTests(SimpleTestCase):
     def test_aucun_filtre_de_periode_en_date(self):
+        horodates = champs_horodates()
         fautes = []
         for app in APPLICATIONS:
             for chemin in sorted((RACINE / app).rglob("*.py")):
                 parties = chemin.relative_to(RACINE).parts
                 if "tests" in parties or "migrations" in parties:
                     continue
-                for ligne, motif in _filtres_en_date(chemin):
+                for ligne, motif in _filtres_en_date(chemin.read_text(), horodates):
                     fautes.append(f"{chemin.relative_to(RACINE)}:{ligne}: {motif}")
         self.assertEqual(
             fautes, [],
             "Un filtre de période en __date ne peut pas emprunter d'index : "
             "écrivez des bornes avec core.periodes (décision 123).\n" + "\n".join(fautes),
         )
+
+    def test_la_garde_reconnait_chaque_forme(self):
+        source = (
+            "def f(qs, j):\n"
+            "    qs.filter(date__date__gte=j)\n"
+            "    qs.filter(**{'created_at__date__lte': j})\n"
+            "    qs.values('supprime_le__date')\n"
+            "    qs.filter(date__range=(j, j), created_at__gte=j)\n"
+        )
+        lignes = sorted(ligne for ligne, _ in _filtres_en_date(source, champs_horodates()))
+        self.assertEqual(lignes, [2, 3, 4])

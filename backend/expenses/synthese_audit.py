@@ -79,8 +79,9 @@ def synthese(circuit, referentiel, *, debut=None, fin=None):
     période (dates incluses).
     """
     debut, fin = _periode(debut, fin)
-    # En bornes, pas en ``__date`` : 0,8 ms au lieu de 33 sur 600 000
-    # entrées, par l'index de ``created_at`` (décision 123).
+    # En bornes, pas en ``__date`` : l'index de ``created_at`` sert ; sur
+    # 600 000 entrées, la même période filtrée passe de 33 à 0,8 ms à la
+    # liste du journal (décision 123).
     periode = entre_les_jours("created_at", debut, fin)
     circuit = circuit.filter(periode)
     referentiel = referentiel.filter(periode)

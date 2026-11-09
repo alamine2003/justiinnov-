@@ -300,3 +300,25 @@ describe("Pilotage — chargement en échec", () => {
     expect(screen.queryByText(/Aucune enveloppe/)).toBeNull()
   })
 })
+
+describe("Pilotage — devise de consolidation", () => {
+  it("annonce la devise que le serveur renvoie, pas une devise écrite en dur", async () => {
+    profil = { has_global_scope: true, countries: [] } as Partial<Me>
+    const reponse = tableauDeBord()
+    fetchDashboard.mockResolvedValue({ ...reponse, totals: { ...reponse.totals, currency: "EUR" } })
+
+    monter()
+
+    expect(await screen.findByText(/convertie en EUR\./)).toBeInTheDocument()
+  })
+
+  it("n'écrit pas « convertie en . » quand le tableau de bord ne se charge pas", async () => {
+    profil = { has_global_scope: true, countries: [] } as Partial<Me>
+    fetchDashboard.mockRejectedValue(new Error("hors ligne"))
+
+    monter()
+
+    await waitFor(() => expect(fetchDashboard).toHaveBeenCalled())
+    expect(screen.queryByText(/convertie en/)).not.toBeInTheDocument()
+  })
+})

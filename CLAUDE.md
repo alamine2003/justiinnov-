@@ -390,6 +390,7 @@ l'application.
 | Serveur, supervision et BI Grafana, pgAdmin, sauvegardes | `deploy/README.md` |
 | Schéma `bi` (vues du BI de pilotage) et tableaux Grafana | `backend/reporting/bi/`, `deploy/grafana/pilotage.py` |
 | Comportement sous panne : ce qui a cédé, ce qui tient, ce qui reste | `docs/audit-resilience.md` |
+| Revue d'architecture : écarts SOLID corrigés et restants, par priorité | `docs/revue-architecture-2026-11.md` (décision 124) |
 | Infrastructure de la base : dimensionnement, sauvegardes, reprise | `docs/infra-base-de-donnees.md` |
 
 ## Conventions
