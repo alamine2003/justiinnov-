@@ -100,6 +100,33 @@ class ManagerSerializer(serializers.ModelSerializer):
         ]
 
 
+class MotifExigeMixin(serializers.Serializer):
+    """Toute modification dit pourquoi, et le motif reste au journal
+    (décision 109) : projets, types de projets, types de dossiers.
+
+    Le champ ``motif`` est déclaré ici une fois ; :meth:`exiger_le_motif`
+    porte la règle, appelée par ``validate`` à l'endroit où chaque
+    sérialiseur la veut ; :meth:`prendre_le_motif` le retire des données
+    validées pour la vue, qui le confie à ``motif_du_journal``.
+    """
+
+    motif = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, max_length=1000,
+        label=_("Motif"),
+    )
+
+    def exiger_le_motif(self, attrs):
+        if not (attrs.get("motif") or "").strip():
+            raise serializers.ValidationError(
+                {"motif": _("Indiquez le motif de la modification : il reste au journal.")}
+            )
+
+    def prendre_le_motif(self):
+        """Le motif, retiré des données à enregistrer : il va au journal,
+        pas dans le modèle."""
+        return self.validated_data.pop("motif", "").strip()
+
+
 class PaysFigeMixin:
     """Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
 
@@ -165,7 +192,7 @@ class CostCenterSerializer(serializers.ModelSerializer):
         ]
 
 
-class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
+class ProjectSerializer(PaysFigeMixin, MotifExigeMixin, serializers.ModelSerializer):
     """Un projet, son type et sa référence (décision 100).
 
     La référence, l'année et le rang sont attribués à la création
@@ -193,12 +220,7 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
         queryset=Team.objects.all(), write_only=True, required=False, allow_null=True,
         label=_("Équipe"),
     )
-    #: Pourquoi le projet change : exigé à chaque modification (décision
-    #: 109), gardé au journal.
-    motif = serializers.CharField(
-        write_only=True, required=False, allow_blank=True, max_length=1000,
-        label=_("Motif"),
-    )
+    # ``motif`` vient de MotifExigeMixin : exigé à chaque modification.
     RELATIONS_QUI_RETIENNENT = ("expenses", "budgets", "dossiers")
 
     class Meta:
@@ -254,10 +276,7 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"name": _("Le titre d'un projet se change par « Renommer », côté pays.")}
             )
-        if not (attrs.get("motif") or "").strip():
-            raise serializers.ValidationError(
-                {"motif": _("Indiquez le motif de la modification : il reste au journal.")}
-            )
+        self.exiger_le_motif(attrs)
         if "kind" in attrs and attrs["kind"] != instance.kind:
             if instance.is_historical:
                 raise serializers.ValidationError(
@@ -276,7 +295,7 @@ class ProjectSerializer(PaysFigeMixin, serializers.ModelSerializer):
         return attrs
 
 
-class ProjectTypeSerializer(serializers.ModelSerializer):
+class ProjectTypeSerializer(MotifExigeMixin, serializers.ModelSerializer):
     """Un type de projet de la liste commune (décision 119).
 
     Le ``code`` est calculé du nom à la création et ne se saisit jamais :
@@ -291,10 +310,6 @@ class ProjectTypeSerializer(serializers.ModelSerializer):
     #: Nombre de projets du type, toutes filiales : servi au siège seul,
     #: nul pour un compte de pays (``ProjectTypeViewSet.get_queryset``).
     projets = serializers.IntegerField(read_only=True, allow_null=True, default=None)
-    motif = serializers.CharField(
-        write_only=True, required=False, allow_blank=True, max_length=1000,
-        label=_("Motif"),
-    )
 
     class Meta:
         model = ProjectType
@@ -329,14 +344,12 @@ class ProjectTypeSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        if self.instance is not None and not (attrs.get("motif") or "").strip():
-            raise serializers.ValidationError(
-                {"motif": _("Indiquez le motif de la modification : il reste au journal.")}
-            )
+        if self.instance is not None:
+            self.exiger_le_motif(attrs)
         return attrs
 
 
-class DossierKindSerializer(serializers.ModelSerializer):
+class DossierKindSerializer(MotifExigeMixin, serializers.ModelSerializer):
     """Un type de dossier de la liste commune (décision 101).
 
     Son type de projet ne change plus dès qu'un dossier l'emploie : les
@@ -349,11 +362,6 @@ class DossierKindSerializer(serializers.ModelSerializer):
     )
     project_kind_display = serializers.CharField(
         source="project_kind.libelle", read_only=True
-    )
-    #: Pourquoi le type change : exigé à chaque modification (décision 109).
-    motif = serializers.CharField(
-        write_only=True, required=False, allow_blank=True, max_length=1000,
-        label=_("Motif"),
     )
 
     class Meta:
@@ -392,10 +400,8 @@ class DossierKindSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"project_kind": _("Des dossiers emploient ce type : son type de projet ne change plus.")}
             )
-        if instance is not None and not (attrs.get("motif") or "").strip():
-            raise serializers.ValidationError(
-                {"motif": _("Indiquez le motif de la modification : il reste au journal.")}
-            )
+        if instance is not None:
+            self.exiger_le_motif(attrs)
         return attrs
 
 

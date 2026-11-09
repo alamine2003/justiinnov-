@@ -52,14 +52,15 @@ circuit) < `reporting` (tableau de bord, alertes, imports, exports). Trois
 primitives portent les règles transversales, tout le reste leur délègue :
 le **journal** (`core.journal.tracer`, seule écriture de `ChangeLog` et
 `AuditLog`), le **périmètre** (`accounts.perimetre.filtrer`, seul filtre par
-pays et par équipe, appliqué sur le queryset) et les **transitions**
+pays et par équipe, appliqué sur le queryset ; `exiger_dans_le_perimetre`
+pour un objet déjà en main) et les **transitions**
 (`expenses/transitions.py`, `budget/transitions.py` : les règles du circuit
 sont des services ; une vue ne porte que verrou HTTP, sérialisation et
 réponse). Le contrat d'API est **généré** depuis le code
 (`docs/api/schema.json`, `frontend/src/lib/types.generated.ts`, section
 « API REST ») ; la suite backend — neuf cents tests, moins de dix secondes
 en parallèle — se lance sur une base privée (section « Tests »). Entités,
-champs et décisions numérotées (38 à 41 pour ce qui précède) sont dans
+champs et décisions numérotées (38 à 41 et 124 pour ce qui précède) sont dans
 [`docs/model-de-donnees.md`](docs/model-de-donnees.md), qui fait foi.
 
 Chaque index de la base sert une requête nommée sur une **carte** que la

@@ -8,10 +8,18 @@ from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from accounts.models import Role
-from accounts.perimetre import ChampCloisonne, comptes_couvrant, filtrer
+from accounts.perimetre import (
+    PAYS_ENTIER,
+    ChampCloisonne,
+    comptes_couvrant,
+    exiger_dans_le_perimetre,
+    filtrer,
+    voit,
+)
 from accounts.permissions import get_access
 from accounts.tests.test_scoping import ScopingTestCase, make_user
 from core.models import Country, Manager, Team
+from core.regles import HorsPerimetre
 from expenses.models import Dossier
 
 
@@ -100,6 +108,29 @@ class FiltrerTests(ScopingTestCase):
                         Dossier.objects.filter(pk=dossier.pk), get_access(compte), equipe="team"
                     ).exists()
                     self.assertEqual(compte in prevenus, voit)
+
+    def test_voit_repond_comme_filtrer(self):
+        """Décision 124 : un objet en main se juge par la même règle que la
+        liste — pour chaque compte, chaque dossier (équipe comprise, ou
+        absente), cloisonné par équipe ou lu par pays entier."""
+        comptes = [
+            self.rep_togo, self.rep_lome, self.rep_kara, self.rh_togo,
+            self.siege, self.controleur, self.sans_profil,
+        ]
+        for nom, dossier in self.dossiers.items():
+            for compte in comptes:
+                access = get_access(compte)
+                for equipe, team_id in (("team", dossier.team_id), (None, PAYS_ENTIER)):
+                    with self.subTest(dossier=nom, compte=compte.username, equipe=equipe):
+                        attendu = filtrer(
+                            Dossier.objects.filter(pk=dossier.pk), access, equipe=equipe
+                        ).exists()
+                        self.assertEqual(voit(access, dossier.country_id, team_id), attendu)
+                        if attendu:
+                            exiger_dans_le_perimetre(access, dossier.country_id, team_id)
+                        else:
+                            with self.assertRaises(HorsPerimetre):
+                                exiger_dans_le_perimetre(access, dossier.country_id, team_id)
 
     @staticmethod
     def _choix(user, champ):

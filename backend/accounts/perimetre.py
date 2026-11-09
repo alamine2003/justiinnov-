@@ -18,7 +18,9 @@ et chacun pouvait dériver. La règle vit ici, une fois :
 
 :func:`filtrer` la lit depuis le compte (« que voit-il ? ») ;
 :func:`comptes_couvrant` la lit depuis l'objet (« qui le voit ? »), pour
-les notifications. Un test vérifie que les deux répondent la même chose.
+les notifications ; :func:`voit` et :func:`exiger_dans_le_perimetre` la
+lisent pour un objet déjà chargé, dans les services (décision 124). Des
+tests vérifient que toutes répondent la même chose.
 :class:`ChampCloisonne` l'applique aux clés étrangères d'une charge utile.
 """
 
@@ -26,6 +28,7 @@ from django.db.models import Count, Q
 from rest_framework import serializers
 
 from core.models import Country
+from core.regles import HorsPerimetre
 
 from .models import HEADQUARTERS_ROLES, Role
 from .permissions import get_access
@@ -99,6 +102,33 @@ def compter_par_pays(objets, access):
 #: rattachés à des équipes (voir le module), qui ne doivent donc pas en
 #: être prévenus.
 PAYS_ENTIER = object()
+
+
+def voit(access, country_id, team_id=PAYS_ENTIER):
+    """``access`` voit-il un objet du pays ``country_id`` et de l'équipe
+    ``team_id`` ? La règle de :func:`filtrer`, pour un objet déjà en main.
+
+    ``team_id`` vaut :data:`PAYS_ENTIER` pour une ressource qui ne se
+    cloisonne pas par équipe (une enveloppe, un objet de la corbeille) ;
+    ``None`` pour une ressource cloisonnée qui n'en porte pas — elle échappe
+    alors au manager rattaché à des équipes, comme dans :func:`filtrer`.
+    Sans droits (``access`` nul), rien.
+    """
+    if access is None:
+        return False
+    if not access.has_global_scope and country_id not in access.country_ids:
+        return False
+    if team_id is not PAYS_ENTIER and access.team_ids is not None:
+        return team_id in access.team_ids
+    return True
+
+
+def exiger_dans_le_perimetre(access, country_id, team_id=PAYS_ENTIER):
+    """Refus ``HorsPerimetre`` — l'objet n'existe pas pour ce compte — si
+    :func:`voit` dit non. Les services s'en servent pour revérifier un objet
+    qu'une vue a déjà trouvé, ou qu'un import, une commande leur passent."""
+    if not voit(access, country_id, team_id):
+        raise HorsPerimetre()
 
 
 def comptes_couvrant(users, country, equipe=PAYS_ENTIER):

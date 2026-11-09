@@ -376,8 +376,8 @@ class ProjectViewSet(ScopedViewSet):
         from expenses.predefinis import creer_les_dossiers_predefinis
 
         self._check_country_scope(serializer)
+        serializer.prendre_le_motif()
         donnees = dict(serializer.validated_data)
-        donnees.pop("motif", None)
         equipe = self._equipe_des_dossiers(donnees.pop("team", None))
         with transaction.atomic():
             projet = creer_projet(Project(**donnees))
@@ -399,7 +399,7 @@ class ProjectViewSet(ScopedViewSet):
         # Import local, comme à la création.
         from expenses.predefinis import EQUIPE_DU_PROJET, creer_les_dossiers_predefinis
 
-        motif = serializer.validated_data.pop("motif", "").strip()
+        motif = serializer.prendre_le_motif()
         a_typer = not serializer.instance.kind_id and not serializer.instance.is_historical
         with transaction.atomic(), motif_du_journal(motif):
             projet = serializer.save()
@@ -515,13 +515,12 @@ class ProjectTypeViewSet(NoDestroyModelViewSet):
         return super().get_queryset().annotate(projets=projets)
 
     def perform_update(self, serializer):
-        motif = serializer.validated_data.pop("motif", "").strip()
-        with motif_du_journal(motif):
+        with motif_du_journal(serializer.prendre_le_motif()):
             serializer.save()
         serializer.instance = self.get_queryset().get(pk=serializer.instance.pk)
 
     def perform_create(self, serializer):
-        serializer.validated_data.pop("motif", None)
+        serializer.prendre_le_motif()
         try:
             with transaction.atomic():
                 serializer.save()
@@ -552,12 +551,11 @@ class DossierKindViewSet(NoDestroyModelViewSet):
     write_capability = "dossier_kinds.manage"
 
     def perform_update(self, serializer):
-        motif = serializer.validated_data.pop("motif", "").strip()
-        with motif_du_journal(motif):
+        with motif_du_journal(serializer.prendre_le_motif()):
             serializer.save()
 
     def perform_create(self, serializer):
-        serializer.validated_data.pop("motif", None)
+        serializer.prendre_le_motif()
         serializer.save()
 
 

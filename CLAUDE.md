@@ -282,7 +282,9 @@ l'application.
   `add_line`, `upload`, `delete`) et circuit — et l'interface n'a aucune
   liste d'états ni de rôles à recopier.
 - **Le cloisonnement par pays est vérifié sur le queryset**, pas seulement à
-  l'affichage. Un objet hors périmètre répond 404, sans révéler son existence.
+  l'affichage — et, pour un objet déjà en main dans un service, par
+  `accounts.perimetre.exiger_dans_le_perimetre`, jamais par un prédicat
+  réécrit (décision 124). Un objet hors périmètre répond 404, sans révéler son existence.
   Les écritures sont revalidées : une charge utile ne doit pas permettre de
   créer une entité chez le voisin.
 - **Toute action sensible laisse une trace** dans `ChangeLog` ou `AuditLog` :

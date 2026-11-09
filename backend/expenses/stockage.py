@@ -32,6 +32,25 @@ from .models import ElementSupprime, FichierASupprimer, Proof
 
 logger = logging.getLogger(__name__)
 
+#: Pannes du stockage objet au dépôt : botocore lève tout sous ces deux
+#: familles, et elles ne peuvent venir que d'un appel au stockage. Le client
+#: S3 est un détail de cet adaptateur : la vue de dépôt ne connaît que ce
+#: nom.
+#:
+#: ``OSError`` en est volontairement absente, bien qu'elle couvre le disque
+#: plein du stockage local : elle est trop large pour signifier « stockage ».
+#: Une trace d'audit impossible en lève une, et elle doit **remonter** —
+#: la transaction s'annule, la fiche et le fichier disparaissent, et
+#: personne ne reçoit un « réessayez » qui laisserait croire qu'il ne s'est
+#: rien passé (``test_une_trace_impossible_n_emporte_ni_la_fiche_ni_le_fichier``).
+try:  # pragma: no cover - dépend de l'installation
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    PANNES_DE_STOCKAGE = (BotoCoreError, ClientError)
+except ImportError:  # stockage local seul, sans client S3
+    PANNES_DE_STOCKAGE = ()
+
+
 #: Une demande réclamée (``attempted_at`` posé) n'est reprise par un autre
 #: processus qu'après ce délai.
 DELAI_DE_REPRISE = timedelta(minutes=10)
