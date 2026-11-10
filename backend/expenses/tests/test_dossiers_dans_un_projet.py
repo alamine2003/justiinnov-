@@ -219,6 +219,9 @@ class DossiersPredefinisTests(ExpenseTestCase):
         )
 
         self.assertEqual(reponse.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        # La vue ne déclare plus une création qu'elle refusait (décision 125) :
+        # la liste n'annonce plus POST.
+        self.assertNotIn("POST", reponse["Allow"])
 
     def test_le_siege_type_un_ancien_projet_qui_recoit_ses_dossiers(self):
         """Un projet d'avant la 2.0, typé par le siège, reçoit ses dossiers ;

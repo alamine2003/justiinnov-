@@ -81,11 +81,14 @@ def preparer_le_depot(dossier, ligne, remplacee=None):
     if Expense.objects.select_for_update().filter(pk=ligne.pk, dossier=dossier).first() is None:
         raise RegleViolee("expense", _("Cette ligne n'est plus dans ce dossier."))
     if remplacee is not None:
-        # Revalidé ici, hors sérialiseur : la pièce remplacée change d'état,
-        # elle doit relever du même dossier — et de la même ligne — que la
-        # nouvelle.
-        verifier_le_remplacement(remplacee, dossier, ligne)
+        # Revalidée ici, hors sérialiseur, et **sous verrou** : la pièce
+        # remplacée change d'état, elle doit relever du même dossier — et de
+        # la même ligne — que la nouvelle, et ne pas avoir été remplacée
+        # entre-temps. Jugée telle que lue à la validation, un second
+        # « Remplacer » simultané butait sur l'unicité de ``replaces`` et
+        # recevait « doublon » au lieu de « déjà remplacée ».
         remplacee = Proof.objects.select_for_update().get(pk=remplacee.pk)
+        verifier_le_remplacement(remplacee, dossier, ligne)
     return Depot(dossier=dossier, ligne=ligne, remplacee=remplacee)
 
 

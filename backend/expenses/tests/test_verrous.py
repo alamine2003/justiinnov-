@@ -265,6 +265,49 @@ class CourseSurLeCircuit(CourseTestCase):
         codes = sorted([premiere.status_code, seconde.status_code])
         self.assertEqual(codes, [status.HTTP_201_CREATED, status.HTTP_400_BAD_REQUEST], (premiere.data, seconde.data))
         self.assertEqual(Proof.objects.filter(dossier=dossier).count(), 1)
+        # La forme du refus pris sous verrou : celle d'une erreur de champ
+        # (décision 125, le service de dépôt).
+        refus = premiere if premiere.status_code == status.HTTP_400_BAD_REQUEST else seconde
+        self.assertEqual(
+            refus.data, {"file": ["Ce fichier est déjà rattaché à cette ligne (doublon)."]}
+        )
+
+    def test_la_meme_piece_remplacee_deux_fois_en_meme_temps(self):
+        """Deux « Remplacer » sur la même pièce, avec deux fichiers : la
+        pièce remplacée est rejugée sous verrou. Jugée telle que lue à la
+        validation — encore en vigueur pour les deux —, le second butait sur
+        l'unicité de ``replaces`` et recevait « doublon », un message faux
+        (relecture de la 2.4.2). La base gardait une seule succession."""
+        dossier = self._dossier("N-0008", "1000.00")
+        ligne = dossier.expenses.get()
+        depot = self._client(self.owner).post(
+            "/api/proofs/",
+            {"expense": ligne.pk, "kind": "invoice",
+             "file": SimpleUploadedFile("recu.pdf", b"%PDF-1.4 premier", content_type="application/pdf")},
+            format="multipart",
+        )
+        self.assertEqual(depot.status_code, status.HTTP_201_CREATED, depot.data)
+        remplacee = depot.data["id"]
+
+        def remplacer(contenu):
+            return lambda: self._client(self.owner).post(
+                "/api/proofs/",
+                {"expense": ligne.pk, "kind": "invoice", "replaces": remplacee,
+                 "file": SimpleUploadedFile("recu.pdf", contenu, content_type="application/pdf")},
+                format="multipart",
+            )
+
+        premiere, seconde = self._en_course(
+            remplacer(b"%PDF-1.4 second"), remplacer(b"%PDF-1.4 troisieme")
+        )
+
+        self.assertEqual(premiere.status_code, status.HTTP_201_CREATED, premiere.data)
+        self.assertEqual(seconde.status_code, status.HTTP_400_BAD_REQUEST, seconde.data)
+        self.assertEqual(seconde.data, {"replaces": ["Cette pièce a déjà été remplacée."]})
+        self.assertEqual(Proof.objects.filter(replaces=remplacee).count(), 1)
+        self.assertEqual(
+            AuditLog.objects.filter(action=AuditLog.Action.PROOF_REPLACED).count(), 1
+        )
 
 
 class CourseSurLaSaisie(CourseTestCase):
