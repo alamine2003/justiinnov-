@@ -18,6 +18,7 @@ import { useAuth } from "@/context/use-auth"
 import { ApiError } from "@/lib/api"
 import { renameProject } from "@/lib/countries"
 import type { Project } from "@/lib/types"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 
 /**
  * « Renommer le projet » : le titre — quel congrès, quel voyage — se
@@ -62,8 +63,12 @@ function RenameDialog({
   const { t } = useTranslation()
   const [name, setName] = useState(project.name)
   const [motif, setMotif] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Un refus laisse le dialogue ouvert : le titre et le motif saisis ne sont pas perdus.
+  const { saving, error, setError, enregistrer } = useEnregistrement((err) =>
+    err instanceof ApiError && (err.fields.name || err.fields.motif)
+      ? [...(err.fields.name ?? []), ...(err.fields.motif ?? [])].join(" ")
+      : messageDErreur(err, t("projets.renommer.impossible")),
+  )
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -75,21 +80,10 @@ function RenameDialog({
       setError(t("projets.motif.requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       onRenamed(await renameProject(project.id, name.trim(), motif.trim()))
       onOpenChange(false)
-    } catch (err) {
-      // Le dialogue reste ouvert : le titre et le motif saisis ne sont pas perdus.
-      if (err instanceof ApiError && (err.fields.name || err.fields.motif)) {
-        setError([...(err.fields.name ?? []), ...(err.fields.motif ?? [])].join(" "))
-      } else {
-        setError(err instanceof Error ? err.message : t("projets.renommer.impossible"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

@@ -39,7 +39,10 @@ function compte(overrides: Partial<AccountUser>): AccountUser {
   }
 }
 
-vi.mock("@/lib/accounts", () => ({
+// Les fonctions pures du module (`chargeDuCompte`, `perimetreDuRole`) restent
+// les vraies : seuls les appels au serveur sont simulés.
+vi.mock("@/lib/accounts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/accounts")>()),
   fetchUsers: (...args: unknown[]) => fetchUsers(...args),
   createUser: (...args: unknown[]) => createUser(...args),
   updateUser: (...args: unknown[]) => updateUser(...args),

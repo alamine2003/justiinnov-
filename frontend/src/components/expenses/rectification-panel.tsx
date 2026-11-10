@@ -26,6 +26,7 @@ import { approveRectification, refuseRectification } from "@/lib/expenses"
 import { RECTIFICATION_STYLE, WORKFLOW_STYLE } from "@/lib/status-styles"
 import type { Rectification } from "@/lib/types"
 import { formatAmount, formatDate } from "@/lib/utils"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 interface RectificationPanelProps {
   rows: Rectification[]
@@ -180,8 +181,7 @@ function RefuseDialog({
 }) {
   const { t } = useTranslation()
   const [note, setNote] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("depenses.rectification.refus_impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -189,17 +189,11 @@ function RefuseDialog({
       setError(t("depenses.rectification.motif_refus_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await refuseRectification(rectification.id, note.trim())
       await onRefused()
       onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("depenses.rectification.refus_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { ProofPanel } from "./proof-panel"
+import { PiecesDeLaLigne, PiecesDuDossier } from "./proof-panel"
 import type { Proof } from "@/lib/types"
 
 // Le droit `configuration.manage` ne sert qu'à lire la configuration du dépôt ; les
@@ -49,13 +49,24 @@ function piece(overrides: Partial<Proof>): Proof {
   } as Proof
 }
 
-function afficher(proofs: Proof[], props: Partial<Parameters<typeof ProofPanel>[0]> = {}) {
+/** Les pièces rangées sur le dossier : section titrée, vignettes. */
+function afficher(proofs: Proof[], props: Partial<Parameters<typeof PiecesDuDossier>[0]> = {}) {
   return render(
-    <ProofPanel expenseId={9} proofs={proofs} canUpload={false} onChanged={vi.fn()} {...props} />,
+    <PiecesDuDossier expenseId={9} proofs={proofs} canUpload={false} onChanged={vi.fn()} {...props} />,
   )
 }
 
-describe("ProofPanel — contrôle documentaire", () => {
+/** Les pièces d'une ligne, sur sa carte : liste serrée et dépôt. */
+function afficherLaLigne(
+  proofs: Proof[],
+  props: Partial<Parameters<typeof PiecesDeLaLigne>[0]> = {},
+) {
+  return render(
+    <PiecesDeLaLigne expenseId={9} proofs={proofs} canUpload={false} onChanged={vi.fn()} {...props} />,
+  )
+}
+
+describe("Pièces — contrôle documentaire", () => {
   it("propose les décisions que le serveur autorise, sans archivage", () => {
     afficher([piece({ allowed_reviews: ["validated", "rejected"] })])
 
@@ -90,7 +101,7 @@ describe("ProofPanel — contrôle documentaire", () => {
   })
 })
 
-describe("ProofPanel — dépôt", () => {
+describe("Pièces du dossier — dépôt", () => {
   it("propose le dépôt tant que le dossier n'est pas clôturé", () => {
     afficher([], { canUpload: true })
 
@@ -106,11 +117,11 @@ describe("ProofPanel — dépôt", () => {
   })
 })
 
-describe("ProofPanel — la pièce d'une ligne (décision 107)", () => {
+describe("Pièces de la ligne (décision 107)", () => {
   it("dépose sur la ligne : la charge utile porte la ligne, pas le dossier", async () => {
     uploadProof.mockResolvedValue({})
     const onChanged = vi.fn().mockResolvedValue(undefined)
-    afficher([], { canUpload: true, compact: true, onChanged })
+    afficherLaLigne([], { canUpload: true, onChanged })
 
     fireEvent.click(screen.getByRole("button", { name: "Déposer" }))
     const fichier = new File(["%PDF-1.4"], "taxi.pdf", { type: "application/pdf" })
@@ -125,7 +136,7 @@ describe("ProofPanel — la pièce d'une ligne (décision 107)", () => {
   })
 
   it("ne remplace que les pièces de la ligne", () => {
-    afficher([piece({ id: 1, original_name: "taxi.pdf" })], { canUpload: true, compact: true })
+    afficherLaLigne([piece({ id: 1, original_name: "taxi.pdf" })], { canUpload: true })
 
     fireEvent.click(screen.getByRole("button", { name: "Déposer une autre pièce" }))
 
@@ -134,16 +145,15 @@ describe("ProofPanel — la pièce d'une ligne (décision 107)", () => {
   })
 
   it("montre au pays le motif du rejet de la pièce de sa ligne", () => {
-    afficher(
-      [piece({ status: "rejected", status_display: "Rejeté", rejection_reason: "Illisible" })],
-      { compact: true },
-    )
+    afficherLaLigne([
+      piece({ status: "rejected", status_display: "Rejeté", rejection_reason: "Illisible" }),
+    ])
 
     expect(screen.getByText("Rejetée : Illisible")).toBeInTheDocument()
   })
 
   it("ne propose pas le dépôt sans `upload` sur la ligne", () => {
-    afficher([piece({})], { canUpload: false, compact: true })
+    afficherLaLigne([piece({})], { canUpload: false })
 
     expect(screen.queryByRole("button", { name: /Déposer/ })).toBeNull()
     expect(screen.getByText("facture.pdf")).toBeInTheDocument()

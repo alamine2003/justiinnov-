@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 interface ColumnDef<T> {
   key: keyof T | string
@@ -210,8 +211,7 @@ function RowDialog<T extends { id: number }>({
       : defaultForm,
   )
   const [active, setActive] = useState(item && detectActive ? detectActive(item) : true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -220,16 +220,10 @@ function RowDialog<T extends { id: number }>({
       setError(t("pays.lignes.champ_obligatoire", { champ: manquant.label }))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await onSave({ ...form, is_active: active }, item?.id)
       onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

@@ -31,6 +31,7 @@ import {
 import { PROOF_KINDS, proofKindLabel } from "@/lib/labels"
 import { useReferentiel } from "@/lib/referentiel"
 import type { Proof } from "@/lib/types"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 import { formatDate } from "@/lib/utils"
 
 function formatSize(t: TFunction, bytes: number) {
@@ -46,9 +47,8 @@ interface UploadRules {
   formats: string[]
 }
 
-interface ProofPanelProps {
-  /** Le titre de la ligne, pour nommer son bouton de dépôt aux lecteurs d'écran. */
-  ligne?: string
+/** Ce que les deux présentations des pièces ont en commun. */
+interface PiecesProps {
   /**
    * La ligne que les pièces prouvent (décision 107) : un dépôt s'y
    * rattache. `null` pour les pièces d'avant la 2.0, déposées sur tout le
@@ -58,10 +58,6 @@ interface ProofPanelProps {
   proofs: Proof[]
   /** `upload` dans les actions de la ligne : jusqu'à la clôture, par le pays. */
   canUpload: boolean
-  /** Le dossier est clôturé : l'état vide le dit, plutôt que d'inviter à déposer. */
-  closed?: boolean
-  /** Sur la carte d'une ligne : une liste serrée, sans en-tête de section. */
-  compact?: boolean
   onChanged: () => Promise<void>
 }
 
@@ -78,15 +74,13 @@ function reviewChoices(proof: Proof): ReviewChoice[] {
   return REVIEW_CHOICES.filter((choice) => proof.allowed_reviews.includes(choice))
 }
 
-export function ProofPanel({
-  ligne,
-  expenseId,
-  proofs,
-  canUpload: peutDeposer,
-  closed = false,
-  compact = false,
-  onChanged,
-}: ProofPanelProps) {
+/**
+ * Le tronc commun des pièces d'une ligne et de celles du dossier : les
+ * règles de dépôt, le téléchargement, les actions d'une pièce (aperçu,
+ * téléchargement, contrôle, corbeille) et les dialogues (dépôt, contrôle,
+ * aperçu). Chaque présentation n'écrit que sa mise en page.
+ */
+function usePieces({ expenseId, proofs, canUpload: peutDeposer, onChanged }: PiecesProps) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const canUpload = peutDeposer && expenseId !== null
@@ -205,57 +199,89 @@ export function ProofPanel({
     </>
   )
 
-  // Sur la carte d'une ligne : ses pièces, en liste serrée, et le dépôt.
-  if (compact) {
-    return (
-      <div className="space-y-1.5">
-        <FormError>{error}</FormError>
-        {proofs.length > 0 && (
-          <ul className="space-y-1">
-            {proofs.map((proof) => (
-              <li key={proof.id} className="rounded-md border border-border/60 px-2 py-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="truncate text-xs font-medium">{proof.original_name}</span>
-                    <span className="text-xs text-muted-foreground">v{proof.version}</span>
-                    <ProofStatusBadge status={proof.status} label={proof.status_display} />
-                  </span>
-                  {actions(proof)}
-                </div>
-                {/* Un rejet exige un motif : le pays doit pouvoir le lire. */}
-                {proof.rejection_reason && (
-                  <p className="pb-1 text-xs italic text-muted-foreground">
-                    {t("pieces.ligne.motif_rejet", { motif: proof.rejection_reason })}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        {canUpload && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setUploadOpen(true)}
-            // Le nom accessible reprend le texte visible (WCAG 2.5.3) : « Déposer
-            // une autre pièce » ne s'annonçait pas « Déposer la pièce de… ».
-            aria-label={
-              ligne
-                ? proofs.length > 0
-                  ? t("pieces.ligne.remplacer_ou_ajouter_aria", { ligne })
-                  : t("pieces.ligne.deposer_aria", { ligne })
-                : undefined
-            }
-          >
-            <Upload className="mr-1 h-3.5 w-3.5" aria-hidden />
-            {proofs.length > 0 ? t("pieces.ligne.remplacer_ou_ajouter") : t("pieces.deposer")}
-          </Button>
-        )}
-        {dialogues}
-      </div>
-    )
-  }
+  return { canUpload, rules, error, ouvrirLeDepot: () => setUploadOpen(true), actions, dialogues }
+}
+
+/**
+ * Les pièces d'une ligne, sur sa carte (décision 107) : une liste serrée,
+ * sans en-tête de section, et le dépôt.
+ */
+export function PiecesDeLaLigne({
+  ligne,
+  ...props
+}: PiecesProps & {
+  /** Le titre de la ligne, pour nommer son bouton de dépôt aux lecteurs d'écran. */
+  ligne?: string
+}) {
+  const { t } = useTranslation()
+  const { proofs } = props
+  const { canUpload, error, ouvrirLeDepot, actions, dialogues } = usePieces(props)
+
+  return (
+    <div className="space-y-1.5">
+      <FormError>{error}</FormError>
+      {proofs.length > 0 && (
+        <ul className="space-y-1">
+          {proofs.map((proof) => (
+            <li key={proof.id} className="rounded-md border border-border/60 px-2 py-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="truncate text-xs font-medium">{proof.original_name}</span>
+                  <span className="text-xs text-muted-foreground">v{proof.version}</span>
+                  <ProofStatusBadge status={proof.status} label={proof.status_display} />
+                </span>
+                {actions(proof)}
+              </div>
+              {/* Un rejet exige un motif : le pays doit pouvoir le lire. */}
+              {proof.rejection_reason && (
+                <p className="pb-1 text-xs italic text-muted-foreground">
+                  {t("pieces.ligne.motif_rejet", { motif: proof.rejection_reason })}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canUpload && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={ouvrirLeDepot}
+          // Le nom accessible reprend le texte visible (WCAG 2.5.3) : « Déposer
+          // une autre pièce » ne s'annonçait pas « Déposer la pièce de… ».
+          aria-label={
+            ligne
+              ? proofs.length > 0
+                ? t("pieces.ligne.remplacer_ou_ajouter_aria", { ligne })
+                : t("pieces.ligne.deposer_aria", { ligne })
+              : undefined
+          }
+        >
+          <Upload className="mr-1 h-3.5 w-3.5" aria-hidden />
+          {proofs.length > 0 ? t("pieces.ligne.remplacer_ou_ajouter") : t("pieces.deposer")}
+        </Button>
+      )}
+      {dialogues}
+    </div>
+  )
+}
+
+/**
+ * Les pièces rangées sur tout le dossier — celles d'avant la 2.0 : une
+ * section titrée, des vignettes de document, et un état vide qui dit
+ * pourquoi rien ne se dépose.
+ */
+export function PiecesDuDossier({
+  closed = false,
+  ...props
+}: PiecesProps & {
+  /** Le dossier est clôturé : l'état vide le dit, plutôt que d'inviter à déposer. */
+  closed?: boolean
+}) {
+  const { t } = useTranslation()
+  const { proofs } = props
+  const { canUpload, rules, error, ouvrirLeDepot, actions, dialogues } = usePieces(props)
 
   return (
     <div className="space-y-3">
@@ -265,7 +291,7 @@ export function ProofPanel({
           <p className="text-xs text-muted-foreground">{t("pieces.description")}</p>
         </div>
         {canUpload && (
-          <Button size="sm" onClick={() => setUploadOpen(true)}>
+          <Button size="sm" onClick={ouvrirLeDepot}>
             <Upload className="mr-1 h-4 w-4" aria-hidden />
             {t("pieces.deposer")}
           </Button>
@@ -330,7 +356,7 @@ export function ProofPanel({
       {canUpload && proofs.length > 0 && (
         <button
           type="button"
-          onClick={() => setUploadOpen(true)}
+          onClick={ouvrirLeDepot}
           className="flex w-full items-center gap-2.5 rounded-lg border border-dashed border-border p-3 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Upload className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -508,8 +534,7 @@ function ReviewDialog({
   const choices = reviewChoices(proof)
   const [status, setStatus] = useState<ReviewChoice>(choices[0] ?? "validated")
   const [reason, setReason] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("pieces.controle.impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -517,17 +542,11 @@ function ReviewDialog({
       setError(t("pieces.controle.motif_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await reviewProof(proof.id, status, reason)
       await onReviewed()
       onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("pieces.controle.impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

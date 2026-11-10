@@ -13,6 +13,7 @@ import { useAuth } from "@/context/use-auth"
 import { confirmTwoFactor, enrolTwoFactor, totpEnrolmentRequired } from "@/lib/accounts"
 import { ApiError } from "@/lib/api"
 import type { TotpEnrolment } from "@/lib/types"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 
 /**
  * Enrôlement de la double authentification.
@@ -36,8 +37,14 @@ export function TotpNotice() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [code, setCode] = useState("")
   const [codeError, setCodeError] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Un code refusé s'affiche sous le champ, sans le vider.
+  const { saving, error, enregistrer } = useEnregistrement((err) => {
+    if (err instanceof ApiError && err.fields.code) {
+      setCodeError(err.fields.code.join(" "))
+      return null
+    }
+    return messageDErreur(err, t("auth.totp.confirmation_impossible"))
+  })
   const [copied, setCopied] = useState(false)
 
   const aEnroler = me?.totp_confirmed === false
@@ -92,24 +99,13 @@ export function TotpNotice() {
       setCodeError(t("auth.totp.code_six_chiffres"))
       return
     }
-    setSaving(true)
-    setError(null)
     setCodeError(null)
-    try {
+    await enregistrer(async () => {
       await confirmTwoFactor(saisi)
       // Le profil relu porte `totp_confirmed: true` : la garde de routes
       // rend alors l'application.
       await refreshProfile()
-    } catch (err) {
-      // Un code refusé s'affiche sans vider le champ.
-      if (err instanceof ApiError && err.fields.code) {
-        setCodeError(err.fields.code.join(" "))
-      } else {
-        setError(err instanceof Error ? err.message : t("auth.totp.confirmation_impossible"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

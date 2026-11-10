@@ -43,4 +43,16 @@ describe("Configuration — onglet lu dans l'URL", () => {
 
     expect(screen.getByText("Section permissions")).toBeInTheDocument()
   })
+
+  it("tire ses onglets du registre des sections, dans l'ordre", () => {
+    monter("")
+
+    expect(screen.getAllByRole("tab").map((onglet) => onglet.textContent)).toEqual([
+      "Général",
+      "Utilisateurs",
+      "Pays",
+      "Types de projets",
+      "Permissions",
+    ])
+  })
 })

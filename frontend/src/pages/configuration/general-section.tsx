@@ -18,6 +18,7 @@ import { OVERRUN_POLICIES, overrunPolicyLabel } from "@/lib/labels"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import type { OverrunPolicy, WorkflowConfiguration } from "@/lib/types"
 import { useAuth } from "@/context/use-auth"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 import { useQuery } from "@/lib/use-query"
 import { normalizeDecimal } from "@/lib/utils"
 import { RatesSection } from "@/pages/configuration/rates-section"
@@ -166,20 +167,13 @@ function InterrupteurDeLaCorbeille({
 }) {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { saving, error, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
   const reglable = can("corbeille.supprimer")
 
   const changer = async (valeur: boolean) => {
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await onSaved(await updateWorkflowConfiguration({ suppressions_ouvertes: valeur }))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (
@@ -295,9 +289,11 @@ function WorkflowForm({
     default_overrun_policy: workflow.default_overrun_policy,
   })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
-  const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement((e) => {
+    if (e instanceof ApiError) setFieldErrors(e.fields)
+    return messageDErreur(e, t("erreurs.enregistrement_impossible"))
+  })
 
   const set = <K extends keyof WorkflowDraft>(key: K, value: WorkflowDraft[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -308,23 +304,16 @@ function WorkflowForm({
     event.preventDefault()
     const { values, errors } = validateWorkflow(t, draft)
     setFieldErrors(errors)
-    setError(null)
     if (!values) {
       setError(t("configuration.workflow.corriger"))
       return
     }
-    setSaving(true)
-    try {
+    await enregistrer(async () => {
       const result = await updateWorkflowConfiguration(values)
       setSaved(true)
       // Un profil illisible après coup ne remet pas en cause l'enregistrement.
       await onSaved(result).catch(() => undefined)
-    } catch (e) {
-      if (e instanceof ApiError) setFieldErrors(e.fields)
-      setError(e instanceof Error ? e.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   const champ = (key: keyof WorkflowDraft) => fieldErrors[key]?.join(" ")

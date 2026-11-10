@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError } from "@/lib/api"
 import type { DossierDetail } from "@/lib/types"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 
 /**
  * Bouton « Renommer » et son dialogue (décision 104).
@@ -67,8 +68,12 @@ function RenameDialog({
 }) {
   const { t } = useTranslation()
   const [label, setLabel] = useState(actuel)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Un refus laisse le dialogue ouvert : le titre saisi n'est pas perdu.
+  const { saving, error, setError, enregistrer } = useEnregistrement((err) =>
+    err instanceof ApiError && err.fields.label
+      ? err.fields.label.join(" ")
+      : messageDErreur(err, t("dossiers.renommer.impossible")),
+  )
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -76,18 +81,10 @@ function RenameDialog({
       setError(t("dossiers.renommer.titre_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await onConfirm(label.trim())
       onOpenChange(false)
-    } catch (err) {
-      // Le dialogue reste ouvert : le titre saisi n'est pas perdu.
-      if (err instanceof ApiError && err.fields.label) setError(err.fields.label.join(" "))
-      else setError(err instanceof Error ? err.message : t("dossiers.renommer.impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (
