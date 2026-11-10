@@ -5,6 +5,7 @@ import type {
   Me,
   Paginated,
   PermissionMatrix,
+  Role,
   TotpEnrolment,
   WorkflowConfiguration,
 } from "@/lib/types"
@@ -70,6 +71,85 @@ export function createUser(data: unknown) {
 
 export function updateUser(id: number, data: unknown) {
   return apiPatch<AccountUser>(`/users/${id}/`, data)
+}
+
+/** Un rôle tel que la matrice le décrit : libellé, siège, périmètre toujours global. */
+export type RoleDeLaMatrice = PermissionMatrix["roles"][number]
+
+/**
+ * Le périmètre qu'appelle un rôle, lu sur la matrice du serveur.
+ *
+ * Tant que la matrice n'est pas chargée, le rôle reste inconnu : rien n'est
+ * annoncé et le serveur tranche, plutôt que de recopier ici une table de
+ * rôles qui divergerait. Le siège est toujours global : rien à cocher ; le
+ * manager coche son pays (décision 89). Les équipes ne concernent qu'un
+ * compte de pays, et seulement celles des pays cochés.
+ */
+export function perimetreDuRole(roleInfo: RoleDeLaMatrice | undefined) {
+  const isHeadquarters = Boolean(roleInfo?.siege)
+  return {
+    isHeadquarters,
+    alwaysGlobal: Boolean(roleInfo?.always_global),
+    teamsApply: Boolean(roleInfo) && !isHeadquarters,
+  }
+}
+
+/** Ce que le formulaire d'un compte a en main au moment d'enregistrer. */
+export interface SaisieDuCompte {
+  username: string
+  firstName: string
+  lastName: string
+  email: string
+  role: Role
+  active: boolean
+  countryIds: number[]
+  /** Le périmètre a-t-il été touché ? Sinon il n'est pas renvoyé. */
+  countriesTouched: boolean
+  teamIds: number[]
+  teamsTouched: boolean
+  /** Vide : le mot de passe ne change pas. */
+  password: string
+}
+
+/**
+ * La charge utile d'une création (`editing` nul) ou d'une modification de
+ * compte : seulement ce qui doit partir.
+ *
+ * Le périmètre n'est envoyé que s'il a été touché : un PATCH qui renvoie la
+ * liste telle quelle réécrit une trace de changement pour rien.
+ */
+export function chargeDuCompte(
+  editing: AccountUser | null,
+  etat: SaisieDuCompte,
+  roleInfo: RoleDeLaMatrice | undefined,
+): Record<string, unknown> {
+  const { alwaysGlobal, teamsApply } = perimetreDuRole(roleInfo)
+  const payload: Record<string, unknown> = {
+    first_name: etat.firstName,
+    last_name: etat.lastName,
+    email: etat.email,
+    role: etat.role,
+    is_active: etat.active,
+  }
+  // L'identifiant ne se change pas : il signe les traces du journal.
+  if (!editing) payload.username = etat.username
+  const roleChanged = Boolean(editing) && etat.role !== editing?.role
+  if (alwaysGlobal) {
+    // Aucun périmètre pour un rôle toujours global : la liste est vidée
+    // si le compte en avait un, ou si le rôle vient de changer.
+    if (!editing || roleChanged || editing.countries.length > 0) payload.countries = []
+  } else if (!editing || etat.countriesTouched || roleChanged) {
+    // Un changement de rôle renvoie le périmètre tel qu'affiché, pour
+    // que le serveur le revalide contre le nouveau rôle.
+    payload.countries = etat.countryIds
+  }
+  if (teamsApply && (!editing || etat.teamsTouched || etat.countriesTouched || roleChanged)) {
+    payload.teams = etat.teamIds
+  } else if (!teamsApply && editing?.teams && editing.teams.length > 0) {
+    payload.teams = []
+  }
+  if (etat.password) payload.password = etat.password
+  return payload
 }
 
 // ---------------------------------------------------------------------------

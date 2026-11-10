@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 import { AlertTriangle, Loader2, Pencil, Plus, ShieldOff, Users } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -30,14 +30,16 @@ import {
 } from "@/components/ui/table"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import {
+  chargeDuCompte,
   createUser,
   fetchPermissionMatrix,
   fetchUsers,
+  perimetreDuRole,
   resetTwoFactor,
   updateUser,
 } from "@/lib/accounts"
 import { useAuth } from "@/context/use-auth"
-import { fetchCountries, fetchCountry } from "@/lib/countries"
+import { fetchCountries } from "@/lib/countries"
 import { ROLES, roleLabel } from "@/lib/labels"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import { STATUS_TONES } from "@/lib/status-styles"
@@ -46,11 +48,11 @@ import {
   type CountrySummary,
   type PermissionMatrix,
   type Role,
-  type Team,
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { cn } from "@/lib/utils"
 import { useEnregistrement } from "@/lib/use-enregistrement"
+import { useEquipesDesPays } from "@/lib/use-equipes-des-pays"
 
 export function UsersSection() {
   const { t } = useTranslation()
@@ -411,57 +413,17 @@ function UserForm({
   const [countriesTouched, setCountriesTouched] = useState(false)
   const [teamIds, setTeamIds] = useState<number[]>(editing?.teams ?? [])
   const [teamsTouched, setTeamsTouched] = useState(false)
-  // Équipes de chaque pays coché, lues sur sa fiche à mesure des coches.
-  const [teamsByCountry, setTeamsByCountry] = useState<Record<number, Team[]>>({})
   const [password, setPassword] = useState("")
   const [active, setActive] = useState(editing?.is_active ?? true)
   const { saving, error, setError, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
 
-  // Le rattachement au siège vient du serveur. Tant que la matrice n'est pas
-  // chargée, il reste inconnu : le formulaire propose alors les rôles sans
-  // annoncer leur périmètre et laisse le serveur trancher, plutôt que de
-  // recopier ici une table de rôles qui divergerait. Le siège est toujours
-  // global : rien à cocher ; le manager coche son pays (décision 89).
+  // Le rattachement au siège vient du serveur (`perimetreDuRole`) : tant que
+  // la matrice n'est pas chargée, le formulaire propose les rôles sans
+  // annoncer leur périmètre et laisse le serveur trancher.
   const roleInfo = roles.find((r) => r.value === role)
-  const isHeadquarters = Boolean(roleInfo?.siege)
-  const alwaysGlobal = Boolean(roleInfo?.always_global)
-  // Les équipes ne concernent qu'un compte de pays, et seulement celles des
-  // pays cochés.
-  const teamsApply = Boolean(roleInfo) && !isHeadquarters
-
-  // Les pays déjà demandés, hors de l'état : sans cela, `teamsByCountry`
-  // figurait dans les dépendances de l'effet, chaque réponse le relançait, et
-  // son nettoyage jetait les requêtes encore en vol — k pays cochés
-  // produisaient k + (k−1) + … requêtes pour k fiches.
-  const demandes = useRef(new Set<number>())
-
-  useEffect(() => {
-    if (!teamsApply) return
-    const missing = countryIds.filter((id) => !demandes.current.has(id))
-    if (missing.length === 0) return
-    let active = true
-    for (const id of missing) {
-      demandes.current.add(id)
-      fetchCountry(id)
-        .then((country) => {
-          if (!active) return
-          setTeamsByCountry((current) => ({
-            ...current,
-            [id]: country.teams.filter((team) => team.is_active),
-          }))
-        })
-        .catch(() => {
-          // Sans la fiche, aucune équipe à proposer pour ce pays : le
-          // serveur revalidera de toute façon. Le pays sort des demandes
-          // pour qu'un nouveau cochage puisse retenter.
-          demandes.current.delete(id)
-          if (active) setTeamsByCountry((current) => ({ ...current, [id]: [] }))
-        })
-    }
-    return () => {
-      active = false
-    }
-  }, [teamsApply, countryIds])
+  const { isHeadquarters, alwaysGlobal, teamsApply } = perimetreDuRole(roleInfo)
+  // Équipes de chaque pays coché, lues sur sa fiche à mesure des coches.
+  const teamsByCountry = useEquipesDesPays(countryIds, teamsApply)
 
   const eligibleTeams = countryIds.flatMap((id) => teamsByCountry[id] ?? [])
 
@@ -508,32 +470,23 @@ function UserForm({
       return
     }
     await enregistrer(async () => {
-      const payload: Record<string, unknown> = {
-        first_name: firstName,
-        last_name: lastName,
-        email,
-        role,
-        is_active: active,
-      }
-      // L'identifiant ne se change pas : il signe les traces du journal.
-      if (!editing) payload.username = username
-      const roleChanged = Boolean(editing) && role !== editing?.role
-      if (alwaysGlobal) {
-        // Aucun périmètre pour un rôle toujours global : la liste est vidée
-        // si le compte en avait un, ou si le rôle vient de changer.
-        if (!editing || roleChanged || editing.countries.length > 0) payload.countries = []
-      } else if (!editing || countriesTouched || roleChanged) {
-        // Un changement de rôle renvoie le périmètre tel qu'affiché, pour
-        // que le serveur le revalide contre le nouveau rôle.
-        payload.countries = countryIds
-      }
-      if (teamsApply && (!editing || teamsTouched || countriesTouched || roleChanged)) {
-        payload.teams = teamIds
-      } else if (!teamsApply && editing?.teams && editing.teams.length > 0) {
-        payload.teams = []
-      }
-      if (password) payload.password = password
-
+      const payload = chargeDuCompte(
+        editing,
+        {
+          username,
+          firstName,
+          lastName,
+          email,
+          role,
+          active,
+          countryIds,
+          countriesTouched,
+          teamIds,
+          teamsTouched,
+          password,
+        },
+        roleInfo,
+      )
       if (editing) {
         await updateUser(editing.id, payload)
       } else {
