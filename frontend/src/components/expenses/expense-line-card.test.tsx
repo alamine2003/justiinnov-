@@ -30,7 +30,6 @@ function afficher(expense: Expense, proofs: Proof[] = []) {
       <CarteDeLigne
         expense={expense}
         proofs={proofs}
-        closed={false}
         currency="FCFA"
         deleting={false}
         onEdit={vi.fn()}

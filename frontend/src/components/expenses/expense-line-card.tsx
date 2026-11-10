@@ -4,7 +4,7 @@ import { MettreALaCorbeille } from "@/components/corbeille/mettre-a-la-corbeille
 import { Button } from "@/components/ui/button"
 import { BarreEcart } from "@/components/ui/charts"
 import { OriginalAmount } from "@/components/expenses/original-amount"
-import { ProofPanel } from "@/components/expenses/proof-panel"
+import { PiecesDeLaLigne } from "@/components/expenses/proof-panel"
 import { RequestRectification } from "@/components/expenses/request-rectification"
 import { StatusBadge } from "@/components/expenses/status-badge"
 import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
@@ -29,7 +29,6 @@ import { cn, formatAmount, formatDateIn } from "@/lib/utils"
 export function CarteDeLigne({
   expense,
   proofs,
-  closed,
   currency,
   deleting,
   onEdit,
@@ -43,7 +42,6 @@ export function CarteDeLigne({
   expense: Expense
   /** Les pièces de la ligne, prises dans celles du dossier. */
   proofs: Proof[]
-  closed: boolean
   currency: string
   deleting: boolean
   onEdit: (expense: Expense) => void
@@ -161,13 +159,11 @@ export function CarteDeLigne({
             </span>
           )}
         </p>
-        <ProofPanel
-          compact
+        <PiecesDeLaLigne
           ligne={expense.title}
           expenseId={expense.id}
           proofs={proofs}
           canUpload={expense.allowed_actions.includes("upload")}
-          closed={closed}
           onChanged={onProofsChanged}
         />
       </div>

@@ -13,7 +13,7 @@ import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { MettreALaCorbeille } from "@/components/corbeille/mettre-a-la-corbeille"
 import { CarteDeLigne } from "@/components/expenses/expense-line-card"
 import { ExpenseForm } from "@/components/expenses/expense-form"
-import { ProofPanel } from "@/components/expenses/proof-panel"
+import { PiecesDuDossier } from "@/components/expenses/proof-panel"
 import { RectificationPanel } from "@/components/expenses/rectification-panel"
 import { RenameDossier } from "@/components/expenses/rename-dossier"
 import { ReopenDossier } from "@/components/expenses/reopen-dossier"
@@ -420,7 +420,6 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
                     onRequestRectification={requestLineRectification}
                     onError={setActionError}
                     proofs={piecesDeLaLigne(expense.id)}
-                    closed={closed}
                     onProofsChanged={async () => {
                       query.reload()
                     }}
@@ -448,7 +447,7 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
             {piecesDAvant.length > 0 && (
               <Card className="border-border/60 shadow-sm">
                 <CardContent>
-                  <ProofPanel
+                  <PiecesDuDossier
                     expenseId={null}
                     proofs={piecesDAvant}
                     canUpload={false}
