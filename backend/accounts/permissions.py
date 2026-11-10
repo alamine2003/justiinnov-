@@ -558,6 +558,35 @@ def matrice_effective(configuration=None):
     return _MEMO_MATRICE["matrice"]
 
 
+def _photographie(configuration):
+    """Capacité → rôles triés, tels qu'appliqués : ce que le journal compare."""
+    return {cle: sorted(roles) for cle, roles in matrice_effective(configuration).items()}
+
+
+def enregistrer_la_matrice(configuration, choix):
+    """Enregistre les choix ``{capacité: rôles}`` ; rend ``(avant, apres)``.
+
+    ``configuration`` est celle que l'appelant a verrouillée
+    (``WorkflowConfiguration.verrouiller``) ; ``choix`` a été validé — clés
+    connues, verrous respectés — par ``PermissionMatrixUpdateSerializer``.
+    Les deux photographies sont la matrice effective entière, triée, avant
+    et après : à l'appelant d'en tirer ce qui a changé et de le tracer.
+
+    Revenir au défaut efface le choix : la configuration ne garde que ce
+    qui s'en écarte, et un défaut qui change suit.
+    """
+    avant = _photographie(configuration)
+    retenus = dict(configuration.capability_roles or {})
+    for cle, roles in choix.items():
+        if set(roles) == set(CAPACITES_PAR_CLE[cle].defaut):
+            retenus.pop(cle, None)
+        else:
+            retenus[cle] = roles
+    configuration.capability_roles = retenus
+    configuration.save(update_fields=["capability_roles", "updated_at"])
+    return avant, _photographie(configuration)
+
+
 def roles_pour(cle, configuration=None):
     """Rôles qui portent la capacité ``cle``."""
     return matrice_effective(configuration)[cle]

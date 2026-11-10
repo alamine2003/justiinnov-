@@ -565,3 +565,14 @@ class WorkflowConfiguration(models.Model):
         configuration, _ = cls.objects.get_or_create(pk=1)
         cache.set(cls.CACHE_KEY, configuration, cls.CACHE_TTL)
         return configuration
+
+    @classmethod
+    def verrouiller(cls):
+        """Configuration lue en base et verrouillée, pour la modifier.
+
+        Pas depuis le cache : deux modifications simultanées se succèdent
+        au lieu de s'écraser, et le journal décrit exactement l'état que
+        chacune a trouvé. À appeler dans une transaction.
+        """
+        configuration, _ = cls.objects.select_for_update().get_or_create(pk=1)
+        return configuration

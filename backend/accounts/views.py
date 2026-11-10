@@ -5,11 +5,11 @@ dans ``core`` : ils reposent sur les rôles, que ``core`` ne connaît pas
 (décision 40)."""
 
 import json
+from contextlib import contextmanager
 
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.utils import timezone
 from django.utils.translation import gettext as _
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -24,6 +24,7 @@ from core.debit import ComptageSansPerte
 from core.journal import tracer
 from core.mixins import NoDestroyModelViewSet
 from core.models import ChangeLog, WorkflowConfiguration
+from core.regles import RegleViolee
 from core.requetes import client_ip
 from core.serializers import ConfigurationSerializer, WorkflowConfigurationSerializer
 
@@ -33,8 +34,8 @@ from .journal import etat_compte, journaliser_compte, journaliser_modification
 from .models import ALWAYS_GLOBAL_ROLES, HEADQUARTERS_ROLES, Role, UserProfile
 from .permissions import (
     CAPACITES,
-    CAPACITES_PAR_CLE,
     RolePermission,
+    enregistrer_la_matrice,
     get_access,
     matrice_effective,
     peut_conferer_le_role,
@@ -170,31 +171,31 @@ class ThrottledObtainAuthToken(ObtainAuthToken):
             self._journaliser_echec(request, username)
             serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
-        profile = getattr(user, "profile", None)
-        if profile is not None and profile.totp_confirmed:
-            code = request.data.get("code")
-            if code in (None, ""):
-                return Response(
-                    {
-                        "code": [_("Code de double authentification requis.")],
-                        "totp_required": True,
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            # Le code est consommé, pas seulement vérifié : présenté une
-            # seconde fois, il est refusé (cf. ``accounts.totp``).
-            if not totp.consommer_code(profile, code):
-                # Journalisé comme un mot de passe faux, avec le motif : un
-                # code se devine aussi en boucle, et la limite de débit
-                # compte cette tentative comme les autres.
-                self._journaliser_echec(request, username, user=user, motif="totp")
-                return Response(
-                    {
-                        "code": [_("Code de double authentification invalide.")],
-                        "totp_required": True,
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        # Seul un compte enrôlé doit présenter son code, consommé s'il est
+        # bon (``accounts.totp.verifier_a_la_connexion``).
+        verdict = totp.verifier_a_la_connexion(
+            getattr(user, "profile", None), request.data.get("code")
+        )
+        if verdict == totp.CODE_REQUIS:
+            return Response(
+                {
+                    "code": [_("Code de double authentification requis.")],
+                    "totp_required": True,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if verdict == totp.CODE_INVALIDE:
+            # Journalisé comme un mot de passe faux, avec le motif : un
+            # code se devine aussi en boucle, et la limite de débit
+            # compte cette tentative comme les autres.
+            self._journaliser_echec(request, username, user=user, motif="totp")
+            return Response(
+                {
+                    "code": [_("Code de double authentification invalide.")],
+                    "totp_required": True,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         # Renouvelé s'il a dépassé ``TOKEN_MAX_AGE_DAYS`` : ``get_or_create``
         # rendrait indéfiniment le même jeton périmé.
         token = obtenir_jeton(user)
@@ -296,12 +297,7 @@ class WorkflowConfigurationView(APIView):
     )
     @transaction.atomic
     def patch(self, request):
-        # Lue en base et verrouillée, pas depuis le cache : deux
-        # modifications simultanées se succèdent au lieu de s'écraser, et le
-        # journal décrit exactement l'état que chacune a trouvé.
-        configuration, _cree = (
-            WorkflowConfiguration.objects.select_for_update().get_or_create(pk=1)
-        )
+        configuration = WorkflowConfiguration.verrouiller()
         serializer = WorkflowConfigurationSerializer(
             configuration, data=request.data, partial=True
         )
@@ -325,21 +321,42 @@ class WorkflowConfigurationView(APIView):
         }
         serializer.save()
         apres = {name: value for name, value in serializer.data.items() if name in modifiables}
-
-        changes = [name for name in modifiables if avant[name] != apres[name]]
-        if changes:
-            tracer(
-                request,
-                ChangeLog.Actions.UPDATED,
-                configuration,
-                famille="configuration",
-                label="Configuration du workflow",
-                from_value=json.dumps(avant, ensure_ascii=False),
-                to_value=json.dumps(apres, ensure_ascii=False),
-                changed_fields=changes,
-                diff={name: [avant[name], apres[name]] for name in changes},
-            )
+        _tracer_la_configuration(
+            request, configuration, "Configuration du workflow", avant, apres,
+            etat_complet=True,
+        )
         return Response(serializer.data)
+
+
+def _tracer_la_configuration(request, configuration, label, avant, apres, *, etat_complet):
+    """Trace une modification de la configuration, si elle a changé quelque chose.
+
+    ``avant`` et ``apres`` sont deux photographies aux mêmes clés, prises
+    sous le verrou (``WorkflowConfiguration.verrouiller``). ``etat_complet``
+    choisit ce que l'entrée garde en ancienne et nouvelle valeur : l'état
+    entier (la politique du workflow, quelques réglages) ou les
+    seules clés changées (la matrice des droits). ``diff`` et
+    ``changed_fields`` ne portent jamais que ce qui a changé.
+    """
+    changes = [cle for cle in apres if avant[cle] != apres[cle]]
+    if not changes:
+        return
+    if etat_complet:
+        ancien, nouveau = avant, apres
+    else:
+        ancien = {cle: avant[cle] for cle in changes}
+        nouveau = {cle: apres[cle] for cle in changes}
+    tracer(
+        request,
+        ChangeLog.Actions.UPDATED,
+        configuration,
+        famille="configuration",
+        label=label,
+        from_value=json.dumps(ancien, ensure_ascii=False),
+        to_value=json.dumps(nouveau, ensure_ascii=False),
+        changed_fields=changes,
+        diff={cle: [avant[cle], apres[cle]] for cle in changes},
+    )
 
 
 
@@ -349,6 +366,20 @@ def _profil_requis(user):
     if profile is None:
         raise PermissionDenied(_("Ce compte n'a pas de profil."))
     return profile
+
+
+@contextmanager
+def _refus_du_profil():
+    """Traduit le refus d'un service de ``accounts.totp`` en 400.
+
+    La forme est celle que ces routes ont toujours rendue — ``{"detail":
+    message}``, le message seul et non une liste —, et non celle de
+    ``core.regles.traduire_les_regles`` : le contrat ne change pas.
+    """
+    try:
+        yield
+    except RegleViolee as exc:
+        raise ValidationError({exc.champ: exc.message}) from exc
 
 
 class MeView(APIView):
@@ -427,20 +458,8 @@ class TotpEnrolView(APIView):
     @transaction.atomic
     def post(self, request):
         profile = _profil_requis(request.user)
-        if profile.totp_confirmed:
-            raise ValidationError(
-                {
-                    "detail": _(
-                        "La double authentification est déjà active sur ce compte. "
-                        "Demandez sa réinitialisation à un administrateur."
-                    )
-                }
-            )
-        secret = totp.generer_secret()
-        profile.totp_secret = secret
-        # Nouveau secret, nouveaux compteurs : la mémoire anti-rejeu repart.
-        profile.totp_last_counter = None
-        profile.save(update_fields=["totp_secret", "totp_last_counter", "updated_at"])
+        with _refus_du_profil():
+            secret = totp.enroler(profile)
         # L'adresse e-mail nomme le compte dans l'application ; à défaut, le
         # nom de compte, pour un profil hérité d'avant l'obligation.
         libelle = request.user.email or request.user.username
@@ -469,17 +488,9 @@ class TotpConfirmView(APIView):
         profile = _profil_requis(request.user)
         serializer = TotpCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        if profile.totp_confirmed:
-            raise ValidationError(
-                {"detail": _("La double authentification est déjà active sur ce compte.")}
-            )
-        if not profile.totp_secret:
-            raise ValidationError(
-                {"detail": _("Aucun enrôlement en cours : commencez par l'enrôlement.")}
-            )
-        # Consommé et non seulement vérifié : le code de confirmation ne
-        # doit pas pouvoir resservir à la connexion qui suit.
-        if not totp.consommer_code(profile, serializer.validated_data["code"]):
+        with _refus_du_profil():
+            confirme = totp.confirmer(profile, serializer.validated_data["code"])
+        if not confirme:
             # Même trace qu'un mot de passe faux : un code deviné se tente
             # aussi en boucle.
             journaliser_compte(
@@ -487,8 +498,6 @@ class TotpConfirmView(APIView):
                 changed_fields=["totp"],
             )
             raise ValidationError({"code": [_("Code de double authentification invalide.")]})
-        profile.totp_confirmed_at = timezone.now()
-        profile.save(update_fields=["totp_confirmed_at", "updated_at"])
         journaliser_compte(
             request, request.user, ChangeLog.Actions.TOTP_CONFIRMED,
             changed_fields=["totp"],
@@ -621,16 +630,7 @@ class UserViewSet(NoDestroyModelViewSet):
         profile = getattr(user, "profile", None)
         if profile is None:
             raise ValidationError({"detail": _("Ce compte n'a pas de profil.")})
-        etait_confirme = profile.totp_confirmed
-        profile.totp_secret = ""
-        profile.totp_confirmed_at = None
-        profile.totp_last_counter = None
-        profile.save(
-            update_fields=[
-                "totp_secret", "totp_confirmed_at", "totp_last_counter", "updated_at",
-            ]
-        )
-        revoquer_jeton(user)
+        etait_confirme = totp.reinitialiser(profile)
         journaliser_compte(
             request, user, ChangeLog.Actions.TOTP_RESET,
             changed_fields=["totp"],
@@ -706,38 +706,16 @@ class PermissionMatrixView(APIView):
             data=request.data, context={"role": get_access(request.user).role}
         )
         serializer.is_valid(raise_exception=True)
-        choix = serializer.validated_data["capabilities"]
-        # Lue en base et verrouillée, pas depuis le cache : deux
-        # administrateurs qui règlent des cases différentes au même instant
-        # se succèdent au lieu de s'écraser.
-        configuration, _cree = (
-            WorkflowConfiguration.objects.select_for_update().get_or_create(pk=1)
+        # Deux administrateurs qui règlent des cases différentes au même
+        # instant se succèdent au lieu de s'écraser.
+        configuration = WorkflowConfiguration.verrouiller()
+        avant, apres = enregistrer_la_matrice(
+            configuration, serializer.validated_data["capabilities"]
         )
-        avant = {cle: sorted(roles) for cle, roles in matrice_effective(configuration).items()}
-        retenus = dict(configuration.capability_roles or {})
-        for cle, roles in choix.items():
-            capacite = CAPACITES_PAR_CLE[cle]
-            # Revenir au défaut efface le choix : la configuration ne garde
-            # que ce qui s'en écarte, et un défaut qui change suit.
-            if set(roles) == set(capacite.defaut):
-                retenus.pop(cle, None)
-            else:
-                retenus[cle] = roles
-        configuration.capability_roles = retenus
-        configuration.save(update_fields=["capability_roles", "updated_at"])
-        apres = {cle: sorted(roles) for cle, roles in matrice_effective(configuration).items()}
-
-        changes = [cle for cle in apres if avant[cle] != apres[cle]]
-        if changes:
-            tracer(
-                request,
-                ChangeLog.Actions.UPDATED,
-                configuration,
-                famille="configuration",
-                label="Matrice des droits",
-                from_value=json.dumps({c: avant[c] for c in changes}, ensure_ascii=False),
-                to_value=json.dumps({c: apres[c] for c in changes}, ensure_ascii=False),
-                changed_fields=changes,
-                diff={cle: [avant[cle], apres[cle]] for cle in changes},
-            )
+        # Une soixantaine de capacités : le journal ne garde que les cases
+        # qui ont bougé.
+        _tracer_la_configuration(
+            request, configuration, "Matrice des droits", avant, apres,
+            etat_complet=False,
+        )
         return Response(self._matrice(configuration, get_access(request.user)))
