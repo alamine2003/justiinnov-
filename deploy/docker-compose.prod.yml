@@ -596,7 +596,7 @@ services:
   # Caddy sert Grafana, sur le sous-chemin /grafana/, et Grafana demande un
   # mot de passe. Le BI de pilotage a son propre Grafana (grafana-bi, plus bas).
   prometheus:
-    image: prom/prometheus:v3.15.0
+    image: prom/prometheus:v3.15.1
     profiles: ["supervision"]
     mem_limit: 256m
     command:
