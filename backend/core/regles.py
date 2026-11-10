@@ -26,7 +26,12 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 
 
 class RegleViolee(Exception):
-    """Une règle du circuit refuse l'opération sur un champ nommé."""
+    """Une règle du circuit refuse l'opération sur un champ nommé.
+
+    ``champ`` vaut ``None`` pour un refus qui ne porte sur aucun champ :
+    la réponse est alors la liste nue des messages, comme une erreur de
+    validation DRF sans champ.
+    """
 
     def __init__(self, champ, message):
         super().__init__(message)
@@ -57,6 +62,8 @@ def traduire_les_regles():
     try:
         yield
     except RegleViolee as exc:
+        if exc.champ is None:
+            raise ValidationError([str(exc.message)]) from exc
         raise ValidationError({exc.champ: [str(exc.message)]}) from exc
     except ProtectedError as exc:
         # Un retrait qui bute sur une ligne ou une pièce arrivée entre-temps

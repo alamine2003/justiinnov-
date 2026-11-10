@@ -22,6 +22,7 @@ import hashlib
 import logging
 import re
 import zipfile
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -32,13 +33,20 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from openpyxl import load_workbook
 
-from accounts.permissions import get_access, roles_pour
-from budget.aggregates import convert
+from accounts.permissions import Access, get_access, roles_pour
 from core.journal import tracer
-from core.models import Country, Manager, Team
+from core.models import Country, DossierKind, Manager, Project, Team
+from core.regles import PermissionRefusee
+from expenses.devises import (
+    Decaissement,
+    TauxInconnu,
+    convertir_le_decaissement,
+    decaissement_incomplet,
+)
 from expenses.models import AuditLog, Dossier, Expense
 from expenses.numerotation import refus_d_ouverture
-from expenses.workflow import Status, agit_en_auteur
+from expenses.transitions import exiger_l_auteur_du_brouillon
+from expenses.workflow import Status, accepte_des_lignes, hors_de_l_equipe_du_dossier
 
 from .scope import fuseau_de
 
@@ -324,31 +332,30 @@ def _managers_par_pays():
 def _devise_d_origine(row, country, date, amount):
     """Applique la règle « les deux ou aucun » du §5.3 et fige le taux.
 
-    Renvoie ``(amount, original_currency, original_amount, original_rate)``.
-    Quand la pièce est libellée dans une autre devise, c'est la conversion —
-    au taux du jour de la dépense — qui pèse sur l'enveloppe : DEPENSES est
-    alors recalculée plutôt que reprise du classeur, pour que la ligne
-    importée obéisse à la même règle qu'une ligne saisie.
+    Renvoie un :class:`expenses.devises.Decaissement`. Quand la pièce est
+    libellée dans une autre devise, c'est la conversion — au taux du jour de
+    la dépense — qui pèse sur l'enveloppe : DEPENSES est alors recalculée
+    plutôt que reprise du classeur, pour que la ligne importée obéisse à la
+    même règle qu'une ligne saisie (``expenses.devises``, que la saisie
+    partage). Les messages, eux, sont ceux du classeur.
     """
     devise = _texte_borne(row, "DEVISE D'ORIGINE").upper()
     montant = _montant(row["MONTANT D'ORIGINE"], "MONTANT D'ORIGINE")
     if not devise and montant is None:
         if amount is None:
             raise ValueError(_("Montant de dépense obligatoire."))
-        return amount, "", None, None
-    if not devise or montant is None:
+        return Decaissement(amount=amount)
+    if decaissement_incomplet(devise, montant):
         raise ValueError(
             _("Indiquez à la fois la devise et le montant d'origine, ou aucun des deux.")
         )
-    if devise == country.currency:
-        return montant, "", None, None
-    converti, taux = convert(montant, devise, country.currency, date.date())
-    if converti is None:
+    try:
+        return convertir_le_decaissement(devise, montant, country.currency, date.date())
+    except TauxInconnu:
         raise ValueError(
             _("Aucun taux connu pour convertir %(devise)s en %(cible)s au %(date)s.")
             % {"devise": devise, "cible": country.currency, "date": date.date().strftime("%d/%m/%Y")}
-        )
-    return converti, devise, montant, taux
+        ) from None
 
 
 def _note(row):
@@ -521,6 +528,71 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
             dry_run,
         )
 
+    ctx = _contexte_d_import(user, project, kind, cible, country, avec_colonne_pays)
+    erreurs = []
+    valides = []
+    for numero_ligne, row in lignes:
+        try:
+            valides.append(_valider_la_ligne(row, numero_ligne, ctx))
+        except (ValueError, PermissionRefusee) as exc:
+            erreurs.append(_erreur(numero_ligne, str(exc)))
+
+    resultat = _resultat(
+        len(valides), erreurs, dry_run,
+        equipes_creees=len(ctx.equipes_a_creer), managers_crees=len(ctx.managers_a_creer),
+        dossier=cible,
+    )
+    if erreurs or dry_run:
+        return resultat
+
+    try:
+        with transaction.atomic():
+            _ecrire(valides, user, ctx.equipes, ctx.managers, ctx.equipes_a_creer,
+                    ctx.managers_a_creer, cible)
+    except _LigneEnErreur as exc:
+        # La transaction est défaite : rien n'a été écrit, comme pour une
+        # erreur relevée à la validation.
+        return _resultat(0, [_erreur(exc.ligne, exc.motif)], dry_run, dossier=cible)
+    return resultat
+
+
+@dataclass
+class _ContexteImport:
+    """Ce que la validation d'une ligne lit, et ce qu'elle retient d'une
+    ligne à l'autre.
+
+    La cible (projet, type de dossier, dossier prédéfini, pays de la
+    requête), les droits de l'importateur, les index du référentiel lus une
+    fois pour tout le classeur, puis ce que les lignes accumulent : le
+    référentiel à créer à l'écriture et les caches des doublons.
+    """
+
+    access: Access
+    project: Project
+    kind: DossierKind
+    cible: Dossier
+    pays_impose: Country
+    avec_colonne_pays: bool
+    cree_les_equipes: bool
+    cree_les_responsables: bool
+    pays: dict
+    equipes: dict
+    managers: dict
+    # Équipes et managers que le classeur nomme et que le pays ne connaît
+    # pas encore : ils sont créés à l'écriture, une fois par nom. Le
+    # classeur historique est la première source du référentiel — exiger
+    # qu'il soit saisi à la main avant l'import rendrait l'import inutile.
+    equipes_a_creer: dict = field(default_factory=dict)
+    managers_a_creer: dict = field(default_factory=dict)
+    # Lignes déjà en base ou déjà vues dans ce classeur : réimporter le même
+    # fichier — ou le même classeur collé deux fois — ne doit rien créer.
+    empreintes_vues: dict = field(default_factory=dict)
+    lignes_en_base: dict = field(default_factory=dict)
+    lignes_hors_projet: dict = field(default_factory=dict)
+
+
+def _contexte_d_import(user, project, kind, cible, country, avec_colonne_pays):
+    """Droits de l'importateur et référentiel, lus une fois pour le classeur."""
     access = get_access(user)
     # L'import est une déclaration, donc un acte du pays (décision 89) : il
     # obéit aux règles de la saisie. Il ne crée une équipe ou un
@@ -531,161 +603,175 @@ def importer_depenses(uploaded, user, dry_run=False, country=None, project=None,
     cree_les_responsables = access.role in roles_pour("managers.create")
     pays = {c.name.casefold(): c for c in Country.objects.all()}
     equipes = {(team.country_id, team.name.casefold()): team for team in Team.objects.all()}
-    managers = _managers_par_pays()
-    # Équipes et managers que le classeur nomme et que le pays ne connaît
-    # pas encore : ils sont créés à l'écriture, une fois par nom. Le
-    # classeur historique est la première source du référentiel — exiger
-    # qu'il soit saisi à la main avant l'import rendrait l'import inutile.
-    equipes_a_creer = {}
-    managers_a_creer = {}
-    erreurs = []
-    valides = []
-    # Lignes déjà en base ou déjà vues dans ce classeur : réimporter le même
-    # fichier — ou le même classeur collé deux fois — ne doit rien créer.
-    empreintes_vues = {}
-    lignes_en_base = {}
-    lignes_hors_projet = {}
-
-    for numero_ligne, row in lignes:
-        try:
-            number = _numero_d_ordre(row)
-            pays_ligne = _resoudre_le_pays(
-                row, avec_colonne_pays, pays, country, access
-            )
-            if pays_ligne.pk != project.country_id:
-                raise ValueError(
-                    _("La ligne relève de « %(pays)s », le projet d'un autre pays.")
-                    % {"pays": pays_ligne.name}
-                )
-
-            date_ligne = _date(row["DATE"], fuseau_de(pays_ligne))
-            amount = _montant(row["DEPENSES"], "DEPENSES")
-            title = _texte_borne(row, "LIBELLE DES TRANSACTIONS") or "Dépense importée"
-            amount, devise, montant_origine, taux = _devise_d_origine(
-                row, pays_ligne, date_ligne, amount
-            )
-            team_name = _texte_borne(row, "TEAM")
-            cle_equipe = (pays_ligne.pk, team_name.casefold()) if team_name else None
-            team = equipes.get(cle_equipe) if team_name else None
-            if team_name and team is None:
-                if not cree_les_equipes:
-                    raise ValueError(
-                        _(
-                            "Équipe « %(team)s » inconnue du pays : demandez "
-                            "à l'administrateur de la créer."
-                        ) % {"team": team_name}
-                    )
-                equipes_a_creer.setdefault(cle_equipe, (pays_ligne, team_name))
-            if access.team_ids is not None and (team is None or team.pk not in access.team_ids):
-                raise ValueError(_("La ligne doit porter l'une de vos équipes."))
-            owner_name = _texte_borne(row, "OWNER")
-            cle_manager = (pays_ligne.pk, owner_name.casefold()) if owner_name else None
-            owner = managers.get(cle_manager) if owner_name else None
-            if owner_name and owner is None:
-                if not cree_les_responsables:
-                    raise ValueError(
-                        _(
-                            "Responsable « %(owner)s » inconnu du pays : "
-                            "demandez à l'administrateur de l'inscrire."
-                        ) % {"owner": owner_name}
-                    )
-                managers_a_creer.setdefault(cle_manager, (pays_ligne, owner_name))
-
-            # Toutes les lignes vont au dossier prédéfini du type choisi
-            # (décision 106).
-            dossier = cible
-            cle_dossier = dossier.pk
-            if dossier.status != Status.DRAFT:
-                raise ValueError(
-                    _("Le dossier « %(number)s » est déjà déclaré") % {"number": dossier.number}
-                )
-            # Un brouillon appartient à son auteur (décision 46) : l'import
-            # n'y ajoute pas de lignes au nom d'un collègue.
-            if not agit_en_auteur(dossier, access.role, access.username):
-                raise ValueError(
-                    _("Le dossier « %(number)s » est le brouillon d'un autre compte")
-                    % {"number": dossier.number}
-                )
-            # Le dossier est lu par l'équipe qu'il porte (``ExpenseSerializer``) :
-            # une ligne d'une autre équipe y serait visible par la première
-            # et invisible pour la seconde.
-            if (
-                dossier.team_id is not None
-                and team_name
-                and (team is None or team.pk != dossier.team_id)
-            ):
-                raise ValueError(
-                    _(
-                        "Le dossier « %(number)s » porte l'équipe « %(team)s » : "
-                        "la ligne doit porter la même."
-                    ) % {"number": dossier.number, "team": dossier.team.name}
-                )
-
-            empreinte = _empreinte(number, date_ligne.date(), title, amount)
-            deja = empreintes_vues.get(empreinte)
-            if deja is not None:
-                raise ValueError(_("Ligne identique à la ligne %(ligne)s du classeur") % {"ligne": deja})
-            if _deja_dans_le_dossier(
-                dossier, lignes_en_base, number, date_ligne.date(), title, amount
-            ):
-                raise ValueError(
-                    _(
-                        "Ligne déjà présente dans le dossier « %(number)s » : "
-                        "même N°ORDRE, même date, même libellé, même montant"
-                    ) % {"number": dossier.number}
-                )
-            if _empreinte(number, date_ligne.date(), title, amount) in _lignes_hors_du_projet(
-                pays_ligne, project, number, lignes_hors_projet
-            ) or _cle_hors_du_projet(
-                pays_ligne, project, lignes_hors_projet, date_ligne.date(), title, amount, number
-            ):
-                raise ValueError(
-                    _(
-                        "Ligne déjà présente dans le dossier « %(number)s » d'un autre "
-                        "projet du pays : même date, même libellé, même montant"
-                    ) % {"number": number}
-                )
-            empreintes_vues[empreinte] = numero_ligne
-
-            valides.append({
-                "ligne": numero_ligne,
-                "cle_dossier": cle_dossier,
-                "number": number,
-                "project": project,
-                "kind": kind,
-                "country": pays_ligne,
-                "team": team,
-                "cle_equipe": cle_equipe,
-                "owner": owner,
-                "cle_manager": cle_manager,
-                "date": date_ligne,
-                "title": title,
-                "amount": amount,
-                "original_currency": devise,
-                "original_amount": montant_origine,
-                "original_rate": taux,
-                "note": _note(row),
-            })
-        except ValueError as exc:
-            erreurs.append(_erreur(numero_ligne, str(exc)))
-
-    resultat = _resultat(
-        len(valides), erreurs, dry_run,
-        equipes_creees=len(equipes_a_creer), managers_crees=len(managers_a_creer),
-        dossier=cible,
+    return _ContexteImport(
+        access=access,
+        project=project,
+        kind=kind,
+        cible=cible,
+        pays_impose=country,
+        avec_colonne_pays=avec_colonne_pays,
+        cree_les_equipes=cree_les_equipes,
+        cree_les_responsables=cree_les_responsables,
+        pays=pays,
+        equipes=equipes,
+        managers=_managers_par_pays(),
     )
-    if erreurs or dry_run:
-        return resultat
 
-    try:
-        with transaction.atomic():
-            _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
-                    cible)
-    except _LigneEnErreur as exc:
-        # La transaction est défaite : rien n'a été écrit, comme pour une
-        # erreur relevée à la validation.
-        return _resultat(0, [_erreur(exc.ligne, exc.motif)], dry_run, dossier=cible)
-    return resultat
+
+def _valider_la_ligne(row, numero_ligne, ctx):
+    """Valide une ligne du classeur et renvoie ce que l'écriture en retient.
+
+    Lève ``ValueError`` (ou ``PermissionRefusee``) avec le motif que
+    l'import rapporte à cette ligne. Les contrôles du dossier cible restent
+    ici, ligne par ligne, à leur place dans l'ordre des contrôles : les
+    sortir de la boucle changerait la ligne et le motif de l'erreur
+    rapportée.
+    """
+    number = _numero_d_ordre(row)
+    pays_ligne = _resoudre_le_pays(
+        row, ctx.avec_colonne_pays, ctx.pays, ctx.pays_impose, ctx.access
+    )
+    if pays_ligne.pk != ctx.project.country_id:
+        raise ValueError(
+            _("La ligne relève de « %(pays)s », le projet d'un autre pays.")
+            % {"pays": pays_ligne.name}
+        )
+
+    date_ligne = _date(row["DATE"], fuseau_de(pays_ligne))
+    amount = _montant(row["DEPENSES"], "DEPENSES")
+    title = _texte_borne(row, "LIBELLE DES TRANSACTIONS") or "Dépense importée"
+    decaissement = _devise_d_origine(row, pays_ligne, date_ligne, amount)
+    amount = decaissement.amount
+    team_name, team, cle_equipe = _resoudre_l_equipe(row, pays_ligne, ctx)
+    owner, cle_manager = _resoudre_le_responsable(row, pays_ligne, ctx)
+
+    # Toutes les lignes vont au dossier prédéfini du type choisi
+    # (décision 106).
+    dossier = ctx.cible
+    _verifier_le_dossier(dossier, team_name, team, ctx)
+
+    empreinte = _verifier_les_doublons(
+        dossier, number, pays_ligne, date_ligne.date(), title, amount, ctx
+    )
+    ctx.empreintes_vues[empreinte] = numero_ligne
+
+    return {
+        "ligne": numero_ligne,
+        "cle_dossier": dossier.pk,
+        "number": number,
+        "project": ctx.project,
+        "kind": ctx.kind,
+        "country": pays_ligne,
+        "team": team,
+        "cle_equipe": cle_equipe,
+        "owner": owner,
+        "cle_manager": cle_manager,
+        "date": date_ligne,
+        "title": title,
+        "amount": amount,
+        "original_currency": decaissement.original_currency,
+        "original_amount": decaissement.original_amount,
+        "original_rate": decaissement.original_rate,
+        "note": _note(row),
+    }
+
+
+def _resoudre_l_equipe(row, pays_ligne, ctx):
+    """L'équipe de la ligne : ``(nom lu, équipe connue ou None, clé)``.
+
+    Une équipe inconnue du pays est retenue pour l'écriture, si
+    l'importateur a le droit de la créer.
+    """
+    team_name = _texte_borne(row, "TEAM")
+    cle_equipe = (pays_ligne.pk, team_name.casefold()) if team_name else None
+    team = ctx.equipes.get(cle_equipe) if team_name else None
+    if team_name and team is None:
+        if not ctx.cree_les_equipes:
+            raise ValueError(
+                _(
+                    "Équipe « %(team)s » inconnue du pays : demandez "
+                    "à l'administrateur de la créer."
+                ) % {"team": team_name}
+            )
+        ctx.equipes_a_creer.setdefault(cle_equipe, (pays_ligne, team_name))
+    access = ctx.access
+    if access.team_ids is not None and (team is None or team.pk not in access.team_ids):
+        raise ValueError(_("La ligne doit porter l'une de vos équipes."))
+    return team_name, team, cle_equipe
+
+
+def _resoudre_le_responsable(row, pays_ligne, ctx):
+    """Le responsable de la ligne : ``(responsable connu ou None, clé)``."""
+    owner_name = _texte_borne(row, "OWNER")
+    cle_manager = (pays_ligne.pk, owner_name.casefold()) if owner_name else None
+    owner = ctx.managers.get(cle_manager) if owner_name else None
+    if owner_name and owner is None:
+        if not ctx.cree_les_responsables:
+            raise ValueError(
+                _(
+                    "Responsable « %(owner)s » inconnu du pays : "
+                    "demandez à l'administrateur de l'inscrire."
+                ) % {"owner": owner_name}
+            )
+        ctx.managers_a_creer.setdefault(cle_manager, (pays_ligne, owner_name))
+    return owner, cle_manager
+
+
+def _verifier_le_dossier(dossier, team_name, team, ctx):
+    """Le dossier cible reçoit-il cette ligne, de cet importateur ?
+
+    Mêmes règles que la saisie (``expenses.transitions``,
+    ``expenses.workflow``), dites avec les mots du classeur.
+    """
+    if not accepte_des_lignes(dossier):
+        raise ValueError(
+            _("Le dossier « %(number)s » est déjà déclaré") % {"number": dossier.number}
+        )
+    # Un brouillon appartient à son auteur (décision 46) : l'import
+    # n'y ajoute pas de lignes au nom d'un collègue.
+    exiger_l_auteur_du_brouillon(
+        dossier,
+        ctx.access,
+        _("Le dossier « %(number)s » est le brouillon d'un autre compte")
+        % {"number": dossier.number},
+    )
+    # Une équipe que l'import n'a pas encore créée n'est pas celle du
+    # dossier.
+    if team_name and hors_de_l_equipe_du_dossier(dossier, getattr(team, "pk", None)):
+        raise ValueError(
+            _(
+                "Le dossier « %(number)s » porte l'équipe « %(team)s » : "
+                "la ligne doit porter la même."
+            ) % {"number": dossier.number, "team": dossier.team.name}
+        )
+
+
+def _verifier_les_doublons(dossier, number, pays_ligne, jour, title, amount, ctx):
+    """Refuse une ligne déjà vue dans le classeur, déjà dans le dossier, ou
+    déjà dans un autre projet du pays ; renvoie son empreinte."""
+    empreinte = _empreinte(number, jour, title, amount)
+    deja = ctx.empreintes_vues.get(empreinte)
+    if deja is not None:
+        raise ValueError(_("Ligne identique à la ligne %(ligne)s du classeur") % {"ligne": deja})
+    if _deja_dans_le_dossier(dossier, ctx.lignes_en_base, number, jour, title, amount):
+        raise ValueError(
+            _(
+                "Ligne déjà présente dans le dossier « %(number)s » : "
+                "même N°ORDRE, même date, même libellé, même montant"
+            ) % {"number": dossier.number}
+        )
+    if empreinte in _lignes_hors_du_projet(
+        pays_ligne, ctx.project, number, ctx.lignes_hors_projet
+    ) or _cle_hors_du_projet(
+        pays_ligne, ctx.project, ctx.lignes_hors_projet, jour, title, amount, number
+    ):
+        raise ValueError(
+            _(
+                "Ligne déjà présente dans le dossier « %(number)s » d'un autre "
+                "projet du pays : même date, même libellé, même montant"
+            ) % {"number": number}
+        )
+    return empreinte
 
 
 class _LigneEnErreur(Exception):
@@ -769,7 +855,7 @@ def _verrouiller_le_dossier(dossier, ligne):
     verrou fait attendre une soumission en cours, et l'état relu fait foi.
     """
     verrouille = Dossier.objects.select_for_update(of=("self",)).get(pk=dossier.pk)
-    if verrouille.status != Status.DRAFT:
+    if not accepte_des_lignes(verrouille):
         raise _LigneEnErreur(
             ligne["ligne"],
             _("Le dossier « %(number)s » est déjà déclaré") % {"number": dossier.number},

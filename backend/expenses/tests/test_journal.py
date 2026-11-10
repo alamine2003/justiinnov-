@@ -91,8 +91,8 @@ class DeplacementSousVerrouTests(ExpenseTestCase):
             transitions, "verrouiller", wraps=transitions.verrouiller
         )
         verifier = mock.patch.object(
-            DossierSerializer, "_verifier_le_deplacement",
-            autospec=True, side_effect=DossierSerializer._verifier_le_deplacement,
+            DossierSerializer, "verifier_le_deplacement",
+            autospec=True, side_effect=DossierSerializer.verifier_le_deplacement,
         )
         with verrouiller as verrou, verifier as verification:
             temoin.attach_mock(verrou, "verrouiller")

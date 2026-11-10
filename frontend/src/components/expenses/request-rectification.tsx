@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ApiError } from "@/lib/api"
 import { REQUEST_RECTIFICATION, type Expense } from "@/lib/types"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 
 interface RequestRectificationProps {
   expense: Expense
@@ -68,8 +69,20 @@ function RectificationDialog({
   const { t } = useTranslation()
   const [motif, setMotif] = useState("")
   const [motifError, setMotifError] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Le dialogue reste ouvert : le motif saisi n'est pas perdu. Un refus sur
+  // le motif s'affiche sous lui ; un refus sur la ligne (déjà une demande en
+  // attente, état qui ne se rectifie pas) en tête.
+  const { saving, error, enregistrer } = useEnregistrement((err) => {
+    if (!(err instanceof ApiError)) return messageDErreur(err, t("depenses.rectification.impossible"))
+    if (err.fields.motif) setMotifError(err.fields.motif.join(" "))
+    const general = [
+      ...(err.fields.expense ?? []),
+      ...(err.fields.status ?? []),
+      ...(err.fields.non_field_errors ?? []),
+    ]
+    if (general.length > 0) return general.join(" ")
+    return err.fields.motif ? null : err.message
+  })
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -77,31 +90,11 @@ function RectificationDialog({
       setMotifError(t("depenses.rectification.motif_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
     setMotifError(null)
-    try {
+    await enregistrer(async () => {
       await onConfirm(motif.trim())
       onOpenChange(false)
-    } catch (err) {
-      // Le dialogue reste ouvert : le motif saisi n'est pas perdu. Un refus
-      // sur le motif s'affiche sous lui ; un refus sur la ligne (déjà une
-      // demande en attente, état qui ne se rectifie pas) en tête.
-      if (err instanceof ApiError) {
-        if (err.fields.motif) setMotifError(err.fields.motif.join(" "))
-        const general = [
-          ...(err.fields.expense ?? []),
-          ...(err.fields.status ?? []),
-          ...(err.fields.non_field_errors ?? []),
-        ]
-        if (general.length > 0) setError(general.join(" "))
-        else if (!err.fields.motif) setError(err.message)
-      } else {
-        setError(err instanceof Error ? err.message : t("depenses.rectification.impossible"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

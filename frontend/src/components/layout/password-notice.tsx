@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/context/use-auth"
 import { changePassword } from "@/lib/accounts"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 /**
  * Impose le remplacement du mot de passe distribué par le siège.
@@ -28,8 +29,7 @@ export function PasswordNotice() {
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [confirmation, setConfirmation] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("auth.mdp.changement_impossible"))
 
   if (!me?.must_change_password) {
     return null
@@ -41,19 +41,13 @@ export function PasswordNotice() {
       setError(t("auth.mdp.non_identiques"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       // Le serveur révoque l'ancien jeton avec l'ancien mot de passe : sans
       // le nouveau, la requête suivante serait un 401.
       const { token } = await changePassword(current, next)
       if (token) replaceToken(token)
       await refreshProfile()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.mdp.changement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

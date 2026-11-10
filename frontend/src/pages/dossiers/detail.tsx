@@ -13,39 +13,29 @@ import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { MettreALaCorbeille } from "@/components/corbeille/mettre-a-la-corbeille"
 import { CarteDeLigne } from "@/components/expenses/expense-line-card"
 import { ExpenseForm } from "@/components/expenses/expense-form"
-import { ProofPanel } from "@/components/expenses/proof-panel"
+import { PiecesDuDossier } from "@/components/expenses/proof-panel"
 import { RectificationPanel } from "@/components/expenses/rectification-panel"
 import { RenameDossier } from "@/components/expenses/rename-dossier"
 import { ReopenDossier } from "@/components/expenses/reopen-dossier"
 import { StatusBadge } from "@/components/expenses/status-badge"
-import { WorkflowActions, type TransitionPayload } from "@/components/expenses/workflow-actions"
+import { WorkflowActions } from "@/components/expenses/workflow-actions"
 import { FriseDuCircuit } from "@/components/expenses/workflow-frieze"
 import { useAuth } from "@/context/use-auth"
 import { estBrouillon, estCloture } from "@/lib/circuit"
 import {
   createExpense,
-  deleteExpenseDraft,
   fetchBeneficiaries,
   fetchDossier,
   fetchRectifications,
-  renameDossier,
-  reopenDossier,
-  requestRectification,
-  transitionDossier,
-  transitionExpense,
   updateExpense,
 } from "@/lib/expenses"
 import { fetchCountry } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 import { scopedTeams, teamRequired } from "@/lib/teams"
-import {
-  type Beneficiary,
-  type Expense,
-  type ExpenseTransitionName,
-  type TransitionName,
-} from "@/lib/types"
+import { type Beneficiary, type Expense } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatDay } from "@/lib/utils"
+import { useActionsDuDossier } from "@/pages/dossiers/use-actions-du-dossier"
 
 /**
  * La fiche est remontée à chaque dossier (`key`) : en passant du 12 au 13
@@ -95,112 +85,25 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
     { enabled: countryId !== undefined },
   )
 
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  /** Ce que le super administrateur vient de mettre à la corbeille. */
-  const [retiree, setRetiree] = useState<string | null>(null)
+  // Les actions sur le serveur et les messages qu'elles laissent en tête de
+  // page : la fiche ne fait qu'afficher.
+  const {
+    actionError,
+    setActionError,
+    notice,
+    retiree,
+    deletingId,
+    runExpenseTransition,
+    runDossierTransition,
+    reopen,
+    rename,
+    requestLineRectification,
+    afterRectificationDecided,
+    removeDraft,
+    ligneALaCorbeille,
+  } = useActionsDuDossier({ dossierId, dossier, query, rectifications })
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
-
-  // Un refus est relancé aux boutons d'action : le dialogue l'affiche sans
-  // se fermer, et une action directe le remet à la page (`onError`). Il
-  // n'est donc jamais montré deux fois.
-  const runExpenseTransition = async (
-    expense: Expense,
-    action: ExpenseTransitionName,
-    payload?: TransitionPayload,
-  ) => {
-    setActionError(null)
-    setNotice(null)
-    setRetiree(null)
-    const result = await transitionExpense(expense.id, action, payload)
-    if (result.warning) setNotice(result.warning)
-    // La ligne est remplacée sur place ; le dossier (totaux, statut) est
-    // relu en arrière-plan, sans repasser par l'écran de chargement.
-    query.setData((current) =>
-      current
-        ? {
-            ...current,
-            expenses: current.expenses.map((e) => (e.id === expense.id ? { ...e, ...result } : e)),
-          }
-        : current,
-    )
-    query.reload()
-  }
-
-  const runDossierTransition = async (action: TransitionName, payload?: TransitionPayload) => {
-    if (!dossier) return
-    setActionError(null)
-    setNotice(null)
-    setRetiree(null)
-    const { warning, ...result } = await transitionDossier(dossier.id, action, payload)
-    if (warning) setNotice(warning)
-    // La transition renvoie le détail complet : il remplace l'écran sans
-    // attendre la relecture, qui confirme en arrière-plan.
-    query.setData(result)
-    query.reload()
-  }
-
-  // La réouverture n'est pas une transition du circuit : elle a sa propre
-  // route et son propre droit. Le dialogue affiche lui-même les refus par
-  // champ, d'où l'erreur relancée ; la fiche est relue au succès.
-  const reopen = async (note: string) => {
-    if (!dossier) return
-    setActionError(null)
-    setNotice(null)
-    setRetiree(null)
-    await reopenDossier(dossier.id, note)
-    query.reload()
-  }
-
-  // Le renommage ne touche qu'au titre (décision 104) : la fiche renvoyée
-  // remplace l'écran, le dialogue affiche lui-même un refus.
-  const rename = async (label: string) => {
-    setActionError(null)
-    setNotice(null)
-    setRetiree(null)
-    query.setData(await renameDossier(dossierId, label))
-  }
-
-  // La rectification n'est pas une transition : la ligne ne bouge qu'à la
-  // décision d'un administrateur. Le dialogue affiche lui-même les refus
-  // par champ, d'où l'erreur relancée ; la fiche est relue au succès
-  // (`allowed_actions` de la ligne change : plus de nouvelle demande).
-  const requestLineRectification = async (expense: Expense, motif: string) => {
-    setActionError(null)
-    setNotice(null)
-    setRetiree(null)
-    await requestRectification(expense.id, motif)
-    query.reload()
-    rectifications.reload()
-  }
-
-  const afterRectificationDecided = async () => {
-    setActionError(null)
-    setNotice(null)
-    setRetiree(null)
-    query.reload()
-    rectifications.reload()
-  }
-
-  const removeDraft = async (expense: Expense) => {
-    setDeletingId(expense.id)
-    setActionError(null)
-    try {
-      await deleteExpenseDraft(expense.id)
-      query.setData((current) =>
-        current
-          ? { ...current, expenses: current.expenses.filter((e) => e.id !== expense.id) }
-          : current,
-      )
-      query.reload()
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : t("dossiers.detail.suppression_impossible"))
-    } finally {
-      setDeletingId(null)
-    }
-  }
 
   if (query.loading && !dossier) {
     return (
@@ -512,25 +415,11 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
                       setFormOpen(true)
                     }}
                     onDelete={(ligne) => void removeDraft(ligne)}
-                    onTrashed={(ligne) => {
-                      setActionError(null)
-                      setRetiree(t("corbeille.fait", { libelle: ligne.title }))
-                      // La carte part tout de suite, comme au retrait d'un
-                      // brouillon ; ses demandes de rectification sont parties
-                      // avec elle (décision 120).
-                      query.setData((current) =>
-                        current
-                          ? { ...current, expenses: current.expenses.filter((e) => e.id !== ligne.id) }
-                          : current,
-                      )
-                      query.reload()
-                      rectifications.reload()
-                    }}
+                    onTrashed={ligneALaCorbeille}
                     onTransition={runExpenseTransition}
                     onRequestRectification={requestLineRectification}
                     onError={setActionError}
                     proofs={piecesDeLaLigne(expense.id)}
-                    closed={closed}
                     onProofsChanged={async () => {
                       query.reload()
                     }}
@@ -558,7 +447,7 @@ function FicheDossier({ dossierId }: { dossierId: number }) {
             {piecesDAvant.length > 0 && (
               <Card className="border-border/60 shadow-sm">
                 <CardContent>
-                  <ProofPanel
+                  <PiecesDuDossier
                     expenseId={null}
                     proofs={piecesDAvant}
                     canUpload={false}

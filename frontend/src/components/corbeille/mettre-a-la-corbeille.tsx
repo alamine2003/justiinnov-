@@ -15,6 +15,7 @@ import { ChampMotif } from "@/components/projects/rename-project"
 import { ApiError } from "@/lib/api"
 import { mettreALaCorbeille } from "@/lib/corbeille"
 import type { NatureSupprimee, ResultatCorbeille } from "@/lib/types"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 import { cn } from "@/lib/utils"
 
 /**
@@ -97,8 +98,13 @@ function DialogueDeCorbeille({
 }) {
   const { t } = useTranslation()
   const [motif, setMotif] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Le dialogue reste ouvert : le motif saisi n'est pas perdu, et le refus du
+  // serveur (corbeille fermée, ligne constatée…) se lit ici.
+  const { saving, error, setError, enregistrer } = useEnregistrement((err) =>
+    err instanceof ApiError && Object.keys(err.fields).length > 0
+      ? Object.values(err.fields).flat().join(" ")
+      : messageDErreur(err, t("corbeille.impossible")),
+  )
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -106,23 +112,11 @@ function DialogueDeCorbeille({
       setError(t("corbeille.motif_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       const resultat = await mettreALaCorbeille(nature, id, motif.trim())
       onOpenChange(false)
       onDone(resultat)
-    } catch (err) {
-      // Le dialogue reste ouvert : le motif saisi n'est pas perdu, et le
-      // refus du serveur (corbeille fermée, ligne constatée…) se lit ici.
-      if (err instanceof ApiError && Object.keys(err.fields).length > 0) {
-        setError(Object.values(err.fields).flat().join(" "))
-      } else {
-        setError(err instanceof Error ? err.message : t("corbeille.impossible"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

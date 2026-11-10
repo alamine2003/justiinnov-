@@ -377,14 +377,17 @@ l'application.
 | Modèle de données et décisions prises (référence, tenue à jour) | `docs/model-de-donnees.md` |
 | États du circuit (`Status` et ses ensembles) | `backend/core/statuts.py` |
 | Circuit de justification, réouverture, rectification | `backend/expenses/workflow.py` (états, prédicats), `backend/expenses/transitions.py` (services) |
-| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce, demander et décider une rectification) | `backend/expenses/transitions.py` |
+| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce, demander et décider une rectification) et de saisie d'un brouillon (`preparer_l_ajout`, `preparer_la_modification`, `preparer_la_modification_du_dossier`) | `backend/expenses/transitions.py` |
+| Dépôt d'un justificatif : verrous, remplacement, doublon, trace | `backend/expenses/pieces.py` (décision 125) |
 | Services de réallocation (demander, approuver, refuser) | `backend/budget/transitions.py` |
 | Refus métier (`RegleViolee`, `PermissionRefusee`, `HorsPerimetre`) et leur traduction HTTP | `backend/core/regles.py` |
 | Capacités et leurs défauts, périmètres, équipes, double authentification, authentification | `backend/accounts/` (`permissions.py`, `perimetre.py`, `scoping.py`, `views.py`) ; matrice réglée dans `WorkflowConfiguration.capability_roles` |
-| API du référentiel (pays, équipes, projets…) et historique | `backend/accounts/referentiel.py` |
+| API du référentiel (pays, équipes, types…) et historique | `backend/accounts/referentiel.py` |
+| API des projets (création avec dossiers, historique) | `backend/expenses/projets.py` (décision 125) |
 | Journaux `ChangeLog` et `AuditLog` : la seule porte d'écriture | `backend/core/journal.py` |
 | Ordre des applications (`core < accounts < notifications < budget < expenses < reporting`) | `backend/core/tests/test_dependances.py` |
 | Calculs budgétaires | `backend/budget/aggregates.py` |
+| Chiffres du pilotage (tableau de bord, répartition) | `backend/reporting/pilotage.py` (décision 125) |
 | Carte des index (chaque index et la requête qu'il sert) ; périodes en bornes | `backend/config/tests/test_index.py`, `backend/core/periodes.py` (décision 123) |
 | Interface | `DESIGN.md` |
 | Serveur, supervision et BI Grafana, pgAdmin, sauvegardes | `deploy/README.md` |

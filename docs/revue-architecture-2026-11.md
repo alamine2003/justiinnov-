@@ -27,8 +27,10 @@ services.
 
 ## Les 24 écarts
 
-État : **corrigé** dans la 2.4.1 (sans changement de comportement : schéma
-d'API identique, suites vertes), ou **à faire**, avec sa priorité.
+État : **corrigé** dans la 2.4.1 (décision 124) ou la 2.4.2 (décision 125),
+sans changement de comportement — schéma d'API identique, suites vertes —,
+ou **à faire**. Après la 2.4.2, il ne reste que l'écart 21, qui attend une
+décision de la direction, et l'écart 19, gardé à dessein.
 
 | N° | Principe | Écart | Où | État |
 |---|---|---|---|---|
@@ -38,29 +40,29 @@ d'API identique, suites vertes), ou **à faire**, avec sa priorité.
 | 4 | D | Devise de consolidation écrite en dur (serveur et interface) | `reporting/views.py`, `pages/dashboard/index.tsx` | corrigé |
 | 5 | D/S | Le contrôle de périmètre d'un objet chargé était réécrit dans trois services (décision 39) | `expenses/transitions.py`, `expenses/corbeille.py`, `budget/transitions.py` | corrigé : `accounts.perimetre.exiger_dans_le_perimetre` |
 | 6 | L | `BackOfficePermission` ignorait la capacité déclarée par sa vue | `accounts/views.py` | corrigé |
-| 7 | L/I | `DossierViewSet` hérite d'une création qu'il refuse (405), et le sérialiseur garde une branche de création morte | `expenses/views.py`, `expenses/serializers.py` | à faire (3) — régénère le schéma d'API |
-| 8 | S | Le dépôt d'une pièce est un service caché dans la vue (décision 41) | `ProofViewSet.perform_create/update` | à faire (1) — garder l'ordre des verrous |
-| 9 | S | La saisie d'une ligne est orchestrée dans la vue (décision 41) | `ExpenseViewSet.perform_create/update` | à faire (1) |
-| 10 | D | `accounts` importe `expenses` dans quatre fonctions de `ProjectViewSet` (décision 40) ; le test d'ordre ne compte pas ces imports | `accounts/referentiel.py` | à faire (2) |
+| 7 | L/I | `DossierViewSet` hérite d'une création qu'il refuse (405), et le sérialiseur garde une branche de création morte | `expenses/views.py`, `expenses/serializers.py` | corrigé (2.4.2) : `core.mixins.SansCreationModelViewSet` |
+| 8 | S | Le dépôt d'une pièce est un service caché dans la vue (décision 41) | `ProofViewSet.perform_create/update` | corrigé (2.4.2) : `expenses/pieces.py` |
+| 9 | S | La saisie d'une ligne est orchestrée dans la vue (décision 41) | `ExpenseViewSet.perform_create/update` | corrigé (2.4.2) : `transitions.preparer_l_ajout`, `preparer_la_modification` |
+| 10 | D | `accounts` importe `expenses` dans quatre fonctions de `ProjectViewSet` (décision 40) ; le test d'ordre ne compte pas ces imports | `accounts/referentiel.py` | corrigé (2.4.2) : `expenses/projets.py` ; imports paresseux comptés |
 | 11 | S/O | La règle « motif obligatoire » était copiée six fois | `core/serializers.py`, `accounts/referentiel.py` | corrigé : `MotifExigeMixin` |
-| 12 | S | `importer_depenses` fait tout en 210 lignes | `reporting/imports.py` | à faire (3) — ne pas sortir de la boucle les contrôles du dossier |
-| 13 | S | Conversion de devise, équipe de la ligne et auteur du brouillon recopiés entre sérialiseur et import | `expenses/serializers.py`, `reporting/imports.py` | à faire (3) |
+| 12 | S | `importer_depenses` fait tout en 210 lignes | `reporting/imports.py` | corrigé (2.4.2) : `_ContexteImport`, `_valider_la_ligne` |
+| 13 | S | Conversion de devise, équipe de la ligne et auteur du brouillon recopiés entre sérialiseur et import | `expenses/serializers.py`, `reporting/imports.py` | corrigé (2.4.2) : `expenses/devises.py`, prédicats de `workflow.py` |
 | 14 | S/O | La reconnaissance du contenu des pièces vivait dans les sérialiseurs, un `if` par format | `expenses/serializers.py` | corrigé : `expenses/contenu.py`, table `FORMATS` |
-| 15 | S | L'état de la double authentification est modifié dans quatre vues | `accounts/views.py` | à faire (4) |
-| 16 | S | L'enregistrement de la matrice des droits est dans la vue | `accounts/views.py` | à faire (4) |
-| 17 | S | Les agrégats du pilotage sont calculés dans les vues | `reporting/views.py` | à faire (4) |
+| 15 | S | L'état de la double authentification est modifié dans quatre vues | `accounts/views.py` | corrigé (2.4.2) : `accounts/totp.py` |
+| 16 | S | L'enregistrement de la matrice des droits est dans la vue | `accounts/views.py` | corrigé (2.4.2) : `permissions.enregistrer_la_matrice` |
+| 17 | S | Les agrégats du pilotage sont calculés dans les vues | `reporting/views.py` | corrigé (2.4.2) : `reporting/pilotage.py` |
 | 18 | O | Les actions du circuit étaient une chaîne de `if` | `expenses/transitions.executer` | corrigé : `_SERVICES` |
 | 19 | S | `transitions.py` réunit cinq sujets en 1 287 lignes | `expenses/transitions.py` | à garder pour l'instant : des tests le patchent comme module ; réexporter si on découpe |
-| 20 | S | Le motif « enregistrer » est recopié 29 fois dans l'interface | `frontend/src` | à faire (5) |
-| 21 | I/D | `ProofPanel` lit les règles de dépôt sur une API d'administration qu'aucun déposant n'atteint | `components/expenses/proof-panel.tsx` | **décision de la direction** : exposer ces règles au déposant, ou retirer la branche |
-| 22 | S | Le formulaire des comptes porte 13 états et construit sa charge utile | `pages/configuration/users-section.tsx` | à faire (5) |
-| 23 | S | La fiche dossier orchestre elle-même ses mutations | `pages/dossiers/detail.tsx` | à faire (5) |
-| 24 | S/O | Un drapeau `compact` cache deux composants ; la configuration recopie ses onglets | `proof-panel.tsx`, `pages/configuration/index.tsx` | à faire (5) — captures à repasser |
+| 20 | S | Le motif « enregistrer » est recopié 29 fois dans l'interface | `frontend/src` | corrigé (2.4.2) : `lib/use-enregistrement.ts` (28 copies sur 29) |
+| 21 | I/D | Le panneau des pièces (`usePieces`, `proof-panel.tsx`) lit les règles de dépôt sur une API d'administration qu'aucun déposant n'atteint | `components/expenses/proof-panel.tsx` | **décision de la direction** : exposer ces règles au déposant, ou retirer la branche |
+| 22 | S | Le formulaire des comptes porte 13 états et construit sa charge utile | `pages/configuration/users-section.tsx` | corrigé (2.4.2) : `chargeDuCompte`, `useEquipesDesPays` |
+| 23 | S | La fiche dossier orchestre elle-même ses mutations | `pages/dossiers/detail.tsx` | corrigé (2.4.2) : `useActionsDuDossier` |
+| 24 | S/O | Un drapeau `compact` cache deux composants ; la configuration recopie ses onglets | `proof-panel.tsx`, `pages/configuration/index.tsx` | corrigé (2.4.2) : `PiecesDeLaLigne`, `PiecesDuDossier`, registre `SECTIONS` |
 
-Priorités : (1) les règles qui vivent encore dans des vues, qu'un import ou
-une commande contourneraient ; (2) la dépendance à rebours d'`accounts` ;
-(3) les duplications du backend ; (4) les extractions locales ; (5)
-l'interface.
+Les priorités fixées à la revue — (1) les règles qui vivaient encore dans
+des vues, (2) la dépendance à rebours d'`accounts`, (3) les duplications du
+backend, (4) les extractions locales, (5) l'interface — sont toutes
+traitées dans la 2.4.2 (décision 125).
 
 ## Index
 

@@ -26,6 +26,16 @@ class RepriseDesProjetsTests(SansVuesBI, TransactionTestCase):
         executor.loader.build_graph()
         return executor.loader.project_state(cible).apps
 
+    @staticmethod
+    def _compter_les_traces(apps):
+        AuditLog = apps.get_model("expenses", "AuditLog")
+        ChangeLog = apps.get_model("core", "ChangeLog")
+        return {
+            "dossiers_ranges": AuditLog.objects.filter(object_type="Dossier", action="updated").count(),
+            "projets": ChangeLog.objects.filter(model_name="project").count(),
+            "types_de_dossiers": ChangeLog.objects.filter(model_name="dossier_kind").count(),
+        }
+
     def test_chaque_dossier_rejoint_un_projet_et_rien_d_autre_ne_bouge(self):
         apps = self._migrer(AVANT)
         try:
@@ -63,15 +73,17 @@ class RepriseDesProjetsTests(SansVuesBI, TransactionTestCase):
             sans_projet = dossier("N-3", pediatrie, None)
             vide = dossier("N-4")
             lignes_avant = sorted(Expense.objects.values_list("pk", "project_id", "budget_id"))
+            # Les journaux sont immuables : un retour en arrière des
+            # migrations n'efface pas les entrées que la migration initiale
+            # de la base de test a déjà écrites. On compte ce que la reprise
+            # ajoute, pas le total — lancé seul, le test en trouvait le double.
+            journaux_avant = self._compter_les_traces(apps)
 
             apps = self._migrer(APRES)
             Project = apps.get_model("core", "Project")
             Dossier = apps.get_model("expenses", "Dossier")
             Expense = apps.get_model("expenses", "Expense")
             DossierKind = apps.get_model("core", "DossierKind")
-            AuditLog = apps.get_model("expenses", "AuditLog")
-            ChangeLog = apps.get_model("core", "ChangeLog")
-
             historique = Project.objects.get(country_id=togo.pk, is_historical=True)
             self.assertEqual(historique.reference, "TG-P-HIST")
             self.assertEqual(historique.kind, "")
@@ -107,12 +119,13 @@ class RepriseDesProjetsTests(SansVuesBI, TransactionTestCase):
             )
             self.assertEqual(DossierKind.objects.count(), 10)
 
-            # Une trace par dossier rangé, par projet numéroté ou créé.
+            # Une trace par dossier rangé, par projet numéroté ou créé, par
+            # type de dossier posé.
+            apres = self._compter_les_traces(apps)
             self.assertEqual(
-                AuditLog.objects.filter(object_type="Dossier", action="updated").count(), 4
+                {cle: apres[cle] - journaux_avant[cle] for cle in apres},
+                {"dossiers_ranges": 4, "projets": 4, "types_de_dossiers": 10},
             )
-            self.assertEqual(ChangeLog.objects.filter(model_name="project").count(), 4)
-            self.assertEqual(ChangeLog.objects.filter(model_name="dossier_kind").count(), 10)
             del unique, melange, sans_projet, vide
         finally:
             executor = MigrationExecutor(connection)

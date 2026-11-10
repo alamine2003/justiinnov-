@@ -31,6 +31,7 @@ import {
 } from "@/lib/countries"
 import { STATUS_TONES } from "@/lib/status-styles"
 import type { Manager } from "@/lib/types"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 interface ManageManagersProps {
   countryId: number
@@ -196,14 +197,11 @@ function ManagerDialog({
   const [email, setEmail] = useState(manager?.email ?? "")
   const [title, setTitle] = useState(manager?.title ?? "")
   const [active, setActive] = useState(manager?.is_active ?? true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { saving, error, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       const payload = { name, email, title, is_active: active }
       if (manager) {
         await updateManager(manager.id, payload)
@@ -215,11 +213,7 @@ function ManagerDialog({
       }
       await onSaved()
       onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

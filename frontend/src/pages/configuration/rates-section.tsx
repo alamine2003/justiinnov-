@@ -31,6 +31,7 @@ import { createExchangeRate, fetchExchangeRates } from "@/lib/budgets"
 import { STATUS_TONES } from "@/lib/status-styles"
 import { useQuery } from "@/lib/use-query"
 import { formatAmount, formatDay, normalizeDecimal, todayIso } from "@/lib/utils"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 /**
  * Taux de change vers le FCFA.
@@ -156,8 +157,7 @@ function RateForm({
   const [currency, setCurrency] = useState("")
   const [rate, setRate] = useState("")
   const [validFrom, setValidFrom] = useState(todayIso())
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -170,9 +170,7 @@ function RateForm({
       setError(t("configuration.taux.taux_invalide"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await createExchangeRate({
         currency: currency.trim().toUpperCase(),
         rate_to_xof: taux,
@@ -180,11 +178,7 @@ function RateForm({
       })
       onSaved()
       onOpenChange(false)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

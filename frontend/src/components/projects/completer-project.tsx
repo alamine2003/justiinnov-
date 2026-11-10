@@ -14,6 +14,7 @@ import { FormError } from "@/components/ui/form-error"
 import { useAuth } from "@/context/use-auth"
 import { completerProject } from "@/lib/countries"
 import type { Project } from "@/lib/types"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 /**
  * « Compléter les dossiers », côté siège (décision 106) : ouvre les
@@ -31,22 +32,15 @@ export function CompleterProject({
   const { t } = useTranslation()
   const { can } = useAuth()
   const [open, setOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, enregistrer } = useEnregistrement(t("projets.completer.impossible"))
 
   if (!can("projets.update") || !project.accepte_des_dossiers) return null
 
   const confirmer = async () => {
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       onDone(await completerProject(project.id))
       setOpen(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("projets.completer.impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

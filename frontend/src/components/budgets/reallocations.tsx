@@ -32,6 +32,7 @@ import {
 import type { Budget, Reallocation } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { cn, formatAmount, formatDate, normalizeDecimal } from "@/lib/utils"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 interface ReallocationsProps {
   budgets: Budget[]
@@ -275,8 +276,7 @@ function ReallocationForm({
   const [target, setTarget] = useState<number | "">(budgets[1]?.id ?? "")
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("budgets.realloc.demande_impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -296,17 +296,11 @@ function ReallocationForm({
       setError(t("budgets.realloc.enveloppes_identiques"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await createReallocation({ source, target, amount: montant, reason })
       await onSaved()
       onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("budgets.realloc.demande_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   const libelle = (b: Budget) =>
@@ -403,8 +397,7 @@ function RejectDialog({
 }) {
   const { t } = useTranslation()
   const [note, setNote] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("budgets.realloc.refus_impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -412,17 +405,11 @@ function RejectDialog({
       setError(t("budgets.realloc.motif_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await rejectReallocation(reallocation.id, note.trim())
       await onRejected()
       onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("budgets.realloc.refus_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

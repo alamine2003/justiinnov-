@@ -15,7 +15,6 @@ from rest_framework.validators import UniqueTogetherValidator
 
 from accounts.perimetre import ChampCloisonne
 from accounts.permissions import get_access, roles_pour
-from budget.aggregates import convert
 from core.models import (
     Country,
     DossierKind,
@@ -26,10 +25,13 @@ from core.models import (
     Team,
     WorkflowConfiguration,
 )
+from core.regles import RegleViolee
 from core.serializers import DetailField, EntreeHistoriqueSerializer
 
 from .contacts import est_un_telephone, normaliser_telephone
+from . import pieces
 from .contenu import type_verifie
+from .devises import TauxInconnu, convertir_le_decaissement, decaissement_incomplet
 from .models import (
     AuditLog,
     Beneficiary,
@@ -40,7 +42,6 @@ from .models import (
     Rectification,
     compute_sha256,
 )
-from .numerotation import refus_d_ouverture
 from .corbeille import prouve_un_constat, versions_chargees
 from .stockage import effacer_sans_bruit, noter_depot
 from .transitions import peut_decider_rectification
@@ -52,6 +53,7 @@ from .workflow import (
     corbeille_ouverte,
     dossier_allowed_actions,
     expense_allowed_actions,
+    hors_de_l_equipe_du_dossier,
 )
 
 def exiger_un_dossier_de_piece_modifiable(dossier):
@@ -477,28 +479,12 @@ class ProofSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def verifier_le_remplacement(replaces, dossier, expense=None):
-        """La pièce remplacée doit appartenir au même dossier, et à la même ligne.
-
-        Sans ce contrôle, un pays pouvait archiver — via ``replaces`` — une
-        pièce d'un dossier qu'il n'a pas le droit de voir : le remplacement
-        change le statut de la pièce remplacée. Le message ne distingue pas
-        « autre dossier » de « inexistante », pour ne rien révéler. Une pièce
-        d'avant la 2.0, sans ligne, se remplace sur une ligne de son dossier :
-        c'est ainsi qu'elle trouve sa ligne (décision 107).
-        """
-        autre_ligne = (
-            expense is not None
-            and replaces.expense_id is not None
-            and replaces.expense_id != expense.pk
-        )
-        if replaces.dossier_id != dossier.pk or autre_ligne:
-            raise serializers.ValidationError(
-                {"replaces": _("Pièce invalide pour ce dossier.")}
-            )
-        if replaces.status == Proof.ProofStatus.ARCHIVED:
-            raise serializers.ValidationError(
-                {"replaces": _("Cette pièce a déjà été remplacée.")}
-            )
+        """La règle de :func:`expenses.pieces.verifier_le_remplacement`,
+        rendue en erreur de validation."""
+        try:
+            pieces.verifier_le_remplacement(replaces, dossier, expense)
+        except RegleViolee as exc:
+            raise serializers.ValidationError({exc.champ: [exc.message]}) from exc
 
     def _check_duplicate(self, dossier, expense, digest, replaces):
         """Refuse un fichier identique déjà présent sur la même ligne (§5.4).
@@ -675,13 +661,10 @@ class ExpenseSerializer(serializers.ModelSerializer):
         if (
             dossier is not None
             and team is not None
-            and dossier.team_id is not None
-            and team.pk != dossier.team_id
+            and hors_de_l_equipe_du_dossier(dossier, team.pk)
         ):
-            # Le dossier est lu par l'équipe qu'il porte : une ligne d'une
-            # autre équipe y serait visible par la première et invisible
-            # pour la seconde. Une ligne sans équipe reste possible en
-            # brouillon, la soumission l'exigera.
+            # Une ligne sans équipe reste possible en brouillon, la
+            # soumission l'exigera.
             raise serializers.ValidationError(
                 {
                     "team": _(
@@ -716,15 +699,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
     def _resoudre_la_devise(self, attrs, country):
         """Convertit un décaissement fait dans une autre devise (§5.3).
 
-        Une mission au Togo peut payer un hôtel en euros : la pièce porte
-        120 EUR. Le montant d'origine est conservé pour que le siège
-        retrouve le chiffre du justificatif, et ``amount`` reçoit sa
-        conversion dans la devise du pays — c'est elle qui pèse sur
-        l'enveloppe, et c'est elle qui garde les agrégats monodevise.
-
-        Le taux est celui du jour de la dépense, figé à la saisie : un
-        rapport tiré l'an prochain doit donner le même chiffre
-        qu'aujourd'hui.
+        La règle, partagée avec l'import, vit dans ``expenses.devises`` ; il
+        reste ici ce qui tient à la saisie : la modification partielle, qui
+        garde le décaissement en place, et les messages du formulaire.
         """
         if self.partial and not (
             "original_currency" in self.initial_data
@@ -772,7 +749,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"amount": _("Le montant de la dépense est requis.")}
                 )
-            if devise or montant is not None:
+            if decaissement_incomplet(devise, montant):
                 raise serializers.ValidationError(
                     {
                         "original_currency": _(
@@ -786,21 +763,12 @@ class ExpenseSerializer(serializers.ModelSerializer):
         if country is None:
             return
 
-        if devise == country.currency:
-            # Même devise : la conversion serait l'identité, et conserver un
-            # « montant d'origine » laisserait croire à un décaissement
-            # étranger.
-            attrs["amount"] = montant
-            attrs["original_currency"] = ""
-            attrs["original_amount"] = None
-            attrs["original_rate"] = None
-            return
-
         date = attrs.get("date") or getattr(self.instance, "date", None)
-        converti, taux = convert(
-            montant, devise, country.currency, _jour_local(date, country)
-        )
-        if converti is None:
+        try:
+            decaissement = convertir_le_decaissement(
+                devise, montant, country.currency, _jour_local(date, country)
+            )
+        except TauxInconnu:
             raise serializers.ValidationError(
                 {
                     "original_currency": _(
@@ -809,9 +777,15 @@ class ExpenseSerializer(serializers.ModelSerializer):
                         "de change."
                     ).format(source=devise, target=country.currency)
                 }
-            )
-        attrs["amount"] = converti
-        attrs["original_rate"] = taux
+            ) from None
+        attrs["amount"] = decaissement.amount
+        attrs["original_rate"] = decaissement.original_rate
+        if not decaissement.original_currency:
+            # Même devise : la conversion serait l'identité, et conserver un
+            # « montant d'origine » laisserait croire à un décaissement
+            # étranger.
+            attrs["original_currency"] = ""
+            attrs["original_amount"] = None
 
 
 class ExpenseProofSerializer(serializers.ModelSerializer):
@@ -1005,8 +979,6 @@ class DossierSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 _("Ce dossier est déclaré : il ne peut plus être modifié.")
             )
-        if self.instance is None:
-            attrs = self._verifier_le_projet_et_le_type(attrs)
         country = attrs.get("country") or getattr(self.instance, "country", None)
         team = _equipe_effective(self, attrs)
         if team is not None and country is not None and team.country_id != country.pk:
@@ -1014,34 +986,14 @@ class DossierSerializer(serializers.ModelSerializer):
                 {"team": _("Cette équipe appartient à un autre pays.")}
             )
         if self.instance is not None:
-            self._verifier_le_deplacement(attrs)
+            self.verifier_le_deplacement(attrs)
         _exiger_une_equipe_du_perimetre(self, team)
         # Le manager déjà en place compte aussi : un brouillon qui change de
         # pays ne garde pas un manager de l'ancien.
         _verifier_le_manager(_valeur_effective(self, attrs, "owner"), country)
         return attrs
 
-    def _verifier_le_projet_et_le_type(self, attrs):
-        """Un dossier s'ouvre dans un projet actif et typé, avec un type de
-        ce projet (décision 102, ``numerotation.refus_d_ouverture``). Le
-        pays vient du projet ; le titre, à défaut, du type."""
-        projet = attrs.get("project")
-        kind = attrs.get("kind")
-        refus = refus_d_ouverture(projet, kind)
-        if refus is not None:
-            champ, message = refus
-            raise serializers.ValidationError({champ: message})
-        country = attrs.get("country")
-        if country is not None and country.pk != projet.country_id:
-            raise serializers.ValidationError(
-                {"project": _("Ce projet appartient à un autre pays.")}
-            )
-        attrs["country"] = projet.country
-        if not (attrs.get("label") or "").strip():
-            attrs["label"] = kind.name
-        return attrs
-
-    def _verifier_le_deplacement(self, attrs):
+    def verifier_le_deplacement(self, attrs):
         """Un dossier ne change jamais de pays ; avec un contenu, ni d'équipe.
 
         Le pays est attribué à la création, une fois pour toutes

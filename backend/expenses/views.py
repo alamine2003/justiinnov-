@@ -9,8 +9,7 @@ utile, l'appel du service et la réponse. Les règles du circuit — verrous,
 
 import logging
 
-from django.db import IntegrityError, transaction
-from django.utils.translation import gettext as _
+from django.db import transaction
 from django.utils.translation import gettext_lazy
 from django.db.models import Count, Prefetch
 from django.http import FileResponse
@@ -18,7 +17,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import APIException, MethodNotAllowed, ValidationError
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 
 from accounts.permissions import RolePermission, get_access
@@ -27,10 +26,10 @@ from accounts.scoping import CountryScopedMixin
 from core.journal import Trace
 from core.models import ChangeLog
 from core.serializers import ParPaysSerializer
-from core.mixins import NoDestroyModelViewSet
-from core.regles import RegleViolee, traduire_les_regles
+from core.mixins import NoDestroyModelViewSet, SansCreationModelViewSet
+from core.regles import traduire_les_regles
 
-from . import corbeille, stockage, transitions
+from . import corbeille, pieces, stockage, transitions
 from .audit import champs_journalises, journaliser_la_modification, photographier, record
 from .mixins import DraftDeletableViewSet
 from .filtres import AuditLogFilter, DossierFilter, ElementSupprimeFilter
@@ -204,7 +203,7 @@ class BeneficiaryViewSet(CountryScopedMixin, NoDestroyModelViewSet):
         "submit", "review", "justify", "reject", "close", "reopen",
     )
 )
-class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
+class DossierViewSet(WorkflowMixin, CountryScopedMixin, SansCreationModelViewSet):
     """Dossiers de justification, prédéfinis par leur projet (décision 106).
 
     Un dossier naît avec son projet, un par type de dossier : l'API n'en crée
@@ -329,25 +328,15 @@ class DossierViewSet(WorkflowMixin, CountryScopedMixin, NoDestroyModelViewSet):
         """Renvoie un dossier déclaré au brouillon (``transitions.rouvrir``)."""
         return self.perform_transition(request, "reopen")
 
-    @extend_schema(exclude=True)
-    def create(self, request, *args, **kwargs):
-        """Un dossier ne se crée pas : son projet l'a reçu d'office (décision 106)."""
-        raise MethodNotAllowed(request.method)
-
     def perform_update(self, serializer):
-        # Relecture sous verrou : l'instance validée a été lue sans verrou,
-        # et une soumission a pu passer entre-temps. Écrire depuis l'objet
-        # périmé ramenait le dossier au brouillon sans réouverture ni trace.
         with traduire_les_regles():
-            serializer.instance = transitions.verrouiller(serializer.instance)
-            transitions.exiger_un_brouillon(serializer.instance)
-            transitions.exiger_l_auteur_du_brouillon(
+            serializer.instance = transitions.preparer_la_modification_du_dossier(
                 serializer.instance, get_access(self.request.user)
             )
         # Rejugé sous verrou : une ligne ajoutée entre la validation et
         # l'écriture — dans une autre équipe, ou avec une pièce — ferait du
         # déplacement validé un déplacement qui laisse du contenu derrière.
-        serializer._verifier_le_deplacement(serializer.validated_data)
+        serializer.verifier_le_deplacement(serializer.validated_data)
         champs = champs_journalises(serializer)
         avant = photographier(serializer.instance, champs)
         super().perform_update(serializer)
@@ -427,60 +416,20 @@ class ExpenseViewSet(WorkflowMixin, CountryScopedMixin, DraftDeletableViewSet):
         pas le droit de le voir révélerait son existence et son état.
         """
         self._check_country_scope(serializer)
-        # Le dossier est verrouillé le temps de l'insertion : une soumission
-        # ou un retrait du dossier au même instant attend, puis trouve la
-        # ligne — au lieu d'une ligne en brouillon dans un dossier déclaré
-        # que rien ne soumettrait plus, ou d'un retrait qui bute (§3.7, §4.4).
         with traduire_les_regles():
-            dossier = transitions.verrouiller_le_dossier_vise(
-                serializer.validated_data.get("dossier"), None
+            transitions.preparer_l_ajout(
+                serializer.validated_data.get("dossier"), get_access(self.request.user)
             )
-            transitions.exiger_un_dossier_ouvert(dossier)
-            # Une ligne ajoutée modifie le brouillon : son auteur seul
-            # (décision 46), comme l'import.
-            if dossier is not None:
-                transitions.exiger_l_auteur_du_brouillon(
-                    dossier, get_access(self.request.user),
-                    _("Seul l'auteur d'un brouillon peut y ajouter une ligne."),
-                )
         serializer.save(created_by=self.request.user.username)
         record(self.request, AuditLog.Action.CREATED, serializer.instance)
 
     def perform_update(self, serializer):
         self._check_country_scope(serializer)
-        # Relecture sous verrou : l'instance validée a été lue sans verrou,
-        # et une soumission a pu passer entre-temps. Écrire depuis l'objet
-        # périmé ramenait la ligne au brouillon, sans imputation, sans
-        # réouverture ni trace — la seule exception à l'irréversibilité
-        # contournée par un double clic.
-        # Le dossier d'abord, la ligne ensuite : le même ordre que la
-        # soumission, qui verrouille le dossier puis ses lignes — l'ordre
-        # inverse pouvait s'interbloquer. Déplacer un brouillon vers un
-        # dossier déjà déclaré l'y perdrait, exactement comme l'y créer.
         with traduire_les_regles():
-            dossier_vise = transitions.verrouiller_le_dossier_vise(
-                serializer.validated_data.get("dossier"), serializer.instance
+            serializer.instance = transitions.preparer_la_modification(
+                serializer.instance, serializer.validated_data.get("dossier"),
+                get_access(self.request.user),
             )
-            serializer.instance = transitions.verrouiller(serializer.instance)
-            transitions.exiger_un_brouillon(serializer.instance)
-            transitions.exiger_l_auteur_du_brouillon(
-                serializer.instance, get_access(self.request.user)
-            )
-            transitions.exiger_un_dossier_ouvert(dossier_vise)
-            # Rejoindre un autre dossier, c'est modifier ce brouillon-là :
-            # son auteur seul (décision 46).
-            if dossier_vise is not None and dossier_vise.pk != serializer.instance.dossier_id:
-                transitions.exiger_l_auteur_du_brouillon(
-                    dossier_vise, get_access(self.request.user),
-                    _("Seul l'auteur d'un brouillon peut y ajouter une ligne."),
-                )
-                # Ses pièces sont rangées sous son dossier : une ligne qui
-                # en porte ne change plus de dossier (décision 107).
-                if serializer.instance.proofs.exists():
-                    raise RegleViolee(
-                        "dossier",
-                        _("Cette ligne porte des justificatifs : elle ne change plus de dossier."),
-                    )
         # Le taux figé et le montant justifié ne s'écrivent pas par la charge
         # utile, mais la modification les fait bouger : ils sont de la trace.
         champs = champs_journalises(serializer, "original_rate", "justified_amount")
@@ -548,72 +497,18 @@ class ProofViewSet(CountryScopedMixin, NoDestroyModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
+        """Le service prend les verrous et juge (``pieces``) ; la vue écrit
+        le fichier, que ``FileField`` dépose au ``save()``."""
         self._check_country_scope(serializer)
-        # Le dossier sous verrou le temps du dépôt : un retrait du brouillon
-        # au même instant attend, puis la pièce ne trouve plus son dossier
-        # (404) au lieu d'une violation de clé étrangère ; une clôture au
-        # même instant est relue avant d'écrire.
+        donnees = serializer.validated_data
         with traduire_les_regles():
-            dossier = transitions.verrouiller_le_dossier_vise(
-                serializer.validated_data["dossier"], None
+            depot = pieces.preparer_le_depot(
+                donnees["dossier"], donnees["expense"], donnees.get("replaces")
             )
-        if dossier.status in transitions.PROOF_LOCKED_STATUSES:
-            raise ValidationError(
-                _("Le dossier est clôturé : plus aucun justificatif ne peut y être ajouté.")
-            )
-        serializer.validated_data["dossier"] = dossier
-        ligne = serializer.validated_data["expense"]
-        # Relue sous le verrou du dossier : une ligne qui en serait sortie
-        # entre-temps ne range pas sa pièce dans l'ancien (décision 107).
-        # Sous verrou : un retrait de la ligne au même instant est attendu,
-        # puis relu.
-        if Expense.objects.select_for_update().filter(pk=ligne.pk, dossier=dossier).first() is None:
-            raise ValidationError({"expense": [_("Cette ligne n'est plus dans ce dossier.")]})
-        replaced = serializer.validated_data.get("replaces")
-        if replaced is not None:
-            # Revalidé ici, hors sérialiseur : la pièce remplacée change
-            # d'état, elle doit relever du même dossier — et de la même
-            # ligne — que la nouvelle.
-            ProofSerializer.verifier_le_remplacement(replaced, dossier, ligne)
-            replaced = Proof.objects.select_for_update().get(pk=replaced.pk)
-        try:
-            serializer.save(
-                uploaded_by=self.request.user.username,
-                version=replaced.version + 1 if replaced else 1,
-            )
-        except IntegrityError as exc:
-            # Deux dépôts simultanés du même fichier : la base a tranché.
-            raise ValidationError(
-                {"file": [_("Ce fichier est déjà rattaché à cette ligne (doublon).")]}
-            ) from exc
-        proof = serializer.instance
-        if replaced is not None:
-            replaced.status = Proof.ProofStatus.ARCHIVED
-            replaced.save(update_fields=["status", "updated_at"])
-            record(
-                self.request,
-                AuditLog.Action.PROOF_REPLACED,
-                proof,
-                country=dossier.country,
-                dossier=dossier.number,
-                expense=ligne.pk,
-                sha256=proof.sha256,
-                version=proof.version,
-                before={"sha256": replaced.sha256, "version": replaced.version},
-                after={"sha256": proof.sha256, "version": proof.version},
-                replaces=replaced.pk,
-            )
-            return
-        record(
-            self.request,
-            AuditLog.Action.PROOF_UPLOADED,
-            proof,
-            country=dossier.country,
-            dossier=dossier.number,
-            expense=ligne.pk,
-            sha256=proof.sha256,
-            version=proof.version,
-        )
+            donnees["dossier"] = depot.dossier
+            with pieces.doublon_refuse():
+                serializer.save(uploaded_by=self.request.user.username, version=depot.version)
+            pieces.consigner_le_depot(serializer.instance, depot, self.request)
 
     @transaction.atomic
     def perform_update(self, serializer):

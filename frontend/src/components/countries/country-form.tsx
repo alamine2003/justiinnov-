@@ -17,6 +17,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
 import { fetchAvailableCountries } from "@/lib/countries"
 import { useQuery } from "@/lib/use-query"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 export interface CountryFormValues {
   name: string
@@ -68,8 +69,7 @@ function CountryFormBody({
 }: Omit<CountryFormProps, "open">) {
   const { t } = useTranslation()
   const [values, setValues] = useState<CountryFormValues>(initial ?? DEFAULTS)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
   const creation = !initial
 
   // Chargée à l'ouverture seulement : la liste change dès qu'un pays est créé.
@@ -88,16 +88,10 @@ function CountryFormBody({
       setError(t("pays.formulaire.choix_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await onSave(values)
       onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

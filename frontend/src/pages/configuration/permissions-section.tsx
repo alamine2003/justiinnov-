@@ -21,6 +21,7 @@ import { fetchPermissionMatrix, updatePermissionMatrix } from "@/lib/accounts"
 import { ApiError, type FieldErrors } from "@/lib/api"
 import { STATUS_TONES } from "@/lib/status-styles"
 import type { PermissionMatrix } from "@/lib/types"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 import { useQuery } from "@/lib/use-query"
 import { cn } from "@/lib/utils"
 import { Chargement, Erreur } from "@/pages/configuration/section-states"
@@ -53,10 +54,13 @@ export function MatriceDesDroits({
   const [choix, setChoix] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(matrix.capabilities.map((c) => [c.key, c.roles])),
   )
-  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const { saving, error, enregistrer: ecrire } = useEnregistrement((err) => {
+    if (!(err instanceof ApiError)) return t("configuration.permissions.erreur")
+    setFieldErrors(err.fields)
+    return err.message
+  })
 
   const memes = (a: string[], b: string[]) =>
     a.length === b.length && [...a].sort().every((v, k) => v === [...b].sort()[k])
@@ -73,10 +77,8 @@ export function MatriceDesDroits({
 
   const enregistrer = async (e: FormEvent) => {
     e.preventDefault()
-    setSaving(true)
-    setError(null)
     setFieldErrors({})
-    try {
+    await ecrire(async () => {
       const suivante = await updatePermissionMatrix(
         Object.fromEntries(modifiees.map((c) => [c.key, choix[c.key]])),
       )
@@ -89,16 +91,7 @@ export function MatriceDesDroits({
       setChoix(Object.fromEntries(suivante.capabilities.map((c) => [c.key, c.roles])))
       setSaved(true)
       onSaved(suivante)
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setFieldErrors(err.fields)
-        setError(err.message)
-      } else {
-        setError(t("configuration.permissions.erreur"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (
