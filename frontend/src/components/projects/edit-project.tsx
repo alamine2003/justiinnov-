@@ -23,6 +23,7 @@ import { updateProject } from "@/lib/countries"
 import { PROJECT_STATUSES, projectStatusLabel } from "@/lib/labels"
 import type { Project, ProjectKind, ProjectStatus } from "@/lib/types"
 import { typesActifs, useTypesDeProjets } from "@/lib/types-de-projets"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 import { normalizeDecimal } from "@/lib/utils"
 
 /**
@@ -73,8 +74,11 @@ function EditDialog({
   // Typer un projet d'avant la 2.0 : parmi les types actifs (décision 119).
   const types = typesActifs(useTypesDeProjets().data)
   const [motif, setMotif] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement((err) =>
+    err instanceof ApiError && Object.keys(err.fields).length > 0
+      ? Object.values(err.fields).flat().join(" ")
+      : messageDErreur(err, t("projets.modifier.impossible")),
+  )
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -87,24 +91,14 @@ function EditDialog({
       setError(t("projets.motif.requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       const donnees: Record<string, unknown> = {
         status, description, budget: montant, is_active: active, motif: motif.trim(),
       }
       if (project.a_typer && kind !== "") donnees.kind = kind
       onSaved(await updateProject(project.id, donnees))
       onOpenChange(false)
-    } catch (err) {
-      if (err instanceof ApiError && Object.keys(err.fields).length > 0) {
-        setError(Object.values(err.fields).flat().join(" "))
-      } else {
-        setError(err instanceof Error ? err.message : t("projets.modifier.impossible"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

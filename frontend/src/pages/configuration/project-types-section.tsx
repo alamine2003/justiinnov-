@@ -42,6 +42,7 @@ import {
 import { REFERENTIEL_PAGE_SIZE, invalidateReferentiel } from "@/lib/referentiel"
 import { STATUS_TONES } from "@/lib/status-styles"
 import type { DossierKind, ProjectType } from "@/lib/types"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 import { useQuery } from "@/lib/use-query"
 import { Erreur } from "@/pages/configuration/section-states"
 
@@ -333,31 +334,28 @@ function ChampEnErreur({ messages }: { messages?: string[] }) {
   return <p role="alert" className="text-xs text-destructive">{messages.join(" ")}</p>
 }
 
-/** Le formulaire commun aux deux dialogues : enregistrement, erreurs par champ. */
-function useEnregistrement(onSaved: () => void, onClose: () => void) {
+/**
+ * Le formulaire commun aux deux dialogues : l'enregistrement partagé, plus
+ * les erreurs par champ, rangées sous le champ visé.
+ */
+function useEnregistrementDuType(onSaved: () => void, onClose: () => void) {
   const { t } = useTranslation()
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [fields, setFields] = useState<Record<string, string[]>>({})
+  const { saving, error, setError, enregistrer: ecrireEtSuivre } = useEnregistrement((err) => {
+    if (err instanceof ApiError && Object.keys(err.fields).length > 0) {
+      setFields(err.fields)
+      return t("configuration.types_projets.erreur_champs")
+    }
+    return messageDErreur(err, t("erreurs.enregistrement_impossible"))
+  })
 
   const enregistrer = async (ecrire: () => Promise<unknown>) => {
-    setSaving(true)
-    setError(null)
     setFields({})
-    try {
+    await ecrireEtSuivre(async () => {
       await ecrire()
       onSaved()
       onClose()
-    } catch (err) {
-      if (err instanceof ApiError && Object.keys(err.fields).length > 0) {
-        setFields(err.fields)
-        setError(t("configuration.types_projets.erreur_champs"))
-      } else {
-        setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
   return { saving, error, setError, fields, enregistrer }
 }
@@ -429,7 +427,7 @@ function DialogueDeType({
   const [ordre, setOrdre] = useState(type ? String(type.ordre) : "")
   const [actif, setActif] = useState(type?.is_active ?? true)
   const [motif, setMotif] = useState("")
-  const { saving, error, setError, fields, enregistrer } = useEnregistrement(onSaved, onClose)
+  const { saving, error, setError, fields, enregistrer } = useEnregistrementDuType(onSaved, onClose)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -558,7 +556,7 @@ function DialogueDeKind({
   const [ordre, setOrdre] = useState(kind ? String(kind.ordre) : "")
   const [actif, setActif] = useState(kind?.is_active ?? true)
   const [motif, setMotif] = useState("")
-  const { saving, error, setError, fields, enregistrer } = useEnregistrement(onSaved, onClose)
+  const { saving, error, setError, fields, enregistrer } = useEnregistrementDuType(onSaved, onClose)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()

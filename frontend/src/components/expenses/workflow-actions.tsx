@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { ExpenseTransitionName, Schema, TransitionName } from "@/lib/types"
 import { formatAmount, normalizeDecimal } from "@/lib/utils"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 /** Transitions que ce composant sait proposer ; « rouvrir » a son propre bouton. */
 const TRANSITIONS: TransitionName[] = ["submit", "review", "justify", "reject", "close"]
@@ -194,8 +195,7 @@ function RejectDialog({
 }) {
   const { t } = useTranslation()
   const [note, setNote] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("depenses.rejet.impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -203,17 +203,11 @@ function RejectDialog({
       setError(t("depenses.rejet.motif_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    // Un refus laisse le dialogue ouvert : le motif saisi n'est pas perdu.
+    await enregistrer(async () => {
       await onConfirm(note.trim())
       onOpenChange(false)
-    } catch (err) {
-      // Le dialogue reste ouvert : le motif saisi n'est pas perdu.
-      setError(err instanceof Error ? err.message : t("depenses.rejet.impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (
@@ -277,8 +271,7 @@ function JustifyDialog({
   const { t } = useTranslation()
   const [justified, setJustified] = useState(amount ?? "")
   const [note, setNote] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("depenses.justification.impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -291,16 +284,10 @@ function JustifyDialog({
       }
       payload.justified_amount = montant
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await onConfirm(payload)
       onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("depenses.justification.impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

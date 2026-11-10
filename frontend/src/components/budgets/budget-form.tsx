@@ -25,6 +25,7 @@ import type {
   Team,
 } from "@/lib/types"
 import { currentYear, normalizeDecimal, yearChoices } from "@/lib/utils"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 export interface BudgetFormValues {
   country: number
@@ -104,8 +105,7 @@ function BudgetFormBody({
   const [amount, setAmount] = useState(editing?.amount ?? "")
   const [policy, setPolicy] = useState<OverrunPolicy>(editing?.overrun_policy ?? defaultPolicy)
   const [active, setActive] = useState(editing?.is_active ?? true)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
 
   const selectedCountry = countries.find((c) => c.id === country)
   // Une sous-enveloppe ne porte que sur une entité du pays choisi ; les
@@ -127,9 +127,7 @@ function BudgetFormBody({
       setError(t("budgets.form.montant_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await onSave({
         country,
         year,
@@ -143,11 +141,7 @@ function BudgetFormBody({
         is_active: active,
       })
       onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

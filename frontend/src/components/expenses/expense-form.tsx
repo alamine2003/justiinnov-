@@ -31,6 +31,7 @@ import {
   normalizeDecimal,
   toCountryLocalInput,
 } from "@/lib/utils"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 /** Modes de paiement, dans l'ordre du modèle de données. */
 const PAYMENT_METHODS = ["cash", "transfer", "mobile", "card", "check", "other"] as const
@@ -122,8 +123,7 @@ function ExpenseFormBody({
   const [beneficiary, setBeneficiary] = useState<number | "">(editing?.beneficiary ?? "")
   const [payment, setPayment] = useState<PaymentMethod>(editing?.payment_method ?? "cash")
   const [description, setDescription] = useState(editing?.description ?? "")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
   // Le repli « autre devise » ne s'ouvre seul qu'à l'ouverture, si la dépense
   // en a une ; ensuite la personne reste maîtresse de l'ouvrir ou le fermer.
   const [deviseOuverte] = useState(Boolean(editing?.original_currency))
@@ -154,9 +154,7 @@ function ExpenseFormBody({
       setError(t("depenses.formulaire.montant_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await onSave({
         title,
         date: instant,
@@ -179,11 +177,7 @@ function ExpenseFormBody({
         description,
       })
       onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

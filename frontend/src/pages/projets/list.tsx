@@ -47,6 +47,7 @@ import { scopedTeams, teamRequired } from "@/lib/teams"
 import type { CountrySummary, ProjectKind } from "@/lib/types"
 import { typesActifs, useTypesDeProjets } from "@/lib/types-de-projets"
 import { useDebouncedValue } from "@/lib/use-debounced"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 import { useQuery } from "@/lib/use-query"
 import { ApiError } from "@/lib/api"
 
@@ -306,9 +307,18 @@ function ProjectForm({
   const types = typesActifs(useTypesDeProjets().data)
   const [description, setDescription] = useState("")
   const [team, setTeam] = useState<number | "">("")
-  const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
+  // Un refus sur le type, l'équipe ou le nom s'écrit sous le champ ; le reste en tête.
+  const { saving, error, setError, enregistrer } = useEnregistrement((err) => {
+    const champs = err instanceof ApiError ? err.fields : {}
+    const sousLesChamps = Object.fromEntries(
+      ["kind", "team", "name"].filter((cle) => champs[cle]?.length).map((cle) => [cle, champs[cle][0]]),
+    )
+    setFieldErrors(sousLesChamps)
+    return Object.keys(sousLesChamps).length === 0
+      ? messageDErreur(err, t("dossiers.formulaire.creation_impossible"))
+      : null
+  })
 
   // Les équipes du pays, depuis sa fiche ; un manager rattaché à des
   // équipes n'ouvre un projet que pour l'une des siennes.
@@ -344,27 +354,14 @@ function ProjectForm({
       setError(t("dossiers.formulaire.equipe_requise"))
       return
     }
-    setSaving(true)
-    setError(null)
     setFieldErrors({})
-    try {
+    await enregistrer(async () => {
       const projet = await createProject({
         country, name: name.trim(), kind, description, team: team === "" ? null : team,
       })
       onSaved(projet.id)
       onOpenChange(false)
-    } catch (err) {
-      const champs = err instanceof ApiError ? err.fields : {}
-      const sousLesChamps = Object.fromEntries(
-        ["kind", "team", "name"].filter((cle) => champs[cle]?.length).map((cle) => [cle, champs[cle][0]]),
-      )
-      setFieldErrors(sousLesChamps)
-      if (Object.keys(sousLesChamps).length === 0) {
-        setError(err instanceof Error ? err.message : t("dossiers.formulaire.creation_impossible"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

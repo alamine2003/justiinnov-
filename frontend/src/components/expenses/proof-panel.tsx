@@ -31,6 +31,7 @@ import {
 import { PROOF_KINDS, proofKindLabel } from "@/lib/labels"
 import { useReferentiel } from "@/lib/referentiel"
 import type { Proof } from "@/lib/types"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 import { formatDate } from "@/lib/utils"
 
 function formatSize(t: TFunction, bytes: number) {
@@ -508,8 +509,7 @@ function ReviewDialog({
   const choices = reviewChoices(proof)
   const [status, setStatus] = useState<ReviewChoice>(choices[0] ?? "validated")
   const [reason, setReason] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("pieces.controle.impossible"))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -517,17 +517,11 @@ function ReviewDialog({
       setError(t("pieces.controle.motif_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await reviewProof(proof.id, status, reason)
       await onReviewed()
       onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("pieces.controle.impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

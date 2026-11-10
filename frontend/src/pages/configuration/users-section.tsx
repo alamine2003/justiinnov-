@@ -50,6 +50,7 @@ import {
 } from "@/lib/types"
 import { useQuery } from "@/lib/use-query"
 import { cn } from "@/lib/utils"
+import { useEnregistrement } from "@/lib/use-enregistrement"
 
 export function UsersSection() {
   const { t } = useTranslation()
@@ -323,13 +324,10 @@ function ResetTwoFactorDialog({
 }) {
   const { t } = useTranslation()
   const { logout } = useAuth()
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, enregistrer } = useEnregistrement(t("configuration.utilisateurs.totp_reinit_impossible"))
 
   const confirmer = async () => {
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       await resetTwoFactor(user.id)
       if (self) {
         // Le serveur fermera la plateforme à la prochaine requête : autant
@@ -339,11 +337,7 @@ function ResetTwoFactorDialog({
       }
       onDone()
       onOpenChange(false)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("configuration.utilisateurs.totp_reinit_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (
@@ -421,8 +415,7 @@ function UserForm({
   const [teamsByCountry, setTeamsByCountry] = useState<Record<number, Team[]>>({})
   const [password, setPassword] = useState("")
   const [active, setActive] = useState(editing?.is_active ?? true)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { saving, error, setError, enregistrer } = useEnregistrement(t("erreurs.enregistrement_impossible"))
 
   // Le rattachement au siège vient du serveur. Tant que la matrice n'est pas
   // chargée, il reste inconnu : le formulaire propose alors les rôles sans
@@ -514,9 +507,7 @@ function UserForm({
       setError(t("configuration.utilisateurs.form.mdp_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
+    await enregistrer(async () => {
       const payload: Record<string, unknown> = {
         first_name: firstName,
         last_name: lastName,
@@ -550,11 +541,7 @@ function UserForm({
       }
       await onSaved()
       onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("erreurs.enregistrement_impossible"))
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (

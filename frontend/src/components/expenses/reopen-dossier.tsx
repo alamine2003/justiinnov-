@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ApiError } from "@/lib/api"
 import type { DossierDetail } from "@/lib/types"
+import { messageDErreur, useEnregistrement } from "@/lib/use-enregistrement"
 
 interface ReopenDossierProps {
   dossier: DossierDetail
@@ -65,8 +66,21 @@ function ReopenDialog({
   const { t } = useTranslation()
   const [note, setNote] = useState("")
   const [noteError, setNoteError] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Le dialogue reste ouvert : le motif saisi n'est pas perdu. Les refus du
+  // serveur sont rendus là où ils portent : sous le motif, ou en tête quand
+  // ils concernent les lignes ou le statut du dossier.
+  const { saving, error, enregistrer } = useEnregistrement((err) => {
+    if (!(err instanceof ApiError)) return messageDErreur(err, t("dossiers.reouverture.impossible"))
+    if (err.fields.note) setNoteError(err.fields.note.join(" "))
+    const general = [
+      ...(err.fields.expenses ? [t("dossiers.reouverture.lignes_bloquantes")] : []),
+      ...(err.fields.expenses ?? []),
+      ...(err.fields.status ?? []),
+      ...(err.fields.non_field_errors ?? []),
+    ]
+    if (general.length > 0) return general.join(" ")
+    return err.fields.note ? null : err.message
+  })
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -74,32 +88,11 @@ function ReopenDialog({
       setNoteError(t("dossiers.reouverture.motif_requis"))
       return
     }
-    setSaving(true)
-    setError(null)
     setNoteError(null)
-    try {
+    await enregistrer(async () => {
       await onConfirm(note.trim())
       onOpenChange(false)
-    } catch (err) {
-      // Le dialogue reste ouvert : le motif saisi n'est pas perdu. Les
-      // refus du serveur sont rendus là où ils portent : sous le motif, ou
-      // en tête quand ils concernent les lignes ou le statut du dossier.
-      if (err instanceof ApiError) {
-        if (err.fields.note) setNoteError(err.fields.note.join(" "))
-        const general = [
-          ...(err.fields.expenses ? [t("dossiers.reouverture.lignes_bloquantes")] : []),
-          ...(err.fields.expenses ?? []),
-          ...(err.fields.status ?? []),
-          ...(err.fields.non_field_errors ?? []),
-        ]
-        if (general.length > 0) setError(general.join(" "))
-        else if (!err.fields.note) setError(err.message)
-      } else {
-        setError(err instanceof Error ? err.message : t("dossiers.reouverture.impossible"))
-      }
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   return (
