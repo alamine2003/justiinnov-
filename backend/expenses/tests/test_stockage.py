@@ -245,7 +245,7 @@ class TransactionExterieureTests(StockageTestCase):
         """La fiche est créée, puis la trace d'audit échoue : la transaction
         de la vue est annulée, la fiche disparaît — le fichier aussi."""
         with mock.patch(
-            "expenses.views.record", side_effect=OSError("journal indisponible")
+            "expenses.pieces.record", side_effect=OSError("journal indisponible")
         ), self.assertRaises(OSError):
             self.client.post(
                 "/api/proofs/",

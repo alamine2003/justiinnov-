@@ -26,9 +26,11 @@ from core.models import (
     Team,
     WorkflowConfiguration,
 )
+from core.regles import RegleViolee
 from core.serializers import DetailField, EntreeHistoriqueSerializer
 
 from .contacts import est_un_telephone, normaliser_telephone
+from . import pieces
 from .contenu import type_verifie
 from .models import (
     AuditLog,
@@ -40,7 +42,6 @@ from .models import (
     Rectification,
     compute_sha256,
 )
-from .numerotation import refus_d_ouverture
 from .corbeille import prouve_un_constat, versions_chargees
 from .stockage import effacer_sans_bruit, noter_depot
 from .transitions import peut_decider_rectification
@@ -477,28 +478,12 @@ class ProofSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def verifier_le_remplacement(replaces, dossier, expense=None):
-        """La pièce remplacée doit appartenir au même dossier, et à la même ligne.
-
-        Sans ce contrôle, un pays pouvait archiver — via ``replaces`` — une
-        pièce d'un dossier qu'il n'a pas le droit de voir : le remplacement
-        change le statut de la pièce remplacée. Le message ne distingue pas
-        « autre dossier » de « inexistante », pour ne rien révéler. Une pièce
-        d'avant la 2.0, sans ligne, se remplace sur une ligne de son dossier :
-        c'est ainsi qu'elle trouve sa ligne (décision 107).
-        """
-        autre_ligne = (
-            expense is not None
-            and replaces.expense_id is not None
-            and replaces.expense_id != expense.pk
-        )
-        if replaces.dossier_id != dossier.pk or autre_ligne:
-            raise serializers.ValidationError(
-                {"replaces": _("Pièce invalide pour ce dossier.")}
-            )
-        if replaces.status == Proof.ProofStatus.ARCHIVED:
-            raise serializers.ValidationError(
-                {"replaces": _("Cette pièce a déjà été remplacée.")}
-            )
+        """La règle de :func:`expenses.pieces.verifier_le_remplacement`,
+        rendue en erreur de validation."""
+        try:
+            pieces.verifier_le_remplacement(replaces, dossier, expense)
+        except RegleViolee as exc:
+            raise serializers.ValidationError({exc.champ: [exc.message]}) from exc
 
     def _check_duplicate(self, dossier, expense, digest, replaces):
         """Refuse un fichier identique déjà présent sur la même ligne (§5.4).
@@ -1005,8 +990,6 @@ class DossierSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 _("Ce dossier est déclaré : il ne peut plus être modifié.")
             )
-        if self.instance is None:
-            attrs = self._verifier_le_projet_et_le_type(attrs)
         country = attrs.get("country") or getattr(self.instance, "country", None)
         team = _equipe_effective(self, attrs)
         if team is not None and country is not None and team.country_id != country.pk:
@@ -1014,34 +997,14 @@ class DossierSerializer(serializers.ModelSerializer):
                 {"team": _("Cette équipe appartient à un autre pays.")}
             )
         if self.instance is not None:
-            self._verifier_le_deplacement(attrs)
+            self.verifier_le_deplacement(attrs)
         _exiger_une_equipe_du_perimetre(self, team)
         # Le manager déjà en place compte aussi : un brouillon qui change de
         # pays ne garde pas un manager de l'ancien.
         _verifier_le_manager(_valeur_effective(self, attrs, "owner"), country)
         return attrs
 
-    def _verifier_le_projet_et_le_type(self, attrs):
-        """Un dossier s'ouvre dans un projet actif et typé, avec un type de
-        ce projet (décision 102, ``numerotation.refus_d_ouverture``). Le
-        pays vient du projet ; le titre, à défaut, du type."""
-        projet = attrs.get("project")
-        kind = attrs.get("kind")
-        refus = refus_d_ouverture(projet, kind)
-        if refus is not None:
-            champ, message = refus
-            raise serializers.ValidationError({champ: message})
-        country = attrs.get("country")
-        if country is not None and country.pk != projet.country_id:
-            raise serializers.ValidationError(
-                {"project": _("Ce projet appartient à un autre pays.")}
-            )
-        attrs["country"] = projet.country
-        if not (attrs.get("label") or "").strip():
-            attrs["label"] = kind.name
-        return attrs
-
-    def _verifier_le_deplacement(self, attrs):
+    def verifier_le_deplacement(self, attrs):
         """Un dossier ne change jamais de pays ; avec un contenu, ni d'équipe.
 
         Le pays est attribué à la création, une fois pour toutes

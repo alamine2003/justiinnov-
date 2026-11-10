@@ -4,13 +4,27 @@ from django.db import transaction
 from rest_framework import mixins, viewsets
 
 
-class NoDestroyModelViewSet(
-    mixins.CreateModelMixin,
+class SansCreationModelViewSet(
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
     mixins.ListModelMixin,
     viewsets.GenericViewSet,
 ):
+    """Lecture et modification, chaque modification atomique ; ni création
+    ni suppression par l'API.
+
+    Pour une ressource qui naît ailleurs — un dossier naît avec son projet
+    (décision 106) — : la vue ne déclare pas une création qu'elle refuse,
+    ``POST`` répond 405 de lui-même (décision 125, principe de substitution).
+    """
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        # ``partial_update`` passe par ici.
+        return super().update(request, *args, **kwargs)
+
+
+class NoDestroyModelViewSet(mixins.CreateModelMixin, SansCreationModelViewSet):
     """CRUD complet **sans suppression physique**, chaque écriture atomique.
 
     Le module repose sur la désactivation (``is_active``) et non sur la
@@ -34,8 +48,3 @@ class NoDestroyModelViewSet(
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
-
-    @transaction.atomic
-    def update(self, request, *args, **kwargs):
-        # ``partial_update`` passe par ici.
-        return super().update(request, *args, **kwargs)
