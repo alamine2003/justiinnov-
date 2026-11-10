@@ -321,7 +321,7 @@ services:
     # images officielles d'avant — et la publie sur ghcr.io, à côté du
     # backend. L'étiquette ne bouge pas à chaque livraison : le conteneur
     # n'est recréé que lorsqu'elle change.
-    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-a6d52fd8badd
+    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-ed0fb168cf26
     command: server /data
     mem_limit: 512m
     environment:
@@ -516,7 +516,7 @@ services:
 
   sauvegarde-pieces:
     # La même image que `minio`, qui porte aussi `mc` (décision 94).
-    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-a6d52fd8badd
+    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-ed0fb168cf26
     mem_limit: 128m
     entrypoint: ["/sauvegarder.sh", "pieces"]
     environment:
