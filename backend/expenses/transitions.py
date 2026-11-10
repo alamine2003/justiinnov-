@@ -74,6 +74,7 @@ from .workflow import (
     Status,
     a_ete_declare,
     a_ete_rectifiee,
+    accepte_des_lignes,
     agit_en_auteur,
     breaks_four_eyes,
     next_proof_status,
@@ -229,7 +230,7 @@ def exiger_un_dossier_ouvert(dossier):
     passé : plus rien ne pouvait la soumettre, et la dépense restait
     indéfiniment en suspens dans un dossier clos.
     """
-    if dossier is not None and dossier.status in LOCKED_STATUSES:
+    if dossier is not None and not accepte_des_lignes(dossier):
         raise RegleViolee(
             "dossier",
             _(
