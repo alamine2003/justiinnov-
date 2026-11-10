@@ -15,7 +15,6 @@ from rest_framework.validators import UniqueTogetherValidator
 
 from accounts.perimetre import ChampCloisonne
 from accounts.permissions import get_access, roles_pour
-from budget.aggregates import convert
 from core.models import (
     Country,
     DossierKind,
@@ -32,6 +31,7 @@ from core.serializers import DetailField, EntreeHistoriqueSerializer
 from .contacts import est_un_telephone, normaliser_telephone
 from . import pieces
 from .contenu import type_verifie
+from .devises import TauxInconnu, convertir_le_decaissement, decaissement_incomplet
 from .models import (
     AuditLog,
     Beneficiary,
@@ -53,6 +53,7 @@ from .workflow import (
     corbeille_ouverte,
     dossier_allowed_actions,
     expense_allowed_actions,
+    hors_de_l_equipe_du_dossier,
 )
 
 def exiger_un_dossier_de_piece_modifiable(dossier):
@@ -660,13 +661,10 @@ class ExpenseSerializer(serializers.ModelSerializer):
         if (
             dossier is not None
             and team is not None
-            and dossier.team_id is not None
-            and team.pk != dossier.team_id
+            and hors_de_l_equipe_du_dossier(dossier, team.pk)
         ):
-            # Le dossier est lu par l'équipe qu'il porte : une ligne d'une
-            # autre équipe y serait visible par la première et invisible
-            # pour la seconde. Une ligne sans équipe reste possible en
-            # brouillon, la soumission l'exigera.
+            # Une ligne sans équipe reste possible en brouillon, la
+            # soumission l'exigera.
             raise serializers.ValidationError(
                 {
                     "team": _(
@@ -701,15 +699,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
     def _resoudre_la_devise(self, attrs, country):
         """Convertit un décaissement fait dans une autre devise (§5.3).
 
-        Une mission au Togo peut payer un hôtel en euros : la pièce porte
-        120 EUR. Le montant d'origine est conservé pour que le siège
-        retrouve le chiffre du justificatif, et ``amount`` reçoit sa
-        conversion dans la devise du pays — c'est elle qui pèse sur
-        l'enveloppe, et c'est elle qui garde les agrégats monodevise.
-
-        Le taux est celui du jour de la dépense, figé à la saisie : un
-        rapport tiré l'an prochain doit donner le même chiffre
-        qu'aujourd'hui.
+        La règle, partagée avec l'import, vit dans ``expenses.devises`` ; il
+        reste ici ce qui tient à la saisie : la modification partielle, qui
+        garde le décaissement en place, et les messages du formulaire.
         """
         if self.partial and not (
             "original_currency" in self.initial_data
@@ -757,7 +749,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"amount": _("Le montant de la dépense est requis.")}
                 )
-            if devise or montant is not None:
+            if decaissement_incomplet(devise, montant):
                 raise serializers.ValidationError(
                     {
                         "original_currency": _(
@@ -771,21 +763,12 @@ class ExpenseSerializer(serializers.ModelSerializer):
         if country is None:
             return
 
-        if devise == country.currency:
-            # Même devise : la conversion serait l'identité, et conserver un
-            # « montant d'origine » laisserait croire à un décaissement
-            # étranger.
-            attrs["amount"] = montant
-            attrs["original_currency"] = ""
-            attrs["original_amount"] = None
-            attrs["original_rate"] = None
-            return
-
         date = attrs.get("date") or getattr(self.instance, "date", None)
-        converti, taux = convert(
-            montant, devise, country.currency, _jour_local(date, country)
-        )
-        if converti is None:
+        try:
+            decaissement = convertir_le_decaissement(
+                devise, montant, country.currency, _jour_local(date, country)
+            )
+        except TauxInconnu:
             raise serializers.ValidationError(
                 {
                     "original_currency": _(
@@ -794,9 +777,15 @@ class ExpenseSerializer(serializers.ModelSerializer):
                         "de change."
                     ).format(source=devise, target=country.currency)
                 }
-            )
-        attrs["amount"] = converti
-        attrs["original_rate"] = taux
+            ) from None
+        attrs["amount"] = decaissement.amount
+        attrs["original_rate"] = decaissement.original_rate
+        if not decaissement.original_currency:
+            # Même devise : la conversion serait l'identité, et conserver un
+            # « montant d'origine » laisserait croire à un décaissement
+            # étranger.
+            attrs["original_currency"] = ""
+            attrs["original_amount"] = None
 
 
 class ExpenseProofSerializer(serializers.ModelSerializer):

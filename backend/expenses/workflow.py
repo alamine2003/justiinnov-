@@ -328,6 +328,31 @@ def agit_en_auteur(objet, role, username):
     return not objet.created_by or objet.created_by == username
 
 
+def accepte_des_lignes(dossier):
+    """Le dossier reçoit-il encore des lignes ?
+
+    Seulement en brouillon : une ligne arrivée dans un dossier déclaré y
+    resterait en brouillon, et plus rien ne la soumettrait. Partagé par la
+    saisie (``transitions.exiger_un_dossier_ouvert``) et l'import
+    (``reporting.imports``), qui le disent chacun à sa façon.
+    """
+    return dossier.status not in LOCKED_STATUSES
+
+
+def hors_de_l_equipe_du_dossier(dossier, team_id):
+    """Une ligne de l'équipe ``team_id`` sortirait-elle de celle du dossier ?
+
+    Le dossier est lu par l'équipe qu'il porte : une ligne d'une autre
+    équipe y serait visible par la première et invisible pour la seconde.
+    Un dossier sans équipe accepte toute ligne ; ``team_id`` vaut ``None``
+    pour une équipe que l'import n'a pas encore créée, donc une autre. Une
+    ligne sans équipe du tout n'est pas soumise à ce prédicat : la saisie et
+    l'import la laissent passer en brouillon, la soumission l'exigera.
+    Partagé par ``ExpenseSerializer`` et ``reporting.imports``.
+    """
+    return dossier.team_id is not None and team_id != dossier.team_id
+
+
 def peut_saisir(action, objet, *, role, username, configuration=None):
     """La saisie ``action`` (modifier, ajouter, déposer, supprimer) est-elle possible ?
 
