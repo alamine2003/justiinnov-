@@ -387,6 +387,7 @@ l'application.
 | Journaux `ChangeLog` et `AuditLog` : la seule porte d'écriture | `backend/core/journal.py` |
 | Ordre des applications (`core < accounts < notifications < budget < expenses < reporting`) | `backend/core/tests/test_dependances.py` |
 | Calculs budgétaires | `backend/budget/aggregates.py` |
+| Chiffres du pilotage (tableau de bord, répartition) | `backend/reporting/pilotage.py` (décision 125) |
 | Carte des index (chaque index et la requête qu'il sert) ; périodes en bornes | `backend/config/tests/test_index.py`, `backend/core/periodes.py` (décision 123) |
 | Interface | `DESIGN.md` |
 | Serveur, supervision et BI Grafana, pgAdmin, sauvegardes | `deploy/README.md` |

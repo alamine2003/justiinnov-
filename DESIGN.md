@@ -393,6 +393,15 @@ sept valeurs, revenez au `NativeSelect`.
 | Liste plafonnée par le serveur | `<TruncatedNotice page={…} noun={…} />` ; le composant se tait tant que la page n'est pas tronquée |
 | Actualisation en arrière-plan | `<RefreshIndicator />` (`components/ui/refresh-indicator.tsx`) : `<output>`, icône `aria-hidden`, libellé `sr-only` — jamais un `aria-label` posé sur un `<svg>` sans rôle, que les lecteurs d'écran n'annoncent pas |
 
+**Un formulaire enregistre par `useEnregistrement(refus)`**
+(`lib/use-enregistrement.ts`, décision 125) : il porte l'indicateur
+d'envoi, l'erreur et l'envoi entre les deux — `enregistrer(async () => …)`
+reçoit ce que le `try` contenait, fermeture du dialogue comprise, et dit si
+l'envoi a abouti. `refus` est le message par défaut, ou une fonction qui
+range les erreurs de champ et ne renvoie rien pour l'en-tête. On ne recopie
+plus le `try/finally` : il l'était vingt-neuf fois. Seul le dépôt d'une
+pièce garde le sien, qui remet aussi sa progression à zéro.
+
 Le chargement des données passe par `useQuery(clé, fetcher)` (annulation de la
 requête précédente, `loading` distinct de `refreshing`) et, pour les
 pages de **détail** identifiées par l'URL, avec `keepPreviousData: false` :
@@ -868,14 +877,17 @@ Un bouton **« Renommer »** (`outline`, icône `PencilLine`,
 (`CarteDeLigne`), sous la barre justifié / écart, un bloc « Justificatif » :
 l'état se lit sur `has_proof`, dit par le serveur — « Sans justificatif »
 en `statut-attente` (icône `FileWarning`) sinon —, puis les pièces de la
-ligne en liste serrée (`<ProofPanel compact>`) : nom, version, badge de
+ligne en liste serrée (`<PiecesDeLaLigne>`) : nom, version, badge de
 statut, Aperçu, Télécharger, Contrôler selon `allowed_reviews`. « Déposer »
 (`outline`, `sm`) n'apparaît que si la ligne porte `upload` ; le dépôt
 envoie `expense`, jamais `dossier`, et le remplacement ne propose que les
 pièces de la ligne. Le rail de droite ne garde que le nombre de lignes sans
 justificatif (`lignes_sans_preuve`, un `<Alert>` neutre) et, s'il y en a,
-les **pièces d'avant la 2.0**, déposées sur tout le dossier : elles se lisent
-et se contrôlent, il ne s'en dépose plus.
+les **pièces d'avant la 2.0**, déposées sur tout le dossier (`<PiecesDuDossier>`) :
+elles se lisent et se contrôlent, il ne s'en dépose plus. Les deux
+composants (`components/expenses/proof-panel.tsx`) partagent leurs règles,
+leurs actions et leurs dialogues par un même hook ; aucun drapeau ne
+choisit plus entre deux rendus sans rapport (décision 125).
 
 ### Audit en tableau de bord
 
