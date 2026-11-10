@@ -1,10 +1,6 @@
 """Tableaux de bord temps réel (§5.6) et exports (§5.7)."""
 
-from decimal import Decimal
-
 from django.db import transaction
-from django.db.models import Count, Sum
-from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -16,21 +12,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, MultiPartParser
 
-from budget.aggregates import (
-    consolidation_par_pays,
-    current_rates,
-    date_de_reference,
-    niveau_d_execution,
-    seuil_d_alerte,
-    to_xof,
-)
-from budget.models import CONSOLIDATION_CURRENCY
+from budget.aggregates import current_rates, date_de_reference
 from core.journal import tracer
-from core.models import Country, DossierKind, Project, ProjectType
+from core.models import Country, DossierKind, Project
 from expenses.models import AuditLog
-from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 
 from . import alerts as alert_rules
+from . import pilotage
 from .exports import (
     FORMATS,
     PDF,
@@ -60,8 +48,6 @@ PARAMETRE_PAYS = OpenApiParameter(
     "country", int,
     description="Pays ; un pays inconnu ou hors périmètre répond 404.",
 )
-
-ZERO = Decimal("0.00")
 
 #: Nombre d'alertes transmises au tableau de bord, les plus graves d'abord.
 MAX_ALERTS = 50
@@ -93,26 +79,12 @@ def _pays_unique(request):
     return ids[0] if len(ids) == 1 else None
 
 
-def _money(value):
-    return str(value if value is not None else ZERO)
-
-
-def _taux(numerator, denominator):
-    if not denominator:
-        return None
-    return (Decimal(numerator) / Decimal(denominator)).quantize(Decimal("0.0001"))
-
-
-def _ratio(numerator, denominator):
-    return _as_str(_taux(numerator, denominator))
-
-
-def _as_str(value):
-    return str(value) if value is not None else None
-
-
 class DashboardView(APIView):
     """Vue de pilotage : consolidation, répartition par pays et alertes."""
+
+    # Les chiffres viennent de ``reporting.pilotage`` ; la vue lit la
+    # requête, borne au périmètre et assemble la réponse. (Pas dans la
+    # docstring : elle est la description de la route dans le schéma.)
 
     @extend_schema(parameters=[PARAMETRE_ANNEE, PARAMETRE_PAYS], responses=DashboardSerializer)
     def get(self, request):
@@ -123,7 +95,7 @@ class DashboardView(APIView):
         # Un exercice se consolide aux taux en vigueur à sa date de référence
         # — sa clôture, ou ce jour — pour qu'un exercice clos ne bouge plus.
         rates = current_rates(on_date=date_de_reference(year))
-        rows, consolidated = self._per_country(budgets, rates)
+        rows, consolidated = pilotage.par_pays(budgets, rates)
         current_alerts = alert_rules.collect(budgets, dossiers, expenses)
 
         return Response(
@@ -131,10 +103,10 @@ class DashboardView(APIView):
                 "year": year,
                 # Les totaux en devise n'existent que par pays : au niveau
                 # global, seul le FCFA consolidé a un sens.
-                "totals": self._totaux_consolides(rows, rates),
+                "totals": pilotage.totaux_consolides(rows, rates),
                 "consolidated_xof": consolidated,
                 "countries": rows,
-                "workload": self._workload(dossiers, expenses),
+                "workload": pilotage.charge_de_travail(dossiers, expenses),
                 # Les alertes sont calculées à la lecture, mais **pas
                 # notifiées** ici : une requête GET ne doit rien écrire, et
                 # faire dépendre l'alerte de l'ouverture d'une page reviendrait
@@ -148,99 +120,11 @@ class DashboardView(APIView):
             }
         )
 
-    #: Chiffres d'une ligne de pays qui se consolident en FCFA.
-    MONTANTS = ("allocated", "engaged", "consumed", "justified", "remaining")
-
-    def _totaux_consolides(self, rows, rates):
-        """Totaux globaux, en FCFA uniquement.
-
-        Additionner « allocated » du Togo (XOF) et du Guinée (GNF) donnait un
-        chiffre sans unité, présenté comme un total. Chaque montant est
-        converti aux taux de la date de référence de l'exercice ; un pays
-        dont la devise n'a pas de taux est écarté et nommé, jamais absorbé.
-        """
-        totaux = {key: ZERO for key in self.MONTANTS}
-        non_converties = set()
-        for row in rows:
-            montants = {
-                key: to_xof(Decimal(row[key]), row["currency"], rates=rates)
-                for key in self.MONTANTS
-            }
-            if any(value is None for value in montants.values()):
-                non_converties.add(row["currency"])
-                continue
-            for key, value in montants.items():
-                totaux[key] += value
-
-        used = totaux["consumed"] + totaux["engaged"]
-        execution_rate = _taux(used, totaux["allocated"])
-        return {
-            "currency": CONSOLIDATION_CURRENCY,
-            **{key: _money(value) for key, value in totaux.items()},
-            # Ce qui est sorti sans preuve à l'appui.
-            "gap": _money(totaux["consumed"] - totaux["justified"]),
-            "execution_rate": _as_str(execution_rate),
-            # Jugé par la même règle que chaque ligne de pays et chaque
-            # enveloppe (``budget.aggregates.niveau_d_execution``).
-            "execution_level": niveau_d_execution(execution_rate, seuil_d_alerte()),
-            "justification_rate": _ratio(totaux["justified"], totaux["consumed"]),
-            "unconverted_currencies": sorted(non_converties),
-        }
-
-    def _per_country(self, budgets, rates):
-        """Agrège par pays via :func:`consolidation_par_pays`, seul point de
-        calcul partagé avec ``/api/budgets/summary/``."""
-        rows, consolidated = consolidation_par_pays(budgets, rates=rates)
-        return (
-            [
-                {
-                    "country": row["country"],
-                    "country_name": row["country_name"],
-                    "country_ref": row["country_ref"],
-                    "currency": row["currency"],
-                    "allocated": _money(row["allocated"]),
-                    "sub_allocated": _money(row["sub_allocated"]),
-                    "engaged": _money(row["engaged"]),
-                    "consumed": _money(row["consumed"]),
-                    "justified": _money(row["justified"]),
-                    "gap": _money(row["gap"]),
-                    "remaining": _money(row["remaining"]),
-                    "execution_rate": _as_str(row["execution_rate"]),
-                    "execution_level": row["execution_level"],
-                    "justification_rate": _as_str(row["justification_rate"]),
-                    "remaining_xof": _as_str(row["remaining_xof"]),
-                }
-                for row in rows
-            ],
-            {
-                "allocated": str(consolidated["allocated"]),
-                "remaining": str(consolidated["remaining"]),
-                # Une devise sans taux connu est exclue du total et signalée,
-                # jamais absorbée silencieusement.
-                "unconverted_currencies": consolidated["unconverted_currencies"],
-            },
-        )
-
-    def _workload(self, dossiers, expenses):
-        """Ce qui attend une action, pour orienter le contrôle."""
-        by_status = dict(
-            expenses.values_list("status").annotate(total=Count("id"))
-        )
-        return {
-            "expenses_to_review": by_status.get(Status.SUBMITTED, 0)
-            + by_status.get(Status.IN_REVIEW, 0),
-            "expenses_draft": by_status.get(Status.DRAFT, 0),
-            # Décaissements sans preuve : le chiffre que l'application existe
-            # pour faire diminuer.
-            "expenses_unjustified": by_status.get(Status.UNJUSTIFIED, 0),
-            # La définition de la liste (`?ouverts=true`) : la tuile ouvre
-            # une liste au même chiffre (décision 117).
-            "dossiers_open": dossiers.ouverts().count(),
-        }
-
 
 class BreakdownView(APIView):
     """Répartition d'un pays par équipe, propriétaire, projet, catégorie et mois."""
+
+    # Les regroupements viennent de ``reporting.pilotage``.
 
     @extend_schema(parameters=[PARAMETRE_ANNEE, PARAMETRE_PAYS], responses=BreakdownSerializer)
     def get(self, request):
@@ -259,80 +143,8 @@ class BreakdownView(APIView):
         # sont bornées et réparties par mois à l'heure du pays, pas à celle
         # du serveur. ``scoped_querysets`` a déjà refusé un pays inconnu.
         fuseau = fuseau_de(Country.objects.get(pk=country_id))
-
-        # Brouillons et refus ne représentent aucune consommation réelle.
-        counted = expenses.filter(
-            status__in=list(ENGAGING_STATUSES) + list(CONSUMING_STATUSES)
-        )
-        return Response(
-            {
-                "year": year,
-                "by_team": self._group(counted, "team__name", _("Sans équipe")),
-                "by_owner": self._group(counted, "owner__name", _("Sans propriétaire")),
-                # Le projet de la ligne : celui de son dossier depuis la 2.0
-                # (décision 102), celui qu'elle portait pour un dossier rangé
-                # sous « Historique » (décision 103) — comme la consommation
-                # des sous-enveloppes par projet.
-                "by_project": self._group(counted, "project__name", _("Hors projet")),
-                "by_project_kind": self._group(
-                    counted, "dossier__project__kind", _("Sans type de projet"),
-                    libelles={t.code: t.libelle for t in ProjectType.objects.all()},
-                ),
-                "by_dossier_kind": self._group(
-                    counted, "dossier__kind__name", _("Sans type de dossier")
-                ),
-                "by_category": self._group(
-                    counted, "marketing_category__name", _("Sans catégorie")
-                ),
-                "by_expense_title": self._group(
-                    counted, "expense_title__label", _("Sans intitulé")
-                ),
-                "by_month": self._by_month(counted, fuseau),
-            }
-        )
-
-    def _group(self, expenses, field, fallback, libelles=None):
-        rows = (
-            expenses.values(field)
-            .annotate(
-                amount=Sum("amount"),
-                justified=Sum("justified_amount"),
-                lines=Count("id"),
-            )
-            .order_by("-amount")
-        )
-        return [
-            {
-                "label": (libelles or {}).get(row[field], row[field]) or fallback,
-                "amount": _money(row["amount"]),
-                "justified": _money(row["justified"]),
-                "gap": _money((row["amount"] or ZERO) - (row["justified"] or ZERO)),
-                "lines": row["lines"],
-            }
-            for row in rows
-        ]
-
-    def _by_month(self, expenses, fuseau):
-        rows = (
-            expenses.annotate(month=TruncMonth("date", tzinfo=fuseau))
-            .values("month")
-            .annotate(
-                amount=Sum("amount"),
-                justified=Sum("justified_amount"),
-                lines=Count("id"),
-            )
-            .order_by("month")
-        )
-        return [
-            {
-                "label": row["month"].strftime("%Y-%m") if row["month"] else "—",
-                "amount": _money(row["amount"]),
-                "justified": _money(row["justified"]),
-                "gap": _money((row["amount"] or ZERO) - (row["justified"] or ZERO)),
-                "lines": row["lines"],
-            }
-            for row in rows
-        ]
+        counted = pilotage.depenses_comptees(expenses)
+        return Response({"year": year, **pilotage.repartition(counted, fuseau)})
 
 
 class ExportView(APIView):
