@@ -47,7 +47,7 @@ services:
     # qu'en production. Elle ne se tire jamais d'un registre ici : la
     # production la reçoit de ghcr.io, sous la même étiquette.
     build: ./deploy/minio
-    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-a6d52fd8badd
+    image: ghcr.io/alamine2003/justiinnov--minio:RELEASE.2025-04-22T22-12-26Z-ed0fb168cf26
     pull_policy: build
     container_name: justi_minio
     command: server /data --console-address ":9001"

@@ -28,8 +28,8 @@
 # CI le vérifie (`ci.yml`, « Images Docker »), et la livraison ne republie
 # jamais une étiquette existante (`cd.yml`).
 
-# Go 1.25 : la chaîne 1.24 n'est plus maintenue ; MinIO exige 1.24 ou plus.
-FROM golang:1.27.1-alpine3.24 AS construction
+# Go 1.27, branche suivie ; MinIO exige 1.24 ou plus.
+FROM golang:1.27.3-alpine3.24 AS construction
 
 ARG MINIO_MODULE=github.com/minio/minio@v0.0.0-20250422221226-0d7408fc9969
 ARG MINIO_RELEASE=RELEASE.2025-04-22T22-12-26Z
@@ -59,7 +59,7 @@ RUN go install -trimpath -ldflags "-s -w \
       "${MC_MODULE}" \
  && /sortie/minio --version && /sortie/mc --version
 
-FROM alpine:3.24.2
+FROM alpine:3.24.3
 
 # Certificats pour une copie `mc` vers un stockage en TLS ; rien d'autre.
 RUN apk add --no-cache ca-certificates
