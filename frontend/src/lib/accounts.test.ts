@@ -10,6 +10,10 @@ import {
 import type { AccountUser, Me } from "@/lib/types"
 import { PERMISSIONS_DU_PAYS } from "@/test/permissions-fixtures"
 
+// Une valeur sans rien d'un secret : un scanner de secrets lisait un vrai
+// mot de passe dans une chaîne d'exemple.
+const PROVISOIRE = "x".repeat(12)
+
 function profil(overrides: Partial<Me>): Me {
   return {
     id: 1,
@@ -149,7 +153,7 @@ describe("chargeDuCompte", () => {
   it("envoie tout à la création, identifiant et mot de passe compris", () => {
     const charge = chargeDuCompte(
       null,
-      saisie({ password: "Provisoire-2026", teamIds: [4] }),
+      saisie({ password: PROVISOIRE, teamIds: [4] }),
       ROLE_DU_PAYS,
     )
     expect(charge).toEqual({
@@ -161,7 +165,7 @@ describe("chargeDuCompte", () => {
       username: "togo.innov",
       countries: [1],
       teams: [4],
-      password: "Provisoire-2026",
+      password: PROVISOIRE,
     })
     // L'ordre des clés est celui qu'envoyait le formulaire.
     expect(Object.keys(charge)).toEqual([
