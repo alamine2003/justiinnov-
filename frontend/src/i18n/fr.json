@@ -274,7 +274,10 @@
     "theme_bouton": "Thème de l'interface",
     "langue_bouton": "Langue de l'interface",
     "hors_ligne_titre": "Connexion au serveur impossible",
-    "hors_ligne_texte": "Vérifiez votre accès au réseau : les données affichées peuvent être obsolètes et aucune saisie ne sera enregistrée."
+    "hors_ligne_texte": "Vérifiez votre accès au réseau : les données affichées peuvent être obsolètes et aucune saisie ne sera enregistrée.",
+    "version_interface": "Interface",
+    "version_serveur": "Serveur",
+    "versions_differentes": "Versions différentes"
   },
   "notifications": {
     "titre": "Notifications",
@@ -1074,7 +1077,10 @@
       "email_coupe": "Coupé — aucun e-mail ne part, les notifications restent dans l'application",
       "smtp_configure": "Serveur SMTP configuré",
       "smtp_absent": "Aucun serveur — les messages partent dans les logs",
-      "expediteur": "Expéditeur"
+      "expediteur": "Expéditeur",
+      "version_interface": "Version de l'interface",
+      "version_serveur": "Version du serveur",
+      "version_differente": "{{version}} — différente de l'interface"
     },
     "workflow": {
       "titre": "Workflow",

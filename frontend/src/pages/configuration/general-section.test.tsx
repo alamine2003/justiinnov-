@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { GeneralSection } from "./general-section"
+import { BRAND } from "@/lib/brand"
 
 const workflow = {
   require_review_step: true,
@@ -32,11 +33,13 @@ vi.mock("./rates-section", () => ({ RatesSection: () => null }))
 const refreshProfile = vi.fn(async () => {})
 /** Les droits du compte ; la corbeille n'est qu'au super administrateur. */
 let corbeille = true
+/** La version du serveur que donne `/api/me/` (décision 126). */
+let versionDuServeur: string | null = null
 vi.mock("@/context/use-auth", () => ({
   useAuth: () => ({
     refreshProfile,
     can: (cle: string) => cle !== "corbeille.supprimer" || corbeille,
-    me: { role: "admin" },
+    me: { role: "admin", api_version: versionDuServeur },
   }),
 }))
 
@@ -50,6 +53,7 @@ function monter() {
 
 beforeEach(() => {
   corbeille = true
+  versionDuServeur = null
   updateWorkflowConfiguration.mockReset()
   refreshProfile.mockClear()
 })
@@ -98,5 +102,31 @@ describe("GeneralSection — corbeille", () => {
     expect(screen.queryByRole("switch", { name: "Suppressions ouvertes" })).toBeNull()
     expect(screen.queryByText("Corbeille")).toBeNull()
     expect(screen.queryByRole("link", { name: "Voir la corbeille" })).toBeNull()
+  })
+})
+
+/** Décision 126 : la version du serveur à côté de celle de l'interface. */
+describe("GeneralSection — versions", () => {
+  it("montre la version du serveur quand elle est donnée", async () => {
+    versionDuServeur = BRAND.version
+    monter()
+
+    expect(await screen.findByText("Version du serveur")).toBeInTheDocument()
+    expect(screen.getByText("Version de l'interface")).toBeInTheDocument()
+    expect(screen.queryByText(/différente de l'interface/)).toBeNull()
+  })
+
+  it("signale un serveur d'une autre livraison", async () => {
+    versionDuServeur = "0.0.1"
+    monter()
+
+    expect(await screen.findByText("0.0.1 — différente de l'interface")).toBeInTheDocument()
+  })
+
+  it("se tait sans version du serveur", async () => {
+    monter()
+
+    expect(await screen.findByText("Version de l'interface")).toBeInTheDocument()
+    expect(screen.queryByText("Version du serveur")).toBeNull()
   })
 })

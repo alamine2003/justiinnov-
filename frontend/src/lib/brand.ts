@@ -28,6 +28,19 @@ export const BRAND = {
 // l'icône d'onglet et d'application installée — le monogramme sur un carré
 // blanc — vit dans `public/favicon.svg` et `public/icons/`.
 
+/**
+ * La version du serveur diffère-t-elle de celle de l'interface (décision 126) ?
+ *
+ * `api_version` vient de `/api/me/`, nulle hors des administrateurs ;
+ * `dev` est un serveur construit sans version (développement, CI) : rien à
+ * comparer. Une comparaison de deux étiquettes, pas un calcul : un
+ * déploiement à moitié fait, ou une interface gardée en cache face à un
+ * serveur neuf, se voit ici.
+ */
+export function versionsDivergentes(serveur: string | null | undefined): boolean {
+  return Boolean(serveur) && serveur !== "dev" && serveur !== BRAND.version
+}
+
 /** Mention de copyright, l'année courante si elle dépasse la mise en service. */
 export function copyright(): string {
   const annee = new Date().getFullYear()

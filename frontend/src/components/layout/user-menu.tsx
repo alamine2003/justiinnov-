@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/context/use-auth"
 import { TOTP_PATH } from "@/lib/accounts"
+import { BRAND, versionsDivergentes } from "@/lib/brand"
 import { useInstallPrompt } from "@/lib/install-prompt"
 import { STATUS_TONES } from "@/lib/status-styles"
 
@@ -33,6 +34,8 @@ export const SUPERVISION_PATH = "/grafana/"
  * un compte qui ne l'a pas encore enrôlée, « BI de pilotage » à qui le
  * serveur en donne l'adresse (`bi_url`, capacité `bi.consulter`), et
  * « Supervision » aux administrateurs, seuls à avoir un compte Grafana.
+ * Les versions de l'interface et du serveur ne s'affichent qu'à qui le
+ * serveur donne la sienne (`api_version`, administrateurs, décision 126).
  */
 export function UserMenu({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation()
@@ -79,6 +82,20 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
                 </li>
               ))}
             </ul>
+          </DropdownMenuGroup>
+        )}
+        {me?.api_version && (
+          <DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="flex flex-wrap items-center gap-2 font-normal text-muted-foreground">
+              <span>
+                {t("layout.version_interface")} {BRAND.version} · {t("layout.version_serveur")}{" "}
+                {me.api_version}
+              </span>
+              {versionsDivergentes(me.api_version) && (
+                <Badge className={STATUS_TONES.ATTENTE}>{t("layout.versions_differentes")}</Badge>
+              )}
+            </DropdownMenuLabel>
           </DropdownMenuGroup>
         )}
         {/* Absent sur un serveur qui ignore la 2FA : rien à proposer. */}

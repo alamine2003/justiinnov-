@@ -13,7 +13,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
 import { fetchConfiguration, updateWorkflowConfiguration } from "@/lib/accounts"
 import { ApiError, type FieldErrors } from "@/lib/api"
-import { BRAND } from "@/lib/brand"
+import { BRAND, versionsDivergentes } from "@/lib/brand"
 import { OVERRUN_POLICIES, overrunPolicyLabel } from "@/lib/labels"
 import { invalidateReferentiel } from "@/lib/referentiel"
 import type { OverrunPolicy, WorkflowConfiguration } from "@/lib/types"
@@ -25,7 +25,7 @@ import { RatesSection } from "@/pages/configuration/rates-section"
 import { Chargement, Erreur } from "@/pages/configuration/section-states"
 
 export function GeneralSection() {
-  const { can, refreshProfile } = useAuth()
+  const { can, me, refreshProfile } = useAuth()
   const { t } = useTranslation()
   const query = useQuery("configuration:page", () => fetchConfiguration())
   const config = query.data
@@ -45,7 +45,20 @@ export function GeneralSection() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Bloc titre={t("configuration.general.application")}>
           <Ligne label={t("commun.nom")} valeur={BRAND.name} />
-          <Ligne label={t("layout.version")} valeur={BRAND.version} />
+          <Ligne label={t("configuration.general.version_interface")} valeur={BRAND.version} />
+          {/* Celle du serveur vient de `/api/me/` (décision 126) : un écart
+              dit qu'interface et serveur ne sont pas de la même livraison. */}
+          {me?.api_version && (
+            <Ligne
+              label={t("configuration.general.version_serveur")}
+              valeur={
+                versionsDivergentes(me.api_version)
+                  ? t("configuration.general.version_differente", { version: me.api_version })
+                  : me.api_version
+              }
+              alerte={versionsDivergentes(me.api_version)}
+            />
+          )}
           <Ligne label={t("configuration.general.developpement")} valeur={BRAND.developer} />
           <Ligne
             label={t("configuration.general.fuseau_serveur")}

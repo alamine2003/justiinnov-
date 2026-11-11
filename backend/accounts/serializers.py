@@ -222,6 +222,7 @@ class MeSerializer(serializers.ModelSerializer):
     alert_thresholds = serializers.SerializerMethodField()
     supervision = serializers.SerializerMethodField()
     bi_url = serializers.SerializerMethodField()
+    api_version = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -230,6 +231,7 @@ class MeSerializer(serializers.ModelSerializer):
             "role", "role_display", "countries", "teams", "has_global_scope",
             "must_change_password", "totp_required", "totp_confirmed", "language",
             "permissions", "workflow", "alert_thresholds", "supervision", "bi_url",
+            "api_version",
         ]
 
     def _role(self, user):
@@ -356,6 +358,25 @@ class MeSerializer(serializers.ModelSerializer):
         if self._role(user) not in roles_pour("bi.consulter"):
             return None
         return f"{settings.BI_URL}/d/bi-vue-ensemble"
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_api_version(self, user):
+        """Version du serveur qui répond (``APP_VERSION``, décision 126).
+
+        Aux administrateurs seuls (``configuration.manage``) : elle sert à
+        voir, le jour d'un incident, si l'interface et le serveur sont de la
+        même livraison ; annoncée à tous, elle dirait à qui cherche une
+        faille quelle version viser. Nulle aussi tant que le compte est
+        retenu — mot de passe provisoire, double authentification exigée et
+        non confirmée — : ``/api/me/`` lui reste ouvert, la plateforme non.
+        """
+        if self._role(user) not in roles_pour("configuration.manage"):
+            return None
+        if self.get_must_change_password(user):
+            return None
+        if self.get_totp_required(user) and not self.get_totp_confirmed(user):
+            return None
+        return settings.APP_VERSION
 
 
 class MePreferencesSerializer(serializers.Serializer):
