@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { UserMenu } from "./user-menu"
+import { BRAND } from "@/lib/brand"
 import type { Me } from "@/lib/types"
 
 let me: Partial<Me> = {}
@@ -21,7 +22,7 @@ function ouvrir() {
 }
 
 beforeEach(() => {
-  me = { username: "do.innov", role_display: "Super administrateur", totp_confirmed: true, supervision: true, bi_url: null }
+  me = { username: "do.innov", role_display: "Super administrateur", totp_confirmed: true, supervision: true, bi_url: null, api_version: null }
   droits = new Set()
 })
 
@@ -45,5 +46,43 @@ describe("UserMenu — BI de pilotage", () => {
 
     expect(await screen.findByRole("menuitem", { name: "Supervision" })).toBeInTheDocument()
     expect(screen.queryByRole("menuitem", { name: "BI de pilotage" })).toBeNull()
+  })
+})
+
+/** Décision 126 : les deux versions, aux administrateurs seulement. */
+describe("UserMenu — versions", () => {
+  it("nomme l'interface et le serveur, sans alerte quand ils concordent", async () => {
+    me = { ...me, api_version: BRAND.version }
+
+    ouvrir()
+
+    expect(
+      await screen.findByText(`Interface ${BRAND.version} · Serveur ${BRAND.version}`),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Versions différentes")).toBeNull()
+  })
+
+  it("signale un serveur d'une autre livraison", async () => {
+    me = { ...me, api_version: "0.0.1" }
+
+    ouvrir()
+
+    expect(await screen.findByText("Versions différentes")).toBeInTheDocument()
+  })
+
+  it("ne compare rien à un serveur construit sans version", async () => {
+    me = { ...me, api_version: "dev" }
+
+    ouvrir()
+
+    expect(await screen.findByText(`Interface ${BRAND.version} · Serveur dev`)).toBeInTheDocument()
+    expect(screen.queryByText("Versions différentes")).toBeNull()
+  })
+
+  it("se tait quand le serveur ne la donne pas", async () => {
+    ouvrir()
+
+    expect(await screen.findByRole("menuitem", { name: "Déconnexion" })).toBeInTheDocument()
+    expect(screen.queryByText(/Serveur/)).toBeNull()
   })
 })

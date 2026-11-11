@@ -547,6 +547,12 @@ manager qui y est rattaché ; **« Activer la double authentification »**
 faux — rien quand le serveur ne connaît pas la 2FA ; **« BI de pilotage »**
 (icône `ChartColumn`) quand le serveur en donne l'adresse (`me.bi_url`,
 capacité `bi.consulter` sur une pile où Grafana tourne), en nouvel onglet ;
+les versions de l'interface et du serveur (« Interface 2.4.4 · Serveur
+2.4.4 », libellé discret) quand le serveur donne la sienne
+(`me.api_version`, administrateurs, décision 126), avec une pastille
+**« Versions différentes »** (`STATUS_TONES.ATTENTE`) quand elles diffèrent
+— jugé par `versionsDivergentes` (`lib/brand.ts`), qui ignore un serveur
+`dev` ;
 **« Supervision »**
 (icône `Activity`) pour les administrateurs seulement
 (`can("configuration.manage")`) **et** sur une pile qui l'expose

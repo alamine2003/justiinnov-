@@ -32,6 +32,7 @@ function profil(overrides: Partial<Me>): Me {
     language: "fr",
     supervision: false,
     bi_url: null,
+    api_version: null,
     alert_thresholds: [],
     permissions: {
       ...PERMISSIONS_DU_PAYS,

@@ -13580,6 +13580,11 @@
                         "format": "uri",
                         "nullable": true,
                         "readOnly": true
+                    },
+                    "api_version": {
+                        "type": "string",
+                        "nullable": true,
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -13601,7 +13606,8 @@
                     "workflow",
                     "alert_thresholds",
                     "supervision",
-                    "bi_url"
+                    "bi_url",
+                    "api_version"
                 ]
             },
             "MeWorkflow": {

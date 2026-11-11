@@ -5,12 +5,30 @@ l'application :mod:`core`.
 """
 
 import os
+import re
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Version du serveur qui répond (décision 126), posée par la livraison
+# dans l'image du backend (``--build-arg APP_VERSION``, celle de
+# ``frontend/package.json``, comme pour l'interface — décision 98). Sans
+# elle — développement, CI — ou de forme inattendue, ``dev`` : une valeur
+# venue de l'environnement ne s'affiche que si elle ressemble à une
+# version.
+_FORME_DE_VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+-]{0,39}$")
+
+
+def lire_la_version(valeur):
+    """La version à afficher, ou ``dev`` si elle manque ou surprend."""
+    valeur = (valeur or "").strip()
+    return valeur if _FORME_DE_VERSION.fullmatch(valeur) else "dev"
+
+
+APP_VERSION = lire_la_version(os.environ.get("APP_VERSION"))
 
 # Le mode debug doit être un choix explicite : par défaut, on est en production.
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"

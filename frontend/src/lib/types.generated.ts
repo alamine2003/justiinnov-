@@ -4039,6 +4039,7 @@ export interface components {
             readonly supervision: boolean
             /** Format: uri */
             readonly bi_url: string | null
+            readonly api_version: string | null
         }
         /** @description Politique du circuit que l'interface doit connaître. */
         MeWorkflow: {

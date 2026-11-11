@@ -557,7 +557,12 @@ version affichée dans l'interface** (pied de page et en-tête) est figée à
 la construction de l'image frontend (`APP_VERSION`, `frontend/Dockerfile`,
 `vite.config.ts`) : celle de `frontend/package.json`, seule (`2.0.1`), sur
 `main` comme sur un tag — les deux livraisons d'un même commit publient la
-même image, que le SHA court nomme (`sha-…`, décision 98). **Avant de taguer `vX.Y.Z`,
+même image, que le SHA court nomme (`sha-…`, décision 98). La même
+version est inscrite dans l'image du backend (`--build-arg APP_VERSION`,
+`backend/Dockerfile`) ; `/api/me/` la rend aux administrateurs
+(`api_version`, nulle pour le pays, `dev` sans version), et le menu du
+compte comme « Configuration › Général » montrent les deux côte à côte,
+avec un avertissement quand elles diffèrent (décision 126). **Avant de taguer `vX.Y.Z`,
 relevez `version` à `X.Y.Z` dans `frontend/package.json`** (`npm version
 X.Y.Z --no-git-tag-version`, qui met aussi `package-lock.json` à jour) et
 fusionnez ; la livraison refuse un tag qui ne correspond pas au paquet. La

@@ -36,6 +36,13 @@ USER app
 # sans erreur de droit.
 RUN django-admin compilemessages -l en -v0
 
+# Version du serveur (décision 126), affichée aux administrateurs à côté de
+# celle de l'interface : la livraison passe celle de `package.json`
+# (`--build-arg APP_VERSION=2.4.4`, `cd.yml`) ; sans elle, `dev`. Posée en
+# dernier : changer de version ne reconstruit pas les couches du dessus.
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
+
 EXPOSE 8000
 
 # Docker ne déclare le conteneur prêt que lorsque l'API répond et voit sa

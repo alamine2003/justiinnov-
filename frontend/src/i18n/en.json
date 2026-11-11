@@ -274,7 +274,10 @@
     "theme_bouton": "Interface theme",
     "langue_bouton": "Interface language",
     "hors_ligne_titre": "Unable to reach the server",
-    "hors_ligne_texte": "Check your network access: the data shown may be out of date and nothing you enter will be saved."
+    "hors_ligne_texte": "Check your network access: the data shown may be out of date and nothing you enter will be saved.",
+    "version_interface": "Interface",
+    "version_serveur": "Server",
+    "versions_differentes": "Versions differ"
   },
   "notifications": {
     "titre": "Notifications",
@@ -1074,7 +1077,10 @@
       "email_coupe": "Off — no email is sent, notifications stay in the application",
       "smtp_configure": "SMTP server configured",
       "smtp_absent": "No server — messages go to the logs",
-      "expediteur": "Sender"
+      "expediteur": "Sender",
+      "version_interface": "Interface version",
+      "version_serveur": "Server version",
+      "version_differente": "{{version}} — differs from the interface"
     },
     "workflow": {
       "titre": "Workflow",
