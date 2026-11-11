@@ -295,6 +295,19 @@ en entier au survol (`title`, porté par le champ natif qui est au-dessus ;
 le texte affiché, couvert, n'en porte pas : il n'est jamais survolé).
 Désactivé ou invalide (`aria-invalid`), il s'affiche comme `<Input>`.
 
+Une date se saisit par `<ChampDate>` (`components/ui/champ-date.tsx`),
+jamais par un `<Input type="date">` (décision 127) : le sélecteur natif est
+dessiné par le navigateur — minuscule sous Safari, dans la langue du
+navigateur et non de l'interface — et aucun CSS ne le règle. `ChampDate` a
+l'allure d'un `<Input>` (même hauteur, même bordure, icône `CalendarDays` à
+droite, « Choisir une date » quand il est vide) et ouvre dans un popover
+base-ui un calendrier `react-day-picker` : jours de 40 px, semaine du lundi,
+mois et année en listes, au clavier, dans la langue de l'interface. Sa valeur
+reste « AAAA-MM-JJ » ; `id` va au bouton, que nomme le `<Label htmlFor>`.
+Un filtre qui peut rester sans date passe `effacable` (« Effacer la date »).
+Un test (`champ-date.test.tsx`) refuse tout champ natif de date, de mois ou
+de date et heure hors des exceptions qu'il nomme.
+
 Le projet utilise **base-ui** sous shadcn, dont l'API diffère de Radix :
 pour les listes déroulantes, préférez `NativeSelect` — comportement
 clavier natif, rendu correct sur mobile.
@@ -1088,6 +1101,13 @@ livrable, port 8080.
 ---
 
 ## Points connus
+
+- **La date et l'heure d'une dépense** (`expense-form.tsx`, `#exp-date`)
+  restent un champ natif `datetime-local`, seule exception nommée au test
+  de `ChampDate` : le guide vidéo « Saisir une ligne » le remplit, et le
+  changer impose de tourner ce guide de nouveau, sur une base jetable
+  (décision 127). Il passera à `ChampDate` et à un champ d'heure avec ce
+  tournage.
 
 - L'application est installable comme application de bureau (PWA) :
   manifeste et service worker viennent du build Vite, l'icône et le nom

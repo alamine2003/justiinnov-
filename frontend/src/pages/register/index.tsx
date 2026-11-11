@@ -21,6 +21,7 @@ import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
+import { ChampDate } from "@/components/ui/champ-date"
 import { ExportMenu } from "@/components/reporting/export-menu"
 import { useAuth } from "@/context/use-auth"
 import { fetchCountries } from "@/lib/countries"
@@ -232,28 +233,28 @@ export function RegisterPage() {
               <Label htmlFor="reg-from" className="text-xs">
                 {timezone ? t("registre.du_heure", { fuseau: timezone }) : t("registre.du")}
               </Label>
-              <Input
+              <ChampDate
                 id="reg-from"
-                type="date"
                 value={from}
-                onChange={(e) => {
-                  setFrom(e.target.value)
+                onChange={(valeur) => {
+                  setFrom(valeur)
                   setPage(1)
                 }}
+                effacable
               />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="reg-to" className="text-xs">
                 {t("registre.au")}
               </Label>
-              <Input
+              <ChampDate
                 id="reg-to"
-                type="date"
                 value={to}
-                onChange={(e) => {
-                  setTo(e.target.value)
+                onChange={(valeur) => {
+                  setTo(valeur)
                   setPage(1)
                 }}
+                effacable
               />
             </div>
           </div>

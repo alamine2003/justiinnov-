@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
+import { ChampDate } from "@/components/ui/champ-date"
 import { fetchCountries } from "@/lib/countries"
 import { REFERENTIEL_PAGE_SIZE, useReferentiel } from "@/lib/referentiel"
 
@@ -21,21 +21,21 @@ export function BarreDePeriode({
     <div className="flex flex-wrap items-end gap-3">
       <div className="grid gap-1">
         <Label htmlFor="audit-debut" className="text-xs">{t("audit.filtres.debut")}</Label>
-        <Input
+        <ChampDate
           id="audit-debut"
-          type="date"
           value={lire("debut")}
-          onChange={(e) => changer({ debut: e.target.value, page: "" })}
+          onChange={(debut) => changer({ debut, page: "" })}
+          effacable
           className="w-40"
         />
       </div>
       <div className="grid gap-1">
         <Label htmlFor="audit-fin" className="text-xs">{t("audit.filtres.fin")}</Label>
-        <Input
+        <ChampDate
           id="audit-fin"
-          type="date"
           value={lire("fin")}
-          onChange={(e) => changer({ fin: e.target.value, page: "" })}
+          onChange={(fin) => changer({ fin, page: "" })}
+          effacable
           className="w-40"
         />
       </div>

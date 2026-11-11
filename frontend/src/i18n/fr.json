@@ -1556,5 +1556,9 @@
     "motif_placeholder": "Pourquoi retirer cet élément ?",
     "motif_requis": "Indiquez pourquoi cet élément part à la corbeille : le motif reste au journal.",
     "fait_titre": "Mis à la corbeille"
+  },
+  "champ_date": {
+    "choisir": "Choisir une date",
+    "effacer": "Effacer la date"
   }
 }

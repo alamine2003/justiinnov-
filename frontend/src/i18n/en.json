@@ -1556,5 +1556,9 @@
     "motif_placeholder": "Why remove this item?",
     "motif_requis": "Say why this item goes to the bin: the reason stays in the log.",
     "fait_titre": "Moved to the bin"
+  },
+  "champ_date": {
+    "choisir": "Pick a date",
+    "effacer": "Clear the date"
   }
 }
