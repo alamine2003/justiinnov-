@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
+import { ChampDate } from "@/components/ui/champ-date"
 import { useAuth } from "@/context/use-auth"
 import { createExchangeRate, fetchExchangeRates } from "@/lib/budgets"
 import { STATUS_TONES } from "@/lib/status-styles"
@@ -218,13 +219,7 @@ function RateForm({
             </div>
             <div className="space-y-2">
               <Label htmlFor="rate-from">{t("champs.valid_from")}</Label>
-              <Input
-                id="rate-from"
-                type="date"
-                value={validFrom}
-                onChange={(e) => setValidFrom(e.target.value)}
-                required
-              />
+              <ChampDate id="rate-from" value={validFrom} onChange={setValidFrom} />
             </div>
           </div>
 
