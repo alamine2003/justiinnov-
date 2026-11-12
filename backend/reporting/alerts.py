@@ -8,7 +8,9 @@ Titres et détails sont des chaînes **paresseuses** (:func:`format_lazy`) :
 une même alerte est lue dans la langue du tableau de bord par qui le
 consulte, et dans la langue de chaque destinataire par les notifications.
 Une chaîne rendue ici le serait dans la langue du processus qui calcule —
-celle de l'ordonnanceur, pour tout le monde.
+celle de l'ordonnanceur, pour tout le monde. Les nombres aussi
+(:func:`_nombre`) : « 4 000 000 » et « 85,3 » en français, « 4,000,000 » et
+« 85.3 » en anglais, jamais le ``Decimal`` brut (« 4000000.00 »).
 """
 
 from datetime import timedelta
@@ -17,6 +19,8 @@ from decimal import Decimal
 from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from django.utils.formats import number_format
+from django.utils.functional import lazy
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
@@ -28,6 +32,18 @@ from expenses.workflow import CONSUMING_STATUSES, ENGAGING_STATUSES, Status
 from .scope import fuseau_de
 
 ZERO = Decimal("0.00")
+
+
+def _formater(valeur):
+    valeur = Decimal(valeur)
+    # Les décimales qui disent quelque chose, deux au plus : « 5 » et non
+    # « 5.00 », « 2,5 », « 1 234,56 ».
+    decimales = min(2, max(0, -valeur.normalize().as_tuple().exponent))
+    return number_format(valeur, decimal_pos=decimales, use_l10n=True, force_grouping=True)
+
+
+#: Un nombre dans la langue du lecteur, formaté quand le message est lu.
+_nombre = lazy(_formater, str)
 
 
 class Level:
@@ -83,7 +99,7 @@ def budget_alerts(budgets):
                     # « % e » ressemble à un format Python pour xgettext : sans
                     # ce drapeau, msgfmt --check refuserait la traduction.
                     # xgettext:no-python-format
-                    _(" ({taux} % engagés)"), taux=_pourcentage(used, budget.amount)
+                    _(" ({taux} % engagés)"), taux=_nombre(_pourcentage(used, budget.amount))
                 )
                 if budget.amount else ""
             )
@@ -94,7 +110,7 @@ def budget_alerts(budgets):
                     format_lazy(_("Dépassement — {budget}"), budget=budget),
                     format_lazy(
                         _("{overrun} {currency} au-delà de l'enveloppe{taux}."),
-                        overrun=overrun, currency=budget.country.currency, taux=taux,
+                        overrun=_nombre(overrun), currency=budget.country.currency, taux=taux,
                     ),
                     country=budget.country,
                     link="/budgets",
@@ -120,7 +136,7 @@ def budget_alerts(budgets):
                         ),
                         format_lazy(
                             _("{percentage} % de l'enveloppe sont engagés ou consommés."),
-                            percentage=percentage,
+                            percentage=_nombre(percentage),
                         ),
                         country=budget.country,
                         link="/budgets",
@@ -283,8 +299,8 @@ def unusual_expense_alerts(expenses):
                     "{amount} {currency}, soit plus de {factor} fois la moyenne "
                     "des autres dépenses du pays."
                 ),
-                amount=expense.amount, currency=expense.country.currency,
-                factor=f"{factor:g}",
+                amount=_nombre(expense.amount), currency=expense.country.currency,
+                factor=_nombre(factor),
             ),
             country=expense.country,
             link=f"/dossiers/{expense.dossier_id}",

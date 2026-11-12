@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
-from django.utils import timezone
+from django.utils import timezone, translation
 
 from budget.models import Budget
 from core.models import WorkflowConfiguration
@@ -38,7 +38,7 @@ class DepenseInhabituelleTests(DashboardTestCase):
         alertes = self._alertes()
 
         self.assertEqual(len(alertes), 1)
-        self.assertIn("2000000", alertes[0]["detail"])
+        self.assertIn("2\xa0000\xa0000", alertes[0]["detail"])
 
     def test_une_seule_depense_n_est_jamais_inhabituelle(self):
         self.soumise.delete()
@@ -103,7 +103,7 @@ class EnveloppeVideTests(DashboardTestCase):
 
         alerte = next(a for a in response.data["alerts"] if a["kind"] == "budget_overrun")
         self.assertEqual(alerte["level"], "critical")
-        self.assertIn("500000.00", alerte["detail"])
+        self.assertIn("500\xa0000", alerte["detail"])
         # Un pourcentage d'une enveloppe nulle n'a pas de sens : il est tu.
         self.assertNotIn("%", alerte["detail"])
 
@@ -132,3 +132,69 @@ class EnveloppeVideTests(DashboardTestCase):
         self.assertNotIn(
             self.togo.pk, [row["country"] for row in response.data["countries"]]
         )
+
+
+class NombresDesAlertesTests(DashboardTestCase):
+    """Régression : « 4000000.00 XOF, soit plus de 5.00 fois la moyenne » —
+    le ``Decimal`` brut s'affichait tel quel, dans toutes les langues."""
+
+    def setUp(self):
+        super().setUp()
+        # Le middleware active la langue de la requête et ne la remet pas.
+        self.addCleanup(translation.deactivate)
+
+    def _inhabituelle(self, langue):
+        self.make_expense(amount="2000000.00", status=Status.JUSTIFIED, budget=self.budget)
+        self.login(self.doo)
+        response = self.client.get(
+            "/api/dashboard/", {"year": self.year}, HTTP_ACCEPT_LANGUAGE=langue
+        )
+        return next(a for a in response.data["alerts"] if a["kind"] == "unusual_expense")
+
+    def test_le_montant_et_le_facteur_se_lisent_en_francais(self):
+        detail = self._inhabituelle("fr")["detail"]
+
+        self.assertTrue(detail.startswith("2\xa0000\xa0000 XOF, soit plus de 5 fois"), detail)
+        self.assertNotIn(".00", detail)
+
+    def test_et_en_anglais(self):
+        detail = self._inhabituelle("en")["detail"]
+
+        self.assertTrue(detail.startswith("2,000,000 XOF"), detail)
+        self.assertIn(" 5 ", detail)
+
+    def test_le_nombre_se_formate_a_la_lecture(self):
+        """L'alerte est calculée une fois et lue dans la langue de chacun :
+        celle du tableau de bord, ou celle de chaque destinataire d'une
+        notification (``notify_alerts``)."""
+        self.make_expense(amount="2000000.00", status=Status.JUSTIFIED, budget=self.budget)
+        with translation.override("fr"):
+            alerte = next(
+                a for a in alert_rules.unusual_expense_alerts(self.budget.country.expenses.all())
+            )
+        with translation.override("en"):
+            self.assertIn("2,000,000", str(alerte["detail"]))
+        with translation.override("fr"):
+            self.assertIn("2\xa0000\xa0000", str(alerte["detail"]))
+
+    def _alerte(self, montant, genre, langue):
+        self.budget.amount = Decimal(montant)
+        self.budget.save()
+        self.login(self.doo)
+        response = self.client.get(
+            "/api/dashboard/", {"year": self.year}, HTTP_ACCEPT_LANGUAGE=langue
+        )
+        return next(a for a in response.data["alerts"] if a["kind"] == genre)
+
+    def test_le_pourcentage_d_un_seuil_suit_la_langue(self):
+        # 500 000 engagés ou consommés sur 600 000 : 83,3 %.
+        self.assertIn("83,3 %", self._alerte("600000.00", "budget_threshold", "fr")["detail"])
+        self.assertIn("83.3 %", self._alerte("600000.00", "budget_threshold", "en")["detail"])
+
+    def test_le_montant_d_un_depassement_suit_la_langue(self):
+        # 500 000 sur 100 000 : 400 000 au-delà, 500 % engagés.
+        detail = self._alerte("100000.00", "budget_overrun", "fr")["detail"]
+        self.assertTrue(detail.startswith("400\xa0000 XOF au-delà"), detail)
+        self.assertIn("(500 % engagés)", detail)
+        detail = self._alerte("100000.00", "budget_overrun", "en")["detail"]
+        self.assertTrue(detail.startswith("400,000 XOF over"), detail)
