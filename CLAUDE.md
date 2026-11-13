@@ -70,7 +70,10 @@ l'application.
   devise aussi vient de là : la devise officielle est proposée d'office, et
   seule une devise des filiales, ou USD, EUR, est acceptée
   (`DEVISES_AUTORISEES`, décision 121) — un code inconnu sortirait le pays
-  de la consolidation.
+  de la consolidation. Son fuseau horaire aussi : il se choisit parmi ceux
+  du pays (`FUSEAUX`, décision 128), jamais « UTC » par défaut ni celui
+  d'un autre — le jour, le mois et l'exercice d'une dépense se lisent dans
+  ce fuseau.
 - **Trois rôles, pas un de plus** (décision 89). Côté pays, le `manager`
   ouvre les projets **de son pays** (qui naissent avec leurs dossiers),
   saisit les lignes, dépose la pièce de chaque ligne, soumet et importe. Au siège, l'`admin` (RH) **contrôle chaque dossier de

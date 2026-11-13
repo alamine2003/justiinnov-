@@ -199,3 +199,90 @@ class ListeDesDevisesTests(TestCase):
 
         self.assertEqual(set(DEVISES_OFFICIELLES), set(AFRICAN_COUNTRIES))
         self.assertLessEqual(set(DEVISES_OFFICIELLES.values()), DEVISES_AUTORISEES)
+
+
+class FuseauDuPaysTests(ApiTestCase):
+    """Le fuseau d'un pays est l'un des siens (décision 128).
+
+    Le fuseau était un texte libre : en production, le Bénin et le Congo ont
+    été ouverts en « UTC » et le Gabon en « GMT », alors qu'ils vivent à
+    UTC+1. Le jour, le mois et l'exercice d'une dépense se lisent dans ce
+    fuseau.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate()
+
+    def _creer(self, code, nom, fuseau, devise="XOF"):
+        return self.client.post(
+            "/api/countries/",
+            {"name": nom, "code": code, "currency": devise, "timezone": fuseau},
+        )
+
+    def test_un_fuseau_connu_mais_d_un_autre_pays_est_refuse(self):
+        for fuseau in ("UTC", "GMT", "Africa/Lome"):
+            with self.subTest(fuseau=fuseau):
+                response = self._creer("GA", "Gabon", fuseau, devise="XAF")
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("Africa/Libreville", str(response.data["timezone"]))
+        self.assertFalse(Country.objects.filter(code="GA").exists())
+
+    def test_le_fuseau_du_pays_est_accepte(self):
+        response = self._creer("GA", "Gabon", "Africa/Libreville", devise="XAF")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_la_rdc_a_deux_fuseaux(self):
+        response = self._creer("CD", "RDC", "Africa/Lubumbashi", devise="CDF")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_un_pays_ouvert_en_utc_reste_modifiable_et_se_corrige(self):
+        """Son fuseau renvoyé tel quel ne bloque pas le formulaire ; il se
+        corrige vers le sien, jamais vers celui d'un autre."""
+        Country.objects.filter(pk=self.country.pk).update(timezone="UTC")
+        adresse = f"/api/countries/{self.country.pk}/"
+
+        renomme = self.client.patch(
+            adresse, {"name": "Togo (Lomé)", "timezone": "UTC"}, format="json"
+        )
+        ailleurs = self.client.patch(adresse, {"timezone": "Africa/Libreville"}, format="json")
+        corrige = self.client.patch(adresse, {"timezone": "Africa/Lome"}, format="json")
+
+        self.assertEqual(renomme.status_code, status.HTTP_200_OK, renomme.data)
+        self.assertEqual(ailleurs.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Africa/Lome", str(ailleurs.data["timezone"]))
+        self.assertEqual(corrige.status_code, status.HTTP_200_OK, corrige.data)
+        self.country.refresh_from_db()
+        self.assertEqual(self.country.timezone, "Africa/Lome")
+
+    def test_la_creation_propose_le_fuseau_officiel(self):
+        response = self.client.get("/api/countries/disponibles/")
+
+        par_code = {pays["code"]: pays for pays in response.data}
+        self.assertEqual(par_code["BJ"]["timezone"], "Africa/Porto-Novo")
+        self.assertEqual(par_code["BJ"]["timezones"], ["Africa/Porto-Novo"])
+        self.assertEqual(par_code["CD"]["timezone"], "Africa/Kinshasa")
+        self.assertEqual(par_code["CD"]["timezones"], ["Africa/Kinshasa", "Africa/Lubumbashi"])
+
+    def test_la_liste_des_pays_donne_les_fuseaux_de_chacun(self):
+        response = self.client.get("/api/countries/")
+
+        togo = next(pays for pays in response.data["results"] if pays["code"] == "TG")
+        self.assertEqual(togo["timezones"], ["Africa/Lome"])
+
+
+class ListeDesFuseauxTests(TestCase):
+    def test_chaque_filiale_a_ses_fuseaux_et_ils_existent(self):
+        import zoneinfo
+
+        from core.africa import AFRICAN_COUNTRIES, FUSEAUX
+
+        self.assertEqual(set(FUSEAUX), set(AFRICAN_COUNTRIES))
+        connus = zoneinfo.available_timezones()
+        for code, fuseaux in FUSEAUX.items():
+            with self.subTest(code=code):
+                self.assertTrue(fuseaux)
+                self.assertLessEqual(set(fuseaux), connus)

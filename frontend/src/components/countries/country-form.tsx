@@ -33,6 +33,11 @@ interface CountryFormProps {
   onOpenChange: (open: boolean) => void
   onSave: (values: CountryFormValues) => Promise<void>
   initial?: CountryFormValues
+  /**
+   * Les fuseaux que le pays édité peut porter (`timezones` du serveur,
+   * décision 128). À la création, ils viennent du pays choisi.
+   */
+  fuseaux?: readonly string[]
   title?: string
 }
 
@@ -43,8 +48,7 @@ const DEFAULTS: CountryFormValues = {
   currency_symbol: "",
   // Pas de fuseau par défaut : « UTC » passait la validation du serveur et
   // toutes les dépenses du pays se lisaient ensuite à l'heure de Greenwich,
-  // sans le moindre signal. Vide, le champ montre son exemple et le serveur
-  // exige une valeur.
+  // sans le moindre signal. Il vient du pays choisi (décision 128).
   timezone: "",
   is_active: true,
 }
@@ -65,6 +69,7 @@ function CountryFormBody({
   onOpenChange,
   onSave,
   initial,
+  fuseaux,
   title,
 }: Omit<CountryFormProps, "open">) {
   const { t } = useTranslation()
@@ -77,6 +82,15 @@ function CountryFormBody({
     enabled: creation,
     fallback: t("pays.formulaire.liste_indisponible"),
   })
+
+  // Le fuseau se choisit, il ne se tape plus (décision 128) : « UTC » et
+  // « GMT », tapés pour des pays à UTC+1, décalaient d'une heure la lecture
+  // de leurs dépenses. Un fuseau enregistré hors de la liste reste affiché,
+  // marqué à corriger : le masquer changerait la valeur sans le dire.
+  const acceptes = creation
+    ? (disponibles.data?.find((p) => p.code === values.code)?.timezones ?? [])
+    : (fuseaux ?? [])
+  const horsListe = values.timezone !== "" && !acceptes.includes(values.timezone)
 
   const setField = (field: keyof CountryFormValues, value: unknown) => {
     setValues((v) => ({ ...v, [field]: value }))
@@ -118,6 +132,7 @@ function CountryFormBody({
                   code: choisi?.code ?? "",
                   name: choisi?.name ?? "",
                   currency: choisi?.currency ?? v.currency,
+                  timezone: choisi?.timezone ?? "",
                 }))
               }}
               disabled={disponibles.loading}
@@ -182,13 +197,28 @@ function CountryFormBody({
         </div>
         <div className="grid gap-2">
           <Label htmlFor="timezone">{t("champs.timezone")}</Label>
-          <Input
+          <NativeSelect
             id="timezone"
             value={values.timezone}
             onChange={(e) => setField("timezone", e.target.value)}
-            placeholder="Africa/Porto-Novo"
+            disabled={acceptes.length === 0 && !horsListe}
             required
-          />
+          >
+            {values.timezone === "" && <option value="">{t("pays.formulaire.fuseau_choisir")}</option>}
+            {horsListe && (
+              <option value={values.timezone}>
+                {t("pays.formulaire.fuseau_a_corriger", { fuseau: values.timezone })}
+              </option>
+            )}
+            {acceptes.map((fuseau) => (
+              <option key={fuseau} value={fuseau}>
+                {fuseau}
+              </option>
+            ))}
+          </NativeSelect>
+          {horsListe && acceptes.length > 0 && (
+            <p className="text-xs text-muted-foreground">{t("pays.formulaire.fuseau_note")}</p>
+          )}
         </div>
         <div className="flex items-center justify-between rounded-lg border p-3">
           <div>

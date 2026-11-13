@@ -948,7 +948,10 @@
       "devise_iso": "Devise (ISO 4217)",
       "symbole": "Symbole",
       "actif_label": "Pays actif",
-      "actif_aide": "Désactivé, le pays reste consultable mais n'apparaît plus dans les listes actives."
+      "actif_aide": "Désactivé, le pays reste consultable mais n'apparaît plus dans les listes actives.",
+      "fuseau_choisir": "Choisissez d'abord le pays",
+      "fuseau_a_corriger": "{{fuseau}} (à corriger)",
+      "fuseau_note": "Ce fuseau n'est pas celui du pays : choisissez le sien dans la liste. L'heure affichée des dépenses déjà saisies suivra le nouveau fuseau."
     },
     "fiche": {
       "chargement": "Chargement du pays…",

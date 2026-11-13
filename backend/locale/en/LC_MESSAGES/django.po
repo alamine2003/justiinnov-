@@ -1107,6 +1107,13 @@ msgid ""
 msgstr ""
 "“%(devise)s” is not a subsidiary currency. Accepted currencies: %(liste)s."
 
+#: core/africa.py:131
+#, python-format
+msgid ""
+"« %(fuseau)s » n'est pas le fuseau de ce pays. Fuseau accepté : %(liste)s."
+msgstr ""
+"“%(fuseau)s” is not this country's time zone. Accepted time zone: %(liste)s."
+
 #: core/africa.py:98
 #, python-format
 msgid ""

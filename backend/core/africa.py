@@ -84,6 +84,57 @@ def validate_devise(devise):
         )
 
 
+# Fuseaux horaires de chaque filiale (identifiants IANA), le premier proposé
+# d'office à l'ouverture du pays (décision 128). Le fuseau était un texte
+# libre : le Bénin et le Congo ont été ouverts en « UTC » et le Gabon en
+# « GMT », alors qu'ils vivent à UTC+1 — leurs dépenses se lisaient une heure
+# trop tôt, et le jour, le mois, l'exercice d'une dépense se lisent dans ce
+# fuseau. Contrairement à la devise, un pays n'a pas le choix du sien : seule
+# la RDC en compte deux (Kinshasa à l'ouest, Lubumbashi à l'est).
+FUSEAUX = {
+    "BF": ("Africa/Ouagadougou",),
+    "BJ": ("Africa/Porto-Novo",),
+    "CD": ("Africa/Kinshasa", "Africa/Lubumbashi"),
+    "CG": ("Africa/Brazzaville",),
+    "CI": ("Africa/Abidjan",),
+    "CM": ("Africa/Douala",),
+    "DJ": ("Africa/Djibouti",),
+    "GA": ("Africa/Libreville",),
+    "GM": ("Africa/Banjul",),
+    "GN": ("Africa/Conakry",),
+    "MG": ("Indian/Antananarivo",),
+    "ML": ("Africa/Bamako",),
+    "MR": ("Africa/Nouakchott",),
+    "NE": ("Africa/Niamey",),
+    "SN": ("Africa/Dakar",),
+    "TD": ("Africa/Ndjamena",),
+    "TG": ("Africa/Lome",),
+}
+
+
+def fuseaux_du_pays(code):
+    """Les fuseaux qu'une filiale peut porter, le premier étant l'officiel.
+
+    Vide pour un code hors des filiales : rien à proposer, rien à imposer.
+    """
+    return FUSEAUX.get((code or "").strip().upper(), ())
+
+
+def validate_fuseau_du_pays(code, fuseau):
+    """Refuse un fuseau qui n'est pas celui de la filiale, en nommant le sien."""
+    acceptes = fuseaux_du_pays(code)
+    if not acceptes or fuseau in acceptes:
+        return
+    raise ValidationError(
+        _(
+            "« %(fuseau)s » n'est pas le fuseau de ce pays. Fuseau accepté : "
+            "%(liste)s."
+        ),
+        params={"fuseau": fuseau, "liste": ", ".join(acceptes)},
+        code="fuseau_d_un_autre_pays",
+    )
+
+
 def validate_african_country(code):
     """Refuse un code ISO hors des filiales.
 
