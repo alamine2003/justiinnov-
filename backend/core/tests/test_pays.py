@@ -286,3 +286,66 @@ class ListeDesFuseauxTests(TestCase):
             with self.subTest(code=code):
                 self.assertTrue(fuseaux)
                 self.assertLessEqual(set(fuseaux), connus)
+
+
+class SymboleDeLaDeviseTests(ApiTestCase):
+    """Le symbole se pose d'office, d'après la devise (décision 128)."""
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate()
+
+    def _creer(self, **champs):
+        return self.client.post(
+            "/api/countries/",
+            {"name": "Gabon", "code": "GA", "currency": "XAF",
+             "timezone": "Africa/Libreville", **champs},
+        )
+
+    def test_sans_symbole_la_creation_pose_celui_de_la_devise(self):
+        response = self._creer()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(Country.objects.get(code="GA").currency_symbol, "FCFA")
+
+    def test_un_symbole_saisi_est_garde(self):
+        self._creer(currency_symbol="F")
+
+        self.assertEqual(Country.objects.get(code="GA").currency_symbol, "F")
+
+    def test_le_symbole_vide_suit_la_nouvelle_devise(self):
+        """Le formulaire vide le symbole quand la devise change."""
+        response = self.client.patch(
+            f"/api/countries/{self.country.pk}/",
+            {"currency": "USD", "currency_symbol": ""}, format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.country.refresh_from_db()
+        self.assertEqual((self.country.currency, self.country.currency_symbol), ("USD", "$"))
+
+    def test_une_modification_sans_symbole_ne_le_touche_pas(self):
+        Country.objects.filter(pk=self.country.pk).update(currency_symbol="F")
+
+        self.client.patch(f"/api/countries/{self.country.pk}/", {"name": "Togo (Lomé)"}, format="json")
+
+        self.country.refresh_from_db()
+        self.assertEqual(self.country.currency_symbol, "F")
+
+    def test_la_creation_propose_le_symbole(self):
+        response = self.client.get("/api/countries/disponibles/")
+
+        par_code = {pays["code"]: pays["currency_symbol"] for pays in response.data}
+        self.assertEqual(par_code["BJ"], "FCFA")
+        self.assertEqual(par_code["CD"], "FC")
+
+
+class ListeDesSymbolesTests(TestCase):
+    def test_chaque_devise_autorisee_a_un_symbole_qui_tient_dans_le_champ(self):
+        from core.africa import DEVISES_AUTORISEES, SYMBOLES
+
+        self.assertEqual(set(SYMBOLES), set(DEVISES_AUTORISEES))
+        longueur = Country._meta.get_field("currency_symbol").max_length
+        for devise, symbole in SYMBOLES.items():
+            with self.subTest(devise=devise):
+                self.assertTrue(0 < len(symbole) <= longueur)

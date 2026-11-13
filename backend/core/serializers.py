@@ -9,7 +9,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator, UniqueValidator
 
-from .africa import fuseaux_du_pays, validate_devise, validate_fuseau_du_pays
+from .africa import fuseaux_du_pays, symbole_de, validate_devise, validate_fuseau_du_pays
 from .models import (
     ChangeLog,
     CostCenter,
@@ -520,7 +520,22 @@ class CountryWriteSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         self._verifier_les_champs_figes(attrs)
         self._verifier_le_fuseau(attrs)
+        self._poser_le_symbole(attrs)
         return attrs
+
+    def _poser_le_symbole(self, attrs):
+        """Sans symbole, celui de la devise (décision 128).
+
+        À la création, et chaque fois que le formulaire rend le symbole
+        vide : il se vide quand la devise change, pour ne pas laisser
+        « FCFA » sur un pays passé au dollar. Un symbole saisi est gardé.
+        """
+        if self.instance is not None and "currency_symbol" not in attrs:
+            return
+        if attrs.get("currency_symbol", "").strip():
+            return
+        devise = attrs.get("currency") or getattr(self.instance, "currency", "")
+        attrs["currency_symbol"] = symbole_de(devise)
 
     def _verifier_le_fuseau(self, attrs):
         """Le fuseau d'un pays est l'un des siens (décision 128).
@@ -698,6 +713,8 @@ class AvailableCountrySerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     #: Sa devise officielle, que le formulaire propose d'office (décision 121).
     currency = serializers.CharField(read_only=True)
+    #: Le symbole d'usage de cette devise, posé d'office (décision 128).
+    currency_symbol = serializers.CharField(read_only=True)
     #: Son fuseau officiel, proposé d'office lui aussi, et ceux qu'il peut
     #: porter (décision 128) : la RDC en a deux.
     timezone = serializers.CharField(read_only=True)

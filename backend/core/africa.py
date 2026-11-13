@@ -71,6 +71,28 @@ DEVISES_OFFICIELLES = {
 DEVISES_AUTORISEES = frozenset(DEVISES_OFFICIELLES.values()) | {"USD", "EUR"}
 
 
+# Symbole d'usage de chaque devise autorisée, posé d'office quand le
+# formulaire n'en donne pas (décision 128) : « FCFA » se tapait à la main, et
+# le Gabon de la production portait « XAF » pour symbole.
+SYMBOLES = {
+    "XOF": "FCFA",
+    "XAF": "FCFA",
+    "CDF": "FC",
+    "DJF": "Fdj",
+    "GMD": "D",
+    "GNF": "FG",
+    "MGA": "Ar",
+    "MRU": "UM",
+    "USD": "$",
+    "EUR": "€",
+}
+
+
+def symbole_de(devise):
+    """Le symbole d'usage d'une devise, vide si elle n'en a pas ici."""
+    return SYMBOLES.get((devise or "").strip().upper(), "")
+
+
 def validate_devise(devise):
     """Refuse une devise hors de la liste autorisée, en la nommant."""
     if (devise or "").strip().upper() not in DEVISES_AUTORISEES:

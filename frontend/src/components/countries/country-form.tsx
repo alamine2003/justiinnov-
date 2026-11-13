@@ -132,6 +132,7 @@ function CountryFormBody({
                   code: choisi?.code ?? "",
                   name: choisi?.name ?? "",
                   currency: choisi?.currency ?? v.currency,
+                  currency_symbol: choisi?.currency_symbol ?? "",
                   timezone: choisi?.timezone ?? "",
                 }))
               }}
@@ -178,7 +179,13 @@ function CountryFormBody({
             <Input
               id="currency"
               value={values.currency}
-              onChange={(e) => setField("currency", e.target.value.toUpperCase())}
+              onChange={(e) => {
+                // Le symbole suit la devise : vidé, le serveur pose celui de
+                // la nouvelle (décision 128) — « FCFA » ne reste pas sur un
+                // pays passé au dollar.
+                const devise = e.target.value.toUpperCase()
+                setValues((v) => ({ ...v, currency: devise, currency_symbol: "" }))
+              }}
               placeholder="XOF"
               maxLength={3}
               required
@@ -190,7 +197,7 @@ function CountryFormBody({
               id="currency_symbol"
               value={values.currency_symbol}
               onChange={(e) => setField("currency_symbol", e.target.value)}
-              placeholder="FCFA"
+              placeholder={t("pays.formulaire.symbole_auto")}
               maxLength={4}
             />
           </div>

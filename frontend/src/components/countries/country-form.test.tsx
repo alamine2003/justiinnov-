@@ -5,10 +5,10 @@ import { CountryForm } from "./country-form"
 vi.mock("@/lib/countries", () => ({
   fetchAvailableCountries: () =>
     Promise.resolve([
-      { code: "BJ", name: "Bénin", currency: "XOF", timezone: "Africa/Porto-Novo", timezones: ["Africa/Porto-Novo"] },
-      { code: "CG", name: "Congo", currency: "XAF", timezone: "Africa/Brazzaville", timezones: ["Africa/Brazzaville"] },
+      { code: "BJ", name: "Bénin", currency: "XOF", currency_symbol: "FCFA", timezone: "Africa/Porto-Novo", timezones: ["Africa/Porto-Novo"] },
+      { code: "CG", name: "Congo", currency: "XAF", currency_symbol: "FCFA", timezone: "Africa/Brazzaville", timezones: ["Africa/Brazzaville"] },
       {
-        code: "CD", name: "République démocratique du Congo", currency: "CDF",
+        code: "CD", name: "République démocratique du Congo", currency: "CDF", currency_symbol: "FC",
         timezone: "Africa/Kinshasa", timezones: ["Africa/Kinshasa", "Africa/Lubumbashi"],
       },
     ]),
@@ -100,5 +100,38 @@ describe("CountryForm — fuseau", () => {
 
     expect(screen.getByRole("combobox", { name: "Fuseau horaire" })).toHaveValue("Africa/Lome")
     expect(screen.queryByText(/n'est pas celui du pays/)).toBeNull()
+  })
+})
+
+/** Décision 128 : le symbole se pose d'office, et suit la devise. */
+describe("CountryForm — symbole", () => {
+  it("propose le symbole de la devise du pays choisi", async () => {
+    render(<CountryForm open onOpenChange={() => {}} onSave={vi.fn()} />)
+
+    const pays = await screen.findByRole("combobox", { name: "Pays" })
+    await screen.findByRole("option", { name: "Bénin (BJ)" })
+    fireEvent.change(pays, { target: { value: "BJ" } })
+    expect(screen.getByLabelText("Symbole")).toHaveValue("FCFA")
+
+    fireEvent.change(pays, { target: { value: "CD" } })
+    expect(screen.getByLabelText("Symbole")).toHaveValue("FC")
+  })
+
+  it("se vide quand la devise change, pour que le serveur pose le bon", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    render(<CountryForm open onOpenChange={() => {}} onSave={onSave} />)
+
+    const pays = await screen.findByRole("combobox", { name: "Pays" })
+    await screen.findByRole("option", { name: "Bénin (BJ)" })
+    fireEvent.change(pays, { target: { value: "BJ" } })
+    fireEvent.change(screen.getByLabelText("Devise (ISO 4217)"), { target: { value: "usd" } })
+
+    const symbole = screen.getByLabelText("Symbole")
+    expect(symbole).toHaveValue("")
+    expect(symbole).toHaveAttribute("placeholder", "automatique")
+
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(onSave.mock.calls[0][0]).toMatchObject({ currency: "USD", currency_symbol: "" })
   })
 })

@@ -8901,6 +8901,10 @@
                         "type": "string",
                         "readOnly": true
                     },
+                    "currency_symbol": {
+                        "type": "string",
+                        "readOnly": true
+                    },
                     "timezone": {
                         "type": "string",
                         "readOnly": true
@@ -8917,6 +8921,7 @@
                     "code",
                     "name",
                     "currency",
+                    "currency_symbol",
                     "timezone",
                     "timezones"
                 ]

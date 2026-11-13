@@ -2402,6 +2402,7 @@ export interface components {
             readonly code: string
             readonly name: string
             readonly currency: string
+            readonly currency_symbol: string
             readonly timezone: string
             readonly timezones: string[]
         }

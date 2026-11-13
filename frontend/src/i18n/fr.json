@@ -951,7 +951,8 @@
       "actif_aide": "Désactivé, le pays reste consultable mais n'apparaît plus dans les listes actives.",
       "fuseau_choisir": "Choisissez d'abord le pays",
       "fuseau_a_corriger": "{{fuseau}} (à corriger)",
-      "fuseau_note": "Ce fuseau n'est pas celui du pays : choisissez le sien dans la liste. L'heure affichée des dépenses déjà saisies suivra le nouveau fuseau."
+      "fuseau_note": "Ce fuseau n'est pas celui du pays : choisissez le sien dans la liste. L'heure affichée des dépenses déjà saisies suivra le nouveau fuseau.",
+      "symbole_auto": "automatique"
     },
     "fiche": {
       "chargement": "Chargement du pays…",
