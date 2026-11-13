@@ -360,7 +360,7 @@ class AlertTests(DashboardTestCase):
         alerte = next(
             a for a in response.data["alerts"] if a["kind"] == "unusual_expense"
         )
-        self.assertIn("50000000", alerte["title"] + alerte["detail"])
+        self.assertIn("50\xa0000\xa0000", alerte["title"] + alerte["detail"])
 
     def test_depense_ordinaire_non_signalee(self):
         self.make_expense(amount="310000.00", status=Status.JUSTIFIED)
