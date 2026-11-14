@@ -24,7 +24,11 @@ dans `backend/core/africa.py` : un pays se crée depuis elle, tout autre code
 ISO est refusé, et l'ouvrir à une nouvelle filiale se fait dans ce fichier.
 Le même fichier fixe la devise officielle de chaque filiale, proposée à la
 création, et les devises qu'un pays peut porter (`DEVISES_AUTORISEES` :
-celles des filiales, USD et EUR ; décision 121).
+celles des filiales, USD et EUR ; décision 121), ainsi que ses fuseaux
+horaires (`FUSEAUX`, décision 128) : le fuseau officiel est proposé à la
+création, le formulaire le donne à choisir dans la liste du pays
+(`timezones` de l'API), et le serveur refuse celui d'un autre pays. Le
+symbole de la devise (`SYMBOLES`) se pose d'office.
 Au démarrage, seules la Côte d'Ivoire et le Togo sont créées ; les autres le
 seront à leur entrée dans le dispositif.
 

@@ -17,7 +17,7 @@ from rest_framework import filters, serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from core.africa import AFRICAN_COUNTRIES, DEVISES_OFFICIELLES
+from core.africa import AFRICAN_COUNTRIES, DEVISES_OFFICIELLES, FUSEAUX, symbole_de
 from core.mixins import NoDestroyModelViewSet
 from core.models import (
     ChangeLog,
@@ -252,7 +252,14 @@ class CountryViewSet(ScopedViewSet):
         )
         return Response(
             [
-                {"code": code, "name": nom, "currency": DEVISES_OFFICIELLES[code]}
+                {
+                    "code": code,
+                    "name": nom,
+                    "currency": DEVISES_OFFICIELLES[code],
+                    "currency_symbol": symbole_de(DEVISES_OFFICIELLES[code]),
+                    "timezone": FUSEAUX[code][0],
+                    "timezones": list(FUSEAUX[code]),
+                }
                 for code, nom in sorted(
                     AFRICAN_COUNTRIES.items(), key=lambda item: item[1]
                 )

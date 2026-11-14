@@ -139,6 +139,7 @@ export function CountriesPage() {
               }
             : undefined
         }
+        fuseaux={editing?.timezones}
         title={
           editing
             ? t("pays.liste.modifier_titre", { nom: editing.name })

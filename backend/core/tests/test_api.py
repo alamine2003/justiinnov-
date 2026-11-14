@@ -181,7 +181,7 @@ class HistoryTests(ApiTestCase):
 
     def test_auteur_de_l_action_est_enregistre(self):
         self.client.patch(
-            f"/api/countries/{self.country.pk}/", {"timezone": "Africa/Abidjan"}
+            f"/api/countries/{self.country.pk}/", {"currency_symbol": "FCFA"}
         )
 
         entry = ChangeLog.objects.filter(action=ChangeLog.Actions.UPDATED).first()

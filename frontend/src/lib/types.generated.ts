@@ -2402,6 +2402,9 @@ export interface components {
             readonly code: string
             readonly name: string
             readonly currency: string
+            readonly currency_symbol: string
+            readonly timezone: string
+            readonly timezones: string[]
         }
         Beneficiary: {
             readonly id: number
@@ -2872,6 +2875,7 @@ export interface components {
              * @description Identifiant IANA, ex. Africa/Abidjan.
              */
             timezone: string
+            readonly timezones: string[]
             /** Actif */
             is_active: boolean
             readonly managers: components["schemas"]["Manager"][]
@@ -2923,6 +2927,7 @@ export interface components {
              * @description Identifiant IANA, ex. Africa/Abidjan.
              */
             timezone: string
+            readonly timezones: string[]
             /** Actif */
             is_active: boolean
             readonly managers: components["schemas"]["Manager"][]

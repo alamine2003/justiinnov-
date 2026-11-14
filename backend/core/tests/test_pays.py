@@ -199,3 +199,153 @@ class ListeDesDevisesTests(TestCase):
 
         self.assertEqual(set(DEVISES_OFFICIELLES), set(AFRICAN_COUNTRIES))
         self.assertLessEqual(set(DEVISES_OFFICIELLES.values()), DEVISES_AUTORISEES)
+
+
+class FuseauDuPaysTests(ApiTestCase):
+    """Le fuseau d'un pays est l'un des siens (décision 128).
+
+    Le fuseau était un texte libre : en production, le Bénin et le Congo ont
+    été ouverts en « UTC » et le Gabon en « GMT », alors qu'ils vivent à
+    UTC+1. Le jour, le mois et l'exercice d'une dépense se lisent dans ce
+    fuseau.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate()
+
+    def _creer(self, code, nom, fuseau, devise="XOF"):
+        return self.client.post(
+            "/api/countries/",
+            {"name": nom, "code": code, "currency": devise, "timezone": fuseau},
+        )
+
+    def test_un_fuseau_connu_mais_d_un_autre_pays_est_refuse(self):
+        for fuseau in ("UTC", "GMT", "Africa/Lome"):
+            with self.subTest(fuseau=fuseau):
+                response = self._creer("GA", "Gabon", fuseau, devise="XAF")
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("Africa/Libreville", str(response.data["timezone"]))
+        self.assertFalse(Country.objects.filter(code="GA").exists())
+
+    def test_le_fuseau_du_pays_est_accepte(self):
+        response = self._creer("GA", "Gabon", "Africa/Libreville", devise="XAF")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_la_rdc_a_deux_fuseaux(self):
+        response = self._creer("CD", "RDC", "Africa/Lubumbashi", devise="CDF")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_un_pays_ouvert_en_utc_reste_modifiable_et_se_corrige(self):
+        """Son fuseau renvoyé tel quel ne bloque pas le formulaire ; il se
+        corrige vers le sien, jamais vers celui d'un autre."""
+        Country.objects.filter(pk=self.country.pk).update(timezone="UTC")
+        adresse = f"/api/countries/{self.country.pk}/"
+
+        renomme = self.client.patch(
+            adresse, {"name": "Togo (Lomé)", "timezone": "UTC"}, format="json"
+        )
+        ailleurs = self.client.patch(adresse, {"timezone": "Africa/Libreville"}, format="json")
+        corrige = self.client.patch(adresse, {"timezone": "Africa/Lome"}, format="json")
+
+        self.assertEqual(renomme.status_code, status.HTTP_200_OK, renomme.data)
+        self.assertEqual(ailleurs.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Africa/Lome", str(ailleurs.data["timezone"]))
+        self.assertEqual(corrige.status_code, status.HTTP_200_OK, corrige.data)
+        self.country.refresh_from_db()
+        self.assertEqual(self.country.timezone, "Africa/Lome")
+
+    def test_la_creation_propose_le_fuseau_officiel(self):
+        response = self.client.get("/api/countries/disponibles/")
+
+        par_code = {pays["code"]: pays for pays in response.data}
+        self.assertEqual(par_code["BJ"]["timezone"], "Africa/Porto-Novo")
+        self.assertEqual(par_code["BJ"]["timezones"], ["Africa/Porto-Novo"])
+        self.assertEqual(par_code["CD"]["timezone"], "Africa/Kinshasa")
+        self.assertEqual(par_code["CD"]["timezones"], ["Africa/Kinshasa", "Africa/Lubumbashi"])
+
+    def test_la_liste_des_pays_donne_les_fuseaux_de_chacun(self):
+        response = self.client.get("/api/countries/")
+
+        togo = next(pays for pays in response.data["results"] if pays["code"] == "TG")
+        self.assertEqual(togo["timezones"], ["Africa/Lome"])
+
+
+class ListeDesFuseauxTests(TestCase):
+    def test_chaque_filiale_a_ses_fuseaux_et_ils_existent(self):
+        import zoneinfo
+
+        from core.africa import AFRICAN_COUNTRIES, FUSEAUX
+
+        self.assertEqual(set(FUSEAUX), set(AFRICAN_COUNTRIES))
+        connus = zoneinfo.available_timezones()
+        for code, fuseaux in FUSEAUX.items():
+            with self.subTest(code=code):
+                self.assertTrue(fuseaux)
+                self.assertLessEqual(set(fuseaux), connus)
+
+
+class SymboleDeLaDeviseTests(ApiTestCase):
+    """Le symbole se pose d'office, d'après la devise (décision 128)."""
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate()
+
+    def _creer(self, **champs):
+        return self.client.post(
+            "/api/countries/",
+            {"name": "Gabon", "code": "GA", "currency": "XAF",
+             "timezone": "Africa/Libreville", **champs},
+        )
+
+    def test_sans_symbole_la_creation_pose_celui_de_la_devise(self):
+        response = self._creer()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(Country.objects.get(code="GA").currency_symbol, "FCFA")
+
+    def test_un_symbole_saisi_est_garde(self):
+        self._creer(currency_symbol="F")
+
+        self.assertEqual(Country.objects.get(code="GA").currency_symbol, "F")
+
+    def test_le_symbole_vide_suit_la_nouvelle_devise(self):
+        """Le formulaire vide le symbole quand la devise change."""
+        response = self.client.patch(
+            f"/api/countries/{self.country.pk}/",
+            {"currency": "USD", "currency_symbol": ""}, format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.country.refresh_from_db()
+        self.assertEqual((self.country.currency, self.country.currency_symbol), ("USD", "$"))
+
+    def test_une_modification_sans_symbole_ne_le_touche_pas(self):
+        Country.objects.filter(pk=self.country.pk).update(currency_symbol="F")
+
+        self.client.patch(f"/api/countries/{self.country.pk}/", {"name": "Togo (Lomé)"}, format="json")
+
+        self.country.refresh_from_db()
+        self.assertEqual(self.country.currency_symbol, "F")
+
+    def test_la_creation_propose_le_symbole(self):
+        response = self.client.get("/api/countries/disponibles/")
+
+        par_code = {pays["code"]: pays["currency_symbol"] for pays in response.data}
+        self.assertEqual(par_code["BJ"], "FCFA")
+        self.assertEqual(par_code["CD"], "FC")
+
+
+class ListeDesSymbolesTests(TestCase):
+    def test_chaque_devise_autorisee_a_un_symbole_qui_tient_dans_le_champ(self):
+        from core.africa import DEVISES_AUTORISEES, SYMBOLES
+
+        self.assertEqual(set(SYMBOLES), set(DEVISES_AUTORISEES))
+        longueur = Country._meta.get_field("currency_symbol").max_length
+        for devise, symbole in SYMBOLES.items():
+            with self.subTest(devise=devise):
+                self.assertTrue(0 < len(symbole) <= longueur)

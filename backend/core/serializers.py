@@ -2,13 +2,14 @@
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Max
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator, UniqueValidator
 
-from .africa import validate_devise
+from .africa import fuseaux_du_pays, symbole_de, validate_devise, validate_fuseau_du_pays
 from .models import (
     ChangeLog,
     CostCenter,
@@ -434,14 +435,24 @@ class CountryListSerializer(serializers.ModelSerializer):
     team_count = serializers.IntegerField(source="teams.count", read_only=True)
     cost_center_count = serializers.IntegerField(source="cost_centers.count", read_only=True)
     project_count = serializers.IntegerField(source="projects.count", read_only=True)
+    timezones = serializers.SerializerMethodField()
 
     class Meta:
         model = Country
         fields = [
             "id", "name", "code", "country_ref", "currency", "currency_symbol",
-            "timezone", "is_active", "managers", "team_count",
+            "timezone", "timezones", "is_active", "managers", "team_count",
             "cost_center_count", "project_count", "created_at", "updated_at",
         ]
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_timezones(self, country):
+        """Les fuseaux que ce pays peut porter (décision 128).
+
+        Le formulaire les propose en liste : le fuseau ne se tape plus. Un
+        fuseau enregistré hors de cette liste est à corriger.
+        """
+        return list(fuseaux_du_pays(country.code))
 
 
 class CountryDetailSerializer(CountryListSerializer):
@@ -508,7 +519,43 @@ class CountryWriteSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         self._verifier_les_champs_figes(attrs)
+        self._verifier_le_fuseau(attrs)
+        self._poser_le_symbole(attrs)
         return attrs
+
+    def _poser_le_symbole(self, attrs):
+        """Sans symbole, celui de la devise (décision 128).
+
+        À la création, et chaque fois que le formulaire rend le symbole
+        vide : il se vide quand la devise change, pour ne pas laisser
+        « FCFA » sur un pays passé au dollar. Un symbole saisi est gardé.
+        """
+        if self.instance is not None and "currency_symbol" not in attrs:
+            return
+        if attrs.get("currency_symbol", "").strip():
+            return
+        devise = attrs.get("currency") or getattr(self.instance, "currency", "")
+        attrs["currency_symbol"] = symbole_de(devise)
+
+    def _verifier_le_fuseau(self, attrs):
+        """Le fuseau d'un pays est l'un des siens (décision 128).
+
+        Jugé ici, et non dans ``validate_timezone`` : il dépend du code du
+        pays. Un fuseau déjà enregistré et renvoyé tel quel passe, comme la
+        devise : un pays ouvert avant la 2.4.7 en « UTC » doit rester
+        modifiable — renommé, désactivé — sans que son fuseau bloque tout le
+        formulaire. Il se corrige vers le sien, jamais vers un autre.
+        """
+        if "timezone" not in attrs:
+            return
+        fuseau = attrs["timezone"]
+        if self.instance is not None and fuseau == self.instance.timezone:
+            return
+        code = attrs.get("code") or getattr(self.instance, "code", "")
+        try:
+            validate_fuseau_du_pays(code, fuseau)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"timezone": list(exc.messages)}) from exc
 
     def _verifier_les_champs_figes(self, attrs):
         if self.instance is None:
@@ -666,6 +713,12 @@ class AvailableCountrySerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     #: Sa devise officielle, que le formulaire propose d'office (décision 121).
     currency = serializers.CharField(read_only=True)
+    #: Le symbole d'usage de cette devise, posé d'office (décision 128).
+    currency_symbol = serializers.CharField(read_only=True)
+    #: Son fuseau officiel, proposé d'office lui aussi, et ceux qu'il peut
+    #: porter (décision 128) : la RDC en a deux.
+    timezone = serializers.CharField(read_only=True)
+    timezones = serializers.ListField(child=serializers.CharField(), read_only=True)
 
 
 class ConfigurationAlertesSerializer(serializers.Serializer):

@@ -948,7 +948,11 @@
       "devise_iso": "Currency (ISO 4217)",
       "symbole": "Symbol",
       "actif_label": "Active country",
-      "actif_aide": "Once deactivated, the country remains readable but no longer appears in active lists."
+      "actif_aide": "Once deactivated, the country remains readable but no longer appears in active lists.",
+      "fuseau_choisir": "Choose the country first",
+      "fuseau_a_corriger": "{{fuseau}} (to be corrected)",
+      "fuseau_note": "This is not the country's time zone: pick its own from the list. The time shown for expenses already entered will follow the new time zone.",
+      "symbole_auto": "automatic"
     },
     "fiche": {
       "chargement": "Loading the country…",

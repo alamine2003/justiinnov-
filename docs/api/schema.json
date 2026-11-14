@@ -8900,12 +8900,30 @@
                     "currency": {
                         "type": "string",
                         "readOnly": true
+                    },
+                    "currency_symbol": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "timezones": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "readOnly": true
                     }
                 },
                 "required": [
                     "code",
                     "name",
-                    "currency"
+                    "currency",
+                    "currency_symbol",
+                    "timezone",
+                    "timezones"
                 ]
             },
             "Beneficiary": {
@@ -10311,6 +10329,13 @@
                         "description": "Identifiant IANA, ex. Africa/Abidjan.",
                         "maxLength": 64
                     },
+                    "timezones": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "readOnly": true
+                    },
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
@@ -10398,6 +10423,7 @@
                     "currency",
                     "currency_symbol",
                     "timezone",
+                    "timezones",
                     "is_active",
                     "managers",
                     "team_count",
@@ -10457,6 +10483,13 @@
                         "description": "Identifiant IANA, ex. Africa/Abidjan.",
                         "maxLength": 64
                     },
+                    "timezones": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "readOnly": true
+                    },
                     "is_active": {
                         "type": "boolean",
                         "title": "Actif"
@@ -10501,6 +10534,7 @@
                     "currency",
                     "currency_symbol",
                     "timezone",
+                    "timezones",
                     "is_active",
                     "managers",
                     "team_count",
