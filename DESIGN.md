@@ -306,7 +306,18 @@ mois et année en listes, au clavier, dans la langue de l'interface. Sa valeur
 reste « AAAA-MM-JJ » ; `id` va au bouton, que nomme le `<Label htmlFor>`.
 Un filtre qui peut rester sans date passe `effacable` (« Effacer la date »).
 Un test (`champ-date.test.tsx`) refuse tout champ natif de date, de mois ou
-de date et heure hors des exceptions qu'il nomme.
+de date et heure — sans exception depuis la 2.4.8. Une date **et** une heure
+(celle d'une dépense : `#exp-date`, `#exp-time`) se saisissent par un
+`ChampDate` suivi d'un `<Input type="time">` étroit (`w-28`, nommé
+« Heure ») ; la valeur reste « AAAA-MM-JJTHH:MM », à l'heure du pays
+(décision 129).
+
+Le formulaire d'un pays ne fait rien taper de ce que le serveur sait
+déjà (décision 128) : le pays se choisit dans la liste des filiales, sa
+devise officielle et son fuseau sont proposés d'office, le fuseau se
+choisit dans **la liste de ceux du pays** (un fuseau enregistré hors liste
+reste affiché, marqué « à corriger »), et le symbole de la devise se vide
+quand la devise change, pour que le serveur pose le bon.
 
 Le projet utilise **base-ui** sous shadcn, dont l'API diffère de Radix :
 pour les listes déroulantes, préférez `NativeSelect` — comportement
@@ -319,6 +330,11 @@ clavier natif, rendu correct sur mobile.
   <Table>…</Table>
 </div>
 ```
+
+Un tableau qui défile dans sa carte (`defile`) s'enveloppe d'un
+`<TableDefilante label=…>` (`components/ui/table.tsx`) : une région nommée,
+atteignable au clavier — sans quoi un tableau sans lien, vide ou de texte
+seul, ne défilerait qu'à la souris.
 
 - Montants alignés à droite ; un écart non nul en `text-destructive`.
 - Deuxième ligne de contexte sous la valeur principale, en
@@ -1062,6 +1078,19 @@ aussi au menu d'export.
   groupe de filtres à bascule expose `aria-pressed`.
 - Le plugin `jsx-a11y` d'oxlint est actif : `npm run lint` refuse un bouton à
   icône sans libellé.
+- **Contraste 4,5:1 pour tout texte**, en clair comme en sombre : un texte
+  secondaire est en `text-muted-foreground`, jamais éclairci par une
+  opacité (`text-muted-foreground/70` tombait à 3,3:1). Seule une icône
+  décorative (`aria-hidden`) s'atténue.
+- **Le nom accessible reprend le texte affiché** (WCAG 2.5.3) : un
+  `aria-label` qui remplace un texte visible doit le contenir (« essai.togo
+  — menu du compte »). Un lien de carte (guide vidéo) n'a pas d'`aria-label` :
+  son nom est son texte, titre puis description.
+- Une liste de définitions ne contient que des `div` de `dt` et `dd` : un
+  séparateur est une bordure, pas un élément.
+- Les scripts de capture passent chaque écran capturé à **axe-core**
+  (`scripts/accessibilite.ts`, WCAG 2.2 A et AA) et échouent sur une
+  violation grave ou critique : voir « Vérifier avant de conclure ».
 
 ---
 
@@ -1082,8 +1111,10 @@ Un écran que traverse un guide vidéo se filme aussi de nouveau
 (`scripts/tourner-guides.mts`, voir le README) : la vidéo montrerait
 sinon l'ancien écran.
 
-Les trois scripts **échouent si la console du navigateur a produit la moindre
-erreur** — une seule exception, nommée : le `400 totp_required` du premier
+Les trois scripts **échouent si axe-core trouve une violation d'accessibilité
+grave ou critique** sur un écran capturé (`scripts/accessibilite.ts`,
+décision 129 ; les violations modérées sont seulement listées), et **si la
+console du navigateur a produit la moindre erreur** — une seule exception, nommée : le `400 totp_required` du premier
 temps d'une connexion enrôlée (`POST /api/token-auth/`), voulu, que
 `estLeRefusAttenduDuCode` (`scripts/login.ts`) écarte. Regardez les captures : plusieurs défauts de ce projet — un
 `method-wrapper` affiché en clair, une page qui plantait, un bouton d'édition
@@ -1101,13 +1132,6 @@ livrable, port 8080.
 ---
 
 ## Points connus
-
-- **La date et l'heure d'une dépense** (`expense-form.tsx`, `#exp-date`)
-  restent un champ natif `datetime-local`, seule exception nommée au test
-  de `ChampDate` : le guide vidéo « Saisir une ligne » le remplit, et le
-  changer impose de tourner ce guide de nouveau, sur une base jetable
-  (décision 127). Il passera à `ChampDate` et à un champ d'heure avec ce
-  tournage.
 
 - L'application est installable comme application de bureau (PWA) :
   manifeste et service worker viennent du build Vite, l'icône et le nom

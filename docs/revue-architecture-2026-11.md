@@ -29,8 +29,9 @@ services.
 
 État : **corrigé** dans la 2.4.1 (décision 124) ou la 2.4.2 (décision 125),
 sans changement de comportement — schéma d'API identique, suites vertes —,
-ou **à faire**. Après la 2.4.2, il ne reste que l'écart 21, qui attend une
-décision de la direction, et l'écart 19, gardé à dessein.
+ou **à faire**. Après la 2.4.2, il restait l'écart 21, qui attendait une
+décision de la direction — tranchée et corrigé dans la 2.4.8 (décision
+129) —, et l'écart 19, gardé à dessein.
 
 | N° | Principe | Écart | Où | État |
 |---|---|---|---|---|
@@ -54,7 +55,7 @@ décision de la direction, et l'écart 19, gardé à dessein.
 | 18 | O | Les actions du circuit étaient une chaîne de `if` | `expenses/transitions.executer` | corrigé : `_SERVICES` |
 | 19 | S | `transitions.py` réunit cinq sujets en 1 287 lignes | `expenses/transitions.py` | à garder pour l'instant : des tests le patchent comme module ; réexporter si on découpe |
 | 20 | S | Le motif « enregistrer » est recopié 29 fois dans l'interface | `frontend/src` | corrigé (2.4.2) : `lib/use-enregistrement.ts` (28 copies sur 29) |
-| 21 | I/D | Le panneau des pièces (`usePieces`, `proof-panel.tsx`) lit les règles de dépôt sur une API d'administration qu'aucun déposant n'atteint | `components/expenses/proof-panel.tsx` | **décision de la direction** : exposer ces règles au déposant, ou retirer la branche |
+| 21 | I/D | Le panneau des pièces (`usePieces`, `proof-panel.tsx`) lit les règles de dépôt sur une API d'administration qu'aucun déposant n'atteint | `components/expenses/proof-panel.tsx` | corrigé (2.4.8, décision 129) : la direction a choisi de les montrer ; `GET /api/me/` les donne (`regles_de_depot`) à tout compte connecté |
 | 22 | S | Le formulaire des comptes porte 13 états et construit sa charge utile | `pages/configuration/users-section.tsx` | corrigé (2.4.2) : `chargeDuCompte`, `useEquipesDesPays` |
 | 23 | S | La fiche dossier orchestre elle-même ses mutations | `pages/dossiers/detail.tsx` | corrigé (2.4.2) : `useActionsDuDossier` |
 | 24 | S/O | Un drapeau `compact` cache deux composants ; la configuration recopie ses onglets | `proof-panel.tsx`, `pages/configuration/index.tsx` | corrigé (2.4.2) : `PiecesDeLaLigne`, `PiecesDuDossier`, registre `SECTIONS` |

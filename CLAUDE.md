@@ -32,6 +32,7 @@ git) via `manage.py seed_users`.
 
 ```bash
 docker compose run --rm --entrypoint python backend manage.py test
+docker compose run --rm --entrypoint sh backend -c "pip install -q --user ruff==0.17.3 && python -m ruff check ."
 cd frontend && npx tsc -b && npm run lint && npm run test
 ```
 
@@ -43,7 +44,7 @@ donnez à chacune sa base avec `-e POSTGRES_DB=justi_<nom>`.
 
 Pour l'interface, lancez aussi les scripts de capture décrits dans `DESIGN.md`
 (parcours, connexion, thème sombre) : ils échouent sur toute erreur de
-console, et plusieurs défauts n'ont été trouvés qu'en regardant les images. Un
+console et sur toute violation d'accessibilité grave (axe-core), et plusieurs défauts n'ont été trouvés qu'en regardant les images. Un
 écran que traverse un guide vidéo (décision 118) se filme aussi de nouveau
 (`frontend/scripts/tourner-guides.mts`, voir le README), sur une base
 jetable.
