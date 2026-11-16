@@ -27,11 +27,7 @@ import type {
   Project,
   Team,
 } from "@/lib/types"
-import {
-  fromCountryLocalInput,
-  normalizeDecimal,
-  toCountryLocalInput,
-} from "@/lib/utils"
+import { estUneHeure24h, fromCountryLocalInput, normaliserHeure, normalizeDecimal, toCountryLocalInput } from "@/lib/utils"
 import { useEnregistrement } from "@/lib/use-enregistrement"
 
 /** Modes de paiement, dans l'ordre du modèle de données. */
@@ -71,6 +67,7 @@ interface ExpenseFormProps {
  * C'est la transition « Marquer justifié » qui le fixe, et le serveur seul
  * calcule l'écart.
  */
+
 export function ExpenseForm({ open, onOpenChange, editing, ...rest }: ExpenseFormProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -134,6 +131,11 @@ function ExpenseFormBody({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    // L'heure se tape : « 25:70 » serait reportée au lendemain sans un mot.
+    if (!estUneHeure24h(date.slice(11))) {
+      setError(t("depenses.formulaire.heure_invalide"))
+      return
+    }
     const instant = fromCountryLocalInput(date, timezone)
     if (!instant) {
       setError(t("depenses.formulaire.date_requise"))
@@ -204,7 +206,10 @@ function ExpenseFormBody({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* Jour et heure prennent toute la largeur : à deux dans une
+            demi-colonne, l'heure se rognait et le libellé (qui nomme le
+            fuseau) débordait sur celui du lieu. */}
+        <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="exp-date">
               {t("depenses.formulaire.date_heure", { fuseau: timezone })}
@@ -217,16 +222,23 @@ function ExpenseFormBody({
               <ChampDate
                 id="exp-date"
                 value={date.slice(0, 10)}
-                onChange={(jour) => setDate(`${jour}T${date.slice(11, 16) || "00:00"}`)}
+                onChange={(jour) => setDate(`${jour}T${date.slice(11)}`)}
                 className="flex-1"
               />
+              {/* L'heure se tape sur 24 h, « HH:MM », comme l'application
+                  l'affiche partout : le champ natif suivait la langue du
+                  navigateur (« 10:30 AM » sous une interface française). */}
               <Input
                 id="exp-time"
-                type="time"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={5}
+                placeholder={t("depenses.formulaire.heure_placeholder")}
                 aria-label={t("depenses.formulaire.heure")}
-                value={date.slice(11, 16)}
+                value={date.slice(11)}
                 onChange={(e) => setDate(`${date.slice(0, 10)}T${e.target.value}`)}
-                className="w-28"
+                onBlur={(e) => setDate(`${date.slice(0, 10)}T${normaliserHeure(e.target.value)}`)}
+                className="w-24"
                 required
               />
             </div>

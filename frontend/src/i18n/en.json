@@ -524,7 +524,9 @@
       "beneficiaire": "Prospect / beneficiary",
       "equipe_requise": "Choose one of your teams.",
       "equipe_du_dossier": "Team (the dossier's)",
-      "heure": "Time"
+      "heure": "Time",
+      "heure_invalide": "Enter the time in 24-hour format, for example 14:30.",
+      "heure_placeholder": "HH:MM"
     },
     "circuit": {
       "soumettre": "Submit",

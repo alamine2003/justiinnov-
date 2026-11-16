@@ -305,12 +305,18 @@ base-ui un calendrier `react-day-picker` : jours de 40 px, semaine du lundi,
 mois et année en listes, au clavier, dans la langue de l'interface. Sa valeur
 reste « AAAA-MM-JJ » ; `id` va au bouton, que nomme le `<Label htmlFor>`.
 Un filtre qui peut rester sans date passe `effacable` (« Effacer la date »).
-Un test (`champ-date.test.tsx`) refuse tout champ natif de date, de mois ou
-de date et heure — sans exception depuis la 2.4.8. Une date **et** une heure
-(celle d'une dépense : `#exp-date`, `#exp-time`) se saisissent par un
-`ChampDate` suivi d'un `<Input type="time">` étroit (`w-28`, nommé
-« Heure ») ; la valeur reste « AAAA-MM-JJTHH:MM », à l'heure du pays
-(décision 129).
+Un test (`champ-date.test.tsx`) refuse tout champ natif de date, de mois,
+de date et heure ou d'heure — sans exception depuis la 2.4.8. Une date
+**et** une heure (celle d'une dépense : `#exp-date`, `#exp-time`) se
+saisissent par un `ChampDate` suivi d'un `<Input>` texte étroit (`w-24`,
+nommé « Heure », indication « HH:MM »), sur toute la largeur du
+formulaire : à deux dans une demi-colonne, l'heure se rognait. **L'heure se
+tape sur 24 heures**, comme l'application l'affiche partout : le champ
+natif `type="time"` suivait la langue du navigateur et écrivait « 10:30 AM »
+sous une interface française. « 9:05 », « 9h05 » ou « 0905 » se complètent
+en « 09:05 » en quittant le champ (`normaliserHeure`) ; une heure qui
+n'existe pas est refusée à l'enregistrement, avec la raison. La valeur
+reste « AAAA-MM-JJTHH:MM », à l'heure du pays (décision 129).
 
 Le formulaire d'un pays ne fait rien taper de ce que le serveur sait
 déjà (décision 128) : le pays se choisit dans la liste des filiales, sa
@@ -472,7 +478,9 @@ que « Aucune donnée ».
   langue de référence des clés.
 - Les montants transitent en **chaîne** pour préserver la précision décimale.
   La conversion en `number` n'a lieu qu'au formatage.
-- Formatage : `formatAmount`, `formatRate`, `formatDate`, `formatDateIn`.
+- Formatage : `formatAmount`, `formatRate`, `formatDecimal`, `formatDate`,
+  `formatDateIn` — jamais `toFixed`, qui écrit un point même en français
+  (« 20.0 Mo » au lieu de « 20,0 Mo »).
 - Les heures d'une dépense se lisent dans le **fuseau du pays**
   (`formatDateIn(date, country_timezone)`), pas dans celui du lecteur.
 

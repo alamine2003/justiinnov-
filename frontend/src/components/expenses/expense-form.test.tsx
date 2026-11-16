@@ -166,4 +166,35 @@ describe("ExpenseForm — date et heure", () => {
     // Lomé vit à UTC+0 : l'instant envoyé est l'heure saisie.
     expect(onSave.mock.calls[0][0]).toMatchObject({ date: `${premier}T08:15:00.000Z` })
   })
+
+  it("lit l'heure dans le fuseau du pays, à UTC+1 comme au Gabon", async () => {
+    const onSave = afficher({ timezone: "Africa/Libreville" })
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+    fireEvent.change(screen.getByLabelText("Heure"), { target: { value: "08:15" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    // 08:15 à Libreville, c'est 07:15 en temps universel, le même jour.
+    expect(onSave.mock.calls[0][0].date).toMatch(/T07:15:00\.000Z$/)
+  })
+
+  it("complète une heure tapée vite et la garde sur 24 heures", () => {
+    afficher()
+    const heure = screen.getByLabelText("Heure") as HTMLInputElement
+    fireEvent.change(heure, { target: { value: "9h05" } })
+    fireEvent.blur(heure)
+    expect(heure.value).toBe("09:05")
+  })
+
+  it("refuse une heure qui n'existe pas, en le disant", async () => {
+    const onSave = afficher()
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+    fireEvent.change(screen.getByLabelText("Heure"), { target: { value: "25:70" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Indiquez l'heure sur 24 heures")
+    expect(onSave).not.toHaveBeenCalled()
+  })
 })

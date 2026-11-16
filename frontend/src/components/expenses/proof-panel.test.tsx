@@ -176,7 +176,7 @@ describe("Règles de dépôt montrées au déposant", () => {
     fireEvent.click(screen.getByRole("button", { name: "Déposer" }))
 
     expect(screen.getByText(/Formats acceptés : \.pdf, \.png\./)).toBeInTheDocument()
-    expect(screen.getByText(/Taille maximale : 5\.0 Mo/)).toBeInTheDocument()
+    expect(screen.getByText(/Taille maximale : 5,0 Mo/)).toBeInTheDocument()
     expect(screen.getByLabelText("Fichier")).toHaveAttribute("accept", ".pdf,.png")
     reglesDeDepot = undefined
   })

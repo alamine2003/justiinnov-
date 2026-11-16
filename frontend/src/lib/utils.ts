@@ -56,6 +56,14 @@ export function formatAmount(
 }
 
 /** Formate un ratio décimal (« 0.8250 ») en pourcentage. */
+/**
+ * Un nombre à décimales fixes, dans la langue de l'interface : « 20,0 » en
+ * français, « 20.0 » en anglais. `toFixed` écrivait toujours un point.
+ */
+export function formatDecimal(value: number, decimales: number): string {
+  return numberFormat({ minimumFractionDigits: decimales, maximumFractionDigits: decimales }).format(value)
+}
+
 export function formatRate(value: string | null | undefined): string {
   if (!value) return "—"
   const rate = Number(value)
@@ -333,4 +341,22 @@ export function yearChoices({ before, after }: { before: number; after: number }
     annees.push(annee)
   }
   return annees
+}
+
+/** « HH:MM » sur 24 heures. */
+const HEURE_24H = /^([01]\d|2[0-3]):[0-5]\d$/
+
+export function estUneHeure24h(heure: string): boolean {
+  return HEURE_24H.test(heure)
+}
+
+/**
+ * Complète une heure tapée vite : « 9:05 », « 9h05 » ou « 0905 » deviennent
+ * « 09:05 ». Ce qui ne se lit pas comme une heure reste tel quel, et la
+ * soumission le refuse en le disant.
+ */
+export function normaliserHeure(saisie: string): string {
+  const texte = saisie.trim()
+  const match = /^(\d{1,2})[:hH.]?(\d{2})$/.exec(texte)
+  return match ? `${match[1].padStart(2, "0")}:${match[2]}` : texte
 }

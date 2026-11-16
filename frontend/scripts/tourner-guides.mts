@@ -603,7 +603,10 @@ async function main() {
   // Les prises et les fichiers attendent dans un dossier temporaire : rien
   // n'arrive dans `public/` tant qu'un guide peut encore échouer.
   const brouillon = await mkdtemp(path.join(tmpdir(), "guides-"))
-  const navigateur = await chromium.launch()
+  // Le navigateur parle la langue du guide : un champ natif (l'heure
+  // d'une dépense) suit la sienne, pas celle de l'interface, et
+  // afficherait « 10:30 AM » dans un guide en français.
+  const navigateur = await chromium.launch({ args: [`--lang=${langue}`] })
   try {
     console.log(`=== ${langue} ===`)
     const etat = await session(navigateur, langue)

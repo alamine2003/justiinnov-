@@ -3,12 +3,15 @@ import i18n from "@/i18n"
 
 import {
   currentYear,
+  estUneHeure24h,
   formatAmount,
   formatDate,
   formatDateIn,
   formatDay,
+  formatDecimal,
   formatRate,
   fromCountryLocalInput,
+  normaliserHeure,
   normalizeDecimal,
   parseLocalDate,
   pluralize,
@@ -226,5 +229,33 @@ describe("currentYear et yearChoices", () => {
     vi.setSystemTime(new Date("2032-01-01T01:00:00"))
     expect(currentYear()).toBe(2032)
     expect(yearChoices({ before: 2, after: 1 })).toEqual([2030, 2031, 2032, 2033])
+  })
+})
+
+describe("heure sur 24 heures", () => {
+  it("reconnaît HH:MM et rien d'autre", () => {
+    for (const bonne of ["00:00", "09:05", "23:59"]) expect(estUneHeure24h(bonne)).toBe(true)
+    for (const mauvaise of ["24:00", "9:05", "10:60", "10:30 AM", ""]) expect(estUneHeure24h(mauvaise)).toBe(false)
+  })
+
+  it("complète une heure tapée vite", () => {
+    expect(normaliserHeure("9:05")).toBe("09:05")
+    expect(normaliserHeure(" 9h05 ")).toBe("09:05")
+    expect(normaliserHeure("0905")).toBe("09:05")
+    expect(normaliserHeure("14.30")).toBe("14:30")
+    expect(normaliserHeure("midi")).toBe("midi")
+  })
+})
+
+describe("formatDecimal", () => {
+  afterEach(async () => {
+    await i18n.changeLanguage("fr")
+  })
+
+  it("écrit la virgule en français et le point en anglais", async () => {
+    await i18n.changeLanguage("fr")
+    expect(formatDecimal(20, 1)).toBe("20,0")
+    await i18n.changeLanguage("en")
+    expect(formatDecimal(20, 1)).toBe("20.0")
   })
 })

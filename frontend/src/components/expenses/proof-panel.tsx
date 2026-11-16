@@ -30,12 +30,12 @@ import {
 import { PROOF_KINDS, proofKindLabel } from "@/lib/labels"
 import type { Proof } from "@/lib/types"
 import { useEnregistrement } from "@/lib/use-enregistrement"
-import { formatDate } from "@/lib/utils"
+import { formatDate, formatDecimal } from "@/lib/utils"
 
 function formatSize(t: TFunction, bytes: number) {
   if (bytes < 1024) return t("pieces.taille.octets", { valeur: bytes })
-  if (bytes < 1024 * 1024) return t("pieces.taille.ko", { valeur: (bytes / 1024).toFixed(0) })
-  return t("pieces.taille.mo", { valeur: (bytes / (1024 * 1024)).toFixed(1) })
+  if (bytes < 1024 * 1024) return t("pieces.taille.ko", { valeur: formatDecimal(bytes / 1024, 0) })
+  return t("pieces.taille.mo", { valeur: formatDecimal(bytes / (1024 * 1024), 1) })
 }
 
 /** Contraintes de dépôt, quand la configuration est lisible. */
