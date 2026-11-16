@@ -155,6 +155,10 @@ async function main() {
   )
   await shot(hq, "menu_compte")
   await hq.keyboard.press("Escape")
+  // Pendant sa fermeture animée, le menu laisse ses gardes de focus
+  // (focalisables, sous aria-hidden) : axe, passé trop tôt sur l'écran
+  // suivant, les relevait (aria-hidden-focus, tag v2.4.9).
+  await hq.getByRole("menu").waitFor({ state: "hidden" })
   // Sans pays choisi, la consolidation ne propose pas de répartition : deux
   // équipes homonymes de pays différents fusionneraient. Le siège doit
   // d'abord choisir un pays.
@@ -474,6 +478,7 @@ async function main() {
     "le pays ne voit pas « Supervision »",
   )
   await rep.keyboard.press("Escape")
+  await rep.getByRole("menu").waitFor({ state: "hidden" })
   // Le guide vidéo (décision 118) : le pays voit la page et son sommaire
   // des cinq gestes du manager ; seul le guide ouvert par défaut (le
   // premier, en français, la langue des captures) est vérifié ici — sa
