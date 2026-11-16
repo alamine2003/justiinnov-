@@ -322,7 +322,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS("✔ Sauvegardes à jour."))
             return
 
-        for quoi, derniere in trouvees:
+        for quoi, _derniere in trouvees:
             self.stdout.write(self.style.ERROR(f"✘ {quoi} : en retard ou absente"))
         if options["dry_run"]:
             return

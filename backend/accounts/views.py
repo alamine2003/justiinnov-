@@ -31,7 +31,7 @@ from core.serializers import ConfigurationSerializer, WorkflowConfigurationSeria
 from . import totp
 from .authentication import obtenir_jeton, revoquer_jeton
 from .journal import etat_compte, journaliser_compte, journaliser_modification
-from .models import ALWAYS_GLOBAL_ROLES, HEADQUARTERS_ROLES, Role, UserProfile
+from .models import ALWAYS_GLOBAL_ROLES, HEADQUARTERS_ROLES, Role
 from .permissions import (
     CAPACITES,
     RolePermission,

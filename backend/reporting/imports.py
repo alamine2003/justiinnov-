@@ -170,7 +170,9 @@ def _montant(value, entete):
     try:
         montant = Decimal(str(value).strip().replace(",", "."))
     except (InvalidOperation, AttributeError, ValueError):
-        raise ValueError(_("%(entete)s illisible : « %(value)s »") % {"entete": entete, "value": value})
+        raise ValueError(
+            _("%(entete)s illisible : « %(value)s »") % {"entete": entete, "value": value}
+        ) from None
     if not montant.is_finite() or montant < 0:
         raise ValueError(_("%(entete)s illisible : « %(value)s »") % {"entete": entete, "value": value})
     montant = montant.quantize(CENTS)
@@ -837,14 +839,14 @@ def _ecrire(valides, user, equipes, managers, equipes_a_creer, managers_a_creer,
     try:
         with transaction.atomic():
             Expense.objects.bulk_create(depenses, batch_size=TAILLE_LOT)
-    except IntegrityError:
+    except IntegrityError as exc:
         raise _LigneEnErreur(
             valides[0]["ligne"],
             _(
                 "Un autre import vient d'écrire une ou plusieurs de ces lignes : "
                 "relancez l'import, les lignes déjà présentes seront signalées."
             ),
-        )
+        ) from exc
 
 
 def _verrouiller_le_dossier(dossier, ligne):

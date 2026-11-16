@@ -62,7 +62,7 @@ class JetonAuthentication(TokenAuthentication):
             # et chaque vue y touche.
             token = Token.objects.select_related("user", "user__profile").get(key=key)
         except Token.DoesNotExist:
-            raise AuthenticationFailed(_("Jeton invalide."))
+            raise AuthenticationFailed(_("Jeton invalide.")) from None
         if not token.user.is_active:
             raise AuthenticationFailed(_("Compte désactivé."))
         if est_expire(token):

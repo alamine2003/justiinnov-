@@ -61,7 +61,9 @@ class AdminTests(TestCase):
         enveloppe = Budget.objects.create(country=togo, year=2026, amount=Decimal("1000"))
         Dossier.objects.filter(pk=dossier.pk).update(status=Status.SUBMITTED)
         Expense.objects.filter(pk=brouillon.pk).update(status=Status.SUBMITTED, budget=enveloppe)
-        dossier.refresh_from_db(); brouillon.refresh_from_db(); piece.refresh_from_db()
+        dossier.refresh_from_db()
+        brouillon.refresh_from_db()
+        piece.refresh_from_db()
 
         self.assertFalse(lignes.has_change_permission(self.requete, brouillon))
         self.assertFalse(dossiers.has_change_permission(self.requete, dossier))

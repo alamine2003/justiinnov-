@@ -19,7 +19,6 @@ from unittest import mock
 
 from django.db import OperationalError
 from django.test import Client, SimpleTestCase, TestCase
-from django.urls import path
 from rest_framework.exceptions import ValidationError
 
 from core.exceptions import (

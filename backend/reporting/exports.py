@@ -461,14 +461,15 @@ def document_docx(tableaux, contexte):
             continue
         table = document.add_table(rows=1, cols=len(tableau.colonnes))
         table.style = "Table Grid"
-        for cell, (title, _largeur) in zip(table.rows[0].cells, tableau.colonnes):
+        for cell, (title, _largeur) in zip(table.rows[0].cells, tableau.colonnes, strict=True):
             cell.text = ""
             cell.paragraphs[0].add_run(title).bold = True
         for ligne in tableau.lignes:
-            for cell, value in zip(table.add_row().cells, ligne):
+            for cell, value in zip(table.add_row().cells, ligne, strict=False):
                 cell.text = _cellule_docx(value)
         if tableau.total:
-            for cell, value in zip(table.add_row().cells, tableau.total):
+            # Un total plus court que l'en-tête laisse ses dernières cellules vides.
+            for cell, value in zip(table.add_row().cells, tableau.total, strict=False):
                 cell.text = ""
                 cell.paragraphs[0].add_run(_cellule_docx(value)).bold = True
 

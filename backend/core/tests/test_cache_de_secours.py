@@ -20,7 +20,6 @@ jour-là il est trop tard pour l'écrire.
 import sys
 from unittest import mock
 
-from django.conf import settings
 from django.core.cache.backends.db import DatabaseCache
 from django.core.management import call_command
 from django.db import connection

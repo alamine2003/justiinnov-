@@ -1,0 +1,13 @@
+# Analyse statique du backend (décision 129), rejouée par la CI.
+#
+# Le niveau « vraies erreurs », pas le style : imports et variables
+# inutiles, noms indéfinis (F), pièges courants — exception relancée sans
+# sa cause, `zip` qui tronque en silence (B) —, instructions empilées (E7),
+# espaces et fins de fichier (W). La longueur des lignes (E501) et l'ordre
+# des imports (I) ne sont pas vérifiés : les imposer reformaterait tout le
+# dépôt pour rien.
+target-version = "py312"
+extend-exclude = [".venv", "media"]
+
+[lint]
+select = ["F", "B", "E7", "W"]

@@ -18,6 +18,7 @@ docker compose run --rm --entrypoint django-admin backend compilemessages -l en 
 docker compose run --rm --entrypoint sh backend -c 'python manage.py makemessages -l en --ignore=tests --no-obsolete --no-wrap -v0 && msgfmt --check --statistics -o /dev/null locale/en/LC_MESSAGES/django.po && msgattrib --untranslated locale/en/LC_MESSAGES/django.po && msgattrib --only-fuzzy locale/en/LC_MESSAGES/django.po'
 docker compose run --rm -e POSTGRES_DB=justi_verif --entrypoint python backend manage.py makemigrations --check --dry-run
 docker compose run --rm -e POSTGRES_DB=justi_verif -e EMAIL_BACKEND_CONSOLE=1 --entrypoint python backend manage.py test --noinput --parallel auto
+docker compose run --rm --entrypoint sh backend -c "pip install -q --user ruff==0.17.3 && python -m ruff check ."
 ```
 
 Si `requirements.txt` ou le `Dockerfile` ont changé : `docker compose build backend` avant.
