@@ -1,33 +1,33 @@
 WEBVTT
 
 1
-00:00:01.613 --> 00:00:08.870
+00:00:01.514 --> 00:00:08.722
 Vos dépenses sont dans un classeur Excel ? Importez-les depuis la fiche du projet.
 
 2
-00:00:08.870 --> 00:00:17.215
+00:00:08.722 --> 00:00:17.066
 Cliquez sur « Importer », puis choisissez le dossier qui recevra les lignes.
 
 3
-00:00:17.215 --> 00:00:24.687
+00:00:17.066 --> 00:00:24.517
 Colonnes exigées : N°ORDRE, DATE, TEAM, OWNER, LIBELLE DES TRANSACTIONS, DEPENSES.
 
 4
-00:00:24.687 --> 00:00:29.519
+00:00:24.517 --> 00:00:29.349
 TEAM doit être l'équipe du dossier, et le dossier votre brouillon.
 
 5
-00:00:29.519 --> 00:00:37.855
+00:00:29.349 --> 00:00:37.651
 Simulez d'abord : rien n'est écrit, vous voyez ce qui serait créé.
 
 6
-00:00:37.855 --> 00:00:45.809
+00:00:37.651 --> 00:00:45.602
 Sans erreur, désactivez la simulation, puis cliquez sur « Importer ».
 
 7
-00:00:45.809 --> 00:00:52.234
+00:00:45.602 --> 00:00:52.010
 Les lignes arrivent en brouillon : « Ouvrir le dossier » les montre.
 
 8
-00:00:52.234 --> 00:00:59.007
+00:00:52.010 --> 00:00:58.700
 Joignez la pièce de chaque ligne ; soumettez ensuite le dossier.
