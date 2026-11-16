@@ -296,15 +296,15 @@ def journaliser_relation(instance, action, pk_set, model_name, *, champ,
         avant = getattr(porteur, "_relation_avant_clear", {}).get(champ, {})
     if avant == apres:
         return
-    avant, apres = sorted(avant.values()), sorted(apres.values())
+    noms_avant, noms_apres = sorted(avant.values()), sorted(apres.values())
     journaliser(
         instance,
         ChangeLog.Actions.UPDATED,
         model_name,
         country=country,
-        from_value=", ".join(avant),
+        from_value=", ".join(noms_avant),
         changed_fields=[champ],
-        diff={champ: [avant, apres]},
+        diff={champ: [noms_avant, noms_apres]},
     )
 
 

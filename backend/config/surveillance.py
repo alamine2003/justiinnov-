@@ -76,6 +76,7 @@ erreurs ».
 
 import logging
 import os
+from typing import Any
 
 #: Niveau à partir duquel un enregistrement de journal devient un événement.
 #: ``ERROR`` : une panne d'infrastructure (``core.exceptions``) en produit un,
@@ -166,7 +167,9 @@ def configurer_la_surveillance(*, en_test=False):
         )
         return {"actif": False, "raison": "sentry-sdk absent"}
 
-    reglages = {
+    # Typé honnêtement : chaque option a son propre type, que mypy ne
+    # saurait rapprocher des paramètres de ``sentry_sdk.init``.
+    reglages: dict[str, Any] = {
         "dsn": dsn,
         "environment": os.environ.get("SENTRY_ENVIRONMENT", "production"),
         # La version du code, pour savoir quelle livraison a introduit une

@@ -32,10 +32,23 @@ emballé, et la sérialiser ferait attendre chaque requête d'un même compte
 derrière la précédente — un coût réel pour aucun gain.
 """
 
+from typing import TYPE_CHECKING
+
 from django.db import connection, transaction
 
+if TYPE_CHECKING:
+    from rest_framework.throttling import SimpleRateThrottle
 
-class ComptageSansPerte:
+    # Pour mypy seulement : le mixin entoure ``allow_request`` de la classe
+    # de DRF qui le suit dans les bases, et en lit ``get_cache_key`` et
+    # ``rate``. À l'exécution, la base reste ``object`` : l'ordre de
+    # résolution des classes qui l'emploient ne change pas.
+    _BaseDuMixin = SimpleRateThrottle
+else:
+    _BaseDuMixin = object
+
+
+class ComptageSansPerte(_BaseDuMixin):
     """Sérialise le lire-modifier-écrire du compteur, par clé.
 
     Le verrou est un verrou consultatif Postgres, pris sur le nom de la
