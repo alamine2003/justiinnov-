@@ -131,12 +131,15 @@ function ExpenseFormBody({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    // L'heure se tape : « 25:70 » serait reportée au lendemain sans un mot.
-    if (!estUneHeure24h(date.slice(11))) {
+    // L'heure se tape : complétée ici aussi (« 9:05 » puis Entrée ne passe
+    // pas par la sortie du champ), puis vérifiée — « 25:70 » serait
+    // reportée au lendemain sans un mot.
+    const heure = normaliserHeure(date.slice(11))
+    if (!estUneHeure24h(heure)) {
       setError(t("depenses.formulaire.heure_invalide"))
       return
     }
-    const instant = fromCountryLocalInput(date, timezone)
+    const instant = fromCountryLocalInput(`${date.slice(0, 10)}T${heure}`, timezone)
     if (!instant) {
       setError(t("depenses.formulaire.date_requise"))
       return

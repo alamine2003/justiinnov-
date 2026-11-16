@@ -542,6 +542,42 @@ async function main() {
   expect(repDossiers <= hqDossiers, `le pays voit au plus autant de dossiers que le siège (${repDossiers})`)
   await shot(rep, "dossiers_representant")
 
+  // Le formulaire d'une ligne, celui que remplit le pays : jour au
+  // calendrier, heure sur 24 heures (décision 129). Il passe au contrôle
+  // d'accessibilité fermé puis calendrier ouvert, sans rien enregistrer,
+  // dans le premier dossier du compte qui ouvre la saisie.
+  const liensDossiers = await rep
+    .locator("tbody a[href^='/dossiers/']")
+    .evaluateAll((liens) => liens.map((lien) => lien.getAttribute("href")).slice(0, 6))
+  let formulaireVu = false
+  for (const lien of liensDossiers) {
+    if (!lien) continue
+    await goto(rep, lien, 800)
+    const ajouter = rep.getByRole("button", { name: /^Ajouter$/ })
+    if (!(await ajouter.count())) continue
+    await ajouter.first().click()
+    const dialogue = rep.getByRole("dialog", { name: "Ajouter une dépense" })
+    await dialogue.waitFor()
+    await rep.waitForTimeout(400)
+    expect(
+      (await rep.locator("#exp-time").getAttribute("inputmode")) === "numeric",
+      "l'heure d'une ligne se tape sur 24 heures, sans champ natif",
+    )
+    await shot(rep, "ligne_formulaire")
+    await rep.locator("#exp-date").click()
+    await rep.locator("[data-slot=champ-date]").waitFor()
+    await rep.waitForTimeout(400)
+    await shot(rep, "ligne_calendrier")
+    await rep.keyboard.press("Escape")
+    await rep.keyboard.press("Escape")
+    formulaireVu = true
+    break
+  }
+  // Un brouillon ne se saisit que par son auteur : sur une base où le
+  // compte du parcours n'en a ouvert aucun, l'étape est consignée sans
+  // échouer.
+  if (!formulaireVu) console.log("  · aucun dossier du compte pays n'ouvre la saisie d'une ligne : étape passée")
+
   // Le pays déclare, et importe ses propres classeurs.
   await goto(rep, "/dossiers/import", 1200)
   expect(

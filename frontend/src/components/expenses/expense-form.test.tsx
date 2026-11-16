@@ -187,6 +187,18 @@ describe("ExpenseForm — date et heure", () => {
     expect(heure.value).toBe("09:05")
   })
 
+  it("complète l'heure même validée par Entrée, sans quitter le champ", async () => {
+    const onSave = afficher()
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+    const heure = screen.getByLabelText("Heure")
+    fireEvent.change(heure, { target: { value: "8:15" } })
+    fireEvent.submit(heure.closest("form")!)
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave.mock.calls[0][0].date).toMatch(/T08:15:00\.000Z$/)
+  })
+
   it("refuse une heure qui n'existe pas, en le disant", async () => {
     const onSave = afficher()
     fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
