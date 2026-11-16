@@ -6,8 +6,11 @@
 Chaque route est appelée dans le processus même (client de test de Django,
 sans nginx ni gunicorn) : ce qui est mesuré, c'est la vue, ses requêtes SQL
 et la sérialisation, sur le volume de la base. Avec ``--simultanes N``, N
-appels tournent en même temps, chacun avec sa connexion à la base : c'est
-la contention de la base qu'on voit alors, pas celle des processus web.
+appels tournent en même temps dans des fils du même processus, chacun avec
+sa connexion à la base : comme les fils d'un worker gunicorn de la
+production (``--worker-class gthread``, 2 workers × 4 fils), ils partagent
+le verrou global de Python. Un écran qui calcule (l'export) ralentit alors
+d'autant ses voisins ; un écran qui attend la base, beaucoup moins.
 
 **Jamais sur la production.** Un export écrit au journal d'audit (une
 donnée qui sort laisse une trace), une connexion écrit une session, et rien
