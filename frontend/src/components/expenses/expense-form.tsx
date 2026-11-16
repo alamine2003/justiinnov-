@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react"
 import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
+import { ChampDate } from "@/components/ui/champ-date"
 import {
   Dialog,
   DialogContent,
@@ -106,7 +107,8 @@ function ExpenseFormBody({
 }: Omit<ExpenseFormProps, "open">) {
   const { t } = useTranslation()
   const [title, setTitle] = useState(editing?.title ?? "")
-  const [date, setDate] = useState(
+  // Initialiseur paresseux : l'heure courante n'est lue qu'au montage.
+  const [date, setDate] = useState(() =>
     toCountryLocalInput(editing?.date ?? new Date().toISOString(), timezone),
   )
   const [place, setPlace] = useState(editing?.place ?? "")
@@ -207,13 +209,27 @@ function ExpenseFormBody({
             <Label htmlFor="exp-date">
               {t("depenses.formulaire.date_heure", { fuseau: timezone })}
             </Label>
-            <Input
-              id="exp-date"
-              type="datetime-local"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-            />
+            {/* Le jour au calendrier de l'application, l'heure à part
+                (décision 127) : le champ natif « date et heure » ouvrait
+                le petit calendrier du navigateur. La valeur reste
+                « AAAA-MM-JJTHH:MM », à l'heure du pays. */}
+            <div className="flex gap-2">
+              <ChampDate
+                id="exp-date"
+                value={date.slice(0, 10)}
+                onChange={(jour) => setDate(`${jour}T${date.slice(11, 16) || "00:00"}`)}
+                className="flex-1"
+              />
+              <Input
+                id="exp-time"
+                type="time"
+                aria-label={t("depenses.formulaire.heure")}
+                value={date.slice(11, 16)}
+                onChange={(e) => setDate(`${date.slice(0, 10)}T${e.target.value}`)}
+                className="w-28"
+                required
+              />
+            </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="exp-place">{t("champs.place")}</Label>

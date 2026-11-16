@@ -160,7 +160,7 @@ export function dateDuClasseur(jour: Date): string {
   return `${deuxChiffres(jour.getDate())}/${deuxChiffres(jour.getMonth() + 1)}/${jour.getFullYear()}`
 }
 
-/** `AAAA-MM-JJTHH:MM`, la valeur d'un champ `datetime-local`. */
+/** `AAAA-MM-JJTHH:MM` : le jour (calendrier `ChampDate`) et l'heure de la saisie. */
 export function dateDeSaisie(jour: Date, heure = "10:30"): string {
   return `${jour.getFullYear()}-${deuxChiffres(jour.getMonth() + 1)}-${deuxChiffres(jour.getDate())}T${heure}`
 }

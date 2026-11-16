@@ -286,6 +286,25 @@ interface Tournage {
 }
 
 /**
+ * Choisit un jour au calendrier de l'application (`ChampDate`, décision 127)
+ * puis l'heure. Le jour se vise par son attribut `data-day` (« AAAA-MM-JJ »),
+ * le même dans les deux langues ; le jour du tournage peut tomber le mois
+ * d'avant (jusqu'à trois jours plus tôt), d'où un pas en arrière si besoin.
+ */
+async function choisirLeJourEtLHeure(s: Scene, dialogue: Locator, saisie: string) {
+  const [jour, heure] = saisie.split("T")
+  await s.cliquer(dialogue.locator("#exp-date"))
+  const calendrier = s.page.locator("[data-slot=champ-date]")
+  const cible = calendrier.locator(`[data-day="${jour}"] button`)
+  if (!(await cible.isVisible())) {
+    await s.cliquer(calendrier.locator("nav button").first())
+  }
+  await s.cliquer(cible)
+  await calendrier.waitFor({ state: "hidden" })
+  await s.remplir(dialogue.locator("#exp-time"), heure)
+}
+
+/**
  * Choisit dans une liste l'option qui porte ce libellé, et lève avec les
  * options présentes si elle n'y est pas : un choix par position prenait en
  * silence l'élément voisin.
@@ -368,7 +387,7 @@ const TOURNAGES: Record<IdDeGuide, Tournage> = {
       const dialogue = s.page.getByRole("dialog")
       await s.dire(2)
       await s.saisir(dialogue.locator("#exp-title"), d.ligne)
-      await s.remplir(dialogue.locator("#exp-date"), dateDeSaisie(jourDuTournage(AUJOURDHUI, 3)))
+      await choisirLeJourEtLHeure(s, dialogue, dateDeSaisie(jourDuTournage(AUJOURDHUI, 3)))
       await s.saisir(dialogue.locator("#exp-place"), d.lieu)
       await s.dire(3)
       await s.saisir(dialogue.locator("#exp-amount"), d.montant)

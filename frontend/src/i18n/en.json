@@ -522,7 +522,8 @@
       "manager_responsable": "Responsible manager",
       "beneficiaire": "Prospect / beneficiary",
       "equipe_requise": "Choose one of your teams.",
-      "equipe_du_dossier": "Team (the dossier's)"
+      "equipe_du_dossier": "Team (the dossier's)",
+      "heure": "Time"
     },
     "circuit": {
       "soumettre": "Submit",
