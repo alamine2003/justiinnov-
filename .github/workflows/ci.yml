@@ -108,6 +108,17 @@ jobs:
           pip install ruff==0.17.3
           ruff check .
 
+      - name: Typage (mypy)
+        working-directory: backend
+        # Le code de l'application entier, corps des fonctions non annotées
+        # compris (`backend/mypy.ini`, décision 130) ; tests et migrations
+        # hors périmètre. Le greffon django-stubs charge les réglages : il
+        # lit l'environnement du travail, comme les tests. Versions
+        # épinglées, hors des dépendances de l'application.
+        run: |
+          pip install mypy==2.3.1 django-stubs==6.1.1 djangorestframework-stubs==3.18.1
+          mypy .
+
       - name: Compiler les traductions
         working-directory: backend
         # Le `.mo` n'est pas versionné : sans cette étape, les tests qui
@@ -429,6 +440,9 @@ jobs:
           npx tsx scripts/shot-login.ts
           npx tsx scripts/screenshot.ts
           npx tsx scripts/shot-theme.mts
+          # Au clavier seul : ce qu'axe, qui juge un écran figé, ne voit pas
+          # (focus visible, dialogue qui garde le focus et le rend).
+          npx tsx scripts/parcours-clavier.ts
 
       - name: Limitation de débit de nginx
         # `frontend/nginx.conf` limite `/api/health/` à 2 requêtes par

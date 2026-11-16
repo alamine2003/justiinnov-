@@ -1,5 +1,7 @@
 """Centre de notifications de l'utilisateur connecté."""
 
+from typing import TYPE_CHECKING, cast
+
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
@@ -7,6 +9,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .models import Notification
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
 from .serializers import (
     MarkedReadSerializer,
     NotificationSerializer,
@@ -29,8 +34,10 @@ class NotificationViewSet(
     def get_queryset(self):
         # Le filtrage sur le destinataire est la seule protection nécessaire :
         # une notification appartient à une personne, pas à un pays.
+        # Seule une requête authentifiée sert des notifications
+        # (``IsAuthenticated``, permission par défaut) : c'est un compte.
         return Notification.objects.filter(
-            recipient=self.request.user
+            recipient=cast("User", self.request.user)
         ).select_related("country")
 
     @extend_schema(responses=UnreadCountSerializer)

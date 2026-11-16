@@ -502,11 +502,15 @@ lecture écrive en base.
 ```bash
 docker compose run --rm --entrypoint python backend manage.py test
 docker compose run --rm --entrypoint sh backend -c "pip install -q --user ruff==0.17.3 && python -m ruff check ."
+docker compose run --rm --entrypoint sh backend -c "pip install -q --user mypy==2.3.1 django-stubs==6.1.1 djangorestframework-stubs==3.18.1 && python -m mypy ."
 cd frontend && npx tsc -b && npm run lint && npm run test
 ```
 
 Ce sont les commandes de `CLAUDE.md` et de la CI. ruff analyse le backend au
-niveau « vraies erreurs » (`backend/ruff.toml`, décision 129), pas le style.
+niveau « vraies erreurs » (`backend/ruff.toml`, décision 129), pas le style ;
+mypy vérifie les types de tout le code de l'application, corps des
+fonctions non annotées compris, hors tests et migrations (`backend/mypy.ini`,
+décision 130).
 La suite backend — près de dix-huit cents tests, dont les règles du circuit sans HTTP
 (`expenses/tests/test_transitions.py`, `budget/tests/test_transitions.py`),
 un test traversant du cloisonnement (`accounts/tests/test_traversee.py`) et
@@ -528,7 +532,7 @@ au sein de la livraison continue, en sept travaux indépendants :
 | Backend | migrations à jour, traductions compilées, `check --deploy`, suite Django hors mode debug |
 | Frontend | types, lint, tests unitaires, build |
 | Images Docker | les deux images se construisent |
-| Parcours complet | la pile livrable (backend en production sans code monté, frontend nginx, Caddy devant avec le Caddyfile livré) démarre, des comptes jetables entrent par `compose cp` et `seed_users`, `seed_demo --base-jetable` remplit des données, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console ni violation d'accessibilité grave (axe-core, décision 129), `/admin/` répond l'application et non le back-office, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
+| Parcours complet | la pile livrable (backend en production sans code monté, frontend nginx, Caddy devant avec le Caddyfile livré) démarre, des comptes jetables entrent par `compose cp` et `seed_users`, `seed_demo --base-jetable` remplit des données, les trois scripts de capture de `DESIGN.md` (parcours, connexion, thème sombre) passent sans erreur de console ni violation d'accessibilité grave (axe-core, décision 129), le parcours au clavier seul aussi (décision 130), `/admin/` répond l'application et non le back-office, et la limitation de débit de nginx répond bien 429 en JSON sous une rafale ; les captures sont publiées en artefact |
 | Exploitation | syntaxe et `shellcheck` des scripts de `deploy/`, tests de `sauvegarder.sh` avec des doublures |
 | Pile de production | `deploy/docker-compose.prod.yml` s'interpole dans chacun de ses modes, la base archive un segment dans le volume que `sauvegardes-init` lui a donné, le service de sauvegarde prend une sauvegarde physique sous `postgres`, et la reprise à un instant donné retrouve, dans son conteneur, les lignes effacées juste après cet instant |
 | Dépendances | `pip-audit --strict` et `npm audit` au seuil `high` hors avis tolérés (`frontend/scripts/auditer-dependances.mts`, décision 112), **bloquants** |
@@ -707,7 +711,10 @@ npx tsx scripts/shot-theme.mts
 
 Chaque script échoue si la console du navigateur a produit la moindre erreur,
 ou si axe-core trouve une violation d'accessibilité grave ou critique sur un
-écran capturé (`frontend/scripts/accessibilite.ts`, décision 129).
+écran capturé (`frontend/scripts/accessibilite.ts`, décision 129). La CI
+rejoue aussi `frontend/scripts/parcours-clavier.ts`, la déclaration au
+clavier seul : focus visible, dialogue qui garde le focus et le rend
+(décision 130).
 La CI les rejoue sur la pile livrable.
 
 ### Guides vidéo

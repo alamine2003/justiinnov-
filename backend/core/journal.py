@@ -27,6 +27,7 @@ par son nom, résolu à l'écriture.
 import datetime
 import decimal
 from dataclasses import dataclass
+from typing import Any
 
 from django.apps import apps
 
@@ -103,7 +104,9 @@ class Trace:
             request = get_current_request()
         if request is None:
             return cls()
-        user = getattr(request, "user", None)
+        # Tout compte, ou ``None`` hors authentification : l'attribut est lu
+        # tel quel, ``connecte`` en garde l'usage.
+        user: Any = getattr(request, "user", None)
         connecte = user is not None and user.is_authenticated
         return cls(
             user=user.username if connecte else "",
@@ -265,7 +268,7 @@ def tracer(request, action, instance, *, famille, avant=None, apres=None,
 
 def enregistrer(entrees):
     """Écrit d'un coup des entrées préparées, une requête par journal."""
-    par_journal = {}
+    par_journal: dict[type[Any], list[Any]] = {}
     for entree in entrees:
         par_journal.setdefault(type(entree), []).append(entree)
     ecrites = []

@@ -7,6 +7,7 @@ l'application :mod:`core`.
 import os
 import re
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qsl, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
@@ -334,7 +335,8 @@ else:
 # jamais de lui-même ; celui d'un poste oublié resterait valable des années.
 TOKEN_MAX_AGE_DAYS = int(os.environ.get("TOKEN_MAX_AGE_DAYS", "30"))
 
-REST_FRAMEWORK = {
+# Annoté pour mypy : les valeurs sont hétérogènes (listes, nombres, chaînes).
+REST_FRAMEWORK: dict[str, Any] = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         # Jeton à durée de vie bornée, profil chargé d'emblée, résultat du
         # middleware réutilisé (cf. accounts.authentication).
@@ -807,7 +809,8 @@ DJANGO_LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO").upper()
 #: ``WARNING`` les fait réapparaître, le temps d'une enquête.
 DJANGO_LOG_REQUESTS = os.environ.get("DJANGO_LOG_REQUESTS", "ERROR").upper()
 
-LOGGING = {
+# Annoté pour mypy : le bloc « Réglages de test » descend dans ce dictionnaire.
+LOGGING: dict[str, Any] = {
     "version": 1,
     # Les journaux des bibliothèques restent en place : on ajoute une sortie,
     # on ne coupe la parole à personne.

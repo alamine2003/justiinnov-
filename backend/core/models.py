@@ -546,8 +546,13 @@ class WorkflowConfiguration(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ProtectedError(
-            _("La configuration du workflow est un singleton et ne peut pas être supprimée."),
-            self,
+            # Limite des stubs : Django accepte une chaîne paresseuse, que
+            # l'exception ne traduit qu'à l'affichage.
+            _("La configuration du workflow est un singleton et ne peut pas être supprimée."),  # type: ignore[arg-type]
+            # Écart réel, gardé tel quel (aucun changement de comportement) :
+            # Django attend l'ensemble des objets protégés, le singleton se
+            # désigne seul. Aucun code du dépôt ne lit ``protected_objects``.
+            self,  # type: ignore[arg-type]
         )
 
     @classmethod

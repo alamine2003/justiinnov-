@@ -1111,6 +1111,9 @@ aussi au menu d'export.
   et la pastille, redite, est `aria-hidden`.
 - Une liste de définitions ne contient que des `div` de `dt` et `dd` : un
   séparateur est une bordure, pas un élément.
+- **Tout élément qui reçoit le focus le montre** : un `outline-none` s'accompagne
+  toujours d'un anneau `focus-visible:ring-*` — panneau d'onglets compris, que
+  Tab atteint après son onglet.
 - Les scripts de capture passent chaque écran capturé à **axe-core**
   (`scripts/accessibilite.ts`, WCAG 2.2 A et AA) et échouent sur une
   violation grave ou critique : voir « Vérifier avant de conclure ».
@@ -1128,7 +1131,17 @@ SHOT_COUNTRY_USER=… SHOT_COUNTRY_PASSWORD=… SHOT_COUNTRY_TOTP_SECRET=… \
 npx tsx scripts/screenshot.ts     # parcours complet, siège et pays
 npx tsx scripts/shot-login.ts     # connexion, grand écran et mobile
 npx tsx scripts/shot-theme.mts    # écrans principaux, thème clair puis sombre
+npx tsx scripts/parcours-clavier.ts  # la déclaration au clavier seul (compte pays)
 ```
+
+Le parcours clavier (décision 130) vérifie ce qu'axe, qui juge un écran
+figé, ne voit pas : l'ordre de la connexion (identifiant, mot de passe,
+bouton), un indicateur de focus visible sur chaque élément que Tab atteint
+jusqu'à « Projets » puis « Nouveau projet », le focus gardé dans le
+dialogue (Tab et Maj+Tab) et rendu au bouton qui l'a ouvert après Échap.
+Il frappe à vitesse humaine : la garde de focus de base-ui renvoie le focus
+au tour suivant de la boucle d'affichage. Le lecteur d'écran, lui, ne se
+scripte pas : ce parcours-là reste à faire à la main.
 
 Un écran que traverse un guide vidéo se filme aussi de nouveau
 (`scripts/tourner-guides.mts`, voir le README) : la vidéo montrerait

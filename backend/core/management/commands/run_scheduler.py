@@ -13,6 +13,7 @@ import logging
 import os
 import signal
 from pathlib import Path
+from typing import Any
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -38,7 +39,7 @@ BATTEMENT_SECONDES = 60
 #: Les heures s'entendent dans le fuseau de l'application (``TIME_ZONE``,
 #: UTC par défaut), pas dans celui de la machine hôte ; le rapport
 #: hebdomadaire part le lundi matin, avant que le siège n'ouvre.
-JOBS = [
+JOBS: list[dict[str, Any]] = [
     {
         # Les e-mails partent après chaque action ; ceci ne reprend que ce
         # qui n'est pas parti (``notifications.services``).

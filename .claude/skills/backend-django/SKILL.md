@@ -45,6 +45,14 @@ import).
   le référentiel dans `accounts`.
 - Chiffres : `Decimal`, `Coalesce`, agrégations en SQL (`with_consumption`,
   `with_totals`), jamais de boucle Python qui additionne des lignes.
+- **Sous-requêtes ou jointure, pas les deux** (décision 130) : une requête
+  qui annote des `Subquery` n'ajoute jamais un `Count`/`Sum` par jointure.
+  L'agrégat crée un GROUP BY où Django range les sous-requêtes, que
+  Postgres recalcule alors pour chaque ligne jointe : invisible en test,
+  15 s et plus à 60 000 lignes. Garde : `queryset.query.group_by is None`.
+  De même, une boucle d'export ne relit pas toute une relation préchargée
+  pour chaque ligne : on la range une fois par parent. Un écran lourd se
+  mesure sur volume (`manage.py mesurer_les_temps`, base jetable).
 - Chaînes visibles : `gettext_lazy as _` (modèles, choix, workflow) ou
   `gettext as _` (vues, serializers), puis l'entrée anglaise dans le
   **catalogue unique** `backend/locale/en/LC_MESSAGES/django.po`

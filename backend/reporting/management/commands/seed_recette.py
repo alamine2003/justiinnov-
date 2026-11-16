@@ -290,7 +290,7 @@ class Command(BaseCommand):
     def _comptes(self):
         self.comptes = {}
         for suffixe, (role, codes, _libelle) in SIEGE.items():
-            pays = [self.pays[c] for c in codes] if codes else []
+            pays: list[Country] = [self.pays[c] for c in codes] if codes else []
             self.comptes[suffixe] = self._compte(suffixe, role, pays)
         for code in PAYS:
             cc = code.lower()

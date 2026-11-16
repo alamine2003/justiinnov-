@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
@@ -111,7 +112,11 @@ class DossierTotalsSerializer(serializers.Serializer):
 class RenommerSerializer(serializers.Serializer):
     """Le nouveau titre d'un dossier (décision 104)."""
 
-    label = serializers.CharField(max_length=250, trim_whitespace=True)
+    # Un champ déclaré nommé ``label`` masque, pour les stubs, l'attribut
+    # ``Field.label`` ; DRF le range dans ``_declared_fields``.
+    label = serializers.CharField(  # type: ignore[assignment]
+        max_length=250, trim_whitespace=True
+    )
 
 
 def _jour_local(date, country):
@@ -457,6 +462,8 @@ class ProofSerializer(serializers.ModelSerializer):
 
     def _verifier_la_mise_a_jour(self):
         """Ce qui reste modifiable sur une pièce déposée : presque rien."""
+        # Appelée par ``validate`` sur une instance seulement.
+        assert self.instance is not None
         exiger_un_dossier_de_piece_modifiable(self.instance.dossier)
         if self.instance.status in PROOF_FINAL_STATUSES:
             raise serializers.ValidationError(
@@ -711,6 +718,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
             # laisse intact : un PATCH du libellé effaçait la devise.
             en_devise = bool(getattr(self.instance, "original_currency", ""))
             if en_devise and "amount" in attrs:
+                # Une devise lue suppose une instance.
+                assert self.instance is not None
                 raise serializers.ValidationError(
                     {
                         "amount": _(
@@ -1007,6 +1016,8 @@ class DossierSerializer(serializers.ModelSerializer):
         autre dossier.
         """
         dossier = self.instance
+        # Appelée par ``validate`` sur une instance seulement.
+        assert dossier is not None
         for champ in ("project", "kind"):
             if champ in attrs and getattr(attrs[champ], "pk", None) != getattr(dossier, f"{champ}_id"):
                 raise serializers.ValidationError(
@@ -1132,7 +1143,7 @@ class RectificationSerializer(serializers.ModelSerializer):
         # répond par un message générique sur `non_field_errors` avant le
         # service. C'est le service (`transitions.demander_rectification`)
         # qui dit pourquoi, sur `expense` ; la base garde la contrainte.
-        validators = []
+        validators: list[Any] = []
 
     @extend_schema_field(serializers.BooleanField())
     def get_can_decide(self, rectification):

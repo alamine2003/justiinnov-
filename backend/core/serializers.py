@@ -1,6 +1,7 @@
 """Sérialiseurs de l'API de gestion des pays et organisations."""
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Max
@@ -128,7 +129,16 @@ class MotifExigeMixin(serializers.Serializer):
         return self.validated_data.pop("motif", "").strip()
 
 
-class PaysFigeMixin:
+if TYPE_CHECKING:
+    # Pour mypy seulement : ``PaysFigeMixin`` suppose ``instance`` et
+    # ``validate`` du sérialiseur qui le suit dans les bases. À l'exécution,
+    # la base reste ``object`` : l'ordre de résolution ne change pas.
+    _BaseDuPaysFige = serializers.Serializer
+else:
+    _BaseDuPaysFige = object
+
+
+class PaysFigeMixin(_BaseDuPaysFige):
     """Une entité du référentiel ne change plus de pays dès qu'on s'y réfère.
 
     Les lignes, les dossiers, les enveloppes et les profils qui la portent
@@ -138,7 +148,7 @@ class PaysFigeMixin:
     """
 
     #: Relations inverses qui retiennent l'entité dans son pays.
-    RELATIONS_QUI_RETIENNENT = ()
+    RELATIONS_QUI_RETIENNENT: tuple[str, ...] = ()
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -789,13 +799,18 @@ class RenommerProjetSerializer(serializers.Serializer):
 class EntreeHistoriqueSerializer(serializers.Serializer):
     """Une entrée de l'historique d'un projet : référentiel ou circuit (décision 110)."""
 
-    source = serializers.ChoiceField(choices=["referentiel", "circuit"], read_only=True)
+    # La métaclasse de DRF retire les champs déclarés des attributs de la
+    # classe (``_get_declared_fields``) : ``source`` et ``label`` ne
+    # masquent pas ceux de ``Field``, ce que les stubs ne savent pas voir.
+    source = serializers.ChoiceField(  # type: ignore[assignment]
+        choices=["referentiel", "circuit"], read_only=True
+    )
     id = serializers.IntegerField(read_only=True)
     action = serializers.CharField(read_only=True)
     action_display = serializers.CharField(read_only=True)
     objet = serializers.CharField(read_only=True)
     object_id = serializers.IntegerField(read_only=True, allow_null=True)
-    label = serializers.CharField(read_only=True)
+    label = serializers.CharField(read_only=True)  # type: ignore[assignment]  # voir ``source``
     user = serializers.CharField(read_only=True)
     ip_address = serializers.CharField(read_only=True, allow_null=True)
     motif = serializers.CharField(read_only=True)

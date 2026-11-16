@@ -27,6 +27,7 @@ Un refus est une exception de ``core.regles`` : la vue la traduit.
 """
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from django.db import transaction
 from django.utils.translation import gettext as _
@@ -48,7 +49,10 @@ Nature = ElementSupprime.Nature
 TRASHED = AuditLog.Action.TRASHED
 
 #: Le modèle de chaque nature, pour retrouver l'objet visé.
-MODELES = {
+#: Leur ancêtre commun, ``TimeStampedModel``, abstrait, ne porte pas
+#: ``objects`` : le typage les voit comme ``Any``, et :func:`_verrouiller`
+#: ne lit ``dossier_id`` que sur ceux qui l'ont.
+MODELES: dict[str, type[Any]] = {
     Nature.PROJET: Project,
     Nature.DOSSIER: Dossier,
     Nature.LIGNE: Expense,
@@ -97,7 +101,7 @@ class _Retrait:
         self.acteur = acteur
         self.motif = motif
         self.trace = trace
-        self.racine = None
+        self.racine: ElementSupprime | None = None
         self.copies = []
         self.audit = []
         self.emportes = dict.fromkeys(Nature.values, 0)
@@ -164,6 +168,8 @@ class _Retrait:
             rectifications=[_photo(demande) for demande in demandes],
         )
         self.pieces(ligne.proofs.select_for_update(of=("self",)))
+        # La copie de la ligne vient de poser la tête, au plus tard.
+        assert self.racine is not None
         # Les demandes de rectification protègent la ligne en base ; elles
         # partent dans sa copie.
         for demande in demandes:
@@ -347,12 +353,15 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
         # protègent en base, et elles ne partent pas avec lui.
         ailleurs = Expense.objects.filter(project=objet).exclude(dossier__project=objet)
         if ailleurs.exists():
+            premiere = ailleurs.first()
+            # ``exists()`` vient de la trouver.
+            assert premiere is not None
             raise RegleViolee(
                 "nature",
                 _(
                     "{count} ligne(s) d'un autre dossier ({dossier}) citent encore ce "
                     "projet : mettez-les à la corbeille d'abord."
-                ).format(count=ailleurs.count(), dossier=ailleurs.first().dossier.number),
+                ).format(count=ailleurs.count(), dossier=premiere.dossier.number),
             )
         if Budget.objects.filter(project=objet).exists():
             raise RegleViolee(
@@ -408,5 +417,7 @@ def mettre_a_la_corbeille(nature, pk, acteur, motif, trace):
         )
 
     retrait.terminer()
+    # Chaque branche a copié l'objet visé : la tête existe.
+    assert retrait.racine is not None
     triggers.mis_a_la_corbeille(retrait.racine, team, trace.compte)
     return Resultat(retrait.racine, emportes=retrait.emportes, audit=retrait.audit)

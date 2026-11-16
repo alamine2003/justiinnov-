@@ -25,6 +25,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any, cast
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -101,13 +102,15 @@ TAILLE_LOT = 500
 #: Longueurs des champs texte, reprises du modèle : une valeur trop longue
 #: doit être refusée ligne par ligne, pas par une erreur de base au moment
 #: de l'écriture, qui perdrait tout le classeur.
-LONGUEURS = {
+#: Des ``CharField``, dont ``max_length`` est toujours posé : le typage le
+#: voit facultatif.
+LONGUEURS = cast(dict[str, int], {
     "N°ORDRE": Dossier._meta.get_field("number").max_length,
     "LIBELLE DES TRANSACTIONS": Expense._meta.get_field("title").max_length,
     "DEVISE D'ORIGINE": Expense._meta.get_field("original_currency").max_length,
     "TEAM": Team._meta.get_field("name").max_length,
     "OWNER": Manager._meta.get_field("name").max_length,
-}
+})
 
 #: Chiffres avant la virgule autorisés par ``DecimalField(16, 2)``.
 CHIFFRES_ENTIERS_MAX = (
@@ -288,7 +291,7 @@ def _charger_lignes(uploaded):
         position = positions.get(colonne)
         return row[position] if position is not None and position < len(row) else None
 
-    lignes = []
+    lignes: list[tuple[int, dict[str, Any]]] = []
     for line_number, row in enumerate(rows, start=ligne_d_entete + 1):
         if not any(value not in (None, "") for value in row):
             continue
@@ -324,7 +327,7 @@ def _managers_par_pays():
     son seul nom rattachait la ligne au premier homonyme trouvé, fût-il chez
     le voisin.
     """
-    index = {}
+    index: dict[tuple[int, str], Manager] = {}
     for manager in Manager.objects.filter(is_active=True).prefetch_related("countries"):
         for country in manager.countries.all():
             index.setdefault((country.pk, manager.name.casefold()), manager)

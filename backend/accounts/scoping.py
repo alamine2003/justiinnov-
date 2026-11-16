@@ -23,14 +23,24 @@ La règle elle-même — pays, équipes, ``team IS NULL`` — vit dans
 ``accounts.perimetre.filtrer`` (décision 39) ; ce mixin l'applique aux vues.
 """
 
+from typing import TYPE_CHECKING
+
 from django.utils.translation import gettext as _
 from rest_framework.exceptions import PermissionDenied
 
 from .perimetre import filtrer
 from .permissions import get_access
 
+if TYPE_CHECKING:
+    # Pour le typage seulement : le mixin se pose toujours devant une vue
+    # générique de DRF, dont il appelle ``get_queryset`` et lit
+    # ``self.request``. À l'exécution, il ne dérive que d'``object``.
+    from rest_framework.generics import GenericAPIView as _VueGenerique
+else:
+    _VueGenerique = object
 
-class CountryScopedMixin:
+
+class CountryScopedMixin(_VueGenerique):
     """Restreint lectures et écritures au périmètre du profil.
 
     ``country_lookup`` est le chemin ORM menant au pays depuis le modèle de la
@@ -43,14 +53,14 @@ class CountryScopedMixin:
     écrivent une entité portant un champ ``team`` hors de leurs équipes.
     """
 
-    country_lookup = "country"
-    country_field = "country"
+    country_lookup: str = "country"
+    country_field: str | None = "country"
     #: Champ dont la valeur *porte* un pays (ex. le dossier d'une preuve),
     #: quand la ressource n'a pas de champ « pays » propre.
-    country_via = None
-    team_lookup = None
+    country_via: str | None = None
+    team_lookup: str | None = None
     #: Champ du sérialiseur qui porte l'équipe, revalidé à l'écriture.
-    team_field = "team"
+    team_field: str = "team"
 
     def get_queryset(self):
         return filtrer(
@@ -103,10 +113,16 @@ class CountryScopedMixin:
         team = serializer.validated_data.get(self.team_field)
         return None if team is None else team.pk
 
+    # ``perform_create`` et ``perform_update`` viennent des mixins
+    # d'écriture de DRF portés par la vue concrète, pas de ``GenericAPIView`` :
+    # le mixin sert aussi des vues en lecture seule, qui ne les appellent
+    # jamais. Les déclarer sur la base de typage prêterait une écriture à
+    # ces vues ; mypy ne suit pas ce ``super()`` coopératif.
+
     def perform_create(self, serializer):
         self._check_country_scope(serializer)
-        super().perform_create(serializer)
+        super().perform_create(serializer)  # type: ignore[misc]  # mixin coopératif, voir plus haut
 
     def perform_update(self, serializer):
         self._check_country_scope(serializer)
-        super().perform_update(serializer)
+        super().perform_update(serializer)  # type: ignore[misc]  # mixin coopératif, voir plus haut

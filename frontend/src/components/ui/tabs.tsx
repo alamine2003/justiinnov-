@@ -73,7 +73,12 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-content"
-      className={cn("flex-1 text-sm outline-none", className)}
+      // Le panneau reçoit le focus (Tab après l'onglet) : sans anneau, on ne
+      // voit pas où l'on est (parcours clavier, décision 130).
+      className={cn(
+        "flex-1 rounded-md text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        className,
+      )}
       {...props}
     />
   )

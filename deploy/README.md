@@ -1372,6 +1372,20 @@ d'audit — la perte de données réelle de cette sauvegarde** —, ouvre
 la fiche. Code de sortie 0, ou une liste nommée de ce qui manque.
 Comparez les décomptes à ceux de la production au moment du dump.
 
+**3 bis. Mesurer les temps de réponse** sur cette copie, qui a le volume
+et le serveur de la production sans en être la base (décision 130) :
+
+```bash
+docker compose exec backend python manage.py mesurer_les_temps --base-jetable \
+    --compte <un compte admin du dump> --repetitions 20 --simultanes 4
+```
+
+p50, p95 et max par écran lourd (tableau de bord, registre, dossiers,
+projets, audit, export xlsx de l'exercice). Jamais sur la production :
+un export écrit au journal d'audit, et rien ne se purge. Ces chiffres
+vont au compte rendu ; ce sont eux, pas ceux d'un poste de développement,
+qui fixent un seuil d'alerte dans Grafana.
+
 **4. Ouvrir l'application restaurée**, sans port public : un tunnel SSH
 vers le conteneur (`ssh -L 8443:127.0.0.1:443 …` après avoir remis un
 `ports: ["127.0.0.1:8443:443"]` sur `caddy` dans la surcharge), connexion
@@ -1387,7 +1401,8 @@ docker compose down -v && cd ~ && rm -rf ~/restauration
 
 **6. Consigner** dans le journal d'exploitation (`docs/`, ou le projet
 Claude « JUSTI GH ») : date, dump restauré (nom, taille), durée réelle
-de 2 à 4, sortie complète de `verifier_restauration`, écarts constatés,
+de 2 à 4, sortie complète de `verifier_restauration` et de
+`mesurer_les_temps`, écarts constatés,
 limites restantes. Un écart inexpliqué est un incident, pas une note de
 bas de page.
 

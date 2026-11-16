@@ -111,7 +111,9 @@ class TotpConfirmedSerializer(serializers.Serializer):
 
 class PermissionMatrixRoleSerializer(serializers.Serializer):
     value = serializers.ChoiceField(choices=Role.choices, read_only=True)
-    label = serializers.CharField(read_only=True)
+    # Un champ nommé ``label`` : la métaclasse de DRF le retire des attributs
+    # de la classe, mais les stubs y voient l'attribut ``Field.label``.
+    label = serializers.CharField(read_only=True)  # type: ignore[assignment]
     siege = serializers.BooleanField(read_only=True)
     always_global = serializers.BooleanField(read_only=True)
     #: Le lecteur de la matrice peut-il conférer ce rôle à un compte ?
@@ -127,7 +129,8 @@ def _liste_de_roles(**kwargs):
 class PermissionMatrixCapabilitySerializer(serializers.Serializer):
     key = serializers.CharField(read_only=True)
     group = serializers.CharField(read_only=True)
-    label = serializers.CharField(read_only=True)
+    # Même limite des stubs que ``PermissionMatrixRoleSerializer.label``.
+    label = serializers.CharField(read_only=True)  # type: ignore[assignment]
     description = serializers.CharField(read_only=True)
     #: Rôles qui la portent aujourd'hui, verrous appliqués.
     roles = _liste_de_roles(read_only=True)

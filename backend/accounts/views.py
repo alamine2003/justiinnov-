@@ -11,6 +11,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -219,7 +220,9 @@ class BackOfficePermission(RolePermission):
     son message.
     """
 
-    message = _("Le back-office est réservé aux administrateurs du siège.")
+    # Paresseux : un attribut de classe se traduit au chargement du module,
+    # dans la langue de ce moment-là, si on ne diffère pas la traduction.
+    message = gettext_lazy("Le back-office est réservé aux administrateurs du siège.")
 
 
 class ConfigurationView(APIView):
