@@ -36,6 +36,7 @@ table, la configuration ne fait que la remplir.
 
 import json
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from django.utils.translation import gettext_lazy as _
 from rest_framework.permissions import SAFE_METHODS, BasePermission
@@ -44,6 +45,12 @@ from core.models import WorkflowConfiguration
 from core.regles import PermissionRefusee
 
 from .models import Role
+
+if TYPE_CHECKING:
+    # ``str`` ou traduction paresseuse : un alias de django-stubs, outil de
+    # typage que l'image de production n'installe pas — d'où l'import réservé
+    # au typage et les annotations entre guillemets.
+    from django_stubs_ext import StrOrPromise
 
 
 @dataclass(frozen=True)
@@ -142,9 +149,11 @@ class Capacite:
     """Une action de l'API, ses rôles par défaut et ses verrous."""
 
     key: str
-    groupe: str
-    label: str
-    description: str
+    # Des traductions paresseuses (``gettext_lazy``) : elles se rendent dans
+    # la langue de la requête qui les lit, pas dans celle du démarrage.
+    groupe: "StrOrPromise"
+    label: "StrOrPromise"
+    description: "StrOrPromise"
     #: Rôles qui la portent tant que la configuration n'en dit pas autrement.
     defaut: frozenset
     #: Rôles qui ne peuvent jamais la recevoir, quelle que soit la
@@ -533,7 +542,7 @@ CAPACITES_PAR_CLE = {capacite.key: capacite for capacite in CAPACITES}
 #: rend une instance neuve à chaque appel (dépicklée du cache), donc un
 #: mémo sur l'instance ne servirait qu'au sérialiseur qui la garde. Un
 #: choix modifié — empreinte différente — la recalcule.
-_MEMO_MATRICE = {"empreinte": None, "matrice": None}
+_MEMO_MATRICE: dict[str, Any] = {"empreinte": None, "matrice": None}
 
 
 def matrice_effective(configuration=None):
@@ -621,7 +630,7 @@ class RolePermission(BasePermission):
       alors qu'il s'agit de la même vue.
     """
 
-    message = _("Votre rôle ne permet pas cette action.")
+    message: "StrOrPromise" = _("Votre rôle ne permet pas cette action.")
 
     @staticmethod
     def capacite_requise(view, method):

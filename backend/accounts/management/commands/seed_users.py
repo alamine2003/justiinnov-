@@ -126,7 +126,7 @@ class Command(BaseCommand):
             or Country.objects.filter(name=payload["name"]).first()
         )
         created = country is None
-        if created:
+        if country is None:
             country = Country()
         country.country_ref = ref
         for key, value in fields.items():
@@ -284,15 +284,15 @@ class Command(BaseCommand):
         candidats = Manager.objects.filter(name=nom)
         if countries:
             candidats = candidats.filter(countries__in=countries).distinct()
-        candidats = list(candidats)
-        if not candidats:
+        trouves = list(candidats)
+        if not trouves:
             raise CommandError(f"Manager inconnu pour {username} : {nom!r}")
-        if len(candidats) > 1:
+        if len(trouves) > 1:
             raise CommandError(
                 f"Plusieurs managers portent le nom {nom!r} pour {username} : "
                 "précisez-le dans le référentiel avant de relancer."
             )
-        return candidats[0]
+        return trouves[0]
 
     def _enroler(self, profile, username, secret):
         """Pose un secret TOTP venu du fichier et le tient pour confirmé.

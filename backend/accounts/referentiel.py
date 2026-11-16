@@ -6,6 +6,8 @@ que ``core`` ne connaît pas : ``core`` est au bas de l'ordre des
 dépendances, ``accounts`` juste au-dessus (décision 40).
 """
 
+from typing import Any, TypeVar, cast
+
 from django.db import IntegrityError, transaction
 from django.db.models import Count, IntegerField, Q, Value
 from django.utils.translation import gettext as _
@@ -30,20 +32,23 @@ from core.models import (
     ProjectType,
     Team,
 )
+# Les sérialiseurs de ``core`` que ce module redéfinit, cloisonnés, sous
+# le même nom (``_cloisonne``) : importés sous un alias, pour que le nom
+# servi désigne sans ambiguïté la classe cloisonnée.
 from core.serializers import (
     AvailableCountrySerializer,
     ChangeLogSerializer,
-    CostCenterSerializer,
-    CountryDetailSerializer,
-    CountryListSerializer,
+    CostCenterSerializer as _CostCenterSerializerDeCore,
+    CountryDetailSerializer as _CountryDetailSerializerDeCore,
+    CountryListSerializer as _CountryListSerializerDeCore,
     CountryWriteSerializer,
     DossierKindSerializer,
-    ExpenseTitleSerializer,
-    ManagerSerializer,
-    MarketingCategorySerializer,
-    ProjectSerializer,
+    ExpenseTitleSerializer as _ExpenseTitleSerializerDeCore,
+    ManagerSerializer as _ManagerSerializerDeCore,
+    MarketingCategorySerializer as _MarketingCategorySerializerDeCore,
+    ProjectSerializer as _ProjectSerializerDeCore,
     ProjectTypeSerializer,
-    TeamSerializer,
+    TeamSerializer as _TeamSerializerDeCore,
 )
 
 from core.periodes import DepuisLeJour, JusquAuJour
@@ -54,7 +59,12 @@ from .permissions import RolePermission, get_access, roles_pour
 from .scoping import CountryScopedMixin
 
 
-def _cloisonne(serializer_class, **champs):
+_Serialiseur = TypeVar("_Serialiseur", bound=serializers.BaseSerializer)
+
+
+def _cloisonne(
+    serializer_class: type[_Serialiseur], **champs: Any
+) -> type[_Serialiseur]:
     """Le sérialiseur de ``core``, ses clés étrangères limitées au périmètre.
 
     ``core`` ne connaît pas les périmètres (décision 40) : ses sérialiseurs
@@ -77,9 +87,11 @@ def _cloisonne(serializer_class, **champs):
     texte pour deux classes distinctes, sans rien qui permette de les
     distinguer.
     """
-    return type(serializer_class.__name__, (serializer_class,), {
+    # ``type()`` est typé ``type`` ; la classe qu'il fabrique dérive de
+    # ``serializer_class``, c'est donc bien une ``type[_Serialiseur]``.
+    return cast(type[_Serialiseur], type(serializer_class.__name__, (serializer_class,), {
         "__doc__": serializer_class.__doc__, **champs,
-    })
+    }))
 
 
 def _pays_cloisonne():
@@ -90,11 +102,11 @@ def _pays_cloisonne():
     )
 
 
-TeamSerializer = _cloisonne(TeamSerializer, country=_pays_cloisonne())
-CostCenterSerializer = _cloisonne(CostCenterSerializer, country=_pays_cloisonne())
-ProjectSerializer = _cloisonne(ProjectSerializer, country=_pays_cloisonne())
-ExpenseTitleSerializer = _cloisonne(ExpenseTitleSerializer, country=_pays_cloisonne())
-MarketingCategorySerializer = _cloisonne(MarketingCategorySerializer, country=_pays_cloisonne())
+TeamSerializer = _cloisonne(_TeamSerializerDeCore, country=_pays_cloisonne())
+CostCenterSerializer = _cloisonne(_CostCenterSerializerDeCore, country=_pays_cloisonne())
+ProjectSerializer = _cloisonne(_ProjectSerializerDeCore, country=_pays_cloisonne())
+ExpenseTitleSerializer = _cloisonne(_ExpenseTitleSerializerDeCore, country=_pays_cloisonne())
+MarketingCategorySerializer = _cloisonne(_MarketingCategorySerializerDeCore, country=_pays_cloisonne())
 
 
 def _exiger_un_pays_du_perimetre(self, attrs):
@@ -156,9 +168,8 @@ def _ne_montrer_que_le_perimetre(self, instance):
     return data
 
 
-_ManagerSerializerDeCore = ManagerSerializer
 ManagerSerializer = _cloisonne(
-    ManagerSerializer,
+    _ManagerSerializerDeCore,
     countries=ChampCloisonne(
         many=True, queryset=Country.objects.all(), chemin_pays="pk",
         label=gettext_lazy("Pays"), required=False,
@@ -188,11 +199,11 @@ ManagerSerializer = _cloisonne(
 # raison, et ``CountryDetailSerializer`` redéclare ``managers`` plutôt que de
 # l'hériter de l'originale de ``core``.
 CountryListSerializer = _cloisonne(
-    CountryListSerializer,
+    _CountryListSerializerDeCore,
     managers=ManagerSerializer(many=True, read_only=True),
 )
 CountryDetailSerializer = _cloisonne(
-    CountryDetailSerializer,
+    _CountryDetailSerializerDeCore,
     managers=ManagerSerializer(many=True, read_only=True),
     teams=TeamSerializer(many=True, read_only=True),
     cost_centers=CostCenterSerializer(many=True, read_only=True),
@@ -336,6 +347,7 @@ class ProjectTypeViewSet(NoDestroyModelViewSet):
         # en déduirait ceux de la Côte d'Ivoire (hors périmètre, sans
         # révéler son existence) ; pour lui, il est nul.
         access = get_access(self.request.user)
+        projets: Count | Value
         if access is not None and access.has_global_scope:
             projets = Count("projects", distinct=True)
         else:
