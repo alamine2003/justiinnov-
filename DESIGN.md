@@ -62,6 +62,14 @@ Le corail et l'ambre n'ont pas de jeton à eux : ce sont désormais
 aurait dit la même chose deux fois. L'ambre s'encre de marine
 (`--statut-attente-foreground`) : le blanc n'y tenait pas le contraste.
 
+**L'ambre ne s'écrit pas en texte** sur fond clair (1,9:1) : il teinte une
+icône, une bordure ou un badge, et le texte voisin garde l'encre ordinaire
+(« Sans justificatif », « incomplet »). **Le corail ne s'écrit pas sur le
+marine** du bandeau (2,7:1) : le chiffre reste blanc et un soulignement
+corail porte l'alerte. En thème clair, le corail a été assombri d'un cheveu
+en 2.4.8 (`oklch(0.581 …)` → `oklch(0.57 …)`) : à 4,49:1 sur le fond de
+page, un bouton « Refuser » manquait le seuil d'un centième (décision 129).
+
 Le logo a ses propres couleurs — bleu, rouge et orange de Generic
 Healthcare (`--logo`, `--logo-rouge`, `--logo-orange`) — qui ne servent
 qu'à lui (« Identité », plus bas).
@@ -91,7 +99,8 @@ Le blanc ne s'écrit pas non plus *par le jeton* : l'émeraude du succès
 (2,47:1), le bleu de l'information (3,76:1) et l'azur de la marque (3,10:1)
 l'ont eu, et le grep sur la classe `text-white` ne pouvait pas le voir. Les
 deux premiers ont été assombris ; l'azur et le corail, couleurs de la marque,
-n'ont pas bougé — c'est leur encre qui a changé. Le test
+n'ont pas bougé — c'est leur encre qui a changé (le corail du thème clair
+s'est depuis assombri d'un cheveu, voir plus haut). Le test
 `status-badge.test.tsx` calcule désormais le contraste de chaque paire depuis
 `index.css`, `:root` et `.dark`, et échoue sous 4,5:1.
 
@@ -337,10 +346,13 @@ clavier natif, rendu correct sur mobile.
 </div>
 ```
 
-Un tableau qui défile dans sa carte (`defile`) s'enveloppe d'un
-`<TableDefilante label=…>` (`components/ui/table.tsx`) : une région nommée,
-atteignable au clavier — sans quoi un tableau sans lien, vide ou de texte
-seul, ne défilerait qu'à la souris.
+Toute zone qui défile dans sa boîte — tableau, graphique trop large, liste
+à hauteur d'écran — est une `<ZoneDefilante label=…>`
+(`components/ui/zone-defilante.tsx`) : une région nommée, atteignable au
+clavier, sans quoi une zone sans lien ni bouton ne défilerait qu'à la
+souris. Un tableau qui défile dans sa carte (`defile`) prend
+`<TableDefilante label=…>` (`components/ui/table.tsx`), la même avec le
+cadre des tableaux ; un graphique prend son titre pour nom.
 
 - Montants alignés à droite ; un écart non nul en `text-destructive`.
 - Deuxième ligne de contexte sous la valeur principale, en
@@ -1092,8 +1104,11 @@ aussi au menu d'export.
   décorative (`aria-hidden`) s'atténue.
 - **Le nom accessible reprend le texte affiché** (WCAG 2.5.3) : un
   `aria-label` qui remplace un texte visible doit le contenir (« essai.togo
-  — menu du compte »). Un lien de carte (guide vidéo) n'a pas d'`aria-label` :
-  son nom est son texte, titre puis description.
+  — menu du compte »). Un lien ou un bouton de carte (guide vidéo,
+  notification) n'a pas d'`aria-label` : son nom est son texte. Un bouton à
+  icône qui affiche aussi un compteur (la cloche, « 4 », « 9+ ») est nommé
+  par un texte masqué (`sr-only`, accordé : « 1 non lue », « 4 non lues »),
+  et la pastille, redite, est `aria-hidden`.
 - Une liste de définitions ne contient que des `div` de `dt` et `dd` : un
   séparateur est une bordure, pas un élément.
 - Les scripts de capture passent chaque écran capturé à **axe-core**

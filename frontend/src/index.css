@@ -152,7 +152,7 @@
     --accent-foreground: oklch(0.18 0.015 260);
     /* Corail de la marque : la teinte du danger, de l'écart et du dépassement.
        Le pas foncé sert aussi de couleur de texte, d'où sa clarté. */
-    --destructive: oklch(0.581 0.187 19.2);
+    --destructive: oklch(0.57 0.187 19.2);
     /* Blanc pur plutôt que le blanc cassé du fond : le corail de la marque
        reste intact, et la paire passe de 4,50 à 4,70:1. */
     --destructive-foreground: oklch(1 0 0);

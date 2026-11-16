@@ -283,7 +283,8 @@
   "notifications": {
     "titre": "Notifications",
     "aria": "Notifications",
-    "aria_non_lues": "Notifications ({{count}} unread)",
+    "aria_non_lues_one": "Notifications ({{count}} unread)",
+    "aria_non_lues_other": "Notifications ({{count}} unread)",
     "description": "Budget thresholds, expenses to review and decisions that concern you.",
     "tout_lu": "Mark all as read",
     "aucune": "No notifications.",

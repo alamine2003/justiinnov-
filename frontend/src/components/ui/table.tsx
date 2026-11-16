@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { ZoneDefilante } from "@/components/ui/zone-defilante"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
@@ -19,29 +20,16 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
 
 /**
  * Enveloppe d'un tableau qui défile dans sa carte (`defile`, index.css) :
- * une région nommée, atteignable au clavier. Sans elle, un tableau sans
- * lien — vide, ou de texte seul — ne défilerait qu'à la souris (WCAG 2.1.1,
- * contrôle d'accessibilité des captures, décision 129).
+ * une `ZoneDefilante`, avec le cadre des tableaux.
  */
 function TableDefilante({
-  label,
   className,
   ...props
-}: React.ComponentProps<"section"> & { label: string }) {
+}: React.ComponentProps<typeof ZoneDefilante>) {
   return (
-    // Une `section` nommée est une région. Le focus clavier sur une zone qui
-    // défile est la technique attendue (axe, scrollable-region-focusable) :
-    // la règle générique qui le refuse aux éléments non interactifs se lève
-    // ici seulement.
-    <section
-      aria-label={label}
-      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-      tabIndex={0}
+    <ZoneDefilante
       data-slot="table-defilante"
-      className={cn(
-        "defile overflow-x-auto rounded-lg border border-border/60 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        className,
-      )}
+      className={cn("defile overflow-x-auto rounded-lg border border-border/60", className)}
       {...props}
     />
   )

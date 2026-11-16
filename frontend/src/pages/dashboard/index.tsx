@@ -314,7 +314,13 @@ function BandeauConsolide({
     {
       label: t("pilotage.indicateurs.sans_preuve"),
       value: totals.gap,
-      tone: Number(totals.gap) > 0 ? "text-destructive" : "",
+      // Le corail sur le marine ne tient pas 4,5:1 (2,7:1) : le chiffre
+      // reste blanc et le soulignement porte l'alerte, que le libellé dit
+      // déjà.
+      tone:
+        Number(totals.gap) > 0
+          ? "underline decoration-destructive decoration-2 underline-offset-4"
+          : "",
     },
   ]
 

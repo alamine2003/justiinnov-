@@ -297,9 +297,7 @@ export function RegisterPage() {
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                         {formatDateIn(entry.date, entry.country_timezone)}
                         <br />
-                        <span className="opacity-70">
-                          {t("registre.heure_locale", { fuseau: entry.country_timezone })}
-                        </span>
+                        <span>{t("registre.heure_locale", { fuseau: entry.country_timezone })}</span>
                       </TableCell>
                       <TableCell>
                         <Link
@@ -365,7 +363,9 @@ export function RegisterPage() {
                               {t("registre.pieces", { count: entry.proofs.length })}
                             </span>
                             {entry.proofs.some((p) => !p.is_complete) && (
-                              <span className="text-statut-attente">
+                              // Texte en encre ordinaire : l'ambre, à 1,9:1 sur
+                              // blanc, ne se lit pas en petit.
+                              <span className="font-medium text-foreground">
                                 {` · ${t("registre.incomplet")}`}
                               </span>
                             )}

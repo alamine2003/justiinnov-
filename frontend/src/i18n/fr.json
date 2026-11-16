@@ -283,7 +283,8 @@
   "notifications": {
     "titre": "Notifications",
     "aria": "Notifications",
-    "aria_non_lues": "Notifications ({{count}} non lues)",
+    "aria_non_lues_one": "Notifications ({{count}} non lue)",
+    "aria_non_lues_other": "Notifications ({{count}} non lues)",
     "description": "Seuils budgétaires, dépenses à contrôler et décisions vous concernant.",
     "tout_lu": "Tout marquer comme lu",
     "aucune": "Aucune notification.",

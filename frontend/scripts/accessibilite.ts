@@ -22,7 +22,13 @@ export async function controlerAccessibilite(page: Page, ecran: string): Promise
   const { violations } = await new AxeBuilder({ page }).withTags(REGLES_WCAG).analyze()
   const bloquantes: string[] = []
   for (const violation of violations) {
-    const cibles = violation.nodes.map((noeud) => noeud.target.join(" ")).slice(0, 3)
+    // Chaque élément avec le détail d'axe (taux de contraste, couleurs, nom
+    // attendu), trois au plus : sans lui, un échec en CI ne se corrige pas
+    // sans rejouer le parcours.
+    const cibles = violation.nodes.slice(0, 3).map((noeud) => {
+      const detail = (noeud.failureSummary ?? "").replace(/\s+/g, " ").slice(0, 200)
+      return `${noeud.target.join(" ")} (${detail})`
+    })
     const message = `${ecran} — ${violation.id} (${violation.impact}, ${violation.nodes.length} élément(s)) : ${violation.help} — ${cibles.join(" | ")}`
     if (BLOQUANTES.has(violation.impact ?? "")) {
       console.log(`  ✗ accessibilité : ${message}`)

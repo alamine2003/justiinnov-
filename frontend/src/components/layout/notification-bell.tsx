@@ -145,16 +145,20 @@ export function NotificationBell() {
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={unread ? t("notifications.aria_non_lues", { count: unread }) : t("notifications.aria")}
-        className="relative"
-        onClick={() => void openPanel()}
-      >
-        <Bell className="h-4 w-4" />
+      {/* Le nom vient d'un texte masqué, pas d'un `aria-label` : la pastille
+          affiche « 4 » ou « 9+ », que le nom doit reprendre (WCAG 2.5.3), et
+          le texte masqué dit le nombre exact, accordé. La pastille, redite,
+          est cachée aux lecteurs d'écran. */}
+      <Button variant="ghost" size="icon" className="relative" onClick={() => void openPanel()}>
+        <Bell className="h-4 w-4" aria-hidden />
+        <span className="sr-only">
+          {unread ? t("notifications.aria_non_lues", { count: unread }) : t("notifications.aria")}
+        </span>
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+          <span
+            aria-hidden
+            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+          >
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -189,10 +193,14 @@ export function NotificationBell() {
               items.map((notification) => {
                 const KindIcon = notificationKindIcon(notification.kind)
                 return (
+                  // Nommée par son contenu — nature, titre, texte, date, pays —
+                  // et non par son seul titre : le nom reprend tout le texte
+                  // affiché (WCAG 2.5.3). Le lint ne lit pas un contenu fait
+                  // d'expressions ; axe, sur la page rendue, le vérifie.
+                  // eslint-disable-next-line jsx-a11y/control-has-associated-label
                   <button
                     key={notification.id}
                     type="button"
-                    aria-label={notification.title}
                     onClick={() => void handleClick(notification)}
                     className={cn(
                       "w-full rounded-lg border border-border/60 p-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
