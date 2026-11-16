@@ -551,3 +551,37 @@ class LangueDesTitresTests(DashboardTestCase):
 
         colonne = [titre for titre, _ in exports.EXPENSE_COLUMNS].index("PIECES JUSTIFICATIVES")
         self.assertIn("(incomplete proof)", tableau.lignes[0][colonne])
+
+
+class PiecesParLigneTests(DashboardTestCase):
+    """Chaque ligne liste ses pièces et celles d'avant la 2.0, dans l'ordre
+    du dossier, sans les archivées (décisions 107 et 130)."""
+
+    def test_chaque_ligne_a_ses_pieces_et_celles_du_dossier(self):
+        from expenses.models import Proof
+
+        premiere = Expense.objects.filter(dossier=self.dossier).order_by("date", "pk").first()
+        autre = self.make_expense(amount="10.00")
+
+        def piece(rang, ligne, kind, **reste):
+            return Proof.objects.create(
+                dossier=self.dossier, expense=ligne, file=f"justificatifs/{rang}.pdf",
+                original_name=f"{rang}.pdf", kind=kind, sha256=f"{rang:064d}", **reste,
+            )
+
+        piece(1, premiere, Proof.Kind.RECEIPT)
+        piece(2, None, Proof.Kind.INVOICE, is_complete=False)
+        piece(3, autre, Proof.Kind.RECEIPT, status=Proof.ProofStatus.ARCHIVED)
+        piece(4, premiere, Proof.Kind.DISCHARGE)
+
+        tableau = exports.lignes_depenses(Expense.objects.filter(dossier=self.dossier))
+
+        colonne = [titre for titre, _ in exports.EXPENSE_COLUMNS].index("PIECES JUSTIFICATIVES")
+        sommaires = [ligne[colonne] for ligne in tableau.lignes]
+        # La première ligne : ses deux pièces et celle du dossier, dans l'ordre
+        # du dossier (la plus récente d'abord), comme avant la décision 130.
+        self.assertEqual(sommaires.count("Décharge ; Facture (justif incomplet) ; Reçu"), 1)
+        # Les autres, dont celle à la pièce archivée : la pièce du dossier seule.
+        self.assertEqual(
+            sommaires.count("Facture (justif incomplet)"), len(sommaires) - 1
+        )

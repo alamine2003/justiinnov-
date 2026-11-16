@@ -166,23 +166,45 @@ def _style_header(sheet, columns):
     sheet.freeze_panes = "A2"
 
 
-def _proof_summary(dossier, expense=None):
+def _pieces_par_ligne(dossier, memoire):
+    """Libellés des pièces du dossier, rangés par ligne, calculés une fois.
+
+    Relire toutes les pièces du dossier pour chacune de ses lignes coûtait
+    lignes × pièces comparaisons : 153 millions sur le banc de 60 000
+    lignes, 42 s pour un export (décision 130). La clé ``None`` porte les
+    pièces d'avant la 2.0, déposées sur tout le dossier. Chaque libellé
+    garde son rang dans le préchargement, pour l'ordre d'affichage.
+
+    ``memoire`` est indexée par la clé du dossier : ``select_related`` donne
+    à chaque ligne sa propre instance du dossier, une mémoire posée sur
+    l'objet ne servirait qu'une fois.
+    """
+    cache = memoire.get(dossier.pk)
+    if cache is None:
+        cache = {}
+        for rang, proof in enumerate(dossier.proofs.all()):
+            if proof.status == Proof.ProofStatus.ARCHIVED:
+                continue
+            label = proof.get_kind_display()
+            if not proof.is_complete:
+                label += _(" (justif incomplet)")
+            cache.setdefault(proof.expense_id, []).append((rang, label))
+        memoire[dossier.pk] = cache
+    return cache
+
+
+def _proof_summary(dossier, expense=None, memoire=None):
     """Reprend la nuance « Reçu (justif incomplet) » du fichier d'origine.
 
     Pour une ligne (décision 107) : ses pièces, et celles d'avant la 2.0
     déposées sur tout le dossier. Lu dans le préchargement du dossier.
     """
-    labels = []
-    for proof in dossier.proofs.all():
-        if expense is not None and proof.expense_id not in (expense.pk, None):
-            continue
-        if proof.status == Proof.ProofStatus.ARCHIVED:
-            continue
-        label = proof.get_kind_display()
-        if not proof.is_complete:
-            label += _(" (justif incomplet)")
-        labels.append(label)
-    return " ; ".join(labels)
+    pieces = _pieces_par_ligne(dossier, {} if memoire is None else memoire)
+    if expense is None:
+        retenues = [piece for liste in pieces.values() for piece in liste]
+    else:
+        retenues = pieces.get(expense.pk, []) + pieces.get(None, [])
+    return " ; ".join(label for _rang, label in sorted(retenues))
 
 
 def _total_si_devise_unique(devises, ligne):
@@ -218,6 +240,7 @@ def lignes_depenses(expenses):
     )
     totals = {"amount": ZERO, "justified": ZERO}
     devises = set()
+    pieces_des_dossiers: dict = {}
 
     for expense in source:
         dossier = expense.dossier
@@ -244,7 +267,7 @@ def lignes_depenses(expenses):
             expense.justified_amount,
             expense.amount - expense.justified_amount,
             expense.get_status_display(),
-            _proof_summary(dossier, expense),
+            _proof_summary(dossier, expense, pieces_des_dossiers),
             _projet(dossier),
             dossier.project.kind.libelle if dossier.project and dossier.project.kind else "",
             dossier.kind.name if dossier.kind else "",
