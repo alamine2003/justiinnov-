@@ -201,6 +201,13 @@ def _validate_email(value):
         raise serializers.ValidationError(list(exc.messages)) from exc
 
 
+class ReglesDeDepotSerializer(serializers.Serializer):
+    """Ce qu'une pièce justificative doit respecter (décision 129)."""
+
+    formats_acceptes = serializers.ListField(child=serializers.CharField(), read_only=True)
+    taille_max_octets = serializers.IntegerField(read_only=True)
+
+
 class MeSerializer(serializers.ModelSerializer):
     """Profil de l'utilisateur connecté, consommé par le frontend.
 
@@ -223,6 +230,7 @@ class MeSerializer(serializers.ModelSerializer):
     supervision = serializers.SerializerMethodField()
     bi_url = serializers.SerializerMethodField()
     api_version = serializers.SerializerMethodField()
+    regles_de_depot = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -231,7 +239,7 @@ class MeSerializer(serializers.ModelSerializer):
             "role", "role_display", "countries", "teams", "has_global_scope",
             "must_change_password", "totp_required", "totp_confirmed", "language",
             "permissions", "workflow", "alert_thresholds", "supervision", "bi_url",
-            "api_version",
+            "api_version", "regles_de_depot",
         ]
 
     def _role(self, user):
@@ -358,6 +366,21 @@ class MeSerializer(serializers.ModelSerializer):
         if self._role(user) not in roles_pour("bi.consulter"):
             return None
         return f"{settings.BI_URL}/d/bi-vue-ensemble"
+
+    @extend_schema_field(ReglesDeDepotSerializer)
+    def get_regles_de_depot(self, user):
+        """Les formats et la taille qu'une pièce doit respecter (décision 129).
+
+        À tout compte : ce n'est pas un secret, et c'est le pays qui dépose.
+        Le panneau des pièces les lisait dans la configuration, réservée aux
+        administrateurs — qui ne déposent jamais : le déposant ne les voyait
+        pas, et découvrait la règle par un refus (écart 21). Le serveur
+        reste seul juge au dépôt (``expenses.contenu``).
+        """
+        return {
+            "formats_acceptes": list(settings.ALLOWED_PROOF_EXTENSIONS),
+            "taille_max_octets": settings.MAX_PROOF_SIZE,
+        }
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_api_version(self, user):

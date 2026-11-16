@@ -13619,6 +13619,14 @@
                         "type": "string",
                         "nullable": true,
                         "readOnly": true
+                    },
+                    "regles_de_depot": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ReglesDeDepot"
+                            }
+                        ],
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -13641,7 +13649,8 @@
                     "alert_thresholds",
                     "supervision",
                     "bi_url",
-                    "api_version"
+                    "api_version",
+                    "regles_de_depot"
                 ]
             },
             "MeWorkflow": {
@@ -16467,6 +16476,27 @@
                 ],
                 "type": "string",
                 "description": "* `pending` - En attente\n* `approved` - Approuvée\n* `refused` - Refusée"
+            },
+            "ReglesDeDepot": {
+                "type": "object",
+                "description": "Ce qu'une pièce justificative doit respecter (décision 129).",
+                "properties": {
+                    "formats_acceptes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "readOnly": true
+                    },
+                    "taille_max_octets": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "formats_acceptes",
+                    "taille_max_octets"
+                ]
             },
             "RenommerProjetRequest": {
                 "type": "object",

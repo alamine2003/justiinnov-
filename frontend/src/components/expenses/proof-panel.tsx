@@ -21,7 +21,6 @@ import { ProofStatusBadge } from "@/components/expenses/status-badge"
 import { estRemplacable } from "@/lib/circuit"
 import { MettreALaCorbeille } from "@/components/corbeille/mettre-a-la-corbeille"
 import { useAuth } from "@/context/use-auth"
-import { fetchConfiguration } from "@/lib/accounts"
 import {
   downloadProof,
   isPreviewable,
@@ -29,7 +28,6 @@ import {
   uploadProof,
 } from "@/lib/expenses"
 import { PROOF_KINDS, proofKindLabel } from "@/lib/labels"
-import { useReferentiel } from "@/lib/referentiel"
 import type { Proof } from "@/lib/types"
 import { useEnregistrement } from "@/lib/use-enregistrement"
 import { formatDate } from "@/lib/utils"
@@ -82,22 +80,21 @@ function reviewChoices(proof: Proof): ReviewChoice[] {
  */
 function usePieces({ expenseId, proofs, canUpload: peutDeposer, onChanged }: PiecesProps) {
   const { t } = useTranslation()
-  const { can } = useAuth()
+  const { me } = useAuth()
   const canUpload = peutDeposer && expenseId !== null
 
-  // Les formats et la taille acceptés vivent dans la configuration du
-  // serveur, réservée au siège. Un compte pays dépose sans ces garde-fous :
-  // le serveur reste seul juge, l'écran ne fait qu'éviter un aller-retour.
-  const configuration = useReferentiel("configuration", fetchConfiguration, {
-    enabled: canUpload && can("configuration.manage"),
-  })
-  const rules: UploadRules = configuration.data
+  // Les formats et la taille acceptés viennent de `/api/me/`, à tout compte
+  // (décision 129) : ils étaient lus dans la configuration, réservée aux
+  // administrateurs, qui ne déposent jamais — le déposant ne les voyait pas
+  // (écart 21). Le serveur reste seul juge ; l'écran évite un aller-retour.
+  const regles = me?.regles_de_depot
+  const rules: UploadRules = regles
     ? {
-        accept: configuration.data.justificatifs.formats_acceptes
+        accept: regles.formats_acceptes
           .map((f) => (f.startsWith(".") ? f : `.${f}`))
           .join(","),
-        maxBytes: configuration.data.justificatifs.taille_max_mo * 1024 * 1024,
-        formats: configuration.data.justificatifs.formats_acceptes,
+        maxBytes: regles.taille_max_octets,
+        formats: regles.formats_acceptes,
       }
     : { formats: [] }
 
