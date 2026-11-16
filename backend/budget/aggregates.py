@@ -333,7 +333,7 @@ def consolidation_par_pays(budgets, rates=None):
     Unique point de calcul pour ``/api/budgets/summary/`` et le tableau de
     bord : deux implémentations avaient fini par diverger.
     """
-    per_country = defaultdict(
+    per_country: defaultdict[int, dict[str, Decimal]] = defaultdict(
         lambda: {
             "allocated": ZERO, "sub_allocated": ZERO, "engaged": ZERO,
             "consumed": ZERO, "justified": ZERO,
@@ -356,7 +356,7 @@ def consolidation_par_pays(budgets, rates=None):
         entry["justified"] += figures["justified"]
 
     rows = []
-    xof = defaultdict(lambda: ZERO)
+    xof: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
     unconverted = set()
 
     for country_id, entry in per_country.items():

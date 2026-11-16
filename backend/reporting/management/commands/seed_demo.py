@@ -96,7 +96,7 @@ EQUIPES = {"TG": ["Équipe Lomé", "Équipe Kara"], "CI": ["Équipe Abidjan"]}
 MANAGERS = {"TG": "Kodjo Mensah", "CI": "Awa Koné"}
 #: Projets typés par pays (décision 100), avec l'équipe de leurs dossiers :
 #: le premier est le congrès du pays.
-PROJETS = {
+PROJETS: dict[str, list[tuple[str, str, str | None]]] = {
     "TG": [
         ("Lancement gamme pédiatrique", types_de_projets.CONGRES, "Équipe Lomé"),
         ("Tournées terrain Togo", types_de_projets.VOYAGE, "Équipe Kara"),
@@ -110,7 +110,7 @@ BENEFICIAIRES = {
 ENVELOPPES = {"TG": Decimal("25000000.00"), "CI": Decimal("30000000.00")}
 SOUS_ENVELOPPE_LOME = Decimal("8000000.00")
 
-COMPTES = {
+COMPTES: dict[str, tuple[str, str | None]] = {
     "demo.pays": (Role.MANAGER, "TG"),
     "demo.controle": (Role.ADMIN, None),
     "demo.direction": (Role.SUPER_ADMIN, None),

@@ -155,7 +155,9 @@ class DossierQuerySet(models.QuerySet):
         # Le comptage des preuves introduit un GROUP BY, qui fait perdre à
         # Django l'ordre par défaut du modèle : sans tri explicite, deux pages
         # successives pourraient se recouvrir.
-        return self.order_by(*Dossier._meta.ordering).annotate(
+        # ``ordering`` est déclaré dans ``Meta`` : le ``or ()`` ne sert qu'au
+        # typage, qui le voit facultatif.
+        return self.order_by(*(Dossier._meta.ordering or ())).annotate(
             total_amount=Coalesce(
                 Subquery(lines.values("amount")[:1], output_field=money),
                 Value(ZERO),
@@ -195,6 +197,16 @@ class Dossier(TimeStampedModel):
     """
 
     objects = DossierQuerySet.as_manager()
+
+    # Posés par ``DossierQuerySet.with_totals`` seulement, et lus après en
+    # avoir vérifié la présence (``getattr``, ``hasattr``) : des annotations
+    # pour le typage, sans valeur — une valeur par défaut les rendrait
+    # toujours présents, et ``hasattr`` ne distinguerait plus rien.
+    total_justified: Decimal
+    total_lines: int
+    lines_unjustified: int
+    lines_settled: int
+    piece_d_avant: bool
 
     # Le numéro est unique **par pays** : le N°ORDRE d'avant la 2.0 repartait
     # de 1 dans chaque pays, et une unicité globale refusait le « 12 » du

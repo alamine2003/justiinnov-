@@ -20,6 +20,7 @@ message dans sa langue.
 """
 
 from datetime import timedelta
+from typing import Any
 
 from django.conf import settings
 from django.core.mail import EmailMessage
@@ -56,7 +57,7 @@ def _groupes_par_perimetre(users):
     pièce jointe et la langue séparent les groupes, car elles changent le
     message lui-même.
     """
-    groupes = {}
+    groupes: dict[tuple[Any, ...], tuple[Any, list[Any]]] = {}
     for user in users:
         access = get_access(user)
         if access is None:

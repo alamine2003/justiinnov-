@@ -75,7 +75,9 @@ class BudgetQuerySet(models.QuerySet):
         # L'agrégation introduit un GROUP BY, qui fait perdre à Django
         # l'ordre par défaut du modèle : sans tri explicite, deux pages
         # successives pourraient se recouvrir.
-        return self.order_by(*Budget._meta.ordering).annotate(
+        # ``ordering`` est déclaré dans ``Meta`` : le ``or ()`` ne sert qu'au
+        # typage, qui le voit facultatif.
+        return self.order_by(*(Budget._meta.ordering or ())).annotate(
             engaged_total=Coalesce(
                 Sum("expenses__amount", filter=Q(expenses__status__in=engaging)),
                 zero,
@@ -107,7 +109,9 @@ class BudgetQuerySet(models.QuerySet):
         """
         # ``Expense`` vit dans ``expenses``, au-dessus de ``budget`` dans
         # l'ordre des applications (décision 40) : on le rejoint par la
-        # relation inverse, sans l'importer.
+        # relation inverse, sans l'importer. Ainsi rejoint, il n'est connu
+        # que comme ``Model`` : on passe par ``_default_manager``, qui est son
+        # seul gestionnaire, ``objects``.
         Expense = Budget.expenses.field.model
         sous = Budget.objects.filter(
             country_id=OuterRef("country_id"), year=OuterRef("year")
@@ -115,7 +119,7 @@ class BudgetQuerySet(models.QuerySet):
         de_pays = Q(project__isnull=True, team__isnull=True, manager__isnull=True)
         return self.annotate(
             a_servi=ExpressionWrapper(
-                Exists(Expense.objects.filter(budget=OuterRef("pk")))
+                Exists(Expense._default_manager.filter(budget=OuterRef("pk")))
                 | Exists(BudgetReallocation.objects.filter(source=OuterRef("pk")))
                 | Exists(BudgetReallocation.objects.filter(target=OuterRef("pk")))
                 | (de_pays & Exists(sous)),
@@ -233,11 +237,16 @@ class Budget(TimeStampedModel):
     @property
     def scope_label(self):
         """Dimension découpée, ou ``None`` pour l'enveloppe du pays."""
+        # Chaque ``*_id`` posé garantit la relation : les ``assert`` ne
+        # servent qu'au typage.
         if self.project_id:
+            assert self.project is not None
             return self.project.name
         if self.team_id:
+            assert self.team is not None
             return _("Équipe {name}").format(name=self.team.name)
         if self.manager_id:
+            assert self.manager is not None
             return _("Manager {name}").format(name=self.manager.name)
         return None
 

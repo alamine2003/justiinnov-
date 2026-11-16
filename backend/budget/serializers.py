@@ -1,5 +1,7 @@
 """Sérialiseurs des budgets."""
 
+from typing import Any, cast
+
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
@@ -158,7 +160,7 @@ class BudgetSerializer(serializers.ModelSerializer):
         # enveloppe de pays. L'unicité est donc vérifiée explicitement dans
         # ``validate``, avec des messages parlants ; les contraintes en base
         # restent le dernier rempart.
-        validators = []
+        validators: list[Any] = []
 
     @extend_schema_field(serializers.BooleanField())
     def get_can_delete(self, budget):
@@ -175,7 +177,11 @@ class BudgetSerializer(serializers.ModelSerializer):
             return False
         configuration = self.context.get("workflow_configuration")
         if configuration is None:
-            configuration = self.context["workflow_configuration"] = WorkflowConfiguration.charger()
+            # ``context`` est le dictionnaire de la racine, que les stubs
+            # déclarent en lecture seule (``Mapping``).
+            configuration = cast(dict[str, Any], self.context)["workflow_configuration"] = (
+                WorkflowConfiguration.charger()
+            )
         if access.role not in roles_pour("budgets.delete", configuration):
             return False
         a_servi = getattr(budget, "a_servi", None)
@@ -350,7 +356,9 @@ def _as_str(value):
 
 
 class BudgetReallocationSerializer(serializers.ModelSerializer):
-    source = ChampCloisonne(
+    # Un champ déclaré nommé ``source`` masque, pour les stubs, l'attribut
+    # ``Field.source`` ; DRF le range dans ``_declared_fields``.
+    source = ChampCloisonne(  # type: ignore[assignment]
         queryset=Budget.objects.all(), chemin_pays="country",
         label=gettext_lazy("Enveloppe source"),
     )
@@ -391,7 +399,11 @@ class BudgetReallocationSerializer(serializers.ModelSerializer):
         # La matrice des droits se lit une fois par réponse, pas par ligne.
         configuration = self.context.get("workflow_configuration")
         if configuration is None:
-            configuration = self.context["workflow_configuration"] = WorkflowConfiguration.charger()
+            # ``context`` est le dictionnaire de la racine, que les stubs
+            # déclarent en lecture seule (``Mapping``).
+            configuration = cast(dict[str, Any], self.context)["workflow_configuration"] = (
+                WorkflowConfiguration.charger()
+            )
         return peut_decider(reallocation, access, configuration)
 
     def validate_reason(self, value):
@@ -461,7 +473,9 @@ class ExchangeRateSerializer(serializers.ModelSerializer):
             courants = getattr(self, "_taux_en_vigueur", None)
             if courants is None:
                 courants = self._taux_en_vigueur = taux_en_vigueur_ids()
-            self.context["taux_en_vigueur"] = courants
+            # ``context`` est le dictionnaire de la racine, que les stubs
+            # déclarent en lecture seule (``Mapping``).
+            cast(dict[str, Any], self.context)["taux_en_vigueur"] = courants
         return rate.pk in courants
 
     def validate_currency(self, value):

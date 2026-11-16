@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 try:  # pragma: no cover - dépend de l'installation
     from botocore.exceptions import BotoCoreError, ClientError
 
-    PANNES_DE_STOCKAGE = (BotoCoreError, ClientError)
+    PANNES_DE_STOCKAGE: tuple[type[Exception], ...] = (BotoCoreError, ClientError)
 except ImportError:  # stockage local seul, sans client S3
     PANNES_DE_STOCKAGE = ()
 
@@ -174,7 +174,9 @@ def effacer_nom_sans_bruit(nom):
 #: Fichiers écrits par ``ProofSerializer.create`` pendant le bloc courant.
 #: Un ``ContextVar`` plutôt qu'une variable de module : deux requêtes
 #: servies par deux fils ne partagent pas leur liste.
-_depots_en_cours = contextvars.ContextVar("depots_en_cours", default=None)
+_depots_en_cours: contextvars.ContextVar[list[str] | None] = contextvars.ContextVar(
+    "depots_en_cours", default=None
+)
 
 
 @contextmanager
@@ -186,7 +188,7 @@ def suivre_les_depots():
     stockage : le fichier est écrit avant l'``INSERT`` et n'a pas de
     retour arrière.
     """
-    noms = []
+    noms: list[str] = []
     jeton = _depots_en_cours.set(noms)
     try:
         yield noms

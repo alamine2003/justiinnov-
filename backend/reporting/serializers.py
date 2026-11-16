@@ -92,7 +92,9 @@ class DashboardSerializer(serializers.Serializer):
 
 
 class BreakdownRowSerializer(serializers.Serializer):
-    label = serializers.CharField(read_only=True)
+    # Un champ déclaré nommé ``label`` masque, pour les stubs, l'attribut
+    # ``Field.label`` ; DRF le range dans ``_declared_fields``.
+    label = serializers.CharField(read_only=True)  # type: ignore[assignment]
     amount = champ_montant()
     justified = champ_montant()
     gap = champ_montant()

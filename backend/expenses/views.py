@@ -8,6 +8,7 @@ utile, l'appel du service et la réponse. Les règles du circuit — verrous,
 """
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils.translation import gettext_lazy
@@ -116,7 +117,16 @@ def _schema_des_transitions(request, response, *noms):
     return {nom: extend_schema(request=request, responses=response) for nom in noms}
 
 
-class WorkflowMixin:
+# Le mélange ne sert que sur des vues génériques (``DossierViewSet``,
+# ``ExpenseViewSet``) : le typage lui en donne la base, l'exécution non,
+# pour ne rien changer à l'ordre de résolution des méthodes.
+if TYPE_CHECKING:
+    from rest_framework.generics import GenericAPIView as _VueGenerique
+else:
+    _VueGenerique = object
+
+
+class WorkflowMixin(_VueGenerique):
     """Actions de transition : lecture de la charge utile, service, réponse."""
 
     #: Saisie et circuit : la capacité de chaque action. Modifier un

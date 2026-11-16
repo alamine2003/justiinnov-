@@ -11,7 +11,8 @@ au besoin, un pays. Tout se compte ici, en base : l'interface affiche.
 - **à surveiller** : les derniers événements sensibles, en clair.
 """
 
-from datetime import timedelta
+from datetime import date, timedelta
+from typing import Any
 
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate
@@ -40,7 +41,7 @@ C = ChangeLog.Actions
 #: ligne tranchée — le refus d'une ligne s'écrit ``unjustified`` — ; un
 #: refus, par ligne non justifiée ou par pièce rejetée ; une
 #: rectification, par demande.
-COMPTEURS_CIRCUIT = {
+COMPTEURS_CIRCUIT: dict[str, list[tuple[list[str], str | None]]] = {
     "declarations": [([A.SUBMITTED], "Dossier")],
     "decisions": [([A.JUSTIFIED, A.UNJUSTIFIED], "Expense")],
     "reouvertures": [([A.REOPENED], "Dossier")],
@@ -108,7 +109,7 @@ def synthese(circuit, referentiel, *, debut=None, fin=None):
     compteurs["desactivations"] = referentiel.filter(action=C.DEACTIVATED).count()
     compteurs["projets"] = referentiel.filter(model_name=ChangeLog.Models.PROJECT).count()
 
-    jours = {}
+    jours: dict[date, dict[str, Any]] = {}
     for jour, n in (
         circuit.annotate(jour=TruncDate("created_at")).order_by()
         .values_list("jour").annotate(n=Count("pk"))
@@ -120,7 +121,7 @@ def synthese(circuit, referentiel, *, debut=None, fin=None):
     ):
         jours.setdefault(jour, {"jour": jour, "circuit": 0, "referentiel": 0})["referentiel"] = n
 
-    utilisateurs = {}
+    utilisateurs: dict[str, int] = {}
     for user, n in circuit.exclude(user="").order_by().values_list("user").annotate(n=Count("pk")):
         utilisateurs[user] = utilisateurs.get(user, 0) + n
     for user, n in (

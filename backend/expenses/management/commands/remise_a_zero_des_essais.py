@@ -94,8 +94,10 @@ class Command(BaseCommand):
         for ligne in par_pays:
             self.stdout.write(f"  {ligne['country__name']} : {ligne['n']} dossier(s)")
         lignes = Expense.objects.values("status").annotate(n=Count("id"), total=Sum("amount"))
-        for ligne in lignes.order_by("status"):
-            self.stdout.write(f"  lignes {ligne['status']} : {ligne['n']} ({ligne['total']})")
+        for par_statut in lignes.order_by("status"):
+            self.stdout.write(
+                f"  lignes {par_statut['status']} : {par_statut['n']} ({par_statut['total']})"
+            )
         self.stdout.write(
             f"À retirer : {Dossier.objects.count()} dossier(s), {Expense.objects.count()} "
             f"ligne(s), {Proof.objects.count()} pièce(s), "

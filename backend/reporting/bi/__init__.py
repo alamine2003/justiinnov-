@@ -16,8 +16,10 @@ et ``ALTER DEFAULT PRIVILEGES`` les reporte sur chaque vue recréée.
 
 import logging
 from pathlib import Path
+from typing import cast
 
 from django.conf import settings
+from django.db.models import Field
 from django.utils import translation
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,11 @@ def jetons():
     from expenses.models import AuditLog, Beneficiary, Expense, Proof
     from expenses.synthese_audit import SENSIBLES_CIRCUIT
 
-    champ = WorkflowConfiguration._meta.get_field
+    def champ(nom: str) -> Field:
+        # Des champs concrets de la configuration, jamais une relation
+        # inverse : ``get_field`` les rend sous le type le plus large.
+        return cast(Field, WorkflowConfiguration._meta.get_field(nom))
+
     return {
         "FUSEAU_SERVEUR": settings.TIME_ZONE,
         "DEVISE_CONSOLIDATION": CONSOLIDATION_CURRENCY,

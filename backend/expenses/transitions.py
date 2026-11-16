@@ -31,6 +31,7 @@ l'attrape telle quelle. Les messages sont ceux que l'API renvoyait déjà.
 """
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
@@ -487,7 +488,7 @@ def _soumettre_les_lignes(dossier, acteur, trace, resultat):
     _exiger_equipe_et_owner(brouillons)
 
     # Une résolution par clé d'imputation, pas par ligne.
-    par_cle = {}
+    par_cle: dict[tuple[Any, ...], Any] = {}
     for expense in brouillons:
         cle = cle_d_imputation(expense)
         if cle in par_cle:
@@ -1134,7 +1135,10 @@ def controler_piece(proof, statut, acteur, *, motif="", trace):
     # croyant l'autre inchangé — et le dossier se fermait sur une pièce
     # rejetée, ce que la décision 115 refuse.
     dossier_id = Proof.objects.filter(pk=proof.pk).values_list("dossier_id", flat=True).first()
-    Dossier.objects.select_for_update().filter(pk=dossier_id).first()
+    # Sans objet en base, aucun dossier à verrouiller : la relecture sous
+    # verrou qui suit répond introuvable.
+    if dossier_id is not None:
+        Dossier.objects.select_for_update().filter(pk=dossier_id).first()
     piece = relire_sous_verrou(
         Proof.objects.select_related("dossier__country").select_for_update(of=("self",)),
         proof.pk,
@@ -1223,7 +1227,10 @@ def _verrouiller_la_demande(rectification, acteur):
         .values_list("expense__dossier_id", flat=True)
         .first()
     )
-    Dossier.objects.select_for_update().filter(pk=dossier_id).first()
+    # Sans objet en base, aucun dossier à verrouiller : la relecture sous
+    # verrou qui suit répond introuvable.
+    if dossier_id is not None:
+        Dossier.objects.select_for_update().filter(pk=dossier_id).first()
     verrouillee = relire_sous_verrou(
         Rectification.objects.select_related(
             "expense__country", "expense__dossier", "expense__team"

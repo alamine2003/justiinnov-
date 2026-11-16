@@ -24,6 +24,7 @@ de cause.
 
 import hashlib
 import random
+from typing import Any, cast
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -66,7 +67,10 @@ class Command(BaseCommand):
                 "environnement enverrait de vrais e-mails. Refus. (--sans-garde pour passer outre.)"
             )
         base = connection.settings_dict.get("NAME")
-        self.stdout.write(f"Base : {base} · Stockage : {settings.STORAGES['default']['BACKEND']} "
+        # ``STORAGES`` est le dictionnaire de dictionnaires que Django
+        # documente ; le typage des réglages ne le connaît pas si finement.
+        stockages = cast(dict[str, dict[str, Any]], settings.STORAGES)
+        self.stdout.write(f"Base : {base} · Stockage : {stockages['default']['BACKEND']} "
                           f"{getattr(settings, 'AWS_S3_ENDPOINT_URL', '') or ''}")
 
         self.stdout.write("Comptes :")
@@ -91,6 +95,8 @@ class Command(BaseCommand):
         manquantes, differentes, ouvertes = [], [], 0
         for piece in pieces:
             try:
+                # Le fichier d'une pièce est obligatoire : il a toujours un nom.
+                assert piece.file.name is not None
                 with default_storage.open(piece.file.name, "rb") as fichier:
                     calculee = empreinte(fichier)
             except Exception as exc:  # fichier absent, stockage muet

@@ -25,16 +25,16 @@ from core.regles import RegleViolee
 
 from . import transitions
 from .audit import record
-from .models import AuditLog, Expense, Proof
+from .models import AuditLog, Dossier, Expense, Proof
 
 
 @dataclass
 class Depot:
     """Ce que le dépôt a relu sous verrou."""
 
-    dossier: object
-    ligne: object
-    remplacee: object = None
+    dossier: Dossier
+    ligne: Expense
+    remplacee: Proof | None = None
 
     @property
     def version(self):
