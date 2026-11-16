@@ -21,6 +21,18 @@ class LangueDesReponsesTests(ScopingTestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data["detail"], "Your role does not allow this action.")
 
+    def test_le_refus_du_back_office_se_lit_dans_la_langue_de_la_requete(self):
+        """Le message était traduit une fois, au chargement du module (en
+        français), et restait tel quel pour une requête en anglais."""
+        self.login(self.rep_togo)
+
+        anglais = self.client.get("/api/configuration/", HTTP_ACCEPT_LANGUAGE="en")
+        francais = self.client.get("/api/configuration/")
+
+        self.assertEqual(anglais.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(anglais.data["detail"], "The back office is reserved for headquarters administrators.")
+        self.assertEqual(francais.data["detail"], "Le back-office est réservé aux administrateurs du siège.")
+
     def test_sans_en_tete_le_francais_reste_la_reference(self):
         self.login(self.rep_togo)
 
