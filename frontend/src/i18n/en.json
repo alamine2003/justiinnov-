@@ -57,6 +57,7 @@
     "ouvrir_menu": "Open menu",
     "deconnexion": "Sign out",
     "menu_utilisateur": "Account menu",
+    "menu_utilisateur_de": "{{nom}} — account menu",
     "reservee_siege": "This page is restricted to headquarters: you have been taken back to the dashboard.",
     "equipes": "Teams",
     "supervision": "Monitoring",
@@ -282,7 +283,8 @@
   "notifications": {
     "titre": "Notifications",
     "aria": "Notifications",
-    "aria_non_lues": "Notifications ({{count}} unread)",
+    "aria_non_lues_one": "Notifications ({{count}} unread)",
+    "aria_non_lues_other": "Notifications ({{count}} unread)",
     "description": "Budget thresholds, expenses to review and decisions that concern you.",
     "tout_lu": "Mark all as read",
     "aucune": "No notifications.",
@@ -522,7 +524,10 @@
       "manager_responsable": "Responsible manager",
       "beneficiaire": "Prospect / beneficiary",
       "equipe_requise": "Choose one of your teams.",
-      "equipe_du_dossier": "Team (the dossier's)"
+      "equipe_du_dossier": "Team (the dossier's)",
+      "heure": "Time",
+      "heure_invalide": "Enter the time in 24-hour format, for example 14:30.",
+      "heure_placeholder": "HH:MM"
     },
     "circuit": {
       "soumettre": "Submit",

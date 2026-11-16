@@ -9,6 +9,7 @@ import { echelleCommune } from "@/lib/echelle"
 import { NativeSelect } from "@/components/ui/native-select"
 import { StatCard } from "@/components/ui/stat-card"
 import { PageHeader } from "@/components/ui/page-header"
+import { ZoneDefilante } from "@/components/ui/zone-defilante"
 import { TruncatedNotice } from "@/components/ui/truncated-notice"
 import { BudgetForm, type BudgetFormValues, type Scope } from "@/components/budgets/budget-form"
 import { EnveloppeDuPays, SousEnveloppes } from "@/components/budgets/country-envelope"
@@ -227,7 +228,7 @@ export function BudgetsPage() {
 
       {/* Sous les indicateurs, enveloppes et réallocations défilent dès
           `lg` : en-tête et totaux restent en vue (DESIGN.md, « Hauteur d'écran »). */}
-      <div className="defile -mx-1 space-y-6 px-1 pb-1 court:space-y-3">
+      <ZoneDefilante label={t("budgets.titre")} className="defile -mx-1 space-y-6 px-1 pb-1 court:space-y-3">
         {!summary ? null : rows.length === 0 ? (
           <Card className="border-border/60 shadow-sm">
             <CardContent>
@@ -275,7 +276,7 @@ export function BudgetsPage() {
             />
           </CardContent>
         </Card>
-      </div>
+      </ZoneDefilante>
 
       <BudgetForm
         open={formOpen}

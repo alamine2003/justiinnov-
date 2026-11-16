@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import {
   Table,
+  TableDefilante,
   TableBody,
   TableCell,
   TableHead,
@@ -263,7 +264,7 @@ export function RegisterPage() {
 
       <Card className="remplit border-border/60 shadow-sm">
         <CardContent className="remplit">
-          <div className="defile overflow-x-auto rounded-lg border border-border/60">
+          <TableDefilante label={t("registre.titre")}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -296,9 +297,7 @@ export function RegisterPage() {
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                         {formatDateIn(entry.date, entry.country_timezone)}
                         <br />
-                        <span className="opacity-70">
-                          {t("registre.heure_locale", { fuseau: entry.country_timezone })}
-                        </span>
+                        <span>{t("registre.heure_locale", { fuseau: entry.country_timezone })}</span>
                       </TableCell>
                       <TableCell>
                         <Link
@@ -364,7 +363,9 @@ export function RegisterPage() {
                               {t("registre.pieces", { count: entry.proofs.length })}
                             </span>
                             {entry.proofs.some((p) => !p.is_complete) && (
-                              <span className="text-statut-attente">
+                              // Texte en encre ordinaire : l'ambre, à 1,9:1 sur
+                              // blanc, ne se lit pas en petit.
+                              <span className="font-medium text-foreground">
                                 {` · ${t("registre.incomplet")}`}
                               </span>
                             )}
@@ -384,7 +385,7 @@ export function RegisterPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </TableDefilante>
 
           <Pagination
             page={page}

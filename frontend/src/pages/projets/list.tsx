@@ -22,6 +22,7 @@ import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { PageHeader } from "@/components/ui/page-header"
 import {
   Table,
+  TableDefilante,
   TableBody,
   TableCell,
   TableHead,
@@ -194,7 +195,7 @@ export function ProjetsPage() {
 
       <Card className="remplit border-border/60 shadow-sm">
         <CardContent className="remplit">
-          <div className="defile overflow-x-auto rounded-lg border border-border/60">
+          <TableDefilante label={t("projets.liste.titre")}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -251,7 +252,7 @@ export function ProjetsPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </TableDefilante>
 
           <Pagination
             page={page}

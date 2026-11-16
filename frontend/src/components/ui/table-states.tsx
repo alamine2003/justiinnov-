@@ -27,7 +27,7 @@ export function EmptyRow({
         )}
         <p className="text-sm font-medium text-muted-foreground">{title}</p>
         {hint && (
-          <p className="mt-1 text-xs text-muted-foreground/70">{hint}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
         )}
       </TableCell>
     </TableRow>

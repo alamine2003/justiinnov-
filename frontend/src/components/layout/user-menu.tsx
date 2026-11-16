@@ -46,7 +46,11 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="sm" aria-label={t("nav.menu_utilisateur")}>
+          <Button variant="ghost" size="sm" aria-label={
+              me?.username
+                ? t("nav.menu_utilisateur_de", { nom: me.username })
+                : t("nav.menu_utilisateur")
+            }>
             <CircleUserRound className="h-4 w-4 lg:mr-2" aria-hidden />
             <span className="hidden max-w-40 truncate lg:inline">{me?.username}</span>
           </Button>

@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { ZoneDefilante } from "@/components/ui/zone-defilante"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
@@ -14,6 +15,23 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
         {...props}
       />
     </div>
+  )
+}
+
+/**
+ * Enveloppe d'un tableau qui défile dans sa carte (`defile`, index.css) :
+ * une `ZoneDefilante`, avec le cadre des tableaux.
+ */
+function TableDefilante({
+  className,
+  ...props
+}: React.ComponentProps<typeof ZoneDefilante>) {
+  return (
+    <ZoneDefilante
+      data-slot="table-defilante"
+      className={cn("defile overflow-x-auto rounded-lg border border-border/60", className)}
+      {...props}
+    />
   )
 }
 
@@ -104,6 +122,7 @@ function TableCaption({
 
 export {
   Table,
+  TableDefilante,
   TableHeader,
   TableBody,
   TableFooter,

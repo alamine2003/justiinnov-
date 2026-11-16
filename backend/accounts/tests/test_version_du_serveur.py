@@ -1,4 +1,4 @@
-"""``api_version`` : la version du serveur, aux administrateurs (décision 126)."""
+"""`/api/me/` : la version du serveur (décision 126) et les règles de dépôt (décision 129)."""
 
 from django.test import SimpleTestCase, override_settings
 from rest_framework.authtoken.models import Token
@@ -59,3 +59,17 @@ class LectureDeLaVersionTests(SimpleTestCase):
         for valeur in ("<script>", "2.4.4 ; rm", "-2.4.4", "x" * 41):
             with self.subTest(valeur=valeur):
                 self.assertEqual(lire_la_version(valeur), "dev")
+
+
+class ReglesDeDepotTests(APITestCase):
+    """Le déposant voit les règles de dépôt (décision 129, écart 21)."""
+
+    @override_settings(ALLOWED_PROOF_EXTENSIONS=[".pdf", ".png"], MAX_PROOF_SIZE=5 * 1024 * 1024)
+    def test_le_manager_qui_depose_recoit_formats_et_taille(self):
+        user = make_user("regles.manager", Role.MANAGER, [])
+        token = Token.objects.create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        regles = self.client.get("/api/me/").data["regles_de_depot"]
+
+        self.assertEqual(regles, {"formats_acceptes": [".pdf", ".png"], "taille_max_octets": 5 * 1024 * 1024})

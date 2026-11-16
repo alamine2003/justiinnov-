@@ -139,7 +139,7 @@ export function ChampDate({
                   "inline-flex h-10 w-10 items-center justify-center rounded-lg text-sm transition-colors outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50",
                 selected: "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary",
                 today: "[&>button]:font-semibold [&>button]:ring-1 [&>button]:ring-border",
-                outside: "text-muted-foreground/60",
+                outside: "text-muted-foreground",
                 disabled: "opacity-40",
                 hidden: "invisible",
               }}

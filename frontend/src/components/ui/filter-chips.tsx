@@ -50,7 +50,7 @@ export function FilterChips({
           >
             {chip.label}
             {chip.count !== undefined && (
-              <span className={cn("ml-1.5", !actif && "text-muted-foreground/70")}>
+              <span className={cn("ml-1.5", !actif && "text-muted-foreground")}>
                 {chip.count}
               </span>
             )}

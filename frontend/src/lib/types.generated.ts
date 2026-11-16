@@ -4045,6 +4045,7 @@ export interface components {
             /** Format: uri */
             readonly bi_url: string | null
             readonly api_version: string | null
+            readonly regles_de_depot: components["schemas"]["ReglesDeDepot"]
         }
         /** @description Politique du circuit que l'interface doit connaître. */
         MeWorkflow: {
@@ -5312,6 +5313,11 @@ export interface components {
          * @enum {string}
          */
         RectificationStatusEnum: "pending" | "approved" | "refused"
+        /** @description Ce qu'une pièce justificative doit respecter (décision 129). */
+        ReglesDeDepot: {
+            readonly formats_acceptes: string[]
+            readonly taille_max_octets: number
+        }
         /** @description Le nouveau titre d'un projet et son motif (décisions 108 et 109). */
         RenommerProjetRequest: {
             /** Titre */

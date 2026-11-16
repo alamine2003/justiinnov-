@@ -153,8 +153,10 @@ export function CarteDeLigne({
               {t("pieces.ligne.justificatif")}
             </>
           ) : (
-            <span className="flex items-center gap-1.5 text-statut-attente">
-              <FileWarning className="h-3.5 w-3.5" aria-hidden />
+            // L'ambre teinte l'icône, pas le texte : sur blanc, il ne tient
+            // pas 4,5:1 (1,9:1).
+            <span className="flex items-center gap-1.5">
+              <FileWarning className="h-3.5 w-3.5 text-statut-attente" aria-hidden />
               {t("pieces.ligne.sans_justificatif")}
             </span>
           )}

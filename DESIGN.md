@@ -62,6 +62,14 @@ Le corail et l'ambre n'ont pas de jeton à eux : ce sont désormais
 aurait dit la même chose deux fois. L'ambre s'encre de marine
 (`--statut-attente-foreground`) : le blanc n'y tenait pas le contraste.
 
+**L'ambre ne s'écrit pas en texte** sur fond clair (1,9:1) : il teinte une
+icône, une bordure ou un badge, et le texte voisin garde l'encre ordinaire
+(« Sans justificatif », « incomplet »). **Le corail ne s'écrit pas sur le
+marine** du bandeau (2,7:1) : le chiffre reste blanc et un soulignement
+corail porte l'alerte. En thème clair, le corail a été assombri d'un cheveu
+en 2.4.8 (`oklch(0.581 …)` → `oklch(0.57 …)`) : à 4,49:1 sur le fond de
+page, un bouton « Refuser » manquait le seuil d'un centième (décision 129).
+
 Le logo a ses propres couleurs — bleu, rouge et orange de Generic
 Healthcare (`--logo`, `--logo-rouge`, `--logo-orange`) — qui ne servent
 qu'à lui (« Identité », plus bas).
@@ -91,7 +99,8 @@ Le blanc ne s'écrit pas non plus *par le jeton* : l'émeraude du succès
 (2,47:1), le bleu de l'information (3,76:1) et l'azur de la marque (3,10:1)
 l'ont eu, et le grep sur la classe `text-white` ne pouvait pas le voir. Les
 deux premiers ont été assombris ; l'azur et le corail, couleurs de la marque,
-n'ont pas bougé — c'est leur encre qui a changé. Le test
+n'ont pas bougé — c'est leur encre qui a changé (le corail du thème clair
+s'est depuis assombri d'un cheveu, voir plus haut). Le test
 `status-badge.test.tsx` calcule désormais le contraste de chaque paire depuis
 `index.css`, `:root` et `.dark`, et échoue sous 4,5:1.
 
@@ -305,8 +314,25 @@ base-ui un calendrier `react-day-picker` : jours de 40 px, semaine du lundi,
 mois et année en listes, au clavier, dans la langue de l'interface. Sa valeur
 reste « AAAA-MM-JJ » ; `id` va au bouton, que nomme le `<Label htmlFor>`.
 Un filtre qui peut rester sans date passe `effacable` (« Effacer la date »).
-Un test (`champ-date.test.tsx`) refuse tout champ natif de date, de mois ou
-de date et heure hors des exceptions qu'il nomme.
+Un test (`champ-date.test.tsx`) refuse tout champ natif de date, de mois,
+de date et heure ou d'heure — sans exception depuis la 2.4.8. Une date
+**et** une heure (celle d'une dépense : `#exp-date`, `#exp-time`) se
+saisissent par un `ChampDate` suivi d'un `<Input>` texte étroit (`w-24`,
+nommé « Heure », indication « HH:MM »), sur toute la largeur du
+formulaire : à deux dans une demi-colonne, l'heure se rognait. **L'heure se
+tape sur 24 heures**, comme l'application l'affiche partout : le champ
+natif `type="time"` suivait la langue du navigateur et écrivait « 10:30 AM »
+sous une interface française. « 9:05 », « 9h05 » ou « 0905 » se complètent
+en « 09:05 » en quittant le champ (`normaliserHeure`) ; une heure qui
+n'existe pas est refusée à l'enregistrement, avec la raison. La valeur
+reste « AAAA-MM-JJTHH:MM », à l'heure du pays (décision 129).
+
+Le formulaire d'un pays ne fait rien taper de ce que le serveur sait
+déjà (décision 128) : le pays se choisit dans la liste des filiales, sa
+devise officielle et son fuseau sont proposés d'office, le fuseau se
+choisit dans **la liste de ceux du pays** (un fuseau enregistré hors liste
+reste affiché, marqué « à corriger »), et le symbole de la devise se vide
+quand la devise change, pour que le serveur pose le bon.
 
 Le projet utilise **base-ui** sous shadcn, dont l'API diffère de Radix :
 pour les listes déroulantes, préférez `NativeSelect` — comportement
@@ -319,6 +345,14 @@ clavier natif, rendu correct sur mobile.
   <Table>…</Table>
 </div>
 ```
+
+Toute zone qui défile dans sa boîte — tableau, graphique trop large, liste
+à hauteur d'écran — est une `<ZoneDefilante label=…>`
+(`components/ui/zone-defilante.tsx`) : une région nommée, atteignable au
+clavier, sans quoi une zone sans lien ni bouton ne défilerait qu'à la
+souris. Un tableau qui défile dans sa carte (`defile`) prend
+`<TableDefilante label=…>` (`components/ui/table.tsx`), la même avec le
+cadre des tableaux ; un graphique prend son titre pour nom.
 
 - Montants alignés à droite ; un écart non nul en `text-destructive`.
 - Deuxième ligne de contexte sous la valeur principale, en
@@ -456,7 +490,9 @@ que « Aucune donnée ».
   langue de référence des clés.
 - Les montants transitent en **chaîne** pour préserver la précision décimale.
   La conversion en `number` n'a lieu qu'au formatage.
-- Formatage : `formatAmount`, `formatRate`, `formatDate`, `formatDateIn`.
+- Formatage : `formatAmount`, `formatRate`, `formatDecimal`, `formatDate`,
+  `formatDateIn` — jamais `toFixed`, qui écrit un point même en français
+  (« 20.0 Mo » au lieu de « 20,0 Mo »).
 - Les heures d'une dépense se lisent dans le **fuseau du pays**
   (`formatDateIn(date, country_timezone)`), pas dans celui du lecteur.
 
@@ -1062,6 +1098,22 @@ aussi au menu d'export.
   groupe de filtres à bascule expose `aria-pressed`.
 - Le plugin `jsx-a11y` d'oxlint est actif : `npm run lint` refuse un bouton à
   icône sans libellé.
+- **Contraste 4,5:1 pour tout texte**, en clair comme en sombre : un texte
+  secondaire est en `text-muted-foreground`, jamais éclairci par une
+  opacité (`text-muted-foreground/70` tombait à 3,3:1). Seule une icône
+  décorative (`aria-hidden`) s'atténue.
+- **Le nom accessible reprend le texte affiché** (WCAG 2.5.3) : un
+  `aria-label` qui remplace un texte visible doit le contenir (« essai.togo
+  — menu du compte »). Un lien ou un bouton de carte (guide vidéo,
+  notification) n'a pas d'`aria-label` : son nom est son texte. Un bouton à
+  icône qui affiche aussi un compteur (la cloche, « 4 », « 9+ ») est nommé
+  par un texte masqué (`sr-only`, accordé : « 1 non lue », « 4 non lues »),
+  et la pastille, redite, est `aria-hidden`.
+- Une liste de définitions ne contient que des `div` de `dt` et `dd` : un
+  séparateur est une bordure, pas un élément.
+- Les scripts de capture passent chaque écran capturé à **axe-core**
+  (`scripts/accessibilite.ts`, WCAG 2.2 A et AA) et échouent sur une
+  violation grave ou critique : voir « Vérifier avant de conclure ».
 
 ---
 
@@ -1082,8 +1134,10 @@ Un écran que traverse un guide vidéo se filme aussi de nouveau
 (`scripts/tourner-guides.mts`, voir le README) : la vidéo montrerait
 sinon l'ancien écran.
 
-Les trois scripts **échouent si la console du navigateur a produit la moindre
-erreur** — une seule exception, nommée : le `400 totp_required` du premier
+Les trois scripts **échouent si axe-core trouve une violation d'accessibilité
+grave ou critique** sur un écran capturé (`scripts/accessibilite.ts`,
+décision 129 ; les violations modérées sont seulement listées), et **si la
+console du navigateur a produit la moindre erreur** — une seule exception, nommée : le `400 totp_required` du premier
 temps d'une connexion enrôlée (`POST /api/token-auth/`), voulu, que
 `estLeRefusAttenduDuCode` (`scripts/login.ts`) écarte. Regardez les captures : plusieurs défauts de ce projet — un
 `method-wrapper` affiché en clair, une page qui plantait, un bouton d'édition
@@ -1101,13 +1155,6 @@ livrable, port 8080.
 ---
 
 ## Points connus
-
-- **La date et l'heure d'une dépense** (`expense-form.tsx`, `#exp-date`)
-  restent un champ natif `datetime-local`, seule exception nommée au test
-  de `ChampDate` : le guide vidéo « Saisir une ligne » le remplit, et le
-  changer impose de tourner ce guide de nouveau, sur une base jetable
-  (décision 127). Il passera à `ChampDate` et à un champ d'heure avec ce
-  tournage.
 
 - L'application est installable comme application de bureau (PWA) :
   manifeste et service worker viennent du build Vite, l'icône et le nom

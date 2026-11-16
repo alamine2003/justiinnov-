@@ -59,7 +59,7 @@ def _as_int(value, field):
     try:
         return int(value)
     except (TypeError, ValueError):
-        raise ValidationError({field: _("Valeur entière attendue.")})
+        raise ValidationError({field: _("Valeur entière attendue.")}) from None
 
 
 def _mois(value):

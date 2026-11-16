@@ -352,12 +352,12 @@ class ProjectTypeViewSet(NoDestroyModelViewSet):
         try:
             with transaction.atomic():
                 serializer.save()
-        except IntegrityError:
+        except IntegrityError as exc:
             # Deux noms qui donnent le même code, créés au même instant : le
             # second voit la contrainte d'unicité du code, pas un 500.
             raise serializers.ValidationError(
                 {"name": _("Un type de projet au code voisin vient d'être créé : réessayez.")}
-            )
+            ) from exc
         serializer.instance = self.get_queryset().get(pk=serializer.instance.pk)
 
 

@@ -26,6 +26,7 @@ function profil(overrides: Partial<Omit<Me, "permissions">> & { permissions?: Pa
     supervision: false,
     bi_url: null,
     api_version: null,
+    regles_de_depot: { formats_acceptes: [".pdf"], taille_max_octets: 20971520 },
     workflow: { require_review_step: false, suppressions_ouvertes: false },
     alert_thresholds: [],
     ...overrides,

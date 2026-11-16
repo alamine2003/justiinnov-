@@ -48,7 +48,7 @@ def lignes(sql, params=()):
     with connection.cursor() as curseur:
         curseur.execute(sql, params)
         colonnes = [c.name for c in curseur.description]
-        return [dict(zip(colonnes, ligne)) for ligne in curseur.fetchall()]
+        return [dict(zip(colonnes, ligne, strict=True)) for ligne in curseur.fetchall()]
 
 
 class DecorBI(ExpenseTestCase):

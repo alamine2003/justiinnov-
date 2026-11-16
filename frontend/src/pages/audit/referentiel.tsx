@@ -10,6 +10,7 @@ import { PAGE_SIZE, Pagination } from "@/components/ui/pagination"
 import { EmptyRow, SkeletonRows } from "@/components/ui/table-states"
 import {
   Table,
+  TableDefilante,
   TableBody,
   TableCell,
   TableHead,
@@ -109,7 +110,7 @@ export function JournalDuReferentiel() {
 
       <Card className="remplit border-border/60 shadow-sm">
         <CardContent className="remplit">
-          <div className="defile overflow-x-auto rounded-lg border border-border/60">
+          <TableDefilante label={t("audit.onglets.referentiel")}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -172,7 +173,7 @@ export function JournalDuReferentiel() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </TableDefilante>
 
           <Pagination
             page={page}

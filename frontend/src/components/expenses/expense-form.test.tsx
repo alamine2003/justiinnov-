@@ -138,3 +138,75 @@ describe("ExpenseForm — projet de la ligne", () => {
     expect(onSave.mock.calls[0][0]).toMatchObject({ project: 9 })
   })
 })
+
+/**
+ * Décision 127, achevée en 2.4.8 : le jour se choisit au calendrier de
+ * l'application, l'heure à part ; la valeur part à l'heure du pays.
+ */
+describe("ExpenseForm — date et heure", () => {
+  it("compose le jour du calendrier et l'heure, à l'heure du pays", async () => {
+    const onSave = afficher()
+    const maintenant = new Date()
+    const mois = String(maintenant.getMonth() + 1).padStart(2, "0")
+    const premier = `${maintenant.getFullYear()}-${mois}-01`
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+
+    fireEvent.click(screen.getByRole("button", { name: /Date et heure/ }))
+    const jour = await waitFor(() => {
+      const bouton = document.querySelector<HTMLButtonElement>(`[data-day="${premier}"] button`)
+      if (!bouton) throw new Error("jour absent")
+      return bouton
+    })
+    fireEvent.click(jour)
+    fireEvent.change(screen.getByLabelText("Heure"), { target: { value: "08:15" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    // Lomé vit à UTC+0 : l'instant envoyé est l'heure saisie.
+    expect(onSave.mock.calls[0][0]).toMatchObject({ date: `${premier}T08:15:00.000Z` })
+  })
+
+  it("lit l'heure dans le fuseau du pays, à UTC+1 comme au Gabon", async () => {
+    const onSave = afficher({ timezone: "Africa/Libreville" })
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+    fireEvent.change(screen.getByLabelText("Heure"), { target: { value: "08:15" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    // 08:15 à Libreville, c'est 07:15 en temps universel, le même jour.
+    expect(onSave.mock.calls[0][0].date).toMatch(/T07:15:00\.000Z$/)
+  })
+
+  it("complète une heure tapée vite et la garde sur 24 heures", () => {
+    afficher()
+    const heure = screen.getByLabelText("Heure") as HTMLInputElement
+    fireEvent.change(heure, { target: { value: "9h05" } })
+    fireEvent.blur(heure)
+    expect(heure.value).toBe("09:05")
+  })
+
+  it("complète l'heure même validée par Entrée, sans quitter le champ", async () => {
+    const onSave = afficher()
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+    const heure = screen.getByLabelText("Heure")
+    fireEvent.change(heure, { target: { value: "8:15" } })
+    fireEvent.submit(heure.closest("form")!)
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave.mock.calls[0][0].date).toMatch(/T08:15:00\.000Z$/)
+  })
+
+  it("refuse une heure qui n'existe pas, en le disant", async () => {
+    const onSave = afficher()
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Taxi" } })
+    fireEvent.change(screen.getByLabelText(/^Dépense/), { target: { value: "2500" } })
+    fireEvent.change(screen.getByLabelText("Heure"), { target: { value: "25:70" } })
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Indiquez l'heure sur 24 heures")
+    expect(onSave).not.toHaveBeenCalled()
+  })
+})

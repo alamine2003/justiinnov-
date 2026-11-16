@@ -37,8 +37,10 @@ class RejeuSimultaneTests(TransactionTestCase):
                 connection.close()
 
         fils = [threading.Thread(target=connexion) for _ in range(2)]
-        for f in fils: f.start()
-        for f in fils: f.join(timeout=10)
+        for fil in fils:
+            fil.start()
+        for fil in fils:
+            fil.join(timeout=10)
 
         codes = sorted(r.status_code for r in reponses)
         self.assertEqual(codes, [status.HTTP_200_OK, status.HTTP_400_BAD_REQUEST], [r.data for r in reponses])

@@ -57,6 +57,7 @@
     "ouvrir_menu": "Ouvrir le menu",
     "deconnexion": "Déconnexion",
     "menu_utilisateur": "Menu du compte",
+    "menu_utilisateur_de": "{{nom}} — menu du compte",
     "reservee_siege": "Page réservée au siège : vous avez été ramené au tableau de bord.",
     "equipes": "Équipes",
     "supervision": "Supervision",
@@ -282,7 +283,8 @@
   "notifications": {
     "titre": "Notifications",
     "aria": "Notifications",
-    "aria_non_lues": "Notifications ({{count}} non lues)",
+    "aria_non_lues_one": "Notifications ({{count}} non lue)",
+    "aria_non_lues_other": "Notifications ({{count}} non lues)",
     "description": "Seuils budgétaires, dépenses à contrôler et décisions vous concernant.",
     "tout_lu": "Tout marquer comme lu",
     "aucune": "Aucune notification.",
@@ -522,7 +524,10 @@
       "manager_responsable": "Manager responsable",
       "beneficiaire": "Prospect / bénéficiaire",
       "equipe_requise": "Choisissez une de vos équipes.",
-      "equipe_du_dossier": "Équipe (celle du dossier)"
+      "equipe_du_dossier": "Équipe (celle du dossier)",
+      "heure": "Heure",
+      "heure_invalide": "Indiquez l'heure sur 24 heures, par exemple 14:30.",
+      "heure_placeholder": "HH:MM"
     },
     "circuit": {
       "soumettre": "Soumettre",

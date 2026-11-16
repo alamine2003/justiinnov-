@@ -281,7 +281,7 @@ export function LoginPage() {
               travail. */}
 
           {/* Le panneau porte déjà ces mentions sur grand écran. */}
-          <p className="mt-6 text-center text-xs text-muted-foreground/70 lg:hidden">
+          <p className="mt-6 text-center text-xs text-muted-foreground lg:hidden">
             {copyright()}
             <br />
             {t("layout.version")} {BRAND.version} — {BRAND.developer}

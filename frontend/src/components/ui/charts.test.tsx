@@ -183,7 +183,8 @@ describe("CourbeMensuelle", () => {
 
     // Douze noms de mois, plus les cinq graduations de l'axe des montants.
     expect(container.querySelectorAll("text")).toHaveLength(17)
-    expect(screen.getByText("Consommation")).toBeInTheDocument()
+    // Le titre nomme la zone défilante, atteignable au clavier.
+    expect(screen.getByRole("region", { name: "Consommation" })).toHaveAttribute("tabindex", "0")
   })
 
   it("dessine un exercice entièrement vide sans produire de coordonnée invalide", () => {

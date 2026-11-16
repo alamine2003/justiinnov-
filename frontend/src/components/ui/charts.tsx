@@ -10,6 +10,7 @@
  * `banniere`, `destructive`, `statut-attente`) : aucune couleur en dur.
  */
 import { monthShortName } from "@/lib/months"
+import { ZoneDefilante } from "@/components/ui/zone-defilante"
 import { cn, formatCompactAmount, ratio } from "@/lib/utils"
 
 /** Longueur d'un cercle de rayon `r`, pour un `stroke-dasharray`. */
@@ -201,8 +202,7 @@ export function CourbeMensuelle({ points, title }: CourbeMensuelleProps) {
   const graduations = [0, 0.25, 0.5, 0.75, 1]
 
   return (
-    <div className="overflow-x-auto">
-      <span className="sr-only">{title}</span>
+    <ZoneDefilante label={title} className="overflow-x-auto">
       {/* Pas de `preserveAspectRatio="none"` : il étirerait les graduations
           et les noms de mois avec le dessin. Une largeur minimale garde le
           texte lisible : sur un téléphone, le dessin réduit à 330 px
@@ -274,7 +274,7 @@ export function CourbeMensuelle({ points, title }: CourbeMensuelleProps) {
         </text>
       ))}
       </svg>
-    </div>
+    </ZoneDefilante>
   )
 }
 
@@ -528,8 +528,7 @@ export function BarresParJour({ jours, title }: BarresParJourProps) {
   const tousLes = Math.max(1, Math.ceil(jours.length / 8))
 
   return (
-    <div className="overflow-x-auto">
-      <span className="sr-only">{title}</span>
+    <ZoneDefilante label={title} className="overflow-x-auto">
       {/* Même largeur minimale que la courbe mensuelle, même raison. */}
       <svg
         viewBox={`0 0 ${largeur} ${hauteur}`}
@@ -587,6 +586,6 @@ export function BarresParJour({ jours, title }: BarresParJourProps) {
           )
         })}
       </svg>
-    </div>
+    </ZoneDefilante>
   )
 }

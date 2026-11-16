@@ -88,12 +88,13 @@ describe("ChampDate", () => {
 
 /**
  * Le sélecteur natif est dessiné par le navigateur (minuscule sous Safari,
- * dans sa langue à lui) : une date se saisit par `ChampDate`. Seul reste le
- * champ date et heure de la saisie d'une dépense, que traversent les guides
- * vidéo — il changera avec leur nouveau tournage.
+ * dans sa langue à lui) : une date se saisit par `ChampDate`, une heure
+ * dans un champ texte sur 24 heures (`expense-form.tsx`) — le champ natif
+ * d'heure écrivait « 10:30 AM » sous une interface française. Plus aucune
+ * exception depuis la 2.4.8.
  */
 describe("aucun sélecteur de date natif", () => {
-  const TOLERES = new Set([join("components", "expenses", "expense-form.tsx")])
+  const TOLERES = new Set<string>()
 
   function fichiers(dossier: string): string[] {
     return readdirSync(dossier).flatMap((nom) => {
@@ -103,10 +104,10 @@ describe("aucun sélecteur de date natif", () => {
     })
   }
 
-  it("ni date, ni mois, ni date et heure hors des exceptions nommées", () => {
+  it("ni date, ni mois, ni date et heure, ni heure", () => {
     const racine = join(__dirname, "..", "..")
     const fautifs = fichiers(racine)
-      .filter((chemin) => /type="(date|month|datetime-local)"/.test(readFileSync(chemin, "utf8")))
+      .filter((chemin) => /type="(date|month|datetime-local|time)"/.test(readFileSync(chemin, "utf8")))
       .map((chemin) => chemin.slice(racine.length + 1))
       .filter((chemin) => !TOLERES.has(chemin))
     expect(fautifs).toEqual([])

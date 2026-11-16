@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react"
 import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
+import { ChampDate } from "@/components/ui/champ-date"
 import {
   Dialog,
   DialogContent,
@@ -26,11 +27,7 @@ import type {
   Project,
   Team,
 } from "@/lib/types"
-import {
-  fromCountryLocalInput,
-  normalizeDecimal,
-  toCountryLocalInput,
-} from "@/lib/utils"
+import { estUneHeure24h, fromCountryLocalInput, normaliserHeure, normalizeDecimal, toCountryLocalInput } from "@/lib/utils"
 import { useEnregistrement } from "@/lib/use-enregistrement"
 
 /** Modes de paiement, dans l'ordre du modèle de données. */
@@ -70,6 +67,7 @@ interface ExpenseFormProps {
  * C'est la transition « Marquer justifié » qui le fixe, et le serveur seul
  * calcule l'écart.
  */
+
 export function ExpenseForm({ open, onOpenChange, editing, ...rest }: ExpenseFormProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -106,7 +104,8 @@ function ExpenseFormBody({
 }: Omit<ExpenseFormProps, "open">) {
   const { t } = useTranslation()
   const [title, setTitle] = useState(editing?.title ?? "")
-  const [date, setDate] = useState(
+  // Initialiseur paresseux : l'heure courante n'est lue qu'au montage.
+  const [date, setDate] = useState(() =>
     toCountryLocalInput(editing?.date ?? new Date().toISOString(), timezone),
   )
   const [place, setPlace] = useState(editing?.place ?? "")
@@ -132,7 +131,15 @@ function ExpenseFormBody({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const instant = fromCountryLocalInput(date, timezone)
+    // L'heure se tape : complétée ici aussi (« 9:05 » puis Entrée ne passe
+    // pas par la sortie du champ), puis vérifiée — « 25:70 » serait
+    // reportée au lendemain sans un mot.
+    const heure = normaliserHeure(date.slice(11))
+    if (!estUneHeure24h(heure)) {
+      setError(t("depenses.formulaire.heure_invalide"))
+      return
+    }
+    const instant = fromCountryLocalInput(`${date.slice(0, 10)}T${heure}`, timezone)
     if (!instant) {
       setError(t("depenses.formulaire.date_requise"))
       return
@@ -202,18 +209,42 @@ function ExpenseFormBody({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* Jour et heure prennent toute la largeur : à deux dans une
+            demi-colonne, l'heure se rognait et le libellé (qui nomme le
+            fuseau) débordait sur celui du lieu. */}
+        <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="exp-date">
               {t("depenses.formulaire.date_heure", { fuseau: timezone })}
             </Label>
-            <Input
-              id="exp-date"
-              type="datetime-local"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-            />
+            {/* Le jour au calendrier de l'application, l'heure à part
+                (décision 127) : le champ natif « date et heure » ouvrait
+                le petit calendrier du navigateur. La valeur reste
+                « AAAA-MM-JJTHH:MM », à l'heure du pays. */}
+            <div className="flex gap-2">
+              <ChampDate
+                id="exp-date"
+                value={date.slice(0, 10)}
+                onChange={(jour) => setDate(`${jour}T${date.slice(11)}`)}
+                className="flex-1"
+              />
+              {/* L'heure se tape sur 24 h, « HH:MM », comme l'application
+                  l'affiche partout : le champ natif suivait la langue du
+                  navigateur (« 10:30 AM » sous une interface française). */}
+              <Input
+                id="exp-time"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={5}
+                placeholder={t("depenses.formulaire.heure_placeholder")}
+                aria-label={t("depenses.formulaire.heure")}
+                value={date.slice(11)}
+                onChange={(e) => setDate(`${date.slice(0, 10)}T${e.target.value}`)}
+                onBlur={(e) => setDate(`${date.slice(0, 10)}T${normaliserHeure(e.target.value)}`)}
+                className="w-24"
+                required
+              />
+            </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="exp-place">{t("champs.place")}</Label>

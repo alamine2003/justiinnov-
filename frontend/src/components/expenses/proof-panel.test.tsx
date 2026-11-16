@@ -3,17 +3,14 @@ import { describe, expect, it, vi } from "vitest"
 import { PiecesDeLaLigne, PiecesDuDossier } from "./proof-panel"
 import type { Proof } from "@/lib/types"
 
-// Le droit `configuration.manage` ne sert qu'à lire la configuration du dépôt ; les
-// décisions de contrôle viennent du serveur (`allowed_reviews`), pas du rôle.
+// Les décisions de contrôle viennent du serveur (`allowed_reviews`), pas du
+// rôle ; les règles de dépôt, de `/api/me/` (décision 129).
+let reglesDeDepot: { formats_acceptes: string[], taille_max_octets: number } | undefined
 vi.mock("@/context/use-auth", () => ({
   useAuth: () => ({
     can: () => false,
-    me: { username: "rh.innov" },
+    me: { username: "pays.togo", regles_de_depot: reglesDeDepot },
   }),
-}))
-
-vi.mock("@/lib/accounts", () => ({
-  fetchConfiguration: vi.fn(),
 }))
 
 const uploadProof = vi.fn()
@@ -164,5 +161,32 @@ describe("Pièces de la ligne (décision 107)", () => {
 
     expect(screen.queryByRole("button", { name: "Déposer" })).toBeNull()
     expect(screen.getByText("Pièces d'avant la 2.0")).toBeInTheDocument()
+  })
+})
+
+/**
+ * Écart 21 (décision 129) : le déposant est un manager, qui n'a pas accès à
+ * la configuration ; les règles de dépôt lui viennent de `/api/me/`.
+ */
+describe("Règles de dépôt montrées au déposant", () => {
+  it("annonce les formats et la taille, et filtre le sélecteur de fichier", () => {
+    reglesDeDepot = { formats_acceptes: [".pdf", ".png"], taille_max_octets: 5 * 1024 * 1024 }
+    afficherLaLigne([], { canUpload: true })
+
+    fireEvent.click(screen.getByRole("button", { name: "Déposer" }))
+
+    expect(screen.getByText(/Formats acceptés : \.pdf, \.png\./)).toBeInTheDocument()
+    expect(screen.getByText(/Taille maximale : 5,0 Mo/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Fichier")).toHaveAttribute("accept", ".pdf,.png")
+    reglesDeDepot = undefined
+  })
+
+  it("se rabat sur le message générique sans règles connues", () => {
+    reglesDeDepot = undefined
+    afficherLaLigne([], { canUpload: true })
+
+    fireEvent.click(screen.getByRole("button", { name: "Déposer" }))
+
+    expect(screen.getByText(/PDF, image ou document\./)).toBeInTheDocument()
   })
 })

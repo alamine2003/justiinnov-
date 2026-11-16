@@ -17,7 +17,7 @@ export function AppFooter({ className }: { className?: string }) {
       <div className="mx-auto flex w-full max-w-7xl flex-col 2xl:max-w-[96rem] gap-2 px-6 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <p>
           {copyright()}{" "}
-          <span className="text-muted-foreground/70">{t("app.tagline")}.</span>
+          <span className="text-muted-foreground">{t("app.tagline")}.</span>
         </p>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>

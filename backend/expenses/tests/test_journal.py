@@ -11,7 +11,7 @@ from unittest import mock
 from rest_framework import status
 
 from expenses import transitions
-from expenses.models import AuditLog, Beneficiary, Dossier
+from expenses.models import AuditLog, Beneficiary
 from expenses.serializers import DossierSerializer
 
 from .base import ExpenseTestCase

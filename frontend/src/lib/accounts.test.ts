@@ -33,6 +33,7 @@ function profil(overrides: Partial<Me>): Me {
     supervision: false,
     bi_url: null,
     api_version: null,
+    regles_de_depot: { formats_acceptes: [".pdf"], taille_max_octets: 20971520 },
     alert_thresholds: [],
     permissions: {
       ...PERMISSIONS_DU_PAYS,

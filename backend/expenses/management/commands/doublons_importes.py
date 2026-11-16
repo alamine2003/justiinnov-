@@ -52,7 +52,7 @@ class Command(BaseCommand):
         if not doublons:
             self.stdout.write("Aucun doublon en brouillon.")
             return
-        for (dossier_id, jour, title, amount), lot in sorted(doublons.items()):
+        for (_dossier_id, jour, title, amount), lot in sorted(doublons.items()):
             dossier = lot[0].dossier
             self.stdout.write(
                 f"{dossier.country.code} {dossier.number} · {jour} · {title[:60]} · {amount} : "

@@ -98,6 +98,16 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends gettext
           pip install -r requirements.txt
 
+      - name: Analyse statique (ruff)
+        working-directory: backend
+        # Le niveau « vraies erreurs » (`backend/ruff.toml`, décision 129) :
+        # import ou variable inutile, nom indéfini, exception relancée sans
+        # sa cause, `zip` qui tronque en silence. Pas le style. Version
+        # épinglée : une nouvelle règle ne rougit pas la CI sans décision.
+        run: |
+          pip install ruff==0.17.3
+          ruff check .
+
       - name: Compiler les traductions
         working-directory: backend
         # Le `.mo` n'est pas versionné : sans cette étape, les tests qui
