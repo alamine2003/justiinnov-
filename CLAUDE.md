@@ -33,6 +33,7 @@ git) via `manage.py seed_users`.
 ```bash
 docker compose run --rm --entrypoint python backend manage.py test
 docker compose run --rm --entrypoint sh backend -c "pip install -q --user ruff==0.17.3 && python -m ruff check ."
+docker compose run --rm --entrypoint sh backend -c "pip install -q --user mypy==2.3.1 django-stubs==6.1.1 djangorestframework-stubs==3.18.1 && python -m mypy ."
 cd frontend && npx tsc -b && npm run lint && npm run test
 ```
 

@@ -502,11 +502,15 @@ lecture écrive en base.
 ```bash
 docker compose run --rm --entrypoint python backend manage.py test
 docker compose run --rm --entrypoint sh backend -c "pip install -q --user ruff==0.17.3 && python -m ruff check ."
+docker compose run --rm --entrypoint sh backend -c "pip install -q --user mypy==2.3.1 django-stubs==6.1.1 djangorestframework-stubs==3.18.1 && python -m mypy ."
 cd frontend && npx tsc -b && npm run lint && npm run test
 ```
 
 Ce sont les commandes de `CLAUDE.md` et de la CI. ruff analyse le backend au
-niveau « vraies erreurs » (`backend/ruff.toml`, décision 129), pas le style.
+niveau « vraies erreurs » (`backend/ruff.toml`, décision 129), pas le style ;
+mypy vérifie les types de tout le code de l'application, corps des
+fonctions non annotées compris, hors tests et migrations (`backend/mypy.ini`,
+décision 130).
 La suite backend — près de dix-huit cents tests, dont les règles du circuit sans HTTP
 (`expenses/tests/test_transitions.py`, `budget/tests/test_transitions.py`),
 un test traversant du cloisonnement (`accounts/tests/test_traversee.py`) et
