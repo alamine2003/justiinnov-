@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import {
   Table,
+  TableDefilante,
   TableBody,
   TableCell,
   TableHead,
@@ -263,7 +264,7 @@ export function RegisterPage() {
 
       <Card className="remplit border-border/60 shadow-sm">
         <CardContent className="remplit">
-          <div className="defile overflow-x-auto rounded-lg border border-border/60">
+          <TableDefilante label={t("registre.titre")}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -384,7 +385,7 @@ export function RegisterPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </TableDefilante>
 
           <Pagination
             page={page}

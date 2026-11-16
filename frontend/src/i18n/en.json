@@ -57,6 +57,7 @@
     "ouvrir_menu": "Open menu",
     "deconnexion": "Sign out",
     "menu_utilisateur": "Account menu",
+    "menu_utilisateur_de": "{{nom}} — account menu",
     "reservee_siege": "This page is restricted to headquarters: you have been taken back to the dashboard.",
     "equipes": "Teams",
     "supervision": "Monitoring",

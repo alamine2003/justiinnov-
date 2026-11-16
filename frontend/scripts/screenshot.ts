@@ -10,9 +10,11 @@
  *
  * Le script échoue (code de sortie 1) sur toute erreur de console et sur
  * toute attente non tenue : un compte qui verrait des lignes hors de son
- * périmètre, une redirection absente, un titre qui manque.
+ * périmètre, une redirection absente, un titre qui manque — et sur toute
+ * violation d'accessibilité grave d'un écran capturé (`accessibilite.ts`).
  */
 import { chromium, type Browser, type Page } from "playwright"
+import { controlerAccessibilite } from "./accessibilite.ts"
 import { credentials, estLeRefusAttenduDuCode, signIn } from "./login.ts"
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:5173"
@@ -50,7 +52,8 @@ function expectData(condition: boolean, message: string) {
 async function newPage(browser: Browser, viewport = { width: 1440, height: 900 }) {
   // Le navigateur de Playwright se présente en anglais ; l'interface suivrait
   // cette langue et les attentes ci-dessous, écrites en français, échoueraient.
-  const page = await browser.newPage({ viewport, locale: "fr-FR" })
+  // Un contexte à soi : axe y ouvre sa page de synthèse (`accessibilite.ts`).
+  const page = await (await browser.newContext({ viewport, locale: "fr-FR" })).newPage()
   page.on("console", (m) => {
     if (m.type() === "error" && !estLeRefusAttenduDuCode(m)) errors.push(`[console] ${m.text()}`)
   })
@@ -96,8 +99,10 @@ async function supervisionAnnoncee(page: Page): Promise<boolean> {
   return me.supervision === true
 }
 
+/** Capture l'écran et le passe au contrôle d'accessibilité. */
 async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${OUT}/shot_${name}.png`, fullPage: false })
+  failures.push(...(await controlerAccessibilite(page, name)))
 }
 
 async function goto(page: Page, path: string, settle = 1000) {

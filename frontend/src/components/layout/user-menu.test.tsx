@@ -18,7 +18,7 @@ function ouvrir() {
       <UserMenu onLogout={vi.fn()} />
     </MemoryRouter>,
   )
-  fireEvent.click(screen.getByRole("button", { name: "Menu du compte" }))
+  fireEvent.click(screen.getByRole("button", { name: /menu du compte/i }))
 }
 
 beforeEach(() => {
@@ -84,5 +84,17 @@ describe("UserMenu — versions", () => {
 
     expect(await screen.findByRole("menuitem", { name: "Déconnexion" })).toBeInTheDocument()
     expect(screen.queryByText(/Serveur/)).toBeNull()
+  })
+})
+
+/** Le nom affiché sur le bouton fait partie de son nom accessible (WCAG 2.5.3). */
+describe("UserMenu — nom accessible", () => {
+  it("reprend l'identifiant affiché", () => {
+    render(
+      <MemoryRouter>
+        <UserMenu onLogout={vi.fn()} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole("button", { name: "do.innov — menu du compte" })).toBeInTheDocument()
   })
 })

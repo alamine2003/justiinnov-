@@ -57,6 +57,7 @@
     "ouvrir_menu": "Ouvrir le menu",
     "deconnexion": "Déconnexion",
     "menu_utilisateur": "Menu du compte",
+    "menu_utilisateur_de": "{{nom}} — menu du compte",
     "reservee_siege": "Page réservée au siège : vous avez été ramené au tableau de bord.",
     "equipes": "Équipes",
     "supervision": "Supervision",

@@ -272,7 +272,7 @@ export function AppLayout() {
         >
           <Link
             to="/"
-            aria-label={BRAND.name}
+            aria-label={replie ? BRAND.name : undefined}
             className={cn(
               "flex h-16 shrink-0 items-center gap-2 border-b border-border/60 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               replie ? "justify-center" : "px-5",

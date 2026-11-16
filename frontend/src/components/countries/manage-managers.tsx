@@ -116,12 +116,12 @@ export function ManageManagers({
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {manager.email || (
-                      <span className="text-muted-foreground/60">{t("commun.aucun")}</span>
+                      <span className="text-muted-foreground">{t("commun.aucun")}</span>
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {manager.title || (
-                      <span className="text-muted-foreground/60">{t("commun.aucun")}</span>
+                      <span className="text-muted-foreground">{t("commun.aucun")}</span>
                     )}
                   </TableCell>
                   <TableCell>

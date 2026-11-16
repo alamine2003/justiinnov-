@@ -228,11 +228,6 @@ export function GuidePage() {
                       to={lienVers(guide.id)}
                       replace
                       aria-current={actif ? "page" : undefined}
-                      aria-label={t("guides.numero", {
-                        numero: rang + 1,
-                        titre: t(`guides.liste.${guide.id}.titre`),
-                      })}
-                      aria-describedby={`guide-${guide.id}-description`}
                       className={cn(
                         "flex h-full w-full items-start gap-3 rounded-lg border p-2 text-left transition-colors outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50",
                         actif ? "border-ring bg-accent" : "border-border/60 bg-card",
@@ -251,7 +246,9 @@ export function GuidePage() {
                             titre: t(`guides.liste.${guide.id}.titre`),
                           })}
                         </span>
-                        <span id={`guide-${guide.id}-description`} className="block text-xs text-muted-foreground">
+                        {/* Le nom du lien est son texte : titre puis description
+                            (WCAG 2.5.3, le nom reprend ce qu'on lit). */}
+                        <span className="block text-xs text-muted-foreground">
                           {t(`guides.liste.${guide.id}.description`)}
                         </span>
                       </span>

@@ -1,10 +1,12 @@
 /**
- * Revue visuelle des deux thèmes sur les écrans principaux.
+ * Revue visuelle des deux thèmes sur les écrans principaux, contrôle
+ * d'accessibilité compris : un contraste tenu en clair peut tomber en sombre.
  *
  *   SHOT_HQ_USER=… SHOT_HQ_PASSWORD=… SHOT_HQ_TOTP_SECRET=… \
  *   npx tsx scripts/shot-theme.mts
  */
 import { chromium } from "playwright"
+import { controlerAccessibilite } from "./accessibilite.ts"
 import { credentials, estLeRefusAttenduDuCode, signIn } from "./login.ts"
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:5173"
@@ -26,7 +28,8 @@ const compte = credentials("HQ")
 
 const erreurs: string[] = []
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: "fr-FR" })
+// Un contexte à soi : axe y ouvre sa page de synthèse (`accessibilite.ts`).
+const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "fr-FR" })).newPage()
 page.on("console", (message) => {
   if (message.type() === "error" && !estLeRefusAttenduDuCode(message)) {
     erreurs.push(`[console] ${message.text()}`)
@@ -54,8 +57,10 @@ async function capturer(nom: string, chemin: string) {
   await page.waitForTimeout(500)
   await choisirTheme("Clair")
   await page.screenshot({ path: `${OUT}/shot_theme_${nom}_clair.png` })
+  erreurs.push(...(await controlerAccessibilite(page, `${nom} clair`)))
   await choisirTheme("Sombre")
   await page.screenshot({ path: `${OUT}/shot_theme_${nom}_sombre.png` })
+  erreurs.push(...(await controlerAccessibilite(page, `${nom} sombre`)))
 }
 
 await signIn(page, BASE, compte)
@@ -68,9 +73,11 @@ await page.goto(`${BASE}/login`, { waitUntil: "networkidle" })
 await page.waitForTimeout(300)
 await choisirTheme("Clair")
 await page.screenshot({ path: `${OUT}/shot_theme_login_clair.png` })
+erreurs.push(...(await controlerAccessibilite(page, "login clair")))
 await choisirTheme("Sombre")
 await page.screenshot({ path: `${OUT}/shot_theme_login_sombre.png` })
+erreurs.push(...(await controlerAccessibilite(page, "login sombre")))
 
-console.log("Erreurs console :", erreurs.length ? erreurs : "aucune")
+console.log("Erreurs console et accessibilité :", erreurs.length ? erreurs : "aucune")
 await browser.close()
 if (erreurs.length) process.exitCode = 1

@@ -335,16 +335,15 @@ function BandeauConsolide({
           </div>
           <dl className="flex flex-wrap items-stretch gap-x-6 gap-y-3">
             {parts.map((part, index) => (
-              <div key={part.label} className="flex items-stretch gap-6">
-                {index > 0 && <span aria-hidden className="w-px bg-banniere-bordure" />}
-                <div>
-                  <dt className="text-[0.5938rem] font-medium uppercase tracking-[0.08em] text-banniere-muted">
-                    {part.label}
-                  </dt>
-                  <dd className={cn("mt-1.5 text-base font-semibold", part.tone)}>
-                    {formatAmount(part.value)}
-                  </dd>
-                </div>
+              // Un `dl` n'admet que des `div` de `dt` et `dd` : le séparateur
+              // est une bordure, pas un élément.
+              <div key={part.label} className={cn(index > 0 && "border-l border-banniere-bordure pl-6")}>
+                <dt className="text-[0.5938rem] font-medium uppercase tracking-[0.08em] text-banniere-muted">
+                  {part.label}
+                </dt>
+                <dd className={cn("mt-1.5 text-base font-semibold", part.tone)}>
+                  {formatAmount(part.value)}
+                </dd>
               </div>
             ))}
           </dl>
@@ -421,7 +420,7 @@ function Charge({
     >
       <span className="min-w-0">
         <span className="block text-sm text-muted-foreground">{label}</span>
-        <span className="mt-0.5 block text-xs text-muted-foreground/80">{hint}</span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span>
       </span>
       <span
         className={cn(
