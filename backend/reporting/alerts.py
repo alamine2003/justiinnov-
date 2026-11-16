@@ -187,10 +187,19 @@ def proof_alerts(dossiers):
         lignes_sans_preuve=Coalesce(
             Subquery(lignes_sans_preuve, output_field=IntegerField()), Value(0)
         ),
-        incomplete_proofs=Count(
-            "proofs",
-            filter=Q(proofs__status=Proof.ProofStatus.INCOMPLETE),
-            distinct=True,
+        # Par sous-requête, jamais par jointure (décision 130) : un
+        # ``Count("proofs")`` ajouterait un GROUP BY où Django rangerait les
+        # sous-requêtes des totaux, recalculées alors pour chaque pièce.
+        incomplete_proofs=Coalesce(
+            Subquery(
+                Proof.objects.filter(dossier=OuterRef("pk"), status=Proof.ProofStatus.INCOMPLETE)
+                .order_by()
+                .values("dossier")
+                .annotate(n=Count("pk"))
+                .values("n"),
+                output_field=IntegerField(),
+            ),
+            Value(0),
         ),
     )
 

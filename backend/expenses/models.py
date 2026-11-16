@@ -147,14 +147,30 @@ class DossierQuerySet(models.QuerySet):
             .values("n")
         )
 
-        def compteur(nom):
+        # Les pièces se comptent aussi par sous-requête, jamais par jointure
+        # (décision 130) : un ``Count("proofs")`` ajoutait un GROUP BY, où
+        # Django range alors toutes les sous-requêtes ci-dessus — Postgres
+        # les recalculait pour chaque pièce jointe au lieu d'une fois par
+        # dossier. À 60 000 lignes, la liste des dossiers et le tableau de
+        # bord dépassaient le délai de 15 s de la base.
+        pieces = (
+            Proof.objects.filter(dossier=OuterRef("pk"))
+            .order_by()
+            .values("dossier")
+            .annotate(
+                total=Count("id"),
+                # Une pièce rejetée ou archivée ne prouve rien.
+                usable=Count("id", filter=~Q(status__in=[
+                    Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED,
+                ])),
+            )
+        )
+
+        def compteur(nom, source=lines):
             return Coalesce(
-                Subquery(lines.values(nom)[:1], output_field=entier), Value(0)
+                Subquery(source.values(nom)[:1], output_field=entier), Value(0)
             )
 
-        # Le comptage des preuves introduit un GROUP BY, qui fait perdre à
-        # Django l'ordre par défaut du modèle : sans tri explicite, deux pages
-        # successives pourraient se recouvrir.
         # ``ordering`` est déclaré dans ``Meta`` : le ``or ()`` ne sert qu'au
         # typage, qui le voit facultatif.
         return self.order_by(*(Dossier._meta.ordering or ())).annotate(
@@ -174,15 +190,8 @@ class DossierQuerySet(models.QuerySet):
             lines_settled=compteur("settled"),
             lines_sans_preuve=Coalesce(Subquery(sans_preuve[:1], output_field=entier), Value(0)),
             piece_d_avant=Exists(utilisables.filter(dossier=OuterRef("pk"), expense=None)),
-            total_proofs=Count("proofs", distinct=True),
-            # Une pièce rejetée ou archivée ne prouve rien.
-            usable_proofs=Count(
-                "proofs",
-                filter=~Q(proofs__status__in=[
-                    Proof.ProofStatus.REJECTED, Proof.ProofStatus.ARCHIVED,
-                ]),
-                distinct=True,
-            ),
+            total_proofs=compteur("total", pieces),
+            usable_proofs=compteur("usable", pieces),
         )
 
 
