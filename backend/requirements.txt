@@ -6,7 +6,7 @@ djangorestframework==3.18.3
 django-filter==26.2
 django-cors-headers==4.9.0
 psycopg[binary]==3.3.9
-gunicorn==26.2.0
+gunicorn==27.0.1
 django-storages[s3]==1.14.6
 openpyxl==3.1.5
 reportlab==5.1.0
