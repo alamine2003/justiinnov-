@@ -341,7 +341,8 @@ class CorbeilleTests(ExpenseTestCase):
         entre-temps le trouve absent : 404, pas 500."""
         from unittest import mock
 
-        from expenses import transitions
+        # Remplacée là où le retrait l'appelle (décision 131).
+        from expenses import retrait
 
         ligne = self.make_expense()
 
@@ -349,7 +350,7 @@ class CorbeilleTests(ExpenseTestCase):
             Expense.objects.filter(pk=ligne.pk).delete()
 
         self.login(self.owner)
-        with mock.patch.object(transitions, "exiger_la_capacite", retire_pendant_l_attente):
+        with mock.patch.object(retrait, "exiger_la_capacite", retire_pendant_l_attente):
             reponse = self.client.delete(f"/api/expenses/{ligne.pk}/")
 
         self.assertEqual(reponse.status_code, status.HTTP_404_NOT_FOUND)

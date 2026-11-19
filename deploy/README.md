@@ -936,7 +936,7 @@ docker compose -f docker-compose.prod.yml run --rm sauvegarde-distante --une-foi
 | Perte de données maximale (RPO) | **5 minutes** de saisie si le serveur est perdu (`POSTGRES_ARCHIVE_TIMEOUT`, 300 s), **à condition que les segments soient partis hors machine** — `verifier_sauvegardes` prévient dès qu'un segment archivé n'est pas copié dans les deux heures. Si la copie des segments est en défaut et que personne n'a lu l'alerte : **24 h**, le dump de 02:00. Perte d'un disque seulement, serveur intact : 5 minutes dans tous les cas | archivage continu (décision 74) et copie des segments (décision 78). **C'est ici, et ici seulement, que le RPO est écrit** ; `docs/infra-base-de-donnees.md` et `docs/model-de-donnees.md` y renvoient |
 | Délai de reprise (RTO) | **4 h** : serveur neuf, pile en ligne, base et pièces restaurées depuis le distant | `preparer_serveur.sh` (~15 min), `deploy.sh` (~10 min), `restaurer.sh --depuis-distant` (le temps de rapatrier, quelques minutes par giga-octet), « Après une restauration » |
 | Sauvegarde vérifiée | chaque matin | `manage.py verifier_sauvegardes` (ordonnanceur, 8 h 30) lit les marqueurs `.derniere-reussite-*` que `sauvegarder.sh` écrit après chaque réussite, et notifie les administrateurs — in-app et par e-mail — de ce qui manque ou date de plus de 26 h |
-| Restauration prouvée | une fois avant l'ouverture, puis chaque trimestre | « Restauration dans un environnement isolé », avec `manage.py verifier_restauration` et un compte rendu daté |
+| Restauration prouvée | une fois avant l'ouverture, puis chaque trimestre | « Restauration dans un environnement isolé » : `repeter_la_restauration.sh` la chronomètre, lance `verifier_restauration` et `mesurer_les_temps`, et écrit le compte rendu daté |
 
 La notification de sauvegarde en défaut est **critique** et se répète chaque
 matin tant que le défaut dure ; son absence, un matin, ne prouve rien si
@@ -1306,104 +1306,88 @@ de bout en bout, dans une pile jetable qui ne touche ni la base, ni le
 bucket, ni les destinataires de la production. Le compte rendu daté est
 le livrable ; sans lui, rien n'est prouvé.
 
-**1. Une pile jetable.** Sur le serveur (ou sur n'importe quelle machine
-avec Docker), un second projet Compose, avec ses propres volumes, le
-courrier en console et un bucket vide :
+**1 à 3 bis, d'une commande** (décision 131). Sur le serveur, depuis le
+répertoire d'exploitation, à jour (le `rsync` de « Ce que la livraison ne met
+pas à jour ») :
 
 ```bash
-mkdir -p ~/restauration && cd ~/restauration
-cp ~/justi-innov/deploy/docker-compose.prod.yml ~/justi-innov/deploy/{sauvegarder.sh,restaurer.sh,creer_role_applicatif.sql,Caddyfile} .
-cp ~/justi-innov/deploy/.env .env
-# Isolement : mêmes images (BACKEND_IMAGE, FRONTEND_IMAGE, IMAGE_TAG sont
-# dans le .env, écrits par deploy.sh), autres volumes (autre nom de
-# projet), courrier en console, aucun port public.
-sed -i -e '/^EMAIL_BACKEND_CONSOLE=/d' -e 's/^EMAIL_HOST=.*/EMAIL_HOST=/' \
-       -e '/^COMPOSE_PROJECT_NAME=/d' -e '/^COMPOSE_FILE=/d' .env
-cat >> .env <<'EOF'
-EMAIL_BACKEND_CONSOLE=1
-COMPOSE_PROJECT_NAME=justi-restauration
-COMPOSE_FILE=docker-compose.prod.yml:docker-compose.override.yml
-EOF
-cat > docker-compose.override.yml <<'EOF'
-services:
-  caddy:
-    ports: []            # rien n'écoute sur Internet
-EOF
-docker compose up -d --wait db minio backend
+cd /home/deploy/justi-innov
+./restaurer.sh --lister                       # choisir un quotidien du distant
+./repeter_la_restauration.sh justi_innov-<horodatage>.dump \
+    --compte <un compte admin du dump> --cle-hors-serveur
 ```
 
-Le projet `justi-restauration` a ses volumes (`justi-restauration_pgdata`,
-`justi-restauration_sauvegardes`, …) : rien de commun avec la production.
-Les services de sauvegarde ne sont pas démarrés (`up` ne nomme que `db`,
-`minio` et `backend`) : rien ne repart vers le distant depuis cette pile.
-Ne lancez jamais ici `sauvegarde-distante --une-fois`.
+`--cle-hors-serveur` demande, sans l'afficher, la copie de la clé de
+chiffrement gardée hors du serveur (gestionnaire de mots de passe) et
+rapatrie avec elle : c'est la seule preuve qu'elle déchiffre le coffre. Sans
+l'option, la clé du `.env` sert, et le compte rendu le dit.
 
-**2. Rapatrier et restaurer, depuis le distant** — c'est le chemin qui
-servira le jour où le serveur est perdu, et le seul qui prouve que le coffre
-se déchiffre avec la clé gardée hors du serveur :
+Le script chronomètre chaque étape, garde sa sortie, s'arrête à la première
+qui échoue et écrit le compte rendu daté dans
+`~/comptes-rendus-de-restauration/restauration-<horodatage>.md` — verdict,
+dump et taille, durée de chaque étape, sorties complètes. Il refuse de
+lancer quoi que ce soit si le projet Compose n'est pas
+`justi-restauration`, si une répétition précédente n'a pas été détruite,
+ou s'il n'y a pas de copie hors machine. Ce qu'il fait, étape par étape :
 
-```bash
-docker compose run --rm sauvegarde-distante --lister
-docker compose run --rm sauvegarde-distante --rapatrier justi_innov-<horodatage>.dump
-docker compose run --rm sauvegarde-distante --rapatrier-pieces
-./restaurer.sh justi_innov-<horodatage>.dump          # dans CE projet : la base jetable
-./restaurer.sh --pieces                               # dans le bucket jetable
-```
+1. **Une pile jetable** dans `~/restauration` : les fichiers que
+   `docker-compose.prod.yml` monte (`initdb/`, `archiver_wal.sh`,
+   `creer_role_bi.sql`, `caddy/`… — sans eux, Docker monte un répertoire
+   vide et la base archive de travers), le `.env` de la production avec un
+   autre projet Compose (`justi-restauration`, donc d'autres volumes), le
+   courrier en console, ni supervision ni profils, aucun port public pour
+   Caddy (`ports: !reset []` — une liste vide sans `!reset` s'ajoute à celle
+   du fichier de base et laissait 80 et 443 publiés). Ne sont **pas**
+   copiés : `DATABASE_URL`, `DATABASE_MIGRATION_URL`, `REDIS_URL` (une base
+   ou un Redis hors de la pile — le `pg_restore --clean` y écraserait la
+   production), `SENTRY_DSN` et les accès au serveur de courrier. Chaque
+   commande Docker part d'un environnement vidé : une variable exportée dans
+   le shell (`COMPOSE_PROJECT_NAME`, `DATABASE_URL`…) l'emporterait sinon sur
+   ce `.env`. `deploy/tests/test_pile_jetable.sh` fait résoudre la pile à
+   Compose lui-même, en CI. `db`, `minio` et `backend` démarrent, puis
+   `restaurer.sh` relance `backend` et l'ordonnanceur : celui-ci ne joint
+   rien hors de la pile (courrier en console, MinIO de la pile, notifications
+   dans la base jetable). Les services de sauvegarde ne démarrent jamais :
+   rien ne repart vers le distant depuis cette pile.
+2. **Rapatrier et restaurer, depuis le distant** — le chemin qui servira le
+   jour où le serveur est perdu : `restaurer.sh --depuis-distant <dump>`
+   dans la base jetable (le script répond lui-même à la confirmation, après
+   avoir vérifié le projet), puis `--depuis-distant --pieces` dans le bucket
+   jetable. La durée des étapes 1 et 2 est la mesure du délai de reprise,
+   à comparer aux 4 h de l'objectif.
+3. **`verifier_restauration`** : décomptes, **la date de la dernière entrée
+   du journal d'audit — la perte de données réelle de cette sauvegarde** —,
+   et **chaque** pièce ouverte dans le bucket jetable, son empreinte
+   SHA-256 comparée à la fiche. Elle refuse de tourner si le courrier n'est
+   pas en console.
+3 bis. **`mesurer_les_temps --base-jetable`** (décision 130), 20 appels
+   par écran, 4 à la fois : p50, p95 et max des écrans lourds, sur le volume
+   et le serveur de la production sans en être la base. Ce sont ces
+   chiffres, pas ceux d'un poste de développement, qui fixeraient un seuil
+   d'alerte. La mesure fait tourner vingt exports de l'exercice, quatre à
+   la fois, sur le serveur de la production : quelques minutes de calcul
+   que les utilisateurs sentiraient — lancez la répétition hors des heures
+   de travail.
 
-`restaurer.sh` lit `COMPOSE_PROJECT_NAME` et `COMPOSE_FILE` dans ce `.env`
-: il demande de taper le nom de la base, et c'est la base jetable du projet
-`justi-restauration` qu'il écrase — la production n'est pas touchée.
-`--rapatrier` déchiffre le coffre avec `SAUVEGARDE_CHIFFREMENT_CLE` du
-`.env` copié : pour prouver la clé gardée hors du serveur, remplacez-la
-dans ce `.env` par la copie du gestionnaire de mots de passe. Notez
-l'heure de début et de fin : c'est la mesure du délai de reprise.
-
-**3. Vérifier — la commande dit non si une pièce manque :**
-
-```bash
-docker compose exec backend python manage.py verifier_restauration
-```
-
-Elle refuse de tourner si le courrier n'est pas en console, affiche les
-décomptes (comptes par rôle, pays, dossiers et lignes par statut, entrées
-d'audit et d'historique), **la date de la dernière entrée du journal
-d'audit — la perte de données réelle de cette sauvegarde** —, ouvre
-**chaque** pièce dans le bucket jetable et compare son empreinte SHA-256 à
-la fiche. Code de sortie 0, ou une liste nommée de ce qui manque.
-Comparez les décomptes à ceux de la production au moment du dump.
-
-**3 bis. Mesurer les temps de réponse** sur cette copie, qui a le volume
-et le serveur de la production sans en être la base (décision 130) :
-
-```bash
-docker compose exec backend python manage.py mesurer_les_temps --base-jetable \
-    --compte <un compte admin du dump> --repetitions 20 --simultanes 4
-```
-
-p50, p95 et max par écran lourd (tableau de bord, registre, dossiers,
-projets, audit, export xlsx de l'exercice). Jamais sur la production :
-un export écrit au journal d'audit, et rien ne se purge. Ces chiffres
-vont au compte rendu ; ce sont eux, pas ceux d'un poste de développement,
-qui fixent un seuil d'alerte dans Grafana.
-
-**4. Ouvrir l'application restaurée**, sans port public : un tunnel SSH
-vers le conteneur (`ssh -L 8443:127.0.0.1:443 …` après avoir remis un
-`ports: ["127.0.0.1:8443:443"]` sur `caddy` dans la surcharge), connexion
+**4. Ouvrir l'application restaurée**, sans port public : dans
+`~/restauration`, remplacer dans `docker-compose.override.yml` la ligne des
+ports de `caddy` par `ports: !override ["127.0.0.1:8443:443"]`,
+`docker compose up -d caddy`, puis un tunnel
+SSH depuis le poste (`ssh -L 8443:127.0.0.1:443 …`), connexion
 avec un compte du dump, un dossier justifié pris au hasard, sa pièce
 ouverte. Les e-mails que l'application « enverrait » sont dans
 `docker compose logs backend scheduler` — aucun ne part.
 
-**5. Détruire la pile jetable**, volumes compris :
+**5. Détruire la pile jetable**, volumes compris — le compte rendu reste :
 
 ```bash
-docker compose down -v && cd ~ && rm -rf ~/restauration
+./repeter_la_restauration.sh --detruire
 ```
 
-**6. Consigner** dans le journal d'exploitation (`docs/`, ou le projet
-Claude « JUSTI GH ») : date, dump restauré (nom, taille), durée réelle
-de 2 à 4, sortie complète de `verifier_restauration` et de
-`mesurer_les_temps`, écarts constatés,
-limites restantes. Un écart inexpliqué est un incident, pas une note de
+**6. Consigner** : compléter la fin du compte rendu (étape 4, décomptes
+comparés à ceux de la production au moment du dump, écarts constatés,
+limites restantes) et le ranger dans le journal d'exploitation (`docs/`,
+ou le projet Claude « JUSTI GH »). Un écart inexpliqué est un incident, pas une note de
 bas de page.
 
 ### Répéter une migration sur une copie de la production

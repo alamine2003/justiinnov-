@@ -520,6 +520,13 @@ jobs:
         # déployer sur le serveur de production (décision 90).
         run: sh deploy/tests/test_justi_livrer.sh
 
+      - name: Tests de repeter_la_restauration.sh
+        # La répétition de la restauration tourne sur le serveur de
+        # production : aucune de ses commandes ne doit partir du répertoire
+        # d'exploitation, ni toucher son .env, et une étape en échec ne doit
+        # jamais passer pour réussie (décision 131).
+        run: sh deploy/tests/test_repeter_la_restauration.sh
+
       - name: Tests de configurer_copie_distante.sh
         # La mise en service de la copie hors machine écrit des secrets dans
         # le .env de la production : elle ne doit rien casser d'autre, rien
@@ -592,6 +599,14 @@ jobs:
           COMPOSE_PROFILES=supervision docker compose -f docker-compose.prod.yml config -q \
             || { echo "::error::la pile ne s'interpole pas avec la supervision"; exit 1; }
           echo "✔ docker-compose.prod.yml (supervision)"
+
+      - name: La pile jetable de la répétition de restauration ne mène pas à la production
+        # repeter_la_restauration.sh tourne sur le serveur de production.
+        # Compose résout ici sa pile jetable à partir d'un .env qui désigne
+        # une base, un Redis et un courrier extérieurs, depuis un shell qui
+        # exporte le projet de la production : aucun service ne doit y mener,
+        # Caddy ne publie rien (décision 131).
+        run: sh tests/test_pile_jetable.sh
 
       - name: Caddy accepte son fichier, avec et sans supervision
         # Le Caddyfile importe caddy/bi-<SUPERVISION>.caddy : un fichier

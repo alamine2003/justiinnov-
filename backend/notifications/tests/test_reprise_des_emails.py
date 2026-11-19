@@ -172,7 +172,7 @@ class NotificationEnEchecTests(RefusTestCase):
         """Ni mutation sans trace, ni trace d'une mutation annulée : la trace
         d'audit rendue impossible, rien ne subsiste."""
         with mock.patch(
-            "expenses.transitions.record", side_effect=DatabaseError("journal indisponible")
+            "expenses.circuit.record", side_effect=DatabaseError("journal indisponible")
         ), self.assertRaises(DatabaseError):
             self.refuser()
 
