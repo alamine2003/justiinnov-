@@ -39,6 +39,29 @@ RAPPORTS="${RESTAURATION_RAPPORTS:-$HOME/comptes-rendus-de-restauration}"
 FICHIERS="docker-compose.prod.yml sauvegarder.sh restaurer.sh restaurer_a_la_date.sh
 archiver_wal.sh creer_role_applicatif.sql creer_role_bi.sql Caddyfile"
 REPERTOIRES="initdb caddy"
+COMPOSE_JETABLE="docker-compose.prod.yml:docker-compose.override.yml"
+
+# Ce qui, dans le .env de la production, mènerait hors de la pile jetable :
+# une base ou un Redis hors de la pile (le service `sauvegarde` lit
+# DATABASE_URL — un pg_restore --clean y écraserait la production), le
+# serveur de courrier, le projet Sentry, les profils et le nom du projet.
+# Ces lignes ne sont pas copiées ; les valeurs par défaut de
+# docker-compose.prod.yml désignent alors les services du projet jetable.
+ECARTES="COMPOSE_PROJECT_NAME|COMPOSE_FILE|COMPOSE_PROFILES|SUPERVISION|DATABASE_URL|DATABASE_MIGRATION_URL|REDIS_URL|SENTRY_DSN|DJANGO_EMAIL_ENABLED|EMAIL_BACKEND_CONSOLE|EMAIL_HOST|EMAIL_HOST_USER|EMAIL_HOST_PASSWORD"
+
+# Toute commande Docker part d'un environnement vidé : une variable exportée
+# dans le shell (COMPOSE_PROJECT_NAME, DATABASE_URL…) l'emporterait sur le
+# .env jetable, et viserait la production sans que rien ne le montre. Seuls
+# passent le chemin, le répertoire personnel, la désignation du démon Docker
+# et le projet jetable.
+environnement_propre() {
+  set -- COMPOSE_PROJECT_NAME="$PROJET" COMPOSE_FILE="$COMPOSE_JETABLE" "$@"
+  for nom in DOCKER_HOST DOCKER_CONTEXT DOCKER_CONFIG DOCKER_CERT_PATH DOCKER_TLS_VERIFY; do
+    eval "val=\${$nom:-}"
+    [ -z "$val" ] || set -- "$nom=$val" "$@"
+  done
+  env -i PATH="$PATH" HOME="$HOME" "$@"
+}
 
 usage() {
   sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
@@ -72,7 +95,7 @@ exiger_l_isolement() {
 
 compose_isole() {
   exiger_l_isolement
-  (cd "$DOSSIER" && docker compose "$@")
+  (cd "$DOSSIER" && environnement_propre docker compose "$@")
 }
 
 # --- --detruire ----------------------------------------------------------------
@@ -115,7 +138,7 @@ esac
   || refuser "aucune copie hors machine configurée (SAUVEGARDE_DISTANT_ENDPOINT) : il n'y a rien à rapatrier."
 [ ! -e "$DOSSIER" ] \
   || refuser "$DOSSIER existe déjà : une répétition précédente n'a pas été détruite (./repeter_la_restauration.sh --detruire)."
-if [ -n "$(docker volume ls -q --filter "label=com.docker.compose.project=$PROJET")" ]; then
+if [ -n "$(environnement_propre docker volume ls -q --filter "label=com.docker.compose.project=$PROJET")" ]; then
   refuser "des volumes du projet « $PROJET » existent encore : retirez-les d'abord (docker volume ls --filter label=com.docker.compose.project=$PROJET)."
 fi
 for f in $FICHIERS restaurer.sh; do
@@ -229,13 +252,12 @@ preparer_la_pile() {
   # Mêmes images (BACKEND_IMAGE, FRONTEND_IMAGE, IMAGE_TAG, écrits par
   # deploy.sh), autre projet donc autres volumes, courrier en console,
   # aucun port public, aucun profil (ni supervision ni BI).
-  grep -v -E '^(EMAIL_BACKEND_CONSOLE|EMAIL_HOST|COMPOSE_PROJECT_NAME|COMPOSE_FILE|COMPOSE_PROFILES|SUPERVISION)=' \
-    "$SOURCE/.env" > "$DOSSIER/.env"
+  grep -v -E "^($ECARTES)=" "$SOURCE/.env" > "$DOSSIER/.env" || true
   cat >> "$DOSSIER/.env" <<EOF
 EMAIL_HOST=
 EMAIL_BACKEND_CONSOLE=1
 COMPOSE_PROJECT_NAME=$PROJET
-COMPOSE_FILE=docker-compose.prod.yml:docker-compose.override.yml
+COMPOSE_FILE=$COMPOSE_JETABLE
 EOF
   if [ -n "$CLE" ]; then
     # La valeur voyage par l'environnement d'awk : ni dans la ligne de
@@ -245,10 +267,13 @@ EOF
     mv "$DOSSIER/.env.nouveau" "$DOSSIER/.env"
   fi
   chmod 600 "$DOSSIER/.env"
+  # `!reset` : une liste de ports d'une surcharge s'AJOUTE à celle du
+  # fichier de base — `ports: []` laissait 80 et 443 publiés (vérifié avec
+  # `docker compose config`).
   cat > "$DOSSIER/docker-compose.override.yml" <<'EOF'
 services:
   caddy:
-    ports: []            # rien n'écoute sur Internet
+    ports: !reset []     # rien n'écoute sur Internet
 EOF
   exiger_l_isolement
   # Les services de sauvegarde ne sont pas démarrés : rien ne repart vers le
@@ -268,11 +293,11 @@ restaurer_la_base() {
   exiger_l_isolement
   # restaurer.sh demande le nom de la base avant d'écraser : c'est la base
   # du projet jetable, vérifié juste au-dessus, d'où la réponse donnée ici.
-  printf '%s\n' "$BASE" | (cd "$DOSSIER" && ./restaurer.sh --depuis-distant "$DUMP")
+  printf '%s\n' "$BASE" | (cd "$DOSSIER" && environnement_propre ./restaurer.sh --depuis-distant "$DUMP")
 }
 restaurer_les_pieces() {
   exiger_l_isolement
-  (cd "$DOSSIER" && ./restaurer.sh --depuis-distant --pieces)
+  (cd "$DOSSIER" && environnement_propre ./restaurer.sh --depuis-distant --pieces)
 }
 
 etape "2a. Base rapatriée et restaurée" restaurer_la_base

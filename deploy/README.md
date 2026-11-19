@@ -1336,8 +1336,19 @@ ou s'il n'y a pas de copie hors machine. Ce qu'il fait, étape par étape :
    vide et la base archive de travers), le `.env` de la production avec un
    autre projet Compose (`justi-restauration`, donc d'autres volumes), le
    courrier en console, ni supervision ni profils, aucun port public pour
-   Caddy. Seuls `db`, `minio` et `backend` démarrent : les services de
-   sauvegarde jamais, rien ne repart vers le distant depuis cette pile.
+   Caddy (`ports: !reset []` — une liste vide sans `!reset` s'ajoute à celle
+   du fichier de base et laissait 80 et 443 publiés). Ne sont **pas**
+   copiés : `DATABASE_URL`, `DATABASE_MIGRATION_URL`, `REDIS_URL` (une base
+   ou un Redis hors de la pile — le `pg_restore --clean` y écraserait la
+   production), `SENTRY_DSN` et les accès au serveur de courrier. Chaque
+   commande Docker part d'un environnement vidé : une variable exportée dans
+   le shell (`COMPOSE_PROJECT_NAME`, `DATABASE_URL`…) l'emporterait sinon sur
+   ce `.env`. `deploy/tests/test_pile_jetable.sh` fait résoudre la pile à
+   Compose lui-même, en CI. `db`, `minio` et `backend` démarrent, puis
+   `restaurer.sh` relance `backend` et l'ordonnanceur : celui-ci ne joint
+   rien hors de la pile (courrier en console, MinIO de la pile, notifications
+   dans la base jetable). Les services de sauvegarde ne démarrent jamais :
+   rien ne repart vers le distant depuis cette pile.
 2. **Rapatrier et restaurer, depuis le distant** — le chemin qui servira le
    jour où le serveur est perdu : `restaurer.sh --depuis-distant <dump>`
    dans la base jetable (le script répond lui-même à la confirmation, après
@@ -1353,11 +1364,15 @@ ou s'il n'y a pas de copie hors machine. Ce qu'il fait, étape par étape :
    par écran, 4 à la fois : p50, p95 et max des écrans lourds, sur le volume
    et le serveur de la production sans en être la base. Ce sont ces
    chiffres, pas ceux d'un poste de développement, qui fixeraient un seuil
-   d'alerte.
+   d'alerte. La mesure fait tourner vingt exports de l'exercice, quatre à
+   la fois, sur le serveur de la production : quelques minutes de calcul
+   que les utilisateurs sentiraient — lancez la répétition hors des heures
+   de travail.
 
 **4. Ouvrir l'application restaurée**, sans port public : dans
-`~/restauration`, remettre `ports: ["127.0.0.1:8443:443"]` sur `caddy` dans
-`docker-compose.override.yml`, `docker compose up -d caddy`, puis un tunnel
+`~/restauration`, remplacer dans `docker-compose.override.yml` la ligne des
+ports de `caddy` par `ports: !override ["127.0.0.1:8443:443"]`,
+`docker compose up -d caddy`, puis un tunnel
 SSH depuis le poste (`ssh -L 8443:127.0.0.1:443 …`), connexion
 avec un compte du dump, un dossier justifié pris au hasard, sa pièce
 ouverte. Les e-mails que l'application « enverrait » sont dans

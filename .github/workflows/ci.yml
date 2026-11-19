@@ -600,6 +600,14 @@ jobs:
             || { echo "::error::la pile ne s'interpole pas avec la supervision"; exit 1; }
           echo "✔ docker-compose.prod.yml (supervision)"
 
+      - name: La pile jetable de la répétition de restauration ne mène pas à la production
+        # repeter_la_restauration.sh tourne sur le serveur de production.
+        # Compose résout ici sa pile jetable à partir d'un .env qui désigne
+        # une base, un Redis et un courrier extérieurs, depuis un shell qui
+        # exporte le projet de la production : aucun service ne doit y mener,
+        # Caddy ne publie rien (décision 131).
+        run: sh deploy/tests/test_pile_jetable.sh
+
       - name: Caddy accepte son fichier, avec et sans supervision
         # Le Caddyfile importe caddy/bi-<SUPERVISION>.caddy : un fichier
         # manquant ou mal formé empêcherait Caddy, donc la plateforme, de

@@ -37,17 +37,32 @@ verifier() {
 
 # --- Doublure de docker --------------------------------------------------------
 #
-# Une ligne par appel dans $APPELS : « <répertoire>|<projet du .env de ce
-# répertoire>|<arguments> ». Codes et sorties réglables par l'environnement.
-cat > "$DOUBLURES/docker" <<'EOF'
+# Le script appelle docker dans un environnement vidé (`env -i`) : la
+# doublure ne peut rien lire de nôtre. Son journal et ses réglages sont donc
+# des fichiers du bac, dont le chemin est écrit dans la doublure elle-même.
+# Une ligne par appel dans $APPELS :
+#   « <répertoire>|<projet effectif>|<fuite>|<arguments> »
+# Le projet effectif est celui que Compose prendrait : la variable
+# d'environnement d'abord, le .env du répertoire ensuite. La fuite nomme
+# toute variable de la production qui serait arrivée jusqu'à docker.
+APPELS="$BAC/appels"
+REGLAGES="$BAC/reglages"
+mkdir -p "$REGLAGES"
+cat > "$DOUBLURES/docker" <<EOF
 #!/bin/sh
-projet="$(grep -E '^COMPOSE_PROJECT_NAME=' .env 2>/dev/null | tail -1 | cut -d= -f2-)"
-# Un appel par ligne : les scripts passés à `sh -c` tiennent sur plusieurs.
-echo "$(pwd -P)|${projet:--}|$(printf '%s' "$*" | tr '\n' ' ')" >> "$APPELS"
-case "$*" in
-  "volume ls"*) printf '%s' "${VOLUMES_EXISTANTS:-}"; exit 0 ;;
-  *" up -d --wait db minio backend"*) echo "pile démarrée"; exit "${CODE_UP:-0}" ;;
-  *verifier_restauration*) echo "Pièces vérifiées : 12 sur 12"; exit "${CODE_VERIFIER:-0}" ;;
+projet="\${COMPOSE_PROJECT_NAME:-\$(grep -E '^COMPOSE_PROJECT_NAME=' .env 2>/dev/null | tail -1 | cut -d= -f2-)}"
+fuite=""
+for nom in DATABASE_URL REDIS_URL SENTRY_DSN; do
+  eval "val=\\\${\$nom:-}"
+  [ -z "\$val" ] || fuite="\$fuite\$nom "
+done
+# Un appel par ligne : les scripts passés à \`sh -c\` tiennent sur plusieurs.
+echo "\$(pwd -P)|\${projet:--}|\${fuite:-aucune}|\$(printf '%s' "\$*" | tr '\n' ' ')" >> "$APPELS"
+reglage() { cat "$REGLAGES/\$1" 2>/dev/null || echo "\${2:-0}"; }
+case "\$*" in
+  "volume ls"*) cat "$REGLAGES/volumes" 2>/dev/null; exit 0 ;;
+  *" up -d --wait db minio backend"*) echo "pile démarrée"; exit "\$(reglage code_up)" ;;
+  *verifier_restauration*) echo "Pièces vérifiées : 12 sur 12"; exit "\$(reglage code_verifier)" ;;
   *mesurer_les_temps*) echo "Tableau de bord   p50 1100.0 ms"; exit 0 ;;
   *"wc -c"*) echo "4242"; exit 0 ;;
 esac
@@ -72,6 +87,10 @@ EMAIL_HOST=smtp.exemple.invalid
 SAUVEGARDE_DISTANT_ENDPOINT=https://exemple.r2.cloudflarestorage.com
 SAUVEGARDE_CHIFFREMENT_CLE=cle-du-serveur
 SUPERVISION=1
+DATABASE_URL=postgresql://justi_app:x@base-de-production.invalid:5432/justi_innov
+DATABASE_MIGRATION_URL=postgresql://justi:x@base-de-production.invalid:5432/justi_innov
+REDIS_URL=redis://redis-de-production.invalid:6379/0
+SENTRY_DSN=https://cle@sentry.invalid/1
 EOF
 EMPREINTE_ENV="$(cksum < "$EXPLOITATION/.env")"
 
@@ -79,8 +98,6 @@ export HOME="$BAC/maison"
 mkdir -p "$HOME"
 DOSSIER="$HOME/restauration"
 RAPPORTS="$HOME/comptes-rendus-de-restauration"
-APPELS="$BAC/appels"
-export APPELS
 DUMP=justi_innov-2026-11-18T020000Z.dump
 
 lancer() {
@@ -98,7 +115,9 @@ verifier "sans --compte : aucune pile créée" "$([ -e "$DOSSIER" ] && echo oui 
 lancer "x';rm -rf /;'.dump" --compte rh.essai
 verifier "un nom de dump hors alphabet est refusé" "$code" "1"
 verifier "… sans appeler docker" "$(wc -l < "$APPELS" | tr -d ' ')" "0"
-VOLUMES_EXISTANTS="justi-restauration_pgdata" lancer "$DUMP" --compte rh.essai
+echo "justi-restauration_pgdata" > "$REGLAGES/volumes"
+lancer "$DUMP" --compte rh.essai
+rm -f "$REGLAGES/volumes"
 verifier "des volumes jetables restés d'une répétition : refus" "$code" "1"
 
 echo "Répétition complète"
@@ -114,7 +133,10 @@ verifier "projet jetable" "$(grep -c '^COMPOSE_PROJECT_NAME=justi-restauration$'
 verifier "courrier en console" "$(grep -c '^EMAIL_BACKEND_CONSOLE=1$' "$DOSSIER/.env")" "1"
 verifier "aucun serveur de courrier" "$(compte 'smtp.exemple.invalid' "$DOSSIER/.env")" "0"
 verifier "ni supervision ni profils" "$(compte -E '^(SUPERVISION|COMPOSE_PROFILES)=' "$DOSSIER/.env")" "0"
-verifier "aucun port public pour caddy" "$(compte 'ports: \[\]' "$DOSSIER/docker-compose.override.yml")" "1"
+verifier "aucun port public pour caddy (!reset, que Compose ne fusionne pas)" "$(compte 'ports: !reset \[\]' "$DOSSIER/docker-compose.override.yml")" "1"
+verifier "ni base, ni Redis, ni Sentry de la production dans la pile jetable" \
+  "$(compte -E '^(DATABASE_URL|DATABASE_MIGRATION_URL|REDIS_URL|SENTRY_DSN)=' "$DOSSIER/.env")" "0"
+verifier "aucune variable de la production n'atteint docker" "$(compte -v '|aucune|' "$APPELS")" "0"
 verifier "initdb et archiver_wal.sh copiés (montés par la base)" \
   "$([ -f "$DOSSIER/initdb/10-replication.sh" ] && [ -f "$DOSSIER/archiver_wal.sh" ] && echo oui)" "oui"
 verifier "rapatriement du dump depuis le distant" "$(compte "sauvegarde-distante --rapatrier $DUMP" "$APPELS")" "1"
@@ -144,13 +166,15 @@ verifier "… et aucun down" "$(compte 'down' "$APPELS")" "0"
 cp "$BAC/env-jetable" "$DOSSIER/.env"
 lancer --detruire
 verifier "destruction acceptée" "$code" "0"
-verifier "down -v depuis la pile jetable" "$(compte "^$DOSSIER_REEL|justi-restauration|compose down -v" "$APPELS")" "1"
+verifier "down -v depuis la pile jetable" "$(compte "^$DOSSIER_REEL|justi-restauration|aucune|compose down -v" "$APPELS")" "1"
 verifier "le dossier jetable a disparu" "$([ -e "$DOSSIER" ] && echo oui || echo non)" "non"
 verifier "le compte rendu survit" "$([ -f "$RAPPORT" ] && echo oui)" "oui"
 detruire
 
 echo "Une vérification en échec"
-CODE_VERIFIER=3 lancer "$DUMP" --compte rh.essai
+echo 3 > "$REGLAGES/code_verifier"
+lancer "$DUMP" --compte rh.essai
+rm -f "$REGLAGES/code_verifier"
 verifier "sortie en échec" "$code" "1"
 RAPPORT="$(rapport)"
 verifier "verdict : échouée à la vérification" "$(compte 'échouée à l.étape « 3. verifier_restauration »' "$RAPPORT")" "1"
@@ -158,10 +182,27 @@ verifier "rien n'est mesuré après l'échec" "$(compte 'mesurer_les_temps' "$AP
 detruire
 
 echo "Une pile qui ne démarre pas"
-CODE_UP=1 lancer "$DUMP" --compte rh.essai
+echo 1 > "$REGLAGES/code_up"
+lancer "$DUMP" --compte rh.essai
+rm -f "$REGLAGES/code_up"
 verifier "sortie en échec" "$code" "1"
 verifier "verdict : échouée à l'étape 1" "$(compte 'échouée à l.étape « 1. Pile jetable en ligne »' "$(rapport)")" "1"
 verifier "rien n'est restauré" "$(compte 'pg_restore' "$APPELS")" "0"
+detruire
+
+echo "Un shell qui exporte le projet et la base de la production"
+(
+  export COMPOSE_PROJECT_NAME=justi-innov COMPOSE_FILE=docker-compose.prod.yml
+  export DATABASE_URL=postgresql://justi_app:x@base-de-production.invalid:5432/justi_innov
+  export REDIS_URL=redis://redis-de-production.invalid:6379/0
+  lancer "$DUMP" --compte rh.essai
+  verifier "sortie en succès" "$code" "0"
+  verifier "chaque appel voit le projet jetable, pas celui du shell" \
+    "$(grep -v '|volume ls' "$APPELS" | compte -v "^$(cd "$DOSSIER" && pwd -P)|justi-restauration|")" "0"
+  verifier "ni la base ni le Redis du shell n'atteignent docker" "$(compte -v '|aucune|' "$APPELS")" "0"
+  echo "$reussis $echecs" > "$BAC/compteurs"
+)
+read -r reussis echecs < "$BAC/compteurs"
 detruire
 
 echo "--cle-hors-serveur"
