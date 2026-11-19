@@ -606,7 +606,7 @@ jobs:
         # une base, un Redis et un courrier extérieurs, depuis un shell qui
         # exporte le projet de la production : aucun service ne doit y mener,
         # Caddy ne publie rien (décision 131).
-        run: sh deploy/tests/test_pile_jetable.sh
+        run: sh tests/test_pile_jetable.sh
 
       - name: Caddy accepte son fichier, avec et sans supervision
         # Le Caddyfile importe caddy/bi-<SUPERVISION>.caddy : un fichier
