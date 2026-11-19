@@ -31,7 +31,8 @@ services.
 sans changement de comportement — schéma d'API identique, suites vertes —,
 ou **à faire**. Après la 2.4.2, il restait l'écart 21, qui attendait une
 décision de la direction — tranchée et corrigé dans la 2.4.8 (décision
-129) —, et l'écart 19, gardé à dessein.
+129) —, et l'écart 19, gardé à dessein puis corrigé dans la 2.4.11
+(décision 131). **Les 24 écarts sont corrigés.**
 
 | N° | Principe | Écart | Où | État |
 |---|---|---|---|---|
@@ -53,7 +54,7 @@ décision de la direction — tranchée et corrigé dans la 2.4.8 (décision
 | 16 | S | L'enregistrement de la matrice des droits est dans la vue | `accounts/views.py` | corrigé (2.4.2) : `permissions.enregistrer_la_matrice` |
 | 17 | S | Les agrégats du pilotage sont calculés dans les vues | `reporting/views.py` | corrigé (2.4.2) : `reporting/pilotage.py` |
 | 18 | O | Les actions du circuit étaient une chaîne de `if` | `expenses/transitions.executer` | corrigé : `_SERVICES` |
-| 19 | S | `transitions.py` réunit cinq sujets en 1 287 lignes | `expenses/transitions.py` | à garder pour l'instant : des tests le patchent comme module ; réexporter si on découpe |
+| 19 | S | `transitions.py` réunit cinq sujets en 1 287 lignes | `expenses/transitions.py` | corrigé (2.4.11, décision 131) : façade qui réexporte le module commun `exigences` et cinq modules, un par sujet — `circuit`, `saisie`, `retrait`, `controle_des_pieces`, `rectifications` ; les trois tests qui le remplaçaient visent le module qui appelle, et `test_facade_des_transitions.py` garde les 59 noms |
 | 20 | S | Le motif « enregistrer » est recopié 29 fois dans l'interface | `frontend/src` | corrigé (2.4.2) : `lib/use-enregistrement.ts` (28 copies sur 29) |
 | 21 | I/D | Le panneau des pièces (`usePieces`, `proof-panel.tsx`) lit les règles de dépôt sur une API d'administration qu'aucun déposant n'atteint | `components/expenses/proof-panel.tsx` | corrigé (2.4.8, décision 129) : la direction a choisi de les montrer ; `GET /api/me/` les donne (`regles_de_depot`) à tout compte connecté |
 | 22 | S | Le formulaire des comptes porte 13 états et construit sa charge utile | `pages/configuration/users-section.tsx` | corrigé (2.4.2) : `chargeDuCompte`, `useEquipesDesPays` |

@@ -879,7 +879,8 @@ seules exceptions, chacune motivée, tracée et à deux personnes — sont
 transition, dans [`docs/model-de-donnees.md`](docs/model-de-donnees.md)
 (§5.5 et décisions 20 et 57) ; les états et prédicats sont dans
 `backend/expenses/workflow.py`, les services de transition dans
-`backend/expenses/transitions.py` (décision 41).
+`backend/expenses/transitions.py` (décision 41), façade d'un module commun et
+de cinq modules, un par sujet (décision 131).
 
 Ce que l'API garantit en plus, calculé côté serveur :
 

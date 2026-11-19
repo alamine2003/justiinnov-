@@ -381,8 +381,8 @@ l'application.
 |---|---|
 | Modèle de données et décisions prises (référence, tenue à jour) | `docs/model-de-donnees.md` |
 | États du circuit (`Status` et ses ensembles) | `backend/core/statuts.py` |
-| Circuit de justification, réouverture, rectification | `backend/expenses/workflow.py` (états, prédicats), `backend/expenses/transitions.py` (services) |
-| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce, demander et décider une rectification) et de saisie d'un brouillon (`preparer_l_ajout`, `preparer_la_modification`, `preparer_la_modification_du_dossier`) | `backend/expenses/transitions.py` |
+| Circuit de justification, réouverture, rectification | `backend/expenses/workflow.py` (états, prédicats), `backend/expenses/transitions.py` (façade des services, décision 131) |
+| Services de transition (soumettre, rouvrir, trancher, clôturer, retirer un brouillon, contrôler une pièce, demander et décider une rectification) et de saisie d'un brouillon (`preparer_l_ajout`, `preparer_la_modification`, `preparer_la_modification_du_dossier`) | façade `backend/expenses/transitions.py` ; un module commun et un par sujet (décision 131) : `exigences.py` (résultat, prédicats partagés, relecture sous verrou), `circuit.py`, `saisie.py`, `retrait.py`, `controle_des_pieces.py`, `rectifications.py`. Un `mock.patch` vise le module qui appelle, pas la façade |
 | Dépôt d'un justificatif : verrous, remplacement, doublon, trace | `backend/expenses/pieces.py` (décision 125) |
 | Services de réallocation (demander, approuver, refuser) | `backend/budget/transitions.py` |
 | Refus métier (`RegleViolee`, `PermissionRefusee`, `HorsPerimetre`) et leur traduction HTTP | `backend/core/regles.py` |
