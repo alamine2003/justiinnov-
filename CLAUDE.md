@@ -399,6 +399,7 @@ l'application.
 | Schéma `bi` (vues du BI de pilotage) et tableaux Grafana | `backend/reporting/bi/`, `deploy/grafana/pilotage.py` |
 | Comportement sous panne : ce qui a cédé, ce qui tient, ce qui reste | `docs/audit-resilience.md` |
 | Revue d'architecture : écarts SOLID corrigés et restants, par priorité | `docs/revue-architecture-2026-11.md` (décision 124) |
+| Revue d'architecture majeure de la 2.5 : 54 écarts, leur état, l'ordre de traitement | `docs/revue-architecture-2-5.md` (décision 132) |
 | Infrastructure de la base : dimensionnement, sauvegardes, reprise | `docs/infra-base-de-donnees.md` |
 
 ## Conventions
