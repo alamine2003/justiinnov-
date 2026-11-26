@@ -10,7 +10,7 @@ from unittest import mock
 
 from rest_framework import status
 
-from expenses import transitions
+from expenses import saisie
 from expenses.models import AuditLog, Beneficiary
 from expenses.serializers import DossierSerializer
 
@@ -87,9 +87,8 @@ class DeplacementSousVerrouTests(ExpenseTestCase):
     def test_la_verification_rejoue_apres_le_verrou(self):
         self.login(self.owner)
         temoin = mock.Mock()
-        verrouiller = mock.patch.object(
-            transitions, "verrouiller", wraps=transitions.verrouiller
-        )
+        # Remplacé là où la saisie l'appelle (décision 131).
+        verrouiller = mock.patch.object(saisie, "verrouiller", wraps=saisie.verrouiller)
         verifier = mock.patch.object(
             DossierSerializer, "verifier_le_deplacement",
             autospec=True, side_effect=DossierSerializer.verifier_le_deplacement,
